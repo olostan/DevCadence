@@ -332,3 +332,59 @@ func TestDeferredAmbiguityRequiresABoundary(t *testing.T) {
 		t.Fatalf("a bounded deferral was rejected: %v", err)
 	}
 }
+
+// TestSpecificationReviewVerdictCannotOutrankItsFindings keeps the Design
+// Readiness Gate from being passed by a summary rather than by evidence — the
+// same failure DCI-041 forbids for deterministic validation.
+func TestSpecificationReviewVerdictCannotOutrankItsFindings(t *testing.T) {
+	review := &protocol.SpecificationReviewResult{
+		SchemaVersion:        protocol.SchemaVersion1,
+		ReviewID:             "sr_1",
+		ProjectID:            "example",
+		ProblemModelID:       "pm_1",
+		ProblemModelRevision: 7,
+		Dimension:            protocol.SpecAmbiguity,
+		ReviewerProfile:      "local-strong-reviewer",
+		Verdict:              protocol.VerdictPass,
+		Findings: []protocol.SpecificationFinding{{
+			Severity:            protocol.SeverityHigh,
+			Statement:           `"offline" does not say whether a registry may be reached.`,
+			WhyItMatters:        "Two competent teams would build different products.",
+			ResolutionAuthority: protocol.ResolveByHuman,
+			BlocksReadiness:     true,
+		}},
+		Summary: "One high-impact ambiguity remains.",
+	}
+	if err := review.Validate(); err == nil {
+		t.Fatal("a passing verdict was accepted over a readiness-blocking finding")
+	} else if got := errs.CategoryOf(err); got != errs.CategoryIntegrity {
+		t.Fatalf("category = %s, want integrity (%v)", got, err)
+	}
+
+	// The same review reporting the concern it found is valid.
+	review.Verdict = protocol.VerdictConcern
+	if err := review.Validate(); err != nil {
+		t.Fatalf("a concern verdict over a blocking finding was refused: %v", err)
+	}
+}
+
+// TestSpecificationReviewRejectsImplementationDimensions pins the separation
+// the record exists for: an implementation review vector is not a
+// specification review vector, and a record that accepted both would make the
+// two kinds of evidence interchangeable again.
+func TestSpecificationReviewRejectsImplementationDimensions(t *testing.T) {
+	review := &protocol.SpecificationReviewResult{
+		SchemaVersion:        protocol.SchemaVersion1,
+		ReviewID:             "sr_1",
+		ProjectID:            "example",
+		ProblemModelID:       "pm_1",
+		ProblemModelRevision: 1,
+		Dimension:            protocol.SpecificationReviewDimension(protocol.DimensionConcurrency),
+		ReviewerProfile:      "local-strong-reviewer",
+		Verdict:              protocol.VerdictPass,
+		Summary:              "Nothing to report.",
+	}
+	if err := review.Validate(); err == nil {
+		t.Fatal("an implementation review dimension was accepted for a specification review")
+	}
+}

@@ -32,13 +32,14 @@ type Name string
 
 // Names of the schemas published in M0.
 const (
-	NameProjectState           Name = "project-state"
-	NameEngineeringWorkPackage Name = "engineering-work-package"
-	NameEvidencePacket         Name = "evidence-packet"
-	NameValidationResult       Name = "validation-result"
-	NameReviewResult           Name = "review-result"
-	NameDecisionRecord         Name = "decision-record"
-	NameLessonCandidate        Name = "lesson-candidate"
+	NameProjectState              Name = "project-state"
+	NameEngineeringWorkPackage    Name = "engineering-work-package"
+	NameEvidencePacket            Name = "evidence-packet"
+	NameValidationResult          Name = "validation-result"
+	NameSpecificationReviewResult Name = "specification-review-result"
+	NameReviewResult              Name = "review-result"
+	NameDecisionRecord            Name = "decision-record"
+	NameLessonCandidate           Name = "lesson-candidate"
 )
 
 // Names of the discovery and specification schemas added by
@@ -56,19 +57,20 @@ const (
 // It is the explicit statement of which twin belongs to which, so that a new
 // protocol type cannot be added without deciding on its schema.
 var RecordKindToSchema = map[string]Name{
-	"ProjectState":           NameProjectState,
-	"EngineeringWorkPackage": NameEngineeringWorkPackage,
-	"EvidencePacket":         NameEvidencePacket,
-	"ValidationResult":       NameValidationResult,
-	"ReviewResult":           NameReviewResult,
-	"DecisionRecord":         NameDecisionRecord,
-	"LessonCandidate":        NameLessonCandidate,
-	"ProblemModel":           NameProblemModel,
-	"AmbiguityLedger":        NameAmbiguityLedger,
-	"ProductDecision":        NameProductDecision,
-	"Requirement":            NameRequirement,
-	"DiscoveryExperiment":    NameDiscoveryExperiment,
-	"SpecificationReadiness": NameSpecificationReadiness,
+	"ProjectState":              NameProjectState,
+	"EngineeringWorkPackage":    NameEngineeringWorkPackage,
+	"EvidencePacket":            NameEvidencePacket,
+	"ValidationResult":          NameValidationResult,
+	"SpecificationReviewResult": NameSpecificationReviewResult,
+	"ReviewResult":              NameReviewResult,
+	"DecisionRecord":            NameDecisionRecord,
+	"LessonCandidate":           NameLessonCandidate,
+	"ProblemModel":              NameProblemModel,
+	"AmbiguityLedger":           NameAmbiguityLedger,
+	"ProductDecision":           NameProductDecision,
+	"Requirement":               NameRequirement,
+	"DiscoveryExperiment":       NameDiscoveryExperiment,
+	"SpecificationReadiness":    NameSpecificationReadiness,
 }
 
 // Set is a compiled collection of schemas.
@@ -207,7 +209,7 @@ func (s *Set) ValidateRecord(kind string, v any) error {
 func AllNames() []Name {
 	names := []Name{
 		NameProjectState, NameEngineeringWorkPackage, NameEvidencePacket,
-		NameValidationResult, NameReviewResult, NameDecisionRecord,
+		NameValidationResult, NameReviewResult, NameSpecificationReviewResult, NameDecisionRecord,
 		NameLessonCandidate, NameProblemModel, NameAmbiguityLedger,
 		NameProductDecision, NameRequirement, NameDiscoveryExperiment,
 		NameSpecificationReadiness,

@@ -134,7 +134,7 @@ func HappyPathScenario(t *testing.T, projectID string) *ScenarioBuilder {
 			Commit: candidate, RecordDigest: "sha256:" + zeros(64),
 		}).
 		AddAs(protocol.Actor{Kind: protocol.ActorLocalAgent, ID: "reviewer"}, &events.ReviewCompleted{
-			TaskID: taskID, AttemptID: attemptID, ReviewID: "rev_0001",
+			TaskID: taskID, AttemptID: attemptID, ReviewID: "rev_0001", WorkPackageID: wpID,
 			Dimension: protocol.DimensionCorrectness, Verdict: protocol.VerdictPass,
 			RecordDigest: "sha256:" + zeros(64),
 		}).

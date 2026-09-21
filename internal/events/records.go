@@ -142,6 +142,9 @@ func (p *ReviewCompleted) CheckReferencedRecord(document []byte) error {
 	if review.AttemptID != p.AttemptID {
 		return mismatch(event, "attempt_id", p.AttemptID, review.AttemptID)
 	}
+	if review.WorkPackageID != p.WorkPackageID {
+		return mismatch(event, "work_package_id", p.WorkPackageID, review.WorkPackageID)
+	}
 	if review.Dimension != p.Dimension {
 		return mismatch(event, "dimension", p.Dimension, review.Dimension)
 	}
@@ -338,19 +341,59 @@ func (p *RequirementRecorded) CheckReferencedRecord(document []byte) error {
 
 // ReferencedRecord implements RecordReferencing.
 //
-// SpecificationReviewCompleted's digest is optional in the same way.
+// The record is a SpecificationReviewResult, not a ReviewResult. The two are
+// different kinds of evidence: a specification review judges whether intent is
+// understood well enough to build from, before any Engineering Work Package or
+// Attempt exists, so it cannot carry the attempt and work-package identifiers a
+// ReviewResult requires. Pointing this event at a ReviewResult would have been
+// a claim about a document that cannot represent it.
+//
+// The digest stays optional: a specification review may be journalled during
+// discovery before its full document is written.
 func (p *SpecificationReviewCompleted) ReferencedRecord() RecordRef {
-	return RecordRef{Kind: "ReviewResult", ID: p.ReviewID, Digest: p.RecordDigest}
+	return RecordRef{Kind: "SpecificationReviewResult", ID: p.ReviewID, Digest: p.RecordDigest}
 }
 
 // CheckReferencedRecord implements RecordReferencing.
 func (p *SpecificationReviewCompleted) CheckReferencedRecord(document []byte) error {
-	var review protocol.ReviewResult
+	var review protocol.SpecificationReviewResult
 	if err := protocol.Unmarshal(document, &review); err != nil {
 		return err
 	}
+	const event = "SpecificationReviewCompleted"
 	if review.ReviewID != p.ReviewID {
-		return mismatch("SpecificationReviewCompleted", "review_id", p.ReviewID, review.ReviewID)
+		return mismatch(event, "review_id", p.ReviewID, review.ReviewID)
+	}
+	if review.ReviewerProfile != p.ReviewerProfile {
+		return mismatch(event, "reviewer_profile", p.ReviewerProfile, review.ReviewerProfile)
+	}
+	if review.Summary != p.Summary {
+		return mismatch(event, "summary", p.Summary, review.Summary)
+	}
+	// The gaps the journal reports are the gaps the record found: a review
+	// that opened an ambiguity the compact event omits would leave that
+	// question invisible to anything reading the journal alone.
+	if !sameStrings(p.MaterialGapsFound, review.MaterialGapRefs) {
+		return mismatch(event, "material_gaps_found", p.MaterialGapsFound, review.MaterialGapRefs)
 	}
 	return nil
+}
+
+// sameStrings compares two reference lists as sets: order carries no meaning
+// in either the event or the record, but membership does.
+func sameStrings(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	seen := make(map[string]int, len(a))
+	for _, v := range a {
+		seen[v]++
+	}
+	for _, v := range b {
+		seen[v]--
+		if seen[v] < 0 {
+			return false
+		}
+	}
+	return true
 }

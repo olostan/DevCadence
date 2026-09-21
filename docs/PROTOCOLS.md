@@ -335,7 +335,23 @@ A model may summarize the result, but the raw check is retained.
 
 ## 11. ReviewResult
 
-ReviewResult is model-assisted evidence.
+ReviewResult is model-assisted evidence **about an implementation candidate**,
+judged against the Engineering Work Package that governed the attempt. It
+therefore requires both `attempt_id` and `work_package_id`, and that linkage is
+mechanically proven rather than assumed:
+
+```
+ReviewCompleted.work_package_id == ReviewResult.work_package_id == Attempt.work_package_id
+```
+
+The first equality is checked in the control-plane transaction (the event and
+the record it summarises must agree); the second in the reducer (the record
+must be about the blueprint the attempt actually executed). No work-package
+*version* is carried on the event: the attempt already pins the exact version,
+and `ReviewResult` records only the id, so a version on the event could be
+checked against nothing.
+
+Specification reviews are a different record entirely; see §11a.
 
 Fields:
 - review dimension;
@@ -358,6 +374,28 @@ Possible dimensions:
 - concurrency;
 - API compatibility;
 - complexity/maintainability.
+
+## 11a. SpecificationReviewResult
+
+SpecificationReviewResult is independent evidence **about a specification**,
+produced during discovery — before an Engineering Work Package or an Attempt
+exists. It is deliberately not a ReviewResult: the two judge different
+artifacts at different times, and an implementation review record cannot
+represent a specification review without empty attempt and work-package
+fields that would make the two interchangeable again.
+
+It pins `problem_model_id` and `problem_model_revision`, because a verdict
+about revision 7 says nothing about revision 8.
+
+Its dimensions are the discovery vectors from `prompts/specification-reviewer.md`
+— `completeness`, `ambiguity`, `contradiction`, `architecture_contamination`,
+`security_privacy`, `failure_modes`, `operations`, `ux_mental_model` — not the
+implementation vectors of §11.
+
+Each finding carries a resolution authority and a recommended question, so a
+gap is routed to whoever can settle it (DCI-008), plus `blocks_readiness`. A
+`pass` verdict over a finding that blocks readiness is refused: the Design
+Readiness Gate must be passed by evidence, not by a summary.
 
 ## 12. DisagreementReport
 

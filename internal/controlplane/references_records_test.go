@@ -339,7 +339,7 @@ func TestReviewEvidenceMustExistAndAgree(t *testing.T) {
 func reviewEvent(attemptID, digest string, dimension protocol.ReviewDimension,
 	verdict protocol.ReviewVerdict) *events.ReviewCompleted {
 	return &events.ReviewCompleted{
-		AttemptID: attemptID, ReviewID: "rev_0001",
+		AttemptID: attemptID, ReviewID: "rev_0001", WorkPackageID: "wp_0001",
 		Dimension: dimension, Verdict: verdict, RecordDigest: digest,
 	}
 }
@@ -406,3 +406,199 @@ func zeros(n int) string {
 }
 
 var _ = storage.EventQuery{}
+
+// TestReviewIsTiedToTheWorkPackageTheAttemptExecuted proves the three-way
+// equality that makes a review evidence about *this* work:
+//
+//	ReviewCompleted.work_package_id == ReviewResult.work_package_id
+//	                                == Attempt.work_package_id
+//
+// The first equality is the control plane's (the event and its record must
+// agree); the second is the reducer's (the record must be about the blueprint
+// the attempt actually ran against). Before this, a review whose durable
+// record cited a different blueprint satisfied every check: the digest
+// matched, and no repeated field mentioned the work package at all.
+func TestReviewIsTiedToTheWorkPackageTheAttemptExecuted(t *testing.T) {
+	const attemptID = "att_0001"
+
+	t.Run("record names a different work package", func(t *testing.T) {
+		h := testsupport.NewHarness(t)
+		taskID := driveToReviewing(t, h)
+		// The record says wp_elsewhere; the event says wp_0001, which is
+		// what the attempt ran against. The digest is honest either way.
+		result := testsupport.Review("example", "rev_0002", attemptID, "wp_elsewhere",
+			protocol.DimensionCorrectness, protocol.VerdictPass)
+		refusesWith(t, h, controlplane.AppendTypedEventInput{
+			ProjectID: "example",
+			Payload: &events.ReviewCompleted{
+				TaskID: taskID, AttemptID: attemptID, ReviewID: "rev_0002",
+				WorkPackageID: "wp_0001",
+				Dimension:     protocol.DimensionCorrectness, Verdict: protocol.VerdictPass,
+				RecordDigest: testsupport.Digest(t, result),
+			},
+			Records: []controlplane.RecordToStore{{Version: 1, Record: result}},
+		}, "a review whose durable record judged a different blueprint")
+	})
+
+	t.Run("event names a work package the attempt never ran against", func(t *testing.T) {
+		h := testsupport.NewHarness(t)
+		taskID := driveToReviewing(t, h)
+		// Here event and record agree with each other — and both are wrong
+		// about the attempt, which the reducer is the only thing that knows.
+		result := testsupport.Review("example", "rev_0002", attemptID, "wp_elsewhere",
+			protocol.DimensionCorrectness, protocol.VerdictPass)
+		refusesWith(t, h, controlplane.AppendTypedEventInput{
+			ProjectID: "example",
+			Payload: &events.ReviewCompleted{
+				TaskID: taskID, AttemptID: attemptID, ReviewID: "rev_0002",
+				WorkPackageID: "wp_elsewhere",
+				Dimension:     protocol.DimensionCorrectness, Verdict: protocol.VerdictPass,
+				RecordDigest: testsupport.Digest(t, result),
+			},
+			Records: []controlplane.RecordToStore{{Version: 1, Record: result}},
+		}, "a review judging a blueprint the attempt never executed")
+	})
+
+	t.Run("a correct review is accepted", func(t *testing.T) {
+		h := testsupport.NewHarness(t)
+		taskID := driveToReviewing(t, h)
+		result := testsupport.Review("example", "rev_0002", attemptID, "wp_0001",
+			protocol.DimensionArchitecture, protocol.VerdictPass)
+		if _, err := h.Service.AppendTypedEvent(context.Background(),
+			controlplane.AppendTypedEventInput{
+				ProjectID: "example",
+				Payload: &events.ReviewCompleted{
+					TaskID: taskID, AttemptID: attemptID, ReviewID: "rev_0002",
+					WorkPackageID: "wp_0001",
+					Dimension:     protocol.DimensionArchitecture, Verdict: protocol.VerdictPass,
+					RecordDigest: testsupport.Digest(t, result),
+				},
+				Records: []controlplane.RecordToStore{{Version: 1, Record: result}},
+			}); err != nil {
+			t.Fatalf("a well-formed second review dimension was refused: %v", err)
+		}
+	})
+
+	t.Run("a refused review leaves nothing behind", func(t *testing.T) {
+		ctx := context.Background()
+		h := testsupport.NewHarness(t)
+		taskID := driveToReviewing(t, h)
+		before := snapshot(t, h)
+
+		result := testsupport.Review("example", "rev_0002", attemptID, "wp_elsewhere",
+			protocol.DimensionCorrectness, protocol.VerdictPass)
+		if _, err := h.Service.AppendTypedEvent(ctx, controlplane.AppendTypedEventInput{
+			ProjectID: "example",
+			Payload: &events.ReviewCompleted{
+				TaskID: taskID, AttemptID: attemptID, ReviewID: "rev_0002",
+				WorkPackageID: "wp_elsewhere",
+				Dimension:     protocol.DimensionCorrectness, Verdict: protocol.VerdictPass,
+				RecordDigest: testsupport.Digest(t, result),
+			},
+			Records: []controlplane.RecordToStore{{Version: 1, Record: result}},
+		}); err == nil {
+			t.Fatal("a review with a broken work-package link was committed")
+		}
+		if after := snapshot(t, h); after != before {
+			t.Fatalf("a refused review changed durable state: before %+v, after %+v", before, after)
+		}
+		if _, err := h.Service.Record(ctx, "example", "ReviewResult", "rev_0002", 1); err == nil {
+			t.Fatal("the review record survived the refused event")
+		}
+	})
+}
+
+// specReview builds a coherent specification-review record.
+func specReview(reviewID, profile, summary string, gaps []string) *protocol.SpecificationReviewResult {
+	return &protocol.SpecificationReviewResult{
+		SchemaVersion:        protocol.SchemaVersion1,
+		ReviewID:             reviewID,
+		ProjectID:            "example",
+		ProblemModelID:       "pm_0001",
+		ProblemModelRevision: 1,
+		Dimension:            protocol.SpecAmbiguity,
+		ReviewerProfile:      profile,
+		Verdict:              protocol.VerdictConcern,
+		Findings: []protocol.SpecificationFinding{{
+			Severity:            protocol.SeverityHigh,
+			Statement:           `"offline" is undefined for first-time setup.`,
+			WhyItMatters:        "It binds the distribution model.",
+			ResolutionAuthority: protocol.ResolveByHuman,
+		}},
+		MaterialGapRefs: gaps,
+		Summary:         summary,
+	}
+}
+
+// TestSpecificationReviewReferencesItsOwnRecordKind is the point of the
+// dedicated record: a specification review is evidence about intent, produced
+// before any Work Package or Attempt exists, so it cannot be an
+// implementation ReviewResult. That mismatch used to be hidden by the
+// optional digest; now the claim is typed and checked.
+func TestSpecificationReviewReferencesItsOwnRecordKind(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("a coherent specification review is accepted", func(t *testing.T) {
+		h := testsupport.NewHarness(t)
+		initProject(t, h)
+		record := specReview("sr_0001", "local-strong-reviewer", "One ambiguity remains.", []string{"AQ-027"})
+		if _, err := h.Service.AppendTypedEvent(ctx, controlplane.AppendTypedEventInput{
+			ProjectID: "example",
+			Payload: &events.SpecificationReviewCompleted{
+				ReviewID: "sr_0001", ReviewerProfile: "local-strong-reviewer",
+				MaterialGapsFound: []string{"AQ-027"}, Summary: "One ambiguity remains.",
+				RecordDigest: testsupport.Digest(t, record),
+			},
+			Records: []controlplane.RecordToStore{{Version: 1, Record: record}},
+		}); err != nil {
+			t.Fatalf("a coherent specification review was refused: %v", err)
+		}
+	})
+
+	t.Run("an implementation ReviewResult cannot stand in", func(t *testing.T) {
+		h := testsupport.NewHarness(t)
+		initProject(t, h)
+		// A ReviewResult stored under the same id: the digest is real, but
+		// the document is the wrong kind of evidence entirely.
+		wrongKind := testsupport.Review("example", "sr_0002", "att_0001", "wp_0001",
+			protocol.DimensionCorrectness, protocol.VerdictPass)
+		refusesWith(t, h, controlplane.AppendTypedEventInput{
+			ProjectID: "example",
+			Payload: &events.SpecificationReviewCompleted{
+				ReviewID: "sr_0002", ReviewerProfile: "local-strong-reviewer",
+				Summary: "Nothing to report.", RecordDigest: testsupport.Digest(t, wrongKind),
+			},
+			Records: []controlplane.RecordToStore{{Version: 1, Record: wrongKind}},
+		}, "a specification review backed by an implementation ReviewResult")
+	})
+
+	t.Run("gaps the record found must appear in the journal", func(t *testing.T) {
+		h := testsupport.NewHarness(t)
+		initProject(t, h)
+		// The record opened AQ-027; the compact event reports none, which
+		// would leave the question invisible to a journal-only reader.
+		record := specReview("sr_0003", "local-strong-reviewer", "One ambiguity remains.", []string{"AQ-027"})
+		refusesWith(t, h, controlplane.AppendTypedEventInput{
+			ProjectID: "example",
+			Payload: &events.SpecificationReviewCompleted{
+				ReviewID: "sr_0003", ReviewerProfile: "local-strong-reviewer",
+				Summary: "One ambiguity remains.", RecordDigest: testsupport.Digest(t, record),
+			},
+			Records: []controlplane.RecordToStore{{Version: 1, Record: record}},
+		}, "a specification review omitting a gap its record found")
+	})
+
+	t.Run("an absent digest still asserts nothing", func(t *testing.T) {
+		h := testsupport.NewHarness(t)
+		initProject(t, h)
+		if _, err := h.Service.AppendTypedEvent(ctx, controlplane.AppendTypedEventInput{
+			ProjectID: "example",
+			Payload: &events.SpecificationReviewCompleted{
+				ReviewID: "sr_0004", ReviewerProfile: "local-strong-reviewer",
+				Summary: "Reviewed during discovery; full document not yet written.",
+			},
+		}); err != nil {
+			t.Fatalf("a specification review claiming no record was refused: %v", err)
+		}
+	})
+}

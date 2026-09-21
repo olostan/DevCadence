@@ -409,6 +409,8 @@ func NewRecord(kind string) (Record, error) {
 		return &ValidationResult{}, nil
 	case "ReviewResult":
 		return &ReviewResult{}, nil
+	case "SpecificationReviewResult":
+		return &SpecificationReviewResult{}, nil
 	case "DecisionRecord":
 		return &DecisionRecord{}, nil
 	case "LessonCandidate":

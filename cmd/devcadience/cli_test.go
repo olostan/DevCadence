@@ -121,8 +121,8 @@ func TestCLIDrivesASyntheticProjectToDone(t *testing.T) {
 		},
 		{
 			eventType: "ReviewCompleted",
-			payload: `{"attempt_id":"att_1","review_id":"rev_1","dimension":"correctness",` +
-				`"verdict":"pass","record_digest":"` + mustDigest(t, review) + `"}`,
+			payload: `{"attempt_id":"att_1","review_id":"rev_1","work_package_id":"wp_1",` +
+				`"dimension":"correctness","verdict":"pass","record_digest":"` + mustDigest(t, review) + `"}`,
 			record: review,
 		},
 		{eventType: "ChangeAccepted", payload: `{"attempt_id":"att_1","work_package_id":"wp_1",` +

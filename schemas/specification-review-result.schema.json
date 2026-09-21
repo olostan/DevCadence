@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/olostan/DevCadience/schemas/specification-review-result.schema.json",
+  "title": "DevCadience SpecificationReviewResult",
+  "description": "Independent evidence about a specification, produced before implementation exists. Distinct from ReviewResult, which judges a candidate against an Engineering Work Package.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "review_id", "project_id", "problem_model_id", "problem_model_revision", "dimension", "reviewer_profile", "verdict", "findings", "summary"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "review_id": {"type": "string"},
+    "project_id": {"type": "string"},
+    "problem_model_id": {"type": "string"},
+    "problem_model_revision": {"type": "integer", "minimum": 1},
+    "dimension": {"enum": ["completeness", "ambiguity", "contradiction", "architecture_contamination", "security_privacy", "failure_modes", "operations", "ux_mental_model"]},
+    "reviewer_profile": {"type": "string"},
+    "model_identity": {"type": ["string", "null"]},
+    "verdict": {"enum": ["pass", "concern", "fail", "unable_to_verify"]},
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["severity", "statement", "why_it_matters", "resolution_authority"],
+        "properties": {
+          "severity": {"enum": ["info", "low", "medium", "high", "critical"]},
+          "statement": {"type": "string"},
+          "why_it_matters": {"type": "string"},
+          "affected_refs": {"type": "array", "items": {"type": "string"}},
+          "resolution_authority": {"enum": ["human", "repository_tool", "external_research", "experiment", "consultant", "principal"]},
+          "recommended_question": {"type": "string"},
+          "evidence_refs": {"type": "array", "items": {"type": "string"}},
+          "blocks_readiness": {"type": "boolean", "default": false}
+        }
+      }
+    },
+    "material_gap_refs": {"type": "array", "items": {"type": "string"}},
+    "summary": {"type": "string"}
+  }
+}

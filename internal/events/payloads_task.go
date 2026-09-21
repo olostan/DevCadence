@@ -383,9 +383,19 @@ func (p *ValidationCompleted) Validate() error {
 // explicit acceptance or rejection decision, because DCI-044 forbids
 // collapsing several reviewers' verdicts into an automatic outcome.
 type ReviewCompleted struct {
-	TaskID                         string                   `json:"task_id"`
-	AttemptID                      string                   `json:"attempt_id"`
-	ReviewID                       string                   `json:"review_id"`
+	TaskID    string `json:"task_id"`
+	AttemptID string `json:"attempt_id"`
+	ReviewID  string `json:"review_id"`
+	// WorkPackageID names the blueprint the candidate was reviewed against.
+	// A review is an assessment of a candidate *against the Work Package that
+	// governed the attempt*, so a review whose record cites a different
+	// blueprint is not evidence about this work at all — and without this
+	// field the event could not corroborate the record's own claim.
+	//
+	// No version is carried: the attempt already pins the exact Work Package
+	// version it ran against, and ReviewResult records only the id, so a
+	// version here could be checked against nothing.
+	WorkPackageID                  string                   `json:"work_package_id"`
 	Dimension                      protocol.ReviewDimension `json:"dimension"`
 	Verdict                        protocol.ReviewVerdict   `json:"verdict"`
 	RecordDigest                   string                   `json:"record_digest"`
@@ -403,6 +413,10 @@ func (p *ReviewCompleted) Validate() error {
 	if p.AttemptID == "" || p.ReviewID == "" || p.RecordDigest == "" {
 		return errs.New(errs.CategoryInvalidArgument,
 			"ReviewCompleted: attempt_id, review_id and record_digest are required")
+	}
+	if p.WorkPackageID == "" {
+		return errs.New(errs.CategoryInvalidArgument,
+			"ReviewCompleted: work_package_id is required; a review names the blueprint it judged against")
 	}
 	if !p.Dimension.Valid() {
 		return errs.New(errs.CategoryInvalidArgument,

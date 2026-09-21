@@ -1,0 +1,25 @@
+{
+  "schema_version": "1.0",
+  "review_id": "sr_000000000000000000000003",
+  "project_id": "example",
+  "problem_model_id": "pm_000000000000000000000001",
+  "problem_model_revision": 7,
+  "dimension": "ambiguity",
+  "reviewer_profile": "local-strong-reviewer",
+  "model_identity": "qwen2.5-coder-32b-instruct",
+  "verdict": "concern",
+  "findings": [
+    {
+      "severity": "high",
+      "statement": "\"The control plane must work offline\" does not say whether a package registry may be reached during setup.",
+      "why_it_matters": "Two competent teams would build different products: one vendoring every dependency, one fetching at install time. The choice binds the distribution model.",
+      "affected_refs": ["FR-018", "PD-001"],
+      "resolution_authority": "human",
+      "recommended_question": "During first-time setup only, may DevCadience download dependencies from a package registry?",
+      "evidence_refs": ["ev_setup_notes"],
+      "blocks_readiness": true
+    }
+  ],
+  "material_gap_refs": ["AQ-027"],
+  "summary": "One high-impact ambiguity about the meaning of \"offline\" remains unresolved."
+}

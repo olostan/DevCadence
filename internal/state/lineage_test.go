@@ -66,7 +66,8 @@ func twoTaskScenario(t *testing.T) *testsupport.ScenarioBuilder {
 			}).
 			Add(&events.ReviewCompleted{
 				TaskID: task.id, AttemptID: task.attempt, ReviewID: task.review,
-				Dimension: protocol.DimensionCorrectness, Verdict: protocol.VerdictPass,
+				WorkPackageID: task.wp,
+				Dimension:     protocol.DimensionCorrectness, Verdict: protocol.VerdictPass,
 				RecordDigest: lineageDigest,
 			})
 	}

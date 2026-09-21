@@ -161,8 +161,11 @@ rather than stored as a decision that merely looks justified. Specifically:
   that task, a candidate actually produced, and a commit matching that
   candidate — the commit is required, not optional, so the evidence names
   what it is about and cannot be read as covering a superseded candidate;
-- a **review** requires its task in REVIEWING and an attempt of that task
-  that produced a candidate;
+- a **review** requires its task in REVIEWING, an attempt of that task that
+  produced a candidate, and that the work package it names is the one the
+  attempt ran against — a review is an assessment of a candidate *against a
+  blueprint*, so a review judging some other blueprint is not evidence about
+  this work at all;
 - an **acceptance** requires all of the above plus: the candidate commit
   matches the attempt's, the named Work Package is the task's approved one,
   the attempt ran against that same version, at least one validation id and

@@ -1,0 +1,12 @@
+{
+  "schema_version": "1.0",
+  "review_id": "sr_000000000000000000000004",
+  "project_id": "example",
+  "problem_model_id": "pm_000000000000000000000001",
+  "problem_model_revision": 7,
+  "dimension": "concurrency",
+  "reviewer_profile": "local-strong-reviewer",
+  "verdict": "concern",
+  "findings": [],
+  "summary": "An implementation review dimension is not a specification review dimension."
+}

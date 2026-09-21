@@ -82,7 +82,7 @@ func driveLifecycle(t *testing.T, h *testsupport.Harness) string {
 		},
 		{
 			payload: &events.ReviewCompleted{
-				TaskID: taskID, AttemptID: attemptID, ReviewID: "rev_0001",
+				TaskID: taskID, AttemptID: attemptID, ReviewID: "rev_0001", WorkPackageID: wpID,
 				Dimension: protocol.DimensionCorrectness, Verdict: protocol.VerdictPass,
 				RecordDigest: testsupport.Digest(t, review),
 			},

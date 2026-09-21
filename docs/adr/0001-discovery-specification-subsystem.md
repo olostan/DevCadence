@@ -194,3 +194,24 @@ to agent behaviour, they are:
 
 These are write-path refusals, not advisory checks, so an agent cannot record
 the weaker claim at all.
+
+## Durable specification-review evidence (M1 addendum)
+
+`SpecificationReviewCompleted` originally referenced a `ReviewResult` by
+digest. That was a semantic fiction: `ReviewResult` is implementation evidence
+requiring `attempt_id` and `work_package_id` and using implementation review
+dimensions, while a specification review happens before either exists and uses
+the discovery dimensions this ADR's protocol defines. The optional digest hid
+the mismatch, because callers could simply omit it — but when present, it
+claimed a document that could not represent the event.
+
+M1 therefore introduces `SpecificationReviewResult` as its own protocol record
+and JSON Schema, and repoints the event at it. The alternative — reusing
+`ReviewResult` with empty attempt and work-package fields — was rejected: it
+would make the two kinds of evidence structurally interchangeable, which is
+exactly the distinction this ADR exists to preserve, and optional-everything
+records cannot be validated meaningfully.
+
+The *workflow* that produces these records still does not exist; that remains
+M3/M4 (FR-D-006…010). What exists now is the durable contract, so the workflow
+arrives into a protocol that already says what its evidence must look like.

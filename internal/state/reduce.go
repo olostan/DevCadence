@@ -586,6 +586,19 @@ func (p *Projection) applyReviewCompleted(payload *events.ReviewCompleted) error
 	if err := requireCandidate(attempt, what); err != nil {
 		return err
 	}
+	// A review judges the candidate against the blueprint the attempt ran
+	// against. The control plane checks that the event and its durable
+	// ReviewResult agree on the work package; the remaining link — that this
+	// is the work package the *attempt* executed — is journal-internal, so it
+	// belongs here. Together the two prove:
+	//
+	//	ReviewCompleted.work_package_id == ReviewResult.work_package_id
+	//	                                == Attempt.work_package_id
+	if payload.WorkPackageID != attempt.WorkPackageID {
+		return errs.New(errs.CategoryIntegrity,
+			"%s of task %s judges work package %s, but attempt %s ran against %s",
+			what, task.Alias, payload.WorkPackageID, attempt.ID, attempt.WorkPackageID)
+	}
 	// Reviews are evidence, not a transition: the task leaves REVIEWING only
 	// through an explicit acceptance or rejection decision (DCI-044).
 	return p.recordEvidence(p.reviews, "review", payload.ReviewID, evidenceRef{
