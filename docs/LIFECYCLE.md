@@ -414,3 +414,36 @@ Examples:
 - project goals conflict.
 
 The system should present the human with evidence, alternatives and consequences rather than an unstructured transcript.
+
+
+## 18. Discovery and Specification Loop
+
+The Day-0 intake described above is governed by the full protocol in [DISCOVERY_AND_SPECIFICATION.md](DISCOVERY_AND_SPECIFICATION.md).
+
+Before entering Design Exploration, a substantial greenfield project or product-semantic change must pass Specification Readiness.
+
+```mermaid
+flowchart TD
+    Idea["Idea / feature intent"]
+    PM["ProblemModel"]
+    AL["Ambiguity Ledger"]
+    Resolve["Human / research / experiment / consultants"]
+    Reflect["Human reflection"]
+    Candidate["Specification Candidate"]
+    RedTeam["Independent spec red-team"]
+    Gate{"Specification Ready?"}
+    Design["Design Exploration"]
+
+    Idea --> PM --> AL --> Resolve --> PM
+    PM --> Reflect --> AL
+    AL -->|"material ambiguity bounded"| Candidate
+    Candidate --> RedTeam
+    RedTeam -->|"gaps"| AL
+    RedTeam --> Gate
+    Gate -->|"no"| AL
+    Gate -->|"yes"| Design
+```
+
+A fixed questionnaire is not the lifecycle. The principal asks a small number of high-impact questions, updates durable state, and repeats.
+
+When requirements change after architecture has begun, only the affected discovery scope must be reopened unless the change invalidates foundational product assumptions.
