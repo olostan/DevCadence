@@ -121,6 +121,13 @@ CI must eventually check:
 
 Do not edit only one side.
 
+This is enforced at runtime, not only in CI: a durable record is committed
+only after both its typed validation and its serialised document against the
+published schema pass, and a record kind with no registered schema cannot be
+persisted. The two checks are not redundant — constraints such as string
+`format` exist only in the schema, so Go validation alone would let a
+malformed timestamp become durable evidence.
+
 ## 6. Error handling
 
 Errors must preserve context while remaining machine-classifiable.
@@ -213,6 +220,19 @@ Suggested separation:
 - Git repository remains source of truth for code itself.
 
 Transactions must preserve state-machine invariants.
+
+Durable records are identified within their project. A semantic identifier
+chosen by a human or a principal — `PD-001`, `FR-018`, `wp_1` — will be chosen
+again by another project, so `project_id` is part of the record key and of
+every lookup. Opaque control-plane ULIDs (event, task, attempt) are globally
+unique by construction and are keyed globally. See
+[docs/adr/0002-control-plane-persistence.md](docs/adr/0002-control-plane-persistence.md).
+
+Persisted evidence is verified on read: every event payload and stored record
+is checked against its digest, and a mismatch is an integrity error rather
+than a successfully decoded value. Database-level immutability triggers stop
+the application from rewriting history; they do not cover a database modified
+outside it, and both have to hold.
 
 ## 11. Event model
 

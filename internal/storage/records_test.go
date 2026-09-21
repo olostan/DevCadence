@@ -98,7 +98,7 @@ func TestPutRecordRefusesToRewriteHistory(t *testing.T) {
 	var latest int
 	if err := store.Read(ctx, func(tx *storage.Tx) error {
 		var err error
-		latest, err = tx.LatestRecordVersion(ctx, "EngineeringWorkPackage", "wp_000000000000000000000001")
+		latest, err = tx.LatestRecordVersion(ctx, "example", "EngineeringWorkPackage", "wp_000000000000000000000001")
 		return err
 	}); err != nil {
 		t.Fatalf("latest version: %v", err)
@@ -112,7 +112,7 @@ func TestPutRecordRefusesToRewriteHistory(t *testing.T) {
 	var original storage.StoredRecord
 	if err := store.Read(ctx, func(tx *storage.Tx) error {
 		var err error
-		original, err = tx.Record(ctx, "EngineeringWorkPackage", "wp_000000000000000000000001", 1)
+		original, err = tx.Record(ctx, "example", "EngineeringWorkPackage", "wp_000000000000000000000001", 1)
 		return err
 	}); err != nil {
 		t.Fatalf("read version 1: %v", err)
@@ -167,7 +167,7 @@ func TestMissingRecordIsNotFound(t *testing.T) {
 	ctx := context.Background()
 	store := openStore(t)
 	err := store.Read(ctx, func(tx *storage.Tx) error {
-		_, err := tx.Record(ctx, "EngineeringWorkPackage", "wp_missing", 1)
+		_, err := tx.Record(ctx, "example", "EngineeringWorkPackage", "wp_missing", 1)
 		return err
 	})
 	if got := errs.CategoryOf(err); got != errs.CategoryNotFound {
@@ -212,7 +212,7 @@ func TestDiscoveryRecordsPersistThroughTheSameStore(t *testing.T) {
 			SchemaVersion: protocol.SchemaVersion1, RequirementID: "req_1", ProjectID: "example",
 			Kind: protocol.RequirementFunctional, Statement: "MUST explain an acceptance.",
 			Strength: protocol.RequirementMust, Status: protocol.RequirementConfirmed,
-			Source: protocol.RequirementSource{Type: protocol.SourceProductDecision},
+			Source: protocol.RequirementSource{Type: protocol.SourceProductDecision, Ref: strPtr("pd_1")},
 		},
 		&protocol.DiscoveryExperiment{
 			SchemaVersion: protocol.SchemaVersion1, ExperimentID: "exp_1", ProjectID: "example",
@@ -235,7 +235,7 @@ func TestDiscoveryRecordsPersistThroughTheSameStore(t *testing.T) {
 		var stored storage.StoredRecord
 		if err := store.Read(ctx, func(tx *storage.Tx) error {
 			var err error
-			stored, err = tx.Record(ctx, record.RecordKind(), record.RecordID(), 1)
+			stored, err = tx.Record(ctx, "example", record.RecordKind(), record.RecordID(), 1)
 			return err
 		}); err != nil {
 			t.Fatalf("read %s: %v", record.RecordKind(), err)
@@ -260,3 +260,7 @@ func TestDiscoveryRecordsPersistThroughTheSameStore(t *testing.T) {
 		t.Fatal("a discovery record was mutated in place")
 	}
 }
+
+// strPtr is a small helper for the optional string fields the protocol types
+// use to distinguish "absent" from "empty".
+func strPtr(s string) *string { return &s }

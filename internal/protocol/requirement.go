@@ -1,6 +1,10 @@
 package protocol
 
-import "encoding/json"
+import (
+	"encoding/json"
+
+	"github.com/olostan/DevCadience/internal/errs"
+)
 
 // ProductDecisionStatus is the lifecycle of a human product decision.
 type ProductDecisionStatus string
@@ -230,6 +234,24 @@ func (r *Requirement) Validate() error {
 		default:
 			return enumError(kind, "source.type", string(r.Source.Type),
 				"product_decision or human_statement for a confirmed requirement")
+		}
+		// Naming a human-originating source type is not provenance; it is a
+		// claim about provenance. "Confirmed because a human said so" with
+		// nothing to point at is exactly the unverifiable assertion DCI-015
+		// exists to prevent, so the reference is required.
+		//
+		// For source_product_decision the ref is a ProductDecision id, which
+		// the control plane additionally checks exists in the same project.
+		// For human_statement M1 has no durable transcript record, so the ref
+		// is whatever durable artifact carries the statement (an evidence ref
+		// or an ambiguity entry id). Requiring *some* retrievable handle is
+		// the M1-safe rule; tightening it to a specific record kind waits for
+		// the milestone that introduces one.
+		if r.Source.Ref == nil || *r.Source.Ref == "" {
+			return errs.New(errs.CategoryInvalidArgument,
+				"%s: a confirmed requirement sourced from %s must carry source.ref; "+
+					"a claim of human provenance with nothing to trace to is not provenance",
+				kind, r.Source.Type)
 		}
 	}
 	return nil

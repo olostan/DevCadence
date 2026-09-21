@@ -82,6 +82,7 @@ func TestCLIDrivesASyntheticProjectToDone(t *testing.T) {
 			`"verdict":"pass","record_digest":"sha256:0"}`},
 		{"ChangeAccepted", `{"attempt_id":"att_1","work_package_id":"wp_1",` +
 			`"candidate_commit":"cafebabe1234","semantic_summary":"Bounded reads.",` +
+			`"validation_ids":["val_1"],"review_ids":["rev_1"],` +
 			`"decided_by":"principal"}`},
 		{"IntegrationStarted", `{"integration_id":"int_1"}`},
 		{"IntegrationValidationStarted", `{"integration_id":"int_1","integrated_commit":"deadbeef9988"}`},

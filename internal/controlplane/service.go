@@ -122,11 +122,29 @@ func (s *Service) Apply(ctx context.Context, cmd Command) (Result, error) {
 
 		result.RecordDigests = make(map[string]string, len(cmd.Records))
 		for _, record := range cmd.Records {
+			// High-value product-authority references are checked before the
+			// record becomes durable. This is deliberately not a general
+			// referential engine over every protocol relation; it covers the
+			// one relation where a dangling reference would let the system
+			// claim human authority it does not have (DCI-009, DCI-015).
+			if err := checkProductAuthorityRefs(ctx, tx, cmd.ProjectID, record.Record); err != nil {
+				return err
+			}
 			digest, err := tx.PutRecord(ctx, cmd.ProjectID, record.Version, record.Record)
 			if err != nil {
 				return err
 			}
 			result.RecordDigests[record.Record.RecordID()] = digest
+		}
+
+		// Correlation is derived from the typed payload here rather than
+		// taken from the caller. Task history and observability read the
+		// indexed correlation columns, so an adapter that omitted or
+		// mis-set them could append a valid state change that never appears
+		// in its task's history.
+		correlation, err := canonicalCorrelation(cmd.Payload, cmd.Correlation)
+		if err != nil {
+			return err
 		}
 
 		now := s.clock.Now()
@@ -137,7 +155,7 @@ func (s *Service) Apply(ctx context.Context, cmd Command) (Result, error) {
 			EventType:     cmd.Payload.Type(),
 			OccurredAt:    protocol.NewTimestamp(now),
 			Actor:         cmd.Actor,
-			Correlation:   cmd.Correlation,
+			Correlation:   correlation,
 			Payload:       cmd.Payload,
 		}
 		appended, err := tx.AppendEvent(ctx, event)
@@ -346,10 +364,14 @@ func (s *Service) TaskDetail(ctx context.Context, projectID, alias string) (*Tas
 }
 
 // Record returns a stored durable protocol document.
-func (s *Service) Record(ctx context.Context, kind, id string, version int) (storage.StoredRecord, error) {
+//
+// A record is identified within its project: semantic identifiers such as
+// "PD-001" or "wp_1" are chosen per project and collide across them, so the
+// project is part of the lookup rather than a filter applied afterwards.
+func (s *Service) Record(ctx context.Context, projectID, kind, id string, version int) (storage.StoredRecord, error) {
 	var out storage.StoredRecord
 	err := s.store.Read(ctx, func(tx *storage.Tx) error {
-		record, err := tx.Record(ctx, kind, id, version)
+		record, err := tx.Record(ctx, projectID, kind, id, version)
 		if err != nil {
 			return err
 		}

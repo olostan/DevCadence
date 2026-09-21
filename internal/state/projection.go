@@ -82,6 +82,12 @@ type Projection struct {
 	// discovery is the Day-0 projection. It stays nil in ProjectState until
 	// a discovery fact has been recorded.
 	discovery *discoveryState
+
+	// validations and reviews index recorded evidence by id so that an
+	// acceptance can be checked against the evidence it cites. They are
+	// reducer-internal and never rendered into ProjectState.
+	validations map[string]evidenceRef
+	reviews     map[string]evidenceRef
 }
 
 // RecentSemanticChangeLimit bounds how many semantic deltas ProjectState
@@ -100,6 +106,8 @@ func New() *Projection {
 		attemptsByTask:    map[string][]string{},
 		aliases:           map[string]string{},
 		discovery:         newDiscoveryState(),
+		validations:       map[string]evidenceRef{},
+		reviews:           map[string]evidenceRef{},
 		Validation:        protocol.ValidationState{Status: protocol.ValidationUnknown},
 		Health:            protocol.HealthState{Status: protocol.HealthUnknown},
 	}

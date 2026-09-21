@@ -151,10 +151,15 @@ func TestSupersededProductDecisionIsNoLongerActive(t *testing.T) {
 // not be counted as human-confirmed intent.
 func TestRequirementsAreCountedByEpistemicStatus(t *testing.T) {
 	discovery := renderDiscovery(t, discoveryScenario(t).
+		Add(&events.ProductDecisionRecorded{
+			ProductDecisionID: "pd_1", Question: "Offline?", Answer: "Yes.",
+			RecordDigest: testDigest, Status: protocol.ProductDecisionConfirmed,
+		}).
 		Add(&events.RequirementRecorded{
 			RequirementID: "req_1", Statement: "MUST explain an acceptance.",
 			Kind: protocol.RequirementFunctional, Strength: protocol.RequirementMust,
 			Status: protocol.RequirementConfirmed, SourceType: protocol.SourceProductDecision,
+			SourceRef: "pd_1",
 		}).
 		Add(&events.RequirementRecorded{
 			RequirementID: "req_2", Statement: "SHOULD read well in a terminal.",
@@ -177,6 +182,10 @@ func TestRequirementsAreCountedByEpistemicStatus(t *testing.T) {
 // requirement replaces its status rather than double-counting it.
 func TestRequirementPromotionKeepsOneIdentity(t *testing.T) {
 	discovery := renderDiscovery(t, discoveryScenario(t).
+		Add(&events.ProductDecisionRecorded{
+			ProductDecisionID: "pd_1", Question: "Offline?", Answer: "Yes.",
+			RecordDigest: testDigest, Status: protocol.ProductDecisionConfirmed,
+		}).
 		Add(&events.RequirementRecorded{
 			RequirementID: "req_1", Statement: "MUST explain an acceptance.",
 			Status: protocol.RequirementProposed, SourceType: protocol.SourcePrincipalInference,
@@ -184,6 +193,7 @@ func TestRequirementPromotionKeepsOneIdentity(t *testing.T) {
 		Add(&events.RequirementRecorded{
 			RequirementID: "req_1", Statement: "MUST explain an acceptance.",
 			Status: protocol.RequirementConfirmed, SourceType: protocol.SourceProductDecision,
+			SourceRef: "pd_1",
 		}))
 	if discovery.ConfirmedRequirements != 1 || discovery.ProposedRequirements != 0 {
 		t.Fatalf("confirmed = %d, proposed = %d, want 1 and 0",
@@ -202,8 +212,12 @@ func TestConfirmedRequirementEventMustTraceToAHuman(t *testing.T) {
 		t.Fatal("the principal confirmed its own inference through an event")
 	}
 	payload.SourceType = protocol.SourceHumanStatement
+	if err := payload.Validate(); err == nil {
+		t.Fatal("a confirmation claiming human origin with nothing to trace to was accepted")
+	}
+	payload.SourceRef = "AQ-001"
 	if err := payload.Validate(); err != nil {
-		t.Fatalf("a human-sourced confirmation was rejected: %v", err)
+		t.Fatalf("a referenced human-sourced confirmation was rejected: %v", err)
 	}
 }
 
@@ -351,17 +365,18 @@ func TestProjectWithoutDiscoveryOmitsTheProjection(t *testing.T) {
 // the guarantee of ADR-0005: same journal, same bytes.
 func TestDiscoveryProjectionIsDeterministic(t *testing.T) {
 	stream := discoveryScenario(t).
+		Add(&events.ProductDecisionRecorded{
+			ProductDecisionID: "pd_1", Question: "Offline?", Answer: "Yes.",
+			RecordDigest: testDigest, Status: protocol.ProductDecisionConfirmed,
+		}).
 		Add(&events.RequirementRecorded{
 			RequirementID: "req_1", Statement: "MUST explain an acceptance.",
 			Status: protocol.RequirementConfirmed, SourceType: protocol.SourceProductDecision,
+			SourceRef: "pd_1",
 		}).
 		Add(&events.RequirementRecorded{
 			RequirementID: "req_2", Statement: "SHOULD read well.",
 			Status: protocol.RequirementProposed, SourceType: protocol.SourcePrincipalInference,
-		}).
-		Add(&events.ProductDecisionRecorded{
-			ProductDecisionID: "pd_1", Question: "Offline?", Answer: "Yes.",
-			RecordDigest: testDigest, Status: protocol.ProductDecisionConfirmed,
 		}).
 		Stream()
 
@@ -383,5 +398,46 @@ func TestDiscoveryProjectionIsDeterministic(t *testing.T) {
 			t.Fatalf("discovery projection is not deterministic:\n%s\n%s", document, previous)
 		}
 		previous = string(document)
+	}
+}
+
+// TestConfirmedRequirementMustNameARecordedDecision is the journal-side half
+// of the provenance rule: requiring a reference only helps if the reference
+// names something. Without this the journal could assert human authority
+// derived from a decision nobody ever made.
+func TestConfirmedRequirementMustNameARecordedDecision(t *testing.T) {
+	_, err := state.Reduce(discoveryScenario(t).
+		Add(&events.RequirementRecorded{
+			RequirementID: "req_1", Statement: "MUST run offline.",
+			Status: protocol.RequirementConfirmed, SourceType: protocol.SourceProductDecision,
+			SourceRef: "pd_never_recorded",
+		}).Stream())
+	if err == nil {
+		t.Fatal("a requirement was confirmed from a decision that was never recorded")
+	}
+	if got := errs.CategoryOf(err); got != errs.CategoryIntegrity {
+		t.Fatalf("category = %s, want integrity (%v)", got, err)
+	}
+}
+
+// TestConfirmedRequirementCannotRestOnAWithdrawnDecision: a withdrawn
+// decision has had its authority retracted, so it cannot be what a
+// requirement is confirmed from.
+func TestConfirmedRequirementCannotRestOnAWithdrawnDecision(t *testing.T) {
+	_, err := state.Reduce(discoveryScenario(t).
+		Add(&events.ProductDecisionRecorded{
+			ProductDecisionID: "pd_1", Question: "Offline?", Answer: "Yes.",
+			RecordDigest: testDigest, Status: protocol.ProductDecisionWithdrawn,
+		}).
+		Add(&events.RequirementRecorded{
+			RequirementID: "req_1", Statement: "MUST run offline.",
+			Status: protocol.RequirementConfirmed, SourceType: protocol.SourceProductDecision,
+			SourceRef: "pd_1",
+		}).Stream())
+	if err == nil {
+		t.Fatal("a requirement was confirmed from a withdrawn decision")
+	}
+	if got := errs.CategoryOf(err); got != errs.CategoryIntegrity {
+		t.Fatalf("category = %s, want integrity (%v)", got, err)
 	}
 }

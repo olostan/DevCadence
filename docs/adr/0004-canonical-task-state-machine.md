@@ -135,6 +135,47 @@ is not.
 
 Anything else is an `invalid_transition` error and mutates nothing.
 
+**2a. A legal transition is not sufficient authority.** The adjacency list
+says which state changes are possible; it does not say which event may cause
+one. Several states are reachable by more than one edge — RUNNING from READY,
+VALIDATING and REVIEWING — so an event guarded only by "this transition is
+legal" can move a task along an edge it was never meant to act on. A failing
+attempt-validation, for instance, could pull a task out of REVIEWING and
+bypass the rejection decision that is supposed to send it back. Each
+lifecycle event therefore names the state it requires, in addition to the
+transition being legal.
+
+**2b. Lineage is checked, not trusted.** An event that references a task, an
+attempt, a Work Package, a candidate commit or a piece of evidence must refer
+to something that exists and belongs to the same lineage. DCI-032 requires
+every candidate change to have lineage, and docs/OBSERVABILITY.md §13 says an
+acceptance the system cannot explain means the acceptance mechanism is
+incomplete — so an acceptance citing another task's attempt, a commit the
+attempt did not produce, or evidence that was never recorded is refused
+rather than stored as a decision that merely looks justified. Specifically:
+
+- an **attempt** may only start against the Work Package version the task
+  approved, because the attempt record is the durable claim about what the
+  work was executed against;
+- an **attempt validation** requires its task in VALIDATING, an attempt of
+  that task, a candidate actually produced, and a commit matching that
+  candidate — the commit is required, not optional, so the evidence names
+  what it is about and cannot be read as covering a superseded candidate;
+- a **review** requires its task in REVIEWING and an attempt of that task
+  that produced a candidate;
+- an **acceptance** requires all of the above plus: the candidate commit
+  matches the attempt's, the named Work Package is the task's approved one,
+  the attempt ran against that same version, and every cited validation and
+  review id names evidence recorded for *that* task and *that* attempt;
+- a **rejection** carries the same attempt and candidate requirements minus
+  the evidence citations;
+- an **escalation** that cites an attempt must cite one of the task's own.
+
+Validation and review evidence is indexed reducer-internally by id, carrying
+only the task, attempt and candidate it belongs to. That index is not part of
+ProjectState: docs/PROJECT_STATE.md §1 keeps the principal's view compact, and
+the full documents live in the record store behind their ids.
+
 **3. Blocks preserve why.** `BLOCKED` always carries a typed reason with a
 trigger, a statement, a decision authority, optional evidence references, the
 attempt that surfaced it, and the state the task blocked from. A blocked task
@@ -148,9 +189,16 @@ never reopened; a retry starts a new attempt with the next ordinal, and
 previous attempts, including their block reasons, remain.
 
 **5. Repair versus retry are counted separately.** `RepairIterations` counts
-fix-and-recheck cycles *inside* one attempt and is reported by the worker.
-Attempt ordinal counts retries *across* attempts. A failed attempt validation
-returns the task to `RUNNING`; the repair runs as a new attempt.
+the worker's internal fix-and-recheck cycles *before* it produced its outcome,
+and is reported by the worker rather than derived from task transitions.
+Attempt ordinal counts retries *across* attempts.
+
+A failed attempt validation returns the task to `RUNNING` and the repair runs
+as a **new** attempt; it does not reopen the terminated one. Producing a
+candidate terminates the attempt that produced it, and a terminated attempt is
+historical fact. The two counters bound different things — how long one worker
+may iterate, versus how many times the task may be re-delegated (FR-016) —
+which is why neither substitutes for the other.
 
 **6. Reviews do not move the task.** `ReviewCompleted` records evidence. A
 task leaves `REVIEWING` only through `ChangeAccepted` or `ChangeRejected`,
@@ -233,6 +281,16 @@ rather than from convenience.
 - `TestAttemptStatusTransitions`, `TestBlockedReasonRequiresADecisionOwner`,
   `TestTaskBlockedStateAndReasonMustAgree`.
 - `TestIllegalTransitionLeavesPersistenceUntouched` — the durable half.
+- `internal/state/lineage_test.go` — the adversarial set: validation or
+  acceptance citing another task's attempt, a nonexistent attempt, a different
+  candidate commit, a different Work Package, unrecorded evidence ids,
+  another task's evidence, and integration evidence cited as attempt
+  evidence; plus `TestFailedValidationCannotPullATaskOutOfReview` for the
+  state-guard hole and `TestAttemptCannotRunAgainstAnUnapprovedWorkPackage`
+  for the origin of the Work Package lineage.
+- `TestBrokenLineageLeavesPersistenceUntouched` — the durable half of the
+  lineage rules: a refused acceptance advances neither the journal nor the
+  projection.
 
 ## Rollback / supersession strategy
 

@@ -106,9 +106,15 @@ type Attempt struct {
 
 	// CandidateCommit is set when the attempt produced a candidate.
 	CandidateCommit string `json:"candidate_commit,omitempty"`
-	// RepairIterations counts bounded repair cycles inside this attempt.
-	// Retries across attempts are counted by Ordinal instead; the two are
-	// separate because policy bounds them separately (FR-016).
+	// RepairIterations counts the worker's internal fix-and-recheck cycles
+	// before this attempt produced its outcome. It is reported by the worker,
+	// not derived from task transitions.
+	//
+	// Retries across attempts are counted by Ordinal instead. The two are
+	// separate because they bound different things: RepairIterations bounds
+	// how long one worker may iterate, Ordinal bounds how many times the task
+	// may be re-delegated (FR-016). A failed validation returns the task to
+	// RUNNING and the repair begins a new attempt; it does not reopen this one.
 	RepairIterations int `json:"repair_iterations"`
 
 	// BlockReason records a contradiction or unsatisfiable MUST. It is set

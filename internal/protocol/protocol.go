@@ -230,6 +230,21 @@ type Record interface {
 	Validate() error
 }
 
+// ProjectScoped is implemented by durable records that belong to exactly one
+// project.
+//
+// It is deliberately *not* part of Record. LessonCandidate carries no
+// project_id because DCI-073 allows a lesson to be scoped beyond one project,
+// so a mandatory project identity on every record would misstate the
+// contract. Persistence uses this interface to check that a record's own
+// declared project agrees with the project it is being written to, and simply
+// has nothing to check for records that do not implement it.
+type ProjectScoped interface {
+	Record
+	// ProjectOf returns the project the record declares itself to belong to.
+	ProjectOf() string
+}
+
 // Marshal serialises a durable record after validating it.
 //
 // Validation on the write path is deliberate: DCI-092 forbids durable records
@@ -301,8 +316,36 @@ func Digest(v any) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	return DigestBytes(canonical), nil
+}
+
+// DigestBytes returns the algorithm-prefixed SHA-256 of exact bytes.
+//
+// The durable digest contract is defined over the *stored canonical bytes*,
+// not over a re-serialisation of the decoded value
+// (docs/adr/0003-durable-record-compatibility.md). That is the stronger
+// invariant: it detects any change to what was written, including one that
+// would re-serialise identically, and it stays verifiable for a record this
+// build cannot decode at all. Read paths therefore verify with DigestBytes
+// over what the database returned, never by re-encoding the Go value.
+func DigestBytes(canonical []byte) string {
 	sum := sha256.Sum256(canonical)
-	return "sha256:" + hex.EncodeToString(sum[:]), nil
+	return "sha256:" + hex.EncodeToString(sum[:])
+}
+
+// VerifyDigest reports an integrity error when canonical does not hash to the
+// expected digest.
+func VerifyDigest(kind, id, expected string, canonical []byte) error {
+	if expected == "" {
+		return errs.New(errs.CategoryIntegrity,
+			"%s %s was stored without a digest, so its integrity cannot be verified", kind, id)
+	}
+	if actual := DigestBytes(canonical); actual != expected {
+		return errs.New(errs.CategoryIntegrity,
+			"%s %s fails its digest check: stored %s, computed %s; "+
+				"the persisted bytes have changed since they were written", kind, id, expected, actual)
+	}
+	return nil
 }
 
 // requireNonEmpty is a small helper used by Validate implementations to keep
@@ -326,3 +369,23 @@ func requireMinItems(kind, field string, n, min int) error {
 func enumError(kind, field, value string, allowed ...string) error {
 	return errs.New(errs.CategoryInvalidArgument, "%s: %s %q is not one of %v", kind, field, value, allowed)
 }
+
+// ProjectOf implementations. Each simply returns the record's own project_id,
+// which persistence checks against the project it is being written to.
+func (s *ProjectState) ProjectOf() string           { return s.ProjectID }
+func (w *EngineeringWorkPackage) ProjectOf() string { return w.ProjectID }
+func (p *EvidencePacket) ProjectOf() string         { return p.ProjectID }
+func (v *ValidationResult) ProjectOf() string       { return v.ProjectID }
+func (r *ReviewResult) ProjectOf() string           { return r.ProjectID }
+func (d *DecisionRecord) ProjectOf() string         { return d.ProjectID }
+func (m *ProblemModel) ProjectOf() string           { return m.ProjectID }
+func (l *AmbiguityLedger) ProjectOf() string        { return l.ProjectID }
+func (d *ProductDecision) ProjectOf() string        { return d.ProjectID }
+func (r *Requirement) ProjectOf() string            { return r.ProjectID }
+func (e *DiscoveryExperiment) ProjectOf() string    { return e.ProjectID }
+func (r *SpecificationReadiness) ProjectOf() string { return r.ProjectID }
+
+// LessonCandidate deliberately has no ProjectOf: it carries no project_id,
+// because a lesson may be promoted beyond the project that produced it
+// (DCI-073). It is stored under the project that proposed it, and nothing
+// cross-checks a field it does not have.

@@ -327,7 +327,8 @@ func (s ValidationScope) Valid() bool {
 // ValidationCompleted records deterministic evidence.
 //
 // Scope ATTEMPT drives VALIDATING -> REVIEWING on pass and VALIDATING ->
-// RUNNING (bounded repair) on failure. Scope INTEGRATION drives
+// RUNNING on failure, where the repair proceeds as a new attempt rather than
+// reopening the terminated one. Scope INTEGRATION drives
 // INTEGRATION_VALIDATING -> DONE on pass and, on failure, requires a separate
 // EscalationRaised to block the task. Scope BASELINE touches no task.
 type ValidationCompleted struct {
@@ -444,6 +445,23 @@ func (p *ChangeAccepted) Validate() error {
 		return errs.New(errs.CategoryInvalidArgument,
 			"ChangeAccepted: attempt_id, candidate_commit and semantic_summary are required")
 	}
+	// FR-017: acceptance MUST reference the Work Package and the
+	// deterministic validation it rests on. Both are required here rather
+	// than merely checked when present, because an acceptance that names
+	// neither cannot be explained afterwards (docs/OBSERVABILITY.md §13).
+	if p.WorkPackageID == "" {
+		return errs.New(errs.CategoryInvalidArgument,
+			"ChangeAccepted: work_package_id is required; an acceptance must name the blueprint it satisfied")
+	}
+	if len(p.ValidationIDs) == 0 {
+		return errs.New(errs.CategoryInvalidArgument,
+			"ChangeAccepted: at least one validation_id is required; "+
+				"model review is not a substitute for deterministic evidence (DCI-040)")
+	}
+	// ReviewIDs is deliberately not required here: which reviews a change
+	// needs is a policy decision that varies by change class (M6), so the
+	// count belongs to policy while the lineage of any cited review is
+	// checked by the reducer.
 	if !p.DecidedBy.Valid() {
 		return errs.New(errs.CategoryInvalidArgument,
 			"ChangeAccepted: decided_by %q is not a known decision authority", string(p.DecidedBy))

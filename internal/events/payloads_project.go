@@ -133,6 +133,13 @@ func (p *RequirementRecorded) Validate() error {
 				"RequirementRecorded: a confirmed requirement must come from a product decision "+
 					"or a human statement, not %q", string(p.SourceType))
 		}
+		// The same provenance rule the Requirement record carries: a claim of
+		// human origin with nothing to trace to is not provenance (DCI-015).
+		if p.SourceRef == "" {
+			return errs.New(errs.CategoryInvalidArgument,
+				"RequirementRecorded: a confirmed requirement sourced from %s must carry source_ref",
+				string(p.SourceType))
+		}
 	}
 	return nil
 }

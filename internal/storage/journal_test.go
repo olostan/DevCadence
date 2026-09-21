@@ -5,12 +5,16 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/olostan/DevCadience/internal/clock"
 	"github.com/olostan/DevCadience/internal/errs"
 	"github.com/olostan/DevCadience/internal/events"
 	"github.com/olostan/DevCadience/internal/protocol"
 	"github.com/olostan/DevCadience/internal/storage"
 	"github.com/olostan/DevCadience/internal/testsupport"
 )
+
+// testClock is the deterministic clock the storage suite stamps with.
+func testClock() *clock.Fake { return testsupport.NewClock() }
 
 func openStore(t *testing.T) *storage.Store {
 	t.Helper()
@@ -291,14 +295,17 @@ func TestUnknownStoredEventTypeIsReportedNotSkipped(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("append: %v", err)
 	}
-	// Write a row directly, as a newer build would have.
+	// Write a row directly, as a newer build would have. Its digest is
+	// computed properly so that the read reaches the unknown-type check
+	// rather than stopping at the integrity check, which has its own tests.
+	futurePayload := `{"anything":true}`
 	if err := store.Write(ctx, func(tx *storage.Tx) error {
 		return tx.ExecForTest(ctx,
 			`INSERT INTO events (event_id, project_id, event_type, schema_version, occurred_at,
                 actor_kind, actor_id, correlation, payload, payload_digest)
              VALUES ('evt_future', 'example', 'SomethingFromTheFuture', '1.0',
                      '2026-01-02T03:04:05.000000Z', 'control_plane', 'devcadience',
-                     '{}', '{"anything":true}', 'sha256:0')`)
+                     '{}', ?, ?)`, futurePayload, protocol.DigestBytes([]byte(futurePayload)))
 	}); err != nil {
 		t.Fatalf("insert future event: %v", err)
 	}

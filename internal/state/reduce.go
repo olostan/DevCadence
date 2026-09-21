@@ -57,8 +57,7 @@ func (p *Projection) applyPayload(e *events.Event) error {
 		p.Milestone = protocol.MilestoneState{ID: payload.MilestoneID, Title: payload.Title, Status: payload.Status}
 		return nil
 	case *events.RequirementRecorded:
-		p.discovery.applyRequirementRecorded(payload)
-		return nil
+		return p.discovery.applyRequirementRecorded(payload)
 	case *events.ComponentDeclared:
 		return p.applyComponentDeclared(payload)
 	case *events.DesignCandidateCreated:
@@ -110,7 +109,7 @@ func (p *Projection) applyPayload(e *events.Event) error {
 	case *events.ChangeAccepted:
 		return p.applyChangeAccepted(e, payload)
 	case *events.ChangeRejected:
-		return p.transitionTask(e, payload.TaskID, tasks.StateRunning, nil)
+		return p.applyChangeRejected(e, payload)
 	case *events.EscalationRaised:
 		return p.applyEscalationRaised(e, payload)
 	case *events.IntegrationStarted:
@@ -338,6 +337,20 @@ func (p *Projection) applyAttemptStarted(e *events.Event, payload *events.Attemp
 		return errs.New(errs.CategoryInvalidTransition,
 			"attempt cannot start for task %s in state %s", task.Alias, task.State)
 	}
+	// An attempt is lineage: it records what blueprint the work was executed
+	// against. Starting one against a Work Package the task never approved
+	// would make that lineage a fiction, and acceptance later checks the two
+	// agree, so the disagreement is caught here where it originates.
+	if payload.WorkPackageID != task.WorkPackageID {
+		return errs.New(errs.CategoryIntegrity,
+			"attempt for task %s names work package %s, but %s is the approved one",
+			task.Alias, payload.WorkPackageID, task.WorkPackageID)
+	}
+	if payload.WorkPackageVersion != task.WorkPackageVersion {
+		return errs.New(errs.CategoryIntegrity,
+			"attempt for task %s names work package %s v%d, but v%d is the approved version",
+			task.Alias, payload.WorkPackageID, payload.WorkPackageVersion, task.WorkPackageVersion)
+	}
 	if _, exists := p.attempts[payload.AttemptID]; exists {
 		return errs.New(errs.CategoryConflict, "attempt %s already exists", payload.AttemptID)
 	}
@@ -456,35 +469,86 @@ func (p *Projection) applyValidationCompleted(e *events.Event, payload *events.V
 	case events.ScopeBaseline:
 		return p.applyBaselineValidation(payload)
 	case events.ScopeAttempt:
-		if payload.Status == protocol.ValidationPass {
-			return p.transitionTask(e, payload.TaskID, tasks.StateReviewing, nil)
-		}
-		// A failed candidate returns the task to the worker. The repair runs
-		// as a new attempt: the attempt that produced the rejected candidate
-		// has already terminated, and rewriting it would erase history.
-		if _, err := p.Attempt(payload.AttemptID); err != nil {
-			return err
-		}
-		return p.transitionTask(e, payload.TaskID, tasks.StateRunning, nil)
+		return p.applyAttemptValidation(e, payload)
 	case events.ScopeIntegration:
-		if payload.Status != protocol.ValidationPass {
-			// Integration failure does not itself block: an escalation must
-			// name the decision owner, so it is a separate recorded act.
-			return nil
-		}
-		if err := p.transitionTask(e, payload.TaskID, tasks.StateDone, nil); err != nil {
-			return err
-		}
-		// Only an integrated, validated change becomes the project baseline.
-		// Acceptance alone is not integration (docs/ARCHITECTURE.md §11).
-		if payload.Commit != "" {
-			p.AcceptedCommit = payload.Commit
-		} else if task := p.tasks[payload.TaskID]; task.AcceptedCommit != "" {
-			p.AcceptedCommit = task.AcceptedCommit
-		}
-		return nil
+		return p.applyIntegrationValidation(e, payload)
 	}
 	return errs.New(errs.CategoryInternal, "unhandled validation scope %s", payload.Scope)
+}
+
+// applyAttemptValidation records deterministic evidence about one attempt's
+// candidate and moves the task on.
+//
+// Every precondition is checked before anything is mutated, so a validation
+// that cites the wrong attempt or the wrong commit changes nothing.
+func (p *Projection) applyAttemptValidation(e *events.Event, payload *events.ValidationCompleted) error {
+	const what = "attempt validation"
+	// The task must be VALIDATING for either outcome. Checking only that the
+	// transition is legal would not be enough: RUNNING is also reachable from
+	// REVIEWING, so a failing validation could otherwise pull a task out of
+	// review without the rejection decision that is supposed to do it.
+	task, err := p.requireTaskInState(payload.TaskID, tasks.StateValidating, what)
+	if err != nil {
+		return err
+	}
+	attempt, err := p.requireAttemptOf(task.ID, payload.AttemptID, what)
+	if err != nil {
+		return err
+	}
+	if err := requireCandidate(attempt, what); err != nil {
+		return err
+	}
+	// The commit pins the evidence to a specific candidate, so a validation
+	// cannot be read as covering a later or superseded one.
+	if err := requireCandidateCommit(attempt, payload.Commit, what); err != nil {
+		return err
+	}
+	if err := p.recordEvidence(p.validations, "validation", payload.ValidationID, evidenceRef{
+		scope:     string(scopeAttemptEvidence),
+		taskID:    task.ID,
+		attemptID: attempt.ID,
+		commit:    attempt.CandidateCommit,
+	}); err != nil {
+		return err
+	}
+	if payload.Status == protocol.ValidationPass {
+		return p.transitionTask(e, payload.TaskID, tasks.StateReviewing, nil)
+	}
+	// A failed candidate returns the task to the worker. The repair runs as a
+	// new attempt: the attempt that produced the rejected candidate has
+	// already terminated, and rewriting it would erase history.
+	return p.transitionTask(e, payload.TaskID, tasks.StateRunning, nil)
+}
+
+func (p *Projection) applyIntegrationValidation(e *events.Event, payload *events.ValidationCompleted) error {
+	const what = "integration validation"
+	task, err := p.requireTaskInState(payload.TaskID, tasks.StateIntegrationValidating, what)
+	if err != nil {
+		return err
+	}
+	if err := p.recordEvidence(p.validations, "validation", payload.ValidationID, evidenceRef{
+		scope:  string(events.ScopeIntegration),
+		taskID: task.ID,
+		commit: payload.Commit,
+	}); err != nil {
+		return err
+	}
+	if payload.Status != protocol.ValidationPass {
+		// Integration failure does not itself block: an escalation must name
+		// the decision owner, so it is a separate recorded act.
+		return nil
+	}
+	if err := p.transitionTask(e, payload.TaskID, tasks.StateDone, nil); err != nil {
+		return err
+	}
+	// Only an integrated, validated change becomes the project baseline.
+	// Acceptance alone is not integration (docs/ARCHITECTURE.md §11).
+	if payload.Commit != "" {
+		p.AcceptedCommit = payload.Commit
+	} else if task.AcceptedCommit != "" {
+		p.AcceptedCommit = task.AcceptedCommit
+	}
+	return nil
 }
 
 func (p *Projection) applyBaselineValidation(payload *events.ValidationCompleted) error {
@@ -510,36 +574,82 @@ func (p *Projection) applyBaselineValidation(payload *events.ValidationCompleted
 }
 
 func (p *Projection) applyReviewCompleted(payload *events.ReviewCompleted) error {
-	attempt, err := p.Attempt(payload.AttemptID)
+	const what = "review"
+	task, err := p.requireTaskInState(payload.TaskID, tasks.StateReviewing, what)
 	if err != nil {
 		return err
 	}
-	if attempt.TaskID != payload.TaskID {
-		return errs.New(errs.CategoryIntegrity,
-			"review %s references attempt %s of task %s, not %s",
-			payload.ReviewID, payload.AttemptID, attempt.TaskID, payload.TaskID)
-	}
-	task, err := p.Task(payload.TaskID)
+	attempt, err := p.requireAttemptOf(task.ID, payload.AttemptID, what)
 	if err != nil {
 		return err
 	}
-	if task.State != tasks.StateReviewing {
-		return errs.New(errs.CategoryInvalidTransition,
-			"review cannot complete for task %s in state %s", task.Alias, task.State)
+	if err := requireCandidate(attempt, what); err != nil {
+		return err
 	}
 	// Reviews are evidence, not a transition: the task leaves REVIEWING only
-	// through an explicit acceptance or rejection decision.
-	return nil
+	// through an explicit acceptance or rejection decision (DCI-044).
+	return p.recordEvidence(p.reviews, "review", payload.ReviewID, evidenceRef{
+		scope:     string(scopeAttemptEvidence),
+		taskID:    task.ID,
+		attemptID: attempt.ID,
+		commit:    attempt.CandidateCommit,
+	})
 }
 
+// applyChangeAccepted is the point at which a candidate becomes the project's
+// answer, so it is where lineage has to be complete.
+//
+// docs/OBSERVABILITY.md §9 requires an acceptance to be explainable from the
+// Work Package, the candidate, the validation and the reviews. Every one of
+// those references is checked here; an acceptance that cites another task's
+// attempt, a commit the attempt did not produce, a blueprint the task never
+// approved, or evidence that was never recorded is refused rather than
+// stored as a decision that merely looks justified.
 func (p *Projection) applyChangeAccepted(e *events.Event, payload *events.ChangeAccepted) error {
+	const what = "acceptance"
+	task, err := p.requireTaskInState(payload.TaskID, tasks.StateReviewing, what)
+	if err != nil {
+		return err
+	}
+	attempt, err := p.requireAttemptOf(task.ID, payload.AttemptID, what)
+	if err != nil {
+		return err
+	}
+	if err := requireCandidate(attempt, what); err != nil {
+		return err
+	}
+	if err := requireCandidateCommit(attempt, payload.CandidateCommit, what); err != nil {
+		return err
+	}
+	// The accepted change must be the one the approved blueprint asked for,
+	// and the attempt must have been executed against that same blueprint
+	// version (DCI-032).
+	if payload.WorkPackageID != task.WorkPackageID {
+		return errs.New(errs.CategoryIntegrity,
+			"%s of task %s names work package %s, but %s is the approved one",
+			what, task.Alias, payload.WorkPackageID, task.WorkPackageID)
+	}
+	if attempt.WorkPackageID != task.WorkPackageID || attempt.WorkPackageVersion != task.WorkPackageVersion {
+		return errs.New(errs.CategoryIntegrity,
+			"%s of task %s accepts attempt %s, which ran against work package %s v%d "+
+				"rather than the approved %s v%d",
+			what, task.Alias, attempt.ID,
+			attempt.WorkPackageID, attempt.WorkPackageVersion,
+			task.WorkPackageID, task.WorkPackageVersion)
+	}
+	if err := p.requireEvidenceFor(p.validations, "validation", payload.ValidationIDs, task, attempt); err != nil {
+		return err
+	}
+	if err := p.requireEvidenceFor(p.reviews, "review", payload.ReviewIDs, task, attempt); err != nil {
+		return err
+	}
+
 	if err := p.transitionTask(e, payload.TaskID, tasks.StateAccepted, func(t *tasks.Task) error {
 		t.AcceptedCommit = payload.CandidateCommit
 		return nil
 	}); err != nil {
 		return err
 	}
-	task := p.tasks[payload.TaskID]
 	commit := payload.CandidateCommit
 	p.semanticChanges = append(p.semanticChanges, protocol.SemanticChange{
 		TaskID:  task.Alias,
@@ -553,6 +663,13 @@ func (p *Projection) applyEscalationRaised(e *events.Event, payload *events.Esca
 	task, err := p.Task(payload.TaskID)
 	if err != nil {
 		return err
+	}
+	// A block that cites an attempt must cite one of this task's attempts,
+	// otherwise the escalation points the decision owner at unrelated work.
+	if payload.Reason.AttemptID != "" {
+		if _, err := p.requireAttemptOf(task.ID, payload.Reason.AttemptID, "escalation"); err != nil {
+			return err
+		}
 	}
 	reason := payload.Reason
 	reason.BlockedFrom = task.State
@@ -573,4 +690,25 @@ func removeString(list []string, value string) []string {
 		}
 	}
 	return out
+}
+
+// applyChangeRejected sends a reviewed candidate back for repair.
+//
+// It carries the same lineage requirements as acceptance minus the evidence
+// citations: a rejection must be about a real candidate of the task being
+// rejected, or it would return some other task's work to the worker.
+func (p *Projection) applyChangeRejected(e *events.Event, payload *events.ChangeRejected) error {
+	const what = "rejection"
+	task, err := p.requireTaskInState(payload.TaskID, tasks.StateReviewing, what)
+	if err != nil {
+		return err
+	}
+	attempt, err := p.requireAttemptOf(task.ID, payload.AttemptID, what)
+	if err != nil {
+		return err
+	}
+	if err := requireCandidate(attempt, what); err != nil {
+		return err
+	}
+	return p.transitionTask(e, payload.TaskID, tasks.StateRunning, nil)
 }

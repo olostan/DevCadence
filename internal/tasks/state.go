@@ -91,8 +91,12 @@ var transitions = map[State][]State{
 	StateDesigning: {StateReady},
 	StateReady:     {StateRunning},
 	StateRunning:   {StateValidating},
-	// Validating returns to Running for a bounded repair cycle within the
-	// same attempt, or proceeds to Reviewing when deterministic checks pass.
+	// Validating proceeds to Reviewing when deterministic checks pass, or
+	// returns to Running when they fail. The repair runs as a *new* attempt:
+	// producing a candidate terminates the attempt that produced it, and a
+	// terminated attempt is historical fact. Attempt.RepairIterations counts
+	// the worker's internal fix-and-recheck cycles *before* it produced that
+	// candidate, which is a different thing from a retry across attempts.
 	StateValidating: {StateRunning, StateReviewing},
 	// Reviewing returns to Running when a local fix is requested, which
 	// starts a new attempt rather than erasing the previous one.

@@ -25,10 +25,10 @@ func (t *Tx) AppendEvent(ctx context.Context, e events.Event) (events.Event, err
 	if err != nil {
 		return events.Event{}, err
 	}
-	digest, err := e.ComputeDigest()
-	if err != nil {
-		return events.Event{}, err
-	}
+	// The digest is taken over exactly the bytes written to the payload
+	// column, which is what the read path re-computes. Digesting the Go value
+	// separately would leave room for the two to drift.
+	digest := protocol.DigestBytes(payload)
 	correlation, err := protocol.CanonicalJSON(e.Correlation)
 	if err != nil {
 		return events.Event{}, err
@@ -167,6 +167,15 @@ func scanEvent(rows *sql.Rows) (events.Event, error) {
 	if err := json.Unmarshal([]byte(correlation), &e.Correlation); err != nil {
 		return events.Event{}, errs.Wrap(errs.CategoryIntegrity, err,
 			"event %s has an unparsable correlation", e.EventID)
+	}
+	// The digest is verified against the stored payload bytes before they are
+	// decoded, so an event whose bytes changed after they were written never
+	// reaches a caller as a successfully decoded event. The append-only
+	// triggers stop the application from rewriting history; they do nothing
+	// about a database edited outside it, and evidence integrity has to hold
+	// in both cases (docs/SECURITY.md §14).
+	if err := protocol.VerifyDigest("event", e.EventID, e.PayloadDigest, []byte(payload)); err != nil {
+		return events.Event{}, err
 	}
 	decoded, err := events.DecodePayload(e.EventType, json.RawMessage(payload))
 	if err != nil {

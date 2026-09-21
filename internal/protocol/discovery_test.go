@@ -11,6 +11,7 @@ import (
 // central guard (ADR-0001, DCI-005): the principal must not be able to
 // confirm its own inference as something the human asked for.
 func TestConfirmedRequirementMustTraceToAHuman(t *testing.T) {
+	ref := "pd_000000000000000000000001"
 	base := func(source protocol.SourceType, status protocol.RequirementStatus) *protocol.Requirement {
 		return &protocol.Requirement{
 			SchemaVersion: protocol.SchemaVersion1,
@@ -20,7 +21,7 @@ func TestConfirmedRequirementMustTraceToAHuman(t *testing.T) {
 			Statement:     "The system MUST explain an acceptance.",
 			Strength:      protocol.RequirementMust,
 			Status:        status,
-			Source:        protocol.RequirementSource{Type: source},
+			Source:        protocol.RequirementSource{Type: source, Ref: &ref},
 		}
 	}
 	for _, source := range []protocol.SourceType{
@@ -199,5 +200,94 @@ func TestProblemModelRequiresADesiredOutcome(t *testing.T) {
 	model.DesiredOutcomes = []string{"Things become less hard, measurably."}
 	if err := model.Validate(); err != nil {
 		t.Fatalf("valid problem model rejected: %v", err)
+	}
+}
+
+// TestConfirmedRequirementRequiresSourceReference is the provenance half of
+// DCI-015: naming a human-originating source type is a claim about
+// provenance, not provenance. A confirmed requirement that points at nothing
+// cannot be traced back to the human it claims to come from.
+func TestConfirmedRequirementRequiresSourceReference(t *testing.T) {
+	requirement := &protocol.Requirement{
+		SchemaVersion: protocol.SchemaVersion1,
+		RequirementID: "req_1",
+		ProjectID:     "example",
+		Kind:          protocol.RequirementFunctional,
+		Statement:     "The system MUST run offline.",
+		Strength:      protocol.RequirementMust,
+		Status:        protocol.RequirementConfirmed,
+		Source:        protocol.RequirementSource{Type: protocol.SourceProductDecision},
+	}
+	if err := requirement.Validate(); err == nil {
+		t.Fatal("a confirmed requirement with no source reference was accepted")
+	}
+	empty := ""
+	requirement.Source.Ref = &empty
+	if err := requirement.Validate(); err == nil {
+		t.Fatal("a confirmed requirement with an empty source reference was accepted")
+	}
+	ref := "pd_000000000000000000000001"
+	requirement.Source.Ref = &ref
+	if err := requirement.Validate(); err != nil {
+		t.Fatalf("a properly referenced confirmed requirement was rejected: %v", err)
+	}
+
+	// A non-confirmed requirement may legitimately have nothing to point at:
+	// the point is the label, not the existence of a reference.
+	requirement.Status = protocol.RequirementProposed
+	requirement.Source = protocol.RequirementSource{Type: protocol.SourcePrincipalInference}
+	if err := requirement.Validate(); err != nil {
+		t.Fatalf("a proposed inference was rejected: %v", err)
+	}
+}
+
+// TestSafeDeferredUnknownRequiresBoundary is
+// docs/DISCOVERY_AND_SPECIFICATION.md §5: a bare "safe to defer" is an
+// assertion, not the boundary that makes it safe.
+func TestSafeDeferredUnknownRequiresBoundary(t *testing.T) {
+	complete := protocol.ReadinessCheck{Status: protocol.ReadinessComplete}
+	readiness := &protocol.SpecificationReadiness{
+		SchemaVersion: protocol.SchemaVersion1, ReadinessID: "sr_1", ProjectID: "example",
+		ProblemModelID: "pm_1", ProblemModelRevision: 1,
+		Checks: protocol.ReadinessChecks{
+			ProblemOutcome: complete, PrimaryWorkflows: complete, ScopeBoundaries: complete,
+			ArchitectureSensitiveQuestions: complete, SecurityPrivacy: complete,
+			MaterialExternalFacts: complete, FeasibilityAssumptions: complete,
+			Contradictions: complete, IndependentReviews: complete, HumanReflection: complete,
+		},
+		Verdict: protocol.ReadyForArchitecture,
+		RemainingUnknowns: []protocol.RemainingUnknown{
+			{Statement: "Whether the data is regulated.", ArchitectureSafeToDefer: true},
+		},
+	}
+	if err := readiness.Validate(); err == nil {
+		t.Fatal("an unbounded safe deferral was accepted")
+	}
+	boundary := "Revisit before any code touches stored user content."
+	readiness.RemainingUnknowns[0].Boundary = &boundary
+	if err := readiness.Validate(); err != nil {
+		t.Fatalf("a bounded safe deferral was rejected: %v", err)
+	}
+}
+
+// TestHumanReflectionCannotReferenceFutureRevision stops "the human has seen
+// this" from being claimed for edits made after they looked (DCI-009).
+func TestHumanReflectionCannotReferenceFutureRevision(t *testing.T) {
+	model := &protocol.ProblemModel{
+		SchemaVersion: protocol.SchemaVersion1, ProblemModelID: "pm_1",
+		ProjectID: "example", Revision: 2, ProblemStatement: "Things are hard.",
+		DesiredOutcomes: []string{"Things become measurably less hard."},
+	}
+	for _, reflection := range []int{0, 3, 99} {
+		model.HumanReflectionRevision = &reflection
+		if err := model.Validate(); err == nil {
+			t.Errorf("human_reflection_revision %d was accepted against revision 2", reflection)
+		}
+	}
+	for _, reflection := range []int{1, 2} {
+		model.HumanReflectionRevision = &reflection
+		if err := model.Validate(); err != nil {
+			t.Errorf("human_reflection_revision %d was rejected against revision 2: %v", reflection, err)
+		}
 	}
 }

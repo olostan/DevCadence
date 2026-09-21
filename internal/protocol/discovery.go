@@ -1,6 +1,10 @@
 package protocol
 
-import "encoding/json"
+import (
+	"encoding/json"
+
+	"github.com/olostan/DevCadience/internal/errs"
+)
 
 // Discovery and specification records.
 //
@@ -192,8 +196,15 @@ func (m *ProblemModel) Validate() error {
 				"verified", "accepted_risk", "unverified")
 		}
 	}
-	if m.HumanReflectionRevision != nil && *m.HumanReflectionRevision < 1 {
-		return enumError(kind, "human_reflection_revision", "0", ">= 1")
+	// The human cannot have reviewed a revision that does not exist yet.
+	// Allowing it would let "the human has seen this" be claimed for edits
+	// made after they looked (DCI-009).
+	if m.HumanReflectionRevision != nil {
+		if *m.HumanReflectionRevision < 1 || *m.HumanReflectionRevision > m.Revision {
+			return errs.New(errs.CategoryIntegrity,
+				"%s: human_reflection_revision %d must be between 1 and the current revision %d",
+				kind, *m.HumanReflectionRevision, m.Revision)
+		}
 	}
 	return nil
 }

@@ -31,10 +31,8 @@ func (t *Tx) SaveProjection(ctx context.Context, p *state.Projection) error {
 	if err != nil {
 		return err
 	}
-	digest, err := protocol.Digest(projectState)
-	if err != nil {
-		return err
-	}
+	// Taken over the bytes actually stored, which is what the read verifies.
+	digest := protocol.DigestBytes(document)
 
 	if _, err := t.tx.ExecContext(ctx,
 		`INSERT INTO projection_projects
@@ -157,10 +155,22 @@ func (t *Tx) ProjectSummary(ctx context.Context, projectID string) (ProjectSumma
 }
 
 // MaterialisedProjectState decodes the stored ProjectState document.
+//
+// The stored digest is verified first. The projection is derived and can
+// always be rebuilt, so this is not evidence integrity in the sense the
+// journal needs — but `state show` reads this row and nothing else, so
+// without the check a tampered projection would be reported as canonical
+// state while the journal it claims to summarise said something different.
 func (t *Tx) MaterialisedProjectState(ctx context.Context, projectID string) (*protocol.ProjectState, error) {
 	summary, err := t.ProjectSummary(ctx, projectID)
 	if err != nil {
 		return nil, err
+	}
+	if err := protocol.VerifyDigest("project state", projectID,
+		summary.ProjectStateDigest, []byte(summary.ProjectStateJSON)); err != nil {
+		return nil, errs.Wrap(errs.CategoryIntegrity, err,
+			"materialised state for project %s is not what was written; "+
+				"rebuild it from the journal with `devcadience state rebuild`", projectID)
 	}
 	var out protocol.ProjectState
 	if err := protocol.Unmarshal([]byte(summary.ProjectStateJSON), &out); err != nil {

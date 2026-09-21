@@ -63,6 +63,8 @@ func driveLifecycle(t *testing.T, h *testsupport.Harness) string {
 		&events.ChangeAccepted{
 			TaskID: taskID, AttemptID: attemptID, WorkPackageID: wpID, CandidateCommit: candidate,
 			SemanticSummary: "Journal reads accept an inclusive upper bound.",
+			ValidationIDs:   []string{"val_0001"},
+			ReviewIDs:       []string{"rev_0001"},
 			DecidedBy:       protocol.AuthorityPrincipal,
 		},
 		&events.IntegrationStarted{TaskID: taskID, IntegrationID: "int_0001"},

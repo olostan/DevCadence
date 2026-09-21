@@ -1,6 +1,10 @@
 package protocol
 
-import "encoding/json"
+import (
+	"encoding/json"
+
+	"github.com/olostan/DevCadience/internal/errs"
+)
 
 // ExperimentStatus is the lifecycle of a discovery experiment.
 type ExperimentStatus string
@@ -252,6 +256,16 @@ func (r *SpecificationReadiness) Validate() error {
 		if !unknown.ArchitectureSafeToDefer && r.Verdict != NotReady {
 			return enumError(kind, "verdict", string(r.Verdict),
 				"not_ready while an unknown is not safe to defer past architecture")
+		}
+		// docs/DISCOVERY_AND_SPECIFICATION.md §5: ambiguity may be deferred
+		// only when a safe boundary prevents it from silently becoming
+		// architecture. A bare "safe to defer" is an assertion, not the
+		// boundary that makes it safe, so the boundary is required.
+		if unknown.ArchitectureSafeToDefer && (unknown.Boundary == nil || *unknown.Boundary == "") {
+			return errs.New(errs.CategoryInvalidArgument,
+				"%s: remaining unknown %q is marked safe to defer but states no boundary; "+
+					"an unbounded deferral is a silent architectural decision",
+				kind, unknown.Statement)
 		}
 	}
 	sawIncomplete := false

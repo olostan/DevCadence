@@ -105,10 +105,28 @@ Rejected outright: it is precisely what DCI-092 forbids.
 2. **Unrecognised event types** are `schema_version_unsupported`, not skipped.
    Reading a journal that contains one fails, because skipping it would
    produce a reduction that is wrong in a way nothing downstream could detect.
-3. **Original bytes are preserved.** `records.document` stores the canonical
-   JSON exactly as written, with its digest. Reads return those bytes rather
-   than a re-serialisation, so a record remains verifiable and exportable even
-   when this build cannot interpret it.
+3. **Original bytes are preserved, and reads verify them.** `records.document`
+   stores the canonical JSON exactly as written, with its digest. Reads return
+   those bytes rather than a re-serialisation, so a record remains verifiable
+   and exportable even when this build cannot interpret it.
+
+   The digest is defined over **the exact stored canonical bytes**, not over a
+   re-encoding of the decoded value. That is the stronger and simpler
+   invariant: it detects any change to what was written — including one that
+   would happen to re-serialise identically — and it stays computable for a
+   record this build cannot decode at all, which is precisely the record whose
+   integrity matters most. Every read recomputes it and refuses a mismatch
+   with an integrity error (`protocol.VerifyDigest`). The same rule applies to
+   event payloads.
+3a. **Schema-invalid records cannot be written.** Because the Go type and the
+   JSON Schema are twin representations of one contract
+   (ENGINEERING_STANDARDS.md §5), a document the schema rejects must not
+   become durable merely because the Go validation is satisfied. Constraints
+   that exist only in the schema — notably string `format` — are therefore
+   enforced at the write boundary. Format assertion is opt-in in Draft 2020-12
+   and is enabled explicitly; without it `format: "date-time"` would be an
+   annotation and a malformed timestamp would validate, leaving the twins
+   disagreeing exactly where the Go type is weakest.
 4. **Writers validate.** A record is validated before it is serialised, so a
    document a conforming reader would reject never becomes durable.
 5. **Zero-value equivalence.** At schema version 1.0, for an *optional* field,
@@ -130,6 +148,15 @@ Rejected outright: it is precisely what DCI-092 forbids.
    refines the 1.0 schemas in place where the Go types revealed a gap (see
    `schemas/README.md` changelog). From the first tagged release onward, 1.0
    is frozen and changes take a version.
+
+   The same pre-first-release reasoning covers the storage schema: migration
+   0001 was refined in place to make `project_id` part of the durable record
+   key rather than adding a 0002 that rewrites a table no deployment has. A
+   migration that has shipped is never edited — the checksum check refuses
+   it — but 0001 has not shipped, and a database created before the change
+   fails that checksum check loudly rather than drifting
+   (`TestAnEditedMigrationIsRefused`). After the first tagged release this
+   option is gone and schema changes are additive migrations.
 
 ## Rationale
 
@@ -191,6 +218,11 @@ make every record larger and every digest sensitive to a producer's choice of
 - `TestRequiredArraysSerialiseAsEmptyNotNull`,
   `TestCanonicalJSONIsStableAndSorted`,
   `TestDigestIsAlgorithmPrefixedAndContentAddressed`.
+- `TestCorruptedEvidenceIsRejectedOnRead` and
+  `TestDigestIsOverStoredBytesNotReserialisation` for the read-path integrity
+  rule; `TestSchemaInvalidRecordCannotBePersisted` for the write-path schema
+  rule, using `ProductDecision.RecordedAt` — a Go string whose schema declares
+  `format: date-time` — as the case only the schema can catch.
 - `TestPutRecordRefusesToRewriteHistory` — a superseded version is still
   readable.
 

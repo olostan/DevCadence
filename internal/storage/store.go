@@ -18,6 +18,7 @@ import (
 
 	"github.com/olostan/DevCadience/internal/clock"
 	"github.com/olostan/DevCadience/internal/errs"
+	"github.com/olostan/DevCadience/internal/schema"
 
 	_ "modernc.org/sqlite" // pure-Go SQLite driver
 )
@@ -30,6 +31,16 @@ const timeLayout = "2006-01-02T15:04:05.000000Z"
 // needs no filesystem and no cleanup.
 const MemoryPath = ":memory:"
 
+// RecordValidator checks a durable record's serialised document against its
+// published JSON Schema before the record is committed.
+//
+// The interface lives here so that storage can enforce the check while the
+// policy — which schema governs which kind — stays in internal/schema. See
+// schema.RecordValidator for the implementation.
+type RecordValidator interface {
+	ValidateDocument(kind string, document []byte) error
+}
+
 // Config configures a Store.
 type Config struct {
 	// Path is the database file, or MemoryPath.
@@ -41,6 +52,15 @@ type Config struct {
 	// open of an unmigrated database fails rather than silently reporting an
 	// empty project.
 	ReadOnly bool
+	// RecordValidator enforces the published JSON Schema at the durable write
+	// boundary. Leaving it nil selects the schemas embedded in this build,
+	// so the safe behaviour is the default and disabling the check requires
+	// SkipRecordSchemaValidation, which exists only for tests that construct
+	// deliberately non-conforming documents.
+	RecordValidator RecordValidator
+	// SkipRecordSchemaValidation disables schema enforcement on writes. No
+	// production path sets it.
+	SkipRecordSchemaValidation bool
 }
 
 // Store owns the database handle.
@@ -52,9 +72,10 @@ type Config struct {
 // whole class of concurrency bugs; if contention ever becomes measurable, the
 // cap is one line to revisit (ENGINEERING_STANDARDS.md §25: measure first).
 type Store struct {
-	db    *sql.DB
-	clock clock.Clock
-	path  string
+	db              *sql.DB
+	clock           clock.Clock
+	path            string
+	recordValidator RecordValidator
 }
 
 // Open opens (creating if necessary) the control-plane database and brings it
@@ -83,7 +104,18 @@ func Open(ctx context.Context, cfg Config) (*Store, error) {
 	db.SetConnMaxLifetime(0)
 	db.SetConnMaxIdleTime(0)
 
-	store := &Store{db: db, clock: cfg.Clock, path: cfg.Path}
+	validator := cfg.RecordValidator
+	if validator == nil && !cfg.SkipRecordSchemaValidation {
+		// Defaulting to the embedded schemas means a caller who thinks about
+		// none of this still cannot persist a schema-invalid record.
+		defaultValidator, err := schema.DefaultValidator()
+		if err != nil {
+			_ = db.Close()
+			return nil, err
+		}
+		validator = defaultValidator
+	}
+	store := &Store{db: db, clock: cfg.Clock, path: cfg.Path, recordValidator: validator}
 	if err := db.PingContext(ctx); err != nil {
 		_ = db.Close()
 		return nil, errs.Wrap(errs.CategoryInternal, err, "connect to database %s", cfg.Path)
@@ -152,8 +184,9 @@ func (s *Store) Close() error {
 // state takes one, so that a caller cannot accidentally split an atomic
 // operation across two transactions.
 type Tx struct {
-	tx    *sql.Tx
-	clock clock.Clock
+	tx              *sql.Tx
+	clock           clock.Clock
+	recordValidator RecordValidator
 }
 
 // Write runs fn inside a read-write transaction, committing on success and
@@ -178,7 +211,7 @@ func (s *Store) Write(ctx context.Context, fn func(*Tx) error) (err error) {
 		_ = tx.Rollback()
 	}()
 
-	scope := &Tx{tx: tx, clock: s.clock}
+	scope := &Tx{tx: tx, clock: s.clock, recordValidator: s.recordValidator}
 	if err := fn(scope); err != nil {
 		return err
 	}
@@ -198,7 +231,7 @@ func (s *Store) Read(ctx context.Context, fn func(*Tx) error) error {
 		return errs.Wrap(errs.CategoryInternal, err, "begin read transaction")
 	}
 	defer func() { _ = tx.Rollback() }()
-	return fn(&Tx{tx: tx, clock: s.clock})
+	return fn(&Tx{tx: tx, clock: s.clock, recordValidator: s.recordValidator})
 }
 
 // isConstraintViolation reports whether err is a SQLite constraint failure.

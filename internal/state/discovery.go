@@ -160,8 +160,29 @@ func (d *discoveryState) applyProductDecisionRecorded(p *events.ProductDecisionR
 	return nil
 }
 
-func (d *discoveryState) applyRequirementRecorded(p *events.RequirementRecorded) {
+func (d *discoveryState) applyRequirementRecorded(p *events.RequirementRecorded) error {
+	// A requirement confirmed from a product decision must name one that was
+	// actually recorded. The payload already requires a reference; this is
+	// what makes the reference mean something, so the journal cannot assert
+	// human authority derived from a decision nobody made (DCI-008, DCI-015).
+	if p.Status == protocol.RequirementConfirmed && p.SourceType == protocol.SourceProductDecision {
+		status, known := d.productDecisionStatus[p.SourceRef]
+		if !known {
+			return errs.New(errs.CategoryIntegrity,
+				"requirement %s is confirmed from product decision %s, which was never recorded",
+				p.RequirementID, p.SourceRef)
+		}
+		// A withdrawn decision has had its authority retracted, so it cannot
+		// be the thing a requirement is confirmed from. A superseded one
+		// still confirmed it at the time, and history keeps that.
+		if status == protocol.ProductDecisionWithdrawn {
+			return errs.New(errs.CategoryIntegrity,
+				"requirement %s is confirmed from product decision %s, which has been withdrawn",
+				p.RequirementID, p.SourceRef)
+		}
+	}
 	d.requirementStatus[p.RequirementID] = p.Status
+	return nil
 }
 
 func (d *discoveryState) applyReadinessRecorded(p *events.SpecificationReadinessRecorded) error {

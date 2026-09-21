@@ -101,6 +101,13 @@ func Load(fsys fs.FS, dir string) (*Set, error) {
 		return nil, errs.Wrap(errs.CategoryInternal, err, "read schema directory %s", dir)
 	}
 	compiler := jsonschema.NewCompiler()
+	// Format assertion is opt-in in Draft 2020-12 and in this library, which
+	// means `format: "date-time"` is an annotation by default and a malformed
+	// timestamp would validate. The schemas use format as a constraint the Go
+	// types cannot express, so it is asserted here; without this the twin
+	// representations would disagree exactly where the Go type is weakest
+	// (a timestamp held as a string).
+	compiler.AssertFormat()
 
 	type pending struct {
 		name Name

@@ -51,6 +51,19 @@ Settled by [ADR-0003](../docs/adr/0003-durable-record-compatibility.md).
 
 Digests are computed over canonical JSON: object keys sorted, no HTML escaping, number literals preserved. The digest is algorithm-prefixed (`sha256:...`) so that stored digests stay interpretable if the algorithm changes.
 
+The digest is defined over **the exact stored canonical bytes**, not over a re-encoding of a decoded value. Every read of an event payload or a durable record recomputes it and refuses a mismatch as an integrity error, so persisted evidence that changed after it was written is never returned as if it were intact — including when the change was made outside the application.
+
+## Enforcement at the write boundary
+
+A durable record is committed only after **both** checks pass:
+
+1. the typed Go semantic validation;
+2. the serialised document against the schema published here.
+
+The two express different constraints. String `format` exists only in the schema, so a value such as `ProductDecision.recorded_at` — a Go string — is checked for being a real `date-time` only by this second step. Format assertion is opt-in in Draft 2020-12 and is enabled explicitly in the validator; without it the constraint would be an annotation.
+
+A record kind with no schema registered here cannot be persisted at all. That stops a newly added protocol type from bypassing the twin-representation rule by omission.
+
 ## Fixtures
 
 Example documents live in [../fixtures/protocol/](../fixtures/protocol/) and are checked by `tests/schema_fixtures_test.go`: valid fixtures must validate and round-trip through their Go types without semantic loss; invalid fixtures must be rejected. `devcadience schema validate <file>...` runs the same check from the command line.

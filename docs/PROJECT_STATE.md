@@ -271,6 +271,22 @@ identifiers.
 free-form map (ENGINEERING_STANDARDS.md §4). M1 leaves it empty; no model
 runtime exists until M3.
 
+### 7.3a Evidence lineage is checked, not carried
+
+ProjectState stays compact, so it carries no validation or review contents.
+The reducer keeps a private index of recorded evidence — for each validation
+and review id, only the task, attempt and candidate it belongs to — so that an
+acceptance can be checked against the evidence it cites without any of that
+reaching the principal's view. The full documents live in the record store
+behind their ids (DCI-011: compression must not destroy provenance).
+
+An acceptance is refused when it cites evidence that was never recorded,
+evidence belonging to another task or attempt, or integration evidence
+presented as evidence about an attempt's candidate. docs/OBSERVABILITY.md §13
+is the reason: an acceptance the system cannot explain means the acceptance
+mechanism is incomplete, and one citing ids that name nothing reads as
+justified while explaining nothing.
+
 ### 7.4 Bounded current state
 
 `recent_semantic_changes` is capped (currently at ten, newest first) so that

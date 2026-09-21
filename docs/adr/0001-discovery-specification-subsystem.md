@@ -152,3 +152,41 @@ Evaluate on several fuzzy project ideas:
 ## Rollback / supersession strategy
 
 If the protocol proves too heavy, retain ProductDecision/Requirement provenance while simplifying the active Ambiguity Ledger/readiness machinery through a superseding ADR.
+
+---
+
+## Implementation note (M1)
+
+The M1 control plane implements the durable half of this decision: the six
+record types, the eight discovery events, and the `ProjectState.discovery`
+projection. The discovery *workflow* — questioning, human reflection,
+experiments, specification review — is not implemented and needs a model
+runtime (M3) and the MCP surface (M4).
+
+Where this ADR's principles could be enforced mechanically rather than left
+to agent behaviour, they are:
+
+- **DCI-008 / DCI-015, requirement provenance.** A requirement may be
+  `confirmed` only when its source type is `product_decision` or
+  `human_statement` *and* it carries a non-empty `source.ref`. Naming a
+  human-originating source type is a claim about provenance, not provenance;
+  a confirmed requirement pointing at nothing cannot be traced back to the
+  human it invokes. Where the ref names a ProductDecision, the control plane
+  additionally verifies that decision exists in the same project, so a
+  requirement cannot claim authority from a decision nobody recorded. For
+  `human_statement`, M1 has no durable transcript record, so the rule is that
+  *some* retrievable handle is required; tightening it to a specific record
+  kind waits for the milestone that introduces one.
+- **DCI-009, human product authority.** `ProductDecision.authority` is pinned
+  to `human`, and `ProblemModel.human_reflection_revision` must fall between 1
+  and the current revision — the human cannot be recorded as having reviewed a
+  revision that did not exist when they looked.
+- **DCI-016 and §5, safe deferral.** An ambiguity may be deferred only behind
+  a boundary: `AmbiguityResolved` with outcome `explicitly_deferred` requires
+  `safe_deferral_boundary`, and a `SpecificationReadiness` unknown marked
+  `architecture_safe_to_defer` requires an explicit `boundary`. A bare "safe
+  to defer" is an assertion, not the boundary that makes it safe. A readiness
+  verdict also does not survive the ProblemModel revision it judged.
+
+These are write-path refusals, not advisory checks, so an agent cannot record
+the weaker claim at all.

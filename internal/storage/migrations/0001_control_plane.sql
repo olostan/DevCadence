@@ -77,20 +77,28 @@ END;
 -- ---------------------------------------------------------------------------
 
 CREATE TABLE records (
+    -- A record's identity begins with its project. Semantic identifiers like
+    -- "PD-001", "FR-018" or "wp_1" are chosen per project and will collide
+    -- across projects; keying without project_id would make two independent
+    -- projects fight over one row and make every lookup ambiguous.
+    project_id     TEXT    NOT NULL,
     record_kind    TEXT    NOT NULL,
     record_id      TEXT    NOT NULL,
     -- record_version is the document's own version (Work Package revisions);
     -- it is 1 for records that have no revision concept.
     record_version INTEGER NOT NULL,
-    project_id     TEXT    NOT NULL,
     schema_version TEXT    NOT NULL,
     document       TEXT    NOT NULL,
     digest         TEXT    NOT NULL,
     created_at     TEXT    NOT NULL,
-    PRIMARY KEY (record_kind, record_id, record_version)
+    PRIMARY KEY (project_id, record_kind, record_id, record_version)
 );
 
-CREATE INDEX records_project_kind ON records (project_id, record_kind, record_id);
+-- Resolving "the latest version of this record" is the store's other access
+-- pattern; the primary key already orders by version within the identity, so
+-- this index only adds the kind-wide listing a future inspection command
+-- needs.
+CREATE INDEX records_project_kind ON records (project_id, record_kind, record_id, record_version);
 
 CREATE TRIGGER records_immutable_update
 BEFORE UPDATE ON records

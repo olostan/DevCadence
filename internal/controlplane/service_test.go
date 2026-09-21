@@ -165,7 +165,7 @@ func TestWorkPackageAndItsEventCommitTogether(t *testing.T) {
 	if err == nil {
 		t.Fatal("a work package was approved for a task that is not in design")
 	}
-	if _, err := h.Service.Record(ctx, "EngineeringWorkPackage", workPackage.WorkPackageID, 1); err == nil {
+	if _, err := h.Service.Record(ctx, "example", "EngineeringWorkPackage", workPackage.WorkPackageID, 1); err == nil {
 		t.Fatal("the work package record survived the rolled-back approval")
 	}
 
@@ -183,7 +183,7 @@ func TestWorkPackageAndItsEventCommitTogether(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("approve: %v", err)
 	}
-	stored, err := h.Service.Record(ctx, "EngineeringWorkPackage", workPackage.WorkPackageID, 1)
+	stored, err := h.Service.Record(ctx, "example", "EngineeringWorkPackage", workPackage.WorkPackageID, 1)
 	if err != nil {
 		t.Fatalf("record: %v", err)
 	}
