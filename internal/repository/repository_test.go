@@ -357,6 +357,75 @@ func TestCheckMergeConflict(t *testing.T) {
 	}
 }
 
+// TestIsAncestorNonexistentRevisionErrors proves IsAncestor distinguishes a
+// real "not an ancestor" answer (git merge-base --is-ancestor exit 1) from
+// an invalid-revision failure (any other nonzero exit, typically 128):
+// collapsing both into (false, nil) would let a nonexistent commit silently
+// read as an ordinary negative ancestry result.
+func TestIsAncestorNonexistentRevisionErrors(t *testing.T) {
+	fixture := testsupport.NewGitRepo(t)
+	head := fixture.Head()
+	repo, err := repository.Register(context.Background(), "proj-a", fixture.Path, repository.Options{})
+	if err != nil {
+		t.Fatalf("register: %v", err)
+	}
+	const nonexistent = "cafebabe0000000000000000000000000000000"
+
+	if _, err := repo.IsAncestor(context.Background(), nonexistent, head); err == nil {
+		t.Fatal("expected an error for a nonexistent ancestor revision, not a false ancestry result")
+	}
+	if _, err := repo.IsAncestor(context.Background(), head, nonexistent); err == nil {
+		t.Fatal("expected an error for a nonexistent descendant revision, not a false ancestry result")
+	}
+
+	// A genuinely valid, non-ancestor pair must still report a plain false
+	// with no error, so the fix does not turn every negative into an error.
+	fixture.WriteFile("a.txt", "a")
+	other := fixture.Commit("add a")
+	fixture.Git("checkout", "--quiet", "-b", "diverged", head)
+	fixture.WriteFile("b.txt", "b")
+	diverged := fixture.Commit("diverge")
+	isAncestor, err := repo.IsAncestor(context.Background(), other, diverged)
+	if err != nil {
+		t.Fatalf("is ancestor (diverged, valid): %v", err)
+	}
+	if isAncestor {
+		t.Fatal("diverged commit must not report as an ancestor")
+	}
+}
+
+// TestCheckMergeInvalidRevisionErrors proves CheckMerge refuses a
+// nonexistent base or head with a clear error rather than letting it fall
+// through IsAncestor's now-fixed error path into the merge/diff commands,
+// where a failing `git worktree add` or an ambiguous downstream failure
+// could otherwise be misread as a conflict result.
+func TestCheckMergeInvalidRevisionErrors(t *testing.T) {
+	fixture := testsupport.NewGitRepo(t)
+	head := fixture.Head()
+	repo, err := repository.Register(context.Background(), "proj-a", fixture.Path, repository.Options{})
+	if err != nil {
+		t.Fatalf("register: %v", err)
+	}
+	const nonexistent = "cafebabe0000000000000000000000000000000"
+
+	if _, err := repo.CheckMerge(context.Background(), nonexistent, head); err == nil {
+		t.Fatal("expected CheckMerge to error on a nonexistent base, not report a conflict")
+	}
+	if _, err := repo.CheckMerge(context.Background(), head, nonexistent); err == nil {
+		t.Fatal("expected CheckMerge to error on a nonexistent head, not report a conflict")
+	}
+
+	// The accepted working tree must still be untouched after a refused
+	// check.
+	facts, err := repo.Inspect(context.Background())
+	if err != nil {
+		t.Fatalf("inspect: %v", err)
+	}
+	if facts.Dirty {
+		t.Fatal("accepted working tree was mutated by a refused CheckMerge")
+	}
+}
+
 func TestStaleBase(t *testing.T) {
 	if repository.StaleBase("abc", "abc") {
 		t.Fatal("same commit must not be stale")

@@ -344,6 +344,17 @@ func (r *Repository) ResolveCommit(ctx context.Context, rev string) (string, err
 
 // IsAncestor reports whether ancestor is an ancestor of (or equal to)
 // descendant.
+//
+// `git merge-base --is-ancestor` uses its exit code as the answer, not just
+// a success/failure signal: exit 0 means "is an ancestor", exit 1 means
+// "valid commits, not an ancestor", and any other exit code (typically 128)
+// means the command could not even answer the question, most commonly
+// because one of the revisions does not exist. Collapsing every non-zero
+// exit into "not an ancestor" would let an invalid revision silently read
+// as a normal negative answer instead of an error, which is exactly the
+// ambiguity that let CheckMerge misreport an invalid base/head as a merge
+// conflict. Only exit 1 is treated as a real negative result; anything else
+// is surfaced as an error.
 func (r *Repository) IsAncestor(ctx context.Context, ancestor, descendant string) (bool, error) {
 	if err := validateRevision("ancestor", ancestor); err != nil {
 		return false, err
@@ -361,7 +372,15 @@ func (r *Repository) IsAncestor(ctx context.Context, ancestor, descendant string
 	if err != nil {
 		return false, err
 	}
-	return res.Success(), nil
+	switch res.ExitCode {
+	case 0:
+		return true, nil
+	case 1:
+		return false, nil
+	default:
+		return false, errs.New(errs.CategoryInvalidArgument,
+			"repository: is-ancestor %q %q: %s", ancestor, descendant, strings.TrimSpace(string(res.Stderr)))
+	}
 }
 
 // MergeBase returns the merge base of a and b.

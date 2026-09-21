@@ -212,6 +212,21 @@ func (s *Store) Put(ctx context.Context, in PutInput) (PutResult, error) {
 // what it writes) without giving that source the power to hang Put forever:
 // ctx.Err() is checked between reads, so a caller's deadline or cancellation
 // still bounds the call.
+//
+// Known limitation (deliberately not fixed here): the ctx check only runs
+// between calls to r.Read, so a Read that itself blocks indefinitely - a
+// pipe or socket with no data, no EOF, and no cancellation awareness of its
+// own - is not interrupted by ctx. Making that case cancellable would mean
+// running the read in a separate goroutine and selecting on ctx.Done(), but
+// that goroutine can only be abandoned, not actually stopped, unless r also
+// implements something like io.Closer that Put can call from the ctx branch
+// to unblock it - a real behavior change to Put's contract, not a bounded
+// fix within drainUntilCancelled. Every M2 caller of Put
+// (internal/validation/run.go's storeCheckOutput) already passes a fully
+// buffered bytes.Reader over already-captured process output, which never
+// blocks on Read, so this limitation has no effect on anything M2 actually
+// does; it would only matter for a future caller that hands Put a live,
+// blocking stream, which M2 does not do.
 func drainUntilCancelled(ctx context.Context, r io.Reader, buf []byte) error {
 	for {
 		if err := ctx.Err(); err != nil {

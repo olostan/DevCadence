@@ -52,6 +52,20 @@ func (r *Repository) CheckMerge(ctx context.Context, base, head string) (MergeCh
 	if err := validateRevision("head", head); err != nil {
 		return MergeCheck{}, err
 	}
+	// Resolve both revisions to canonical, existing commit SHAs before
+	// doing anything else. Without this, a nonexistent or otherwise
+	// unresolvable revision only surfaces once it reaches a Git command
+	// deep in this function (or not at all, if IsAncestor's error handling
+	// were ever loosened again), producing an ambiguous failure instead of
+	// a clear "this base/head does not name a commit" error up front.
+	base, err := r.ResolveCommit(ctx, base)
+	if err != nil {
+		return MergeCheck{}, err
+	}
+	head, err = r.ResolveCommit(ctx, head)
+	if err != nil {
+		return MergeCheck{}, err
+	}
 	ff, err := r.IsAncestor(ctx, base, head)
 	if err != nil {
 		return MergeCheck{}, err

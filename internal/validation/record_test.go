@@ -282,6 +282,56 @@ func TestExecuteAndRecordCommitNotDirHeadRefused(t *testing.T) {
 	}
 }
 
+// TestExecuteAndRecordDirtyWorktreeRefused proves ExecuteAndRecord refuses
+// to record a commit-addressed ValidationResult when Run.Dir's HEAD matches
+// the claimed Commit but the working tree also has uncommitted changes
+// (here, an untracked file) on top of it: the checks would run against
+// bytes that are not actually in.Commit's tree, so the HEAD check alone is
+// not enough to make the persisted claim true.
+func TestExecuteAndRecordDirtyWorktreeRefused(t *testing.T) {
+	h := testsupport.NewHarness(t)
+	initHarnessProject(t, h)
+	fixture := testsupport.NewGitRepo(t)
+	head := fixture.Head()
+	// An untracked file: HEAD is unchanged and matches the claim below, but
+	// the working tree no longer matches HEAD's tree.
+	fixture.WriteFile("untracked.txt", "not part of any commit\n")
+
+	store, err := artifacts.NewStore(filepath.Join(t.TempDir(), "artifacts"), ids.NewSequential())
+	if err != nil {
+		t.Fatalf("new store: %v", err)
+	}
+	before, err := h.Service.Events(context.Background(), storage.EventQuery{ProjectID: "example"})
+	if err != nil {
+		t.Fatalf("events: %v", err)
+	}
+
+	_, err = validation.ExecuteAndRecord(context.Background(), h.Service, validation.ExecuteInput{
+		ProjectID: "example",
+		Subject:   protocol.ValidationSubject{Kind: protocol.ScopeBaseline},
+		Commit:    head, // matches the dir's real HEAD
+		Profile: validation.Profile{
+			Name:   "baseline",
+			Checks: []validation.CheckSpec{{ID: "ok", Argv: []string{"true"}, Timeout: 5000000000}},
+		},
+		Run: validation.RunOptions{Dir: fixture.Path, Artifacts: store},
+		IDs: h.IDs,
+	})
+	if err == nil {
+		t.Fatal("expected a dirty worktree to be refused even though HEAD matches the claimed commit")
+	}
+	if errs.CategoryOf(err) != errs.CategoryIntegrity {
+		t.Fatalf("category = %v", errs.CategoryOf(err))
+	}
+	after, err := h.Service.Events(context.Background(), storage.EventQuery{ProjectID: "example"})
+	if err != nil {
+		t.Fatalf("events: %v", err)
+	}
+	if len(before) != len(after) {
+		t.Fatalf("journal grew from %d to %d after a refused dirty-worktree validation", len(before), len(after))
+	}
+}
+
 // TestExecuteAndRecordDirNotAGitRepoRefused proves a validation run against a
 // directory that is not a Git repository at all is refused rather than
 // silently accepted as satisfying an arbitrary claimed commit.

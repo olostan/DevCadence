@@ -96,6 +96,24 @@ func ExecuteAndRecord(ctx context.Context, svc *controlplane.Service, in Execute
 			in.Commit, in.Run.Dir, actualHead)
 	}
 
+	// HEAD matching the claim is not enough: a worktree can have the right
+	// HEAD and still have modified or untracked files on top of it, in
+	// which case checks would run against bytes that are not actually
+	// in.Commit's tree, while the persisted ValidationResult still claims
+	// to validate that commit. M2's validation records are commit-addressed
+	// evidence, not working-tree snapshots, so any uncommitted change
+	// (tracked or untracked) makes the checkout unfit to validate as a
+	// commit and must refuse before checks run rather than after.
+	worktreeDirty, err := dirty(ctx, in.Run)
+	if err != nil {
+		return ExecuteResult{}, err
+	}
+	if worktreeDirty {
+		return ExecuteResult{}, errs.New(errs.CategoryIntegrity,
+			"validation: %s has uncommitted changes; refusing to record a commit-addressed validation for %s",
+			in.Run.Dir, in.Commit)
+	}
+
 	checks, outcome, err := RunProfile(ctx, in.Profile, in.Run)
 	if err != nil {
 		return ExecuteResult{}, err
@@ -152,9 +170,10 @@ func ExecuteAndRecord(ctx context.Context, svc *controlplane.Service, in Execute
 	return ExecuteResult{ValidationResult: result, CommandResult: cmdResult}, nil
 }
 
-// headCommit resolves the actual Git HEAD of run.Dir, using the same runner
-// and environment RunProfile would use for that RunOptions.
-func headCommit(ctx context.Context, run RunOptions) (string, error) {
+// gitCheckRunner returns the runner and environment RunProfile would use
+// for run, for the small out-of-band Git checks ExecuteAndRecord makes
+// before trusting run.Dir (headCommit, dirty).
+func gitCheckRunner(run RunOptions) (*process.Runner, []string) {
 	runner := run.Runner
 	if runner == nil {
 		runner = process.NewRunner()
@@ -163,6 +182,13 @@ func headCommit(ctx context.Context, run RunOptions) (string, error) {
 	if env == nil {
 		env = process.BaseEnv()
 	}
+	return runner, env
+}
+
+// headCommit resolves the actual Git HEAD of run.Dir, using the same runner
+// and environment RunProfile would use for that RunOptions.
+func headCommit(ctx context.Context, run RunOptions) (string, error) {
+	runner, env := gitCheckRunner(run)
 	res, err := runner.Run(ctx, process.Spec{
 		Executable: "git",
 		Args:       []string{"-C", run.Dir, "rev-parse", "HEAD"},
@@ -178,6 +204,37 @@ func headCommit(ctx context.Context, run RunOptions) (string, error) {
 			"validation: resolve HEAD in %s: %s", run.Dir, strings.TrimSpace(string(res.Stderr)))
 	}
 	return strings.TrimSpace(string(res.Stdout)), nil
+}
+
+// dirty reports whether run.Dir has any uncommitted change - modified,
+// staged, or untracked - using `git status --porcelain=v2 -z` (the same
+// NUL-delimited, quoting-safe machine format internal/repository uses).
+// Ignored files (porcelain "!" records) do not count: they are not part of
+// the commit's tree and Git itself excludes them from what "dirty" means
+// for the purpose of "does the working tree match HEAD".
+func dirty(ctx context.Context, run RunOptions) (bool, error) {
+	runner, env := gitCheckRunner(run)
+	res, err := runner.Run(ctx, process.Spec{
+		Executable: "git",
+		Args:       []string{"-C", run.Dir, "status", "--porcelain=v2", "-z"},
+		Dir:        run.Dir,
+		Env:        env,
+		Timeout:    headCommitTimeout,
+	})
+	if err != nil {
+		return false, errs.Wrap(errs.CategoryInternal, err, "validation: status in %s", run.Dir)
+	}
+	if !res.Success() {
+		return false, errs.New(errs.CategoryInvalidArgument,
+			"validation: status in %s: %s", run.Dir, strings.TrimSpace(string(res.Stderr)))
+	}
+	for _, tok := range strings.Split(string(res.Stdout), "\x00") {
+		if tok == "" || strings.HasPrefix(tok, "! ") {
+			continue
+		}
+		return true, nil
+	}
+	return false, nil
 }
 
 func defaultActor(a protocol.Actor) protocol.Actor {
