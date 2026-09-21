@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/olostan/DevCadience/schemas/problem-model.schema.json",
+  "title": "DevCadience ProblemModel",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "problem_model_id", "project_id", "revision", "problem_statement", "desired_outcomes", "actors", "primary_workflows", "scope", "success_criteria", "failure_criteria", "constraints", "assumptions", "unknowns", "risk_refs"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "problem_model_id": {"type": "string"},
+    "project_id": {"type": "string"},
+    "revision": {"type": "integer", "minimum": 1},
+    "problem_statement": {"type": "string", "minLength": 1},
+    "desired_outcomes": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+    "actors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "description"],
+        "properties": {
+          "id": {"type": "string"},
+          "description": {"type": "string"},
+          "needs": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    },
+    "primary_workflows": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "description"],
+        "properties": {
+          "id": {"type": "string"},
+          "description": {"type": "string"},
+          "actor_refs": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["in_scope", "out_of_scope"],
+      "properties": {
+        "in_scope": {"type": "array", "items": {"type": "string"}},
+        "out_of_scope": {"type": "array", "items": {"type": "string"}},
+        "future_possible": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "success_criteria": {"type": "array", "items": {"type": "string"}},
+    "failure_criteria": {"type": "array", "items": {"type": "string"}},
+    "constraints": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "category", "statement", "source_type"],
+        "properties": {
+          "id": {"type": "string"},
+          "category": {"type": "string"},
+          "statement": {"type": "string"},
+          "source_type": {"enum": ["human", "external_fact", "repository_fact", "experiment", "policy", "inference"]},
+          "source_ref": {"type": ["string", "null"]}
+        }
+      }
+    },
+    "product_decision_refs": {"type": "array", "items": {"type": "string"}},
+    "requirement_refs": {"type": "array", "items": {"type": "string"}},
+    "assumptions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "statement", "status", "material"],
+        "properties": {
+          "id": {"type": "string"},
+          "statement": {"type": "string"},
+          "status": {"enum": ["verified", "accepted_risk", "unverified"]},
+          "material": {"type": "boolean"},
+          "evidence_refs": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    },
+    "unknowns": {"type": "array", "items": {"type": "string"}},
+    "risk_refs": {"type": "array", "items": {"type": "string"}},
+    "ambiguity_ledger_id": {"type": ["string", "null"]},
+    "human_reflection_revision": {"type": ["integer", "null"], "minimum": 1}
+  }
+}
