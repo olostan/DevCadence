@@ -139,8 +139,17 @@
       },
       "else": {
         "not": {
-          "required": [
-            "why_now"
+          "anyOf": [
+            {
+              "required": [
+                "why_now"
+              ]
+            },
+            {
+              "required": [
+                "repair_guidance"
+              ]
+            }
           ]
         }
       }
@@ -213,6 +222,11 @@
             {
               "required": [
                 "reconsideration_trigger"
+              ]
+            },
+            {
+              "required": [
+                "accepted_risk_ref"
               ]
             }
           ]
