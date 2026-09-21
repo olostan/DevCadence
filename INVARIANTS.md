@@ -27,6 +27,12 @@ Consultant output is never automatically authoritative. For important independen
 ### DCI-007 — First-answer convergence is not a completion criterion
 A coherent first design does not by itself establish readiness for systemic or architectural implementation.
 
+### DCI-008 — Product ambiguity is not silently resolved
+A frontier principal, consultant, or local agent must not silently turn unresolved human intent into a confirmed requirement or architectural fact.
+
+### DCI-009 — Human product authority is preserved
+Goals, acceptable tradeoffs, privacy preferences, user-visible semantics, scope choices and other product-authority decisions belong to the human/product authority. Engineering agents may explain consequences but may not override them for implementation convenience.
+
 ## B. Context and evidence invariants
 
 ### DCI-010 — The principal does not require whole-repository context
@@ -43,6 +49,15 @@ Structured responses must make it possible to tell deterministic observations fr
 
 ### DCI-014 — Evidence depth is progressive
 The system should support summary -> symbol/signature -> focused snippet -> diff -> full file -> direct exploration rather than immediately transferring the maximum context.
+
+### DCI-015 — Requirements preserve provenance and epistemic status
+A requirement must remain distinguishable as confirmed, evidence-backed, proposed, assumed, deferred, rejected or superseded. Model inference must not be serialized as human-confirmed intent.
+
+### DCI-016 — Architecture follows specification readiness
+For substantial greenfield or product-semantic work, architecture must not begin while material ambiguity remains unresolved unless that ambiguity is explicitly accepted as risk or safely deferred behind a documented boundary.
+
+### DCI-017 — Humans are not asked to guess resolvable facts
+When a material question can be established through repository evidence, current authoritative research or a bounded experiment, the system should resolve it there rather than forcing the human to provide a technical guess.
 
 ## C. Work-package invariants
 
