@@ -91,7 +91,7 @@ DevCadience treats software engineering as four coupled loops:
 
 1. **Product loop** — idea, problem framing, requirements, non-goals, constraints, research, validation.
 2. **Architecture loop** — alternatives, assumptions, critique, consultant review, ADRs, invariants, baseline.
-3. **Delivery loop** — scouting, frontier-authored Engineering Work Packages, local implementation, verification, independent review, integration.
+3. **Delivery loop** — scouting, frontier-authored Engineering Work Packages, capability-routed implementation, deterministic verification, independent review, integration.
 4. **Health loop** — code-health measurement, refactoring epochs, architecture reconciliation, postmortems, learning and policy improvement.
 
 The loops continuously feed one another:
@@ -331,8 +331,9 @@ If that hypothesis fails, the architecture must be revised before adding autonom
 
 ## Running the control plane
 
-M1 is implemented, so the control plane can be built and driven locally. No
-model runtime is required and none is contacted.
+M1 and M2 are implemented, so the control plane can be built and can safely
+operate on real repositories without any model runtime. M3 will add cognition
+endpoint discovery/routing and guided environment setup.
 
 ```bash
 go build -o bin/devcadience ./cmd/devcadience
