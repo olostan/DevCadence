@@ -1,0 +1,14 @@
+{
+  "schema_version": "1.0",
+  "disposition_id": "fd_bad_003",
+  "campaign_id": "rc_001",
+  "finding_id": "finding_bad_003",
+  "severity": "low",
+  "materiality": "opportunistic",
+  "disposition": "defer",
+  "rationale": "A deferred finding must name where it is deferred to.",
+  "deferred_target": null,
+  "reconsideration_trigger": "Revisit if the operating envelope changes.",
+  "decided_by": "human",
+  "recorded_at": "2026-09-21T00:00:00Z"
+}

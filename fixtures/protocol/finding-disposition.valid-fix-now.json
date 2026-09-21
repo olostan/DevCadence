@@ -1,0 +1,13 @@
+{
+  "schema_version": "1.0",
+  "disposition_id": "fd_001",
+  "campaign_id": "rc_001",
+  "finding_id": "finding_001",
+  "severity": "high",
+  "materiality": "blocking",
+  "disposition": "fix_now",
+  "rationale": "The issue breaks a current milestone invariant.",
+  "why_now": "The active milestone claims this behavior now.",
+  "decided_by": "principal",
+  "recorded_at": "2026-09-21T00:00:00Z"
+}

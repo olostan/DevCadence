@@ -1,0 +1,14 @@
+{
+  "schema_version": "1.0",
+  "disposition_id": "fd_003",
+  "campaign_id": "rc_001",
+  "finding_id": "finding_003",
+  "severity": "low",
+  "materiality": "opportunistic",
+  "disposition": "defer",
+  "rationale": "The change is real but outside this milestone's closure bar.",
+  "deferred_target": "M7",
+  "reconsideration_trigger": "Revisit when review convergence orchestration ships.",
+  "decided_by": "human",
+  "recorded_at": "2026-09-21T00:00:00Z"
+}

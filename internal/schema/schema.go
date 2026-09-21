@@ -53,6 +53,14 @@ const (
 	NameSpecificationReadiness Name = "specification-readiness"
 )
 
+// Names of the review-convergence schemas published ahead of their M6 Go
+// implementation.
+const (
+	NameReviewCampaign     Name = "review-campaign"
+	NameFindingDisposition Name = "finding-disposition"
+	NameClosureDecision    Name = "closure-decision"
+)
+
 // RecordKindToSchema maps a Go record kind to the schema that governs it.
 // It is the explicit statement of which twin belongs to which, so that a new
 // protocol type cannot be added without deciding on its schema.
@@ -212,7 +220,8 @@ func AllNames() []Name {
 		NameValidationResult, NameReviewResult, NameSpecificationReviewResult, NameDecisionRecord,
 		NameLessonCandidate, NameProblemModel, NameAmbiguityLedger,
 		NameProductDecision, NameRequirement, NameDiscoveryExperiment,
-		NameSpecificationReadiness,
+		NameSpecificationReadiness, NameReviewCampaign, NameFindingDisposition,
+		NameClosureDecision,
 	}
 	sort.Slice(names, func(i, j int) bool {
 		if len(names[i]) != len(names[j]) {
