@@ -9,8 +9,8 @@ Identifiers are stable. If an invariant is superseded, preserve the identifier a
 ### DCI-001 — Frontier intelligence is used for high-leverage cognition
 Frontier models own product reasoning, architectural decisions, alternative analysis, implementation strategy for substantial work, algorithms, pseudocode, interface design, and high-risk adjudication. They are not reduced to task routers.
 
-### DCI-002 — Local intelligence absorbs high-volume repository cognition
-Repository search, repeated source inspection, compiler/test loops, log interpretation, routine implementation, broad local review, and repeated verification should be local by default.
+### DCI-002 — Lower-cost execution cognition absorbs high-volume repository work
+Repository search, repeated source inspection, compiler/test loops, log interpretation, routine implementation, broad review, and repeated verification should use deterministic tooling and the least expensive/privacy-preserving cognition that satisfies the task. Local inference is preferred when capable and policy-appropriate, but remote cognition is a valid execution backend; repository authority and deterministic evidence remain locally governed.
 
 ### DCI-003 — Optimize context volume, not thinking time
 The system must not sacrifice design quality merely to reduce wall-clock reasoning time. Compact, high-quality frontier reasoning is preferred over fast implementation begun with weak grounding.
@@ -70,10 +70,10 @@ Where it reduces ambiguity, the principal must include implementation strategy, 
 ### DCI-022 — Requirement strength is explicit
 Guidance is classified as MUST, SHOULD, SUGGESTED, or LOCAL_DISCRETION.
 
-### DCI-023 — Local agents may challenge assumptions
+### DCI-023 — Execution workers may challenge assumptions
 An implementer must be able to stop and report a contradicted blueprint assumption with evidence.
 
-### DCI-024 — Local agents may not silently override MUST constraints
+### DCI-024 — Execution workers may not silently override MUST constraints
 If the implementation cannot satisfy a MUST condition, the task is blocked or escalated.
 
 ### DCI-025 — Task scope cannot silently expand
@@ -84,8 +84,8 @@ Material scope expansion creates a revised Work Package or a separate task.
 ### DCI-030 — Autonomous work is isolated
 Once worktree support is implemented, autonomous changes occur in isolated Git worktrees/branches based on an explicit base commit.
 
-### DCI-031 — Local workers do not merge directly to main
-Acceptance and integration are separate control-plane decisions.
+### DCI-031 — Execution workers do not merge directly to main
+Acceptance and integration are separate control-plane decisions regardless of whether worker inference is local or remote.
 
 ### DCI-032 — Every candidate change has lineage
 At minimum: project-state revision, task ID, Work Package version, base commit, attempt ID, model/profile, candidate commit, validation results, review results and decision.
@@ -131,7 +131,7 @@ Repair rounds, reviewer output volume, and closure criteria are policy-bounded. 
 ## F. Architecture and governance invariants
 
 ### DCI-050 — Architecture changes are deliberate
-Local workers cannot create, remove or materially redefine architectural boundaries, invariants, security boundaries, or durable public contracts without an authorized design decision.
+Execution workers cannot create, remove or materially redefine architectural boundaries, invariants, security boundaries, or durable public contracts without an authorized design decision.
 
 ### DCI-051 — ADRs explain durable choices
 Important architectural decisions record context, alternatives, rationale, consequences, evidence and supersession relationships.
