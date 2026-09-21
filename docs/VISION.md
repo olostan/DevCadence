@@ -31,6 +31,15 @@ Three capabilities have converged:
 
 The opportunity is to build the missing coordination layer.
 
+```mermaid
+flowchart LR
+    Frontier["Scarce frontier cognition<br/>deep design + current grounding"]
+    Artifact["Compressed intelligence<br/>ADRs · invariants · pseudocode · Work Packages"]
+    Local["Abundant local cognition<br/>inspect · implement · review · retry"]
+    Evidence["Deterministic + independent evidence"]
+    Frontier --> Artifact --> Local --> Evidence --> Frontier
+```
+
 ## 3. Economic model
 
 DevCadience does not assume that frontier tokens are always paid per token. They may be limited by subscription quotas, rate windows or organizational budgets.
@@ -128,19 +137,34 @@ Consultants are not “higher truth.” Their value is independent analysis and 
 
 ## 9. Idea-to-production lifecycle
 
-A new project should move through:
+A new project is deliberately allowed to spend substantial time in discovery and design before implementation.
 
-1. **Idea intake** — desired outcome, users, constraints, unknowns, non-goals.
-2. **Discovery** — research, feasibility, current external grounding, risks.
-3. **Design exploration** — multiple candidate architectures.
-4. **Adversarial design review** — correctness, simplicity, security, scalability, operability, testability, evolvability.
-5. **Design convergence** — synthesize evidence and disagreements.
-6. **Baseline engineering model** — requirements, architecture, invariants, ADRs, component contracts, failure/security/observability/test strategies.
-7. **Milestone planning** — dependency-aware work graph.
-8. **Delivery cycles** — impact classify -> scout -> frontier design -> Work Package -> local implement -> validate -> review -> integrate.
-9. **Refactoring epochs** — restore coherence after accumulated changes.
-10. **Architecture reconciliation** — periodically re-evaluate architecture against current reality.
-11. **Learning** — convert repeated mistakes and successful patterns into evaluated reusable knowledge.
+```mermaid
+flowchart TD
+    Idea["Idea / desired outcome"]
+    Discover["Discovery<br/>research · assumptions · feasibility"]
+    Explore["Design exploration<br/>multiple alternatives"]
+    Critique["Adversarial + independent critique"]
+    Baseline["Baseline Engineering Model"]
+    Plan["Milestone planning"]
+    Delivery["Delivery cycles"]
+    Refactor["Refactoring Epochs"]
+    Reconcile["Architecture Reconciliation"]
+    Learn["Learning / policy evaluation"]
+
+    Idea --> Discover --> Explore --> Critique
+    Critique -->|"not ready"| Explore
+    Critique -->|"ready"| Baseline --> Plan --> Delivery
+    Delivery -->|"feature wave"| Delivery
+    Delivery -->|"health trigger"| Refactor --> Reconcile --> Plan
+    Delivery --> Learn
+    Refactor --> Learn
+    Reconcile --> Learn
+    Learn -. durable lessons .-> Discover
+    Learn -. durable lessons .-> Delivery
+```
+
+The lifecycle is intentionally iterative: design artifacts are durable but revisable through explicit decisions.
 
 ## 10. Adaptive rigor
 
