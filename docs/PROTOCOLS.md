@@ -114,6 +114,46 @@ Evidence-based gate indicating whether remaining ambiguity is safe for architect
 
 See [DISCOVERY_AND_SPECIFICATION.md](DISCOVERY_AND_SPECIFICATION.md) and the corresponding schemas.
 
+## 3B. MachineCapabilityProfile
+
+Purpose: describe the machine and the cognition endpoints available on it, from
+observed evidence.
+
+It is the one durable contract that is **machine-scoped rather than
+project-scoped**, and therefore carries no `project_id`: the hardware and the
+installed runtimes are identical for every project on a host, and what differs per
+project is policy rather than capability.
+
+Shape, in outline:
+
+```text
+machine_fingerprint     digest over the stable facts of the machine
+observed_at             injected observation instant
+knowledge_revision      which compatibility knowledge produced the assessment
+probe_depth             inventory | health | inference
+environment             observed facts + per-component findings
+accelerator_candidates  assessed backends, with reasons
+endpoints               cognition endpoints, with health/auth/capability/evidence
+assessment              readiness verdict
+limitations             what this configuration cannot do
+```
+
+Three rules distinguish it from a status dump:
+
+- **facts, assessment and evidence are separate.** `environment` contains no
+  judgement; `accelerator_candidates` is a pure function of it and may never claim
+  more than `runtime_available`.
+- **a capability grade carries its provenance** (`configured`, `measured`,
+  `evaluated`) and a grade without one is refused. `unknown` is the normal,
+  correct value.
+- **`acceleration.state: verified` requires evidence** — an authoritative offload
+  signal from the runtime that performed the inference, a verification instant,
+  no conflicts, and a profile whose `probe_depth` actually ran inference (DCI-106).
+
+It is computed on demand rather than persisted; ProjectState carries a compact
+projection of it. See
+[adr/0013-environment-intelligence-and-cognition-contracts.md](adr/0013-environment-intelligence-and-cognition-contracts.md).
+
 ## 4. InvestigationRequest
 
 An InvestigationRequest asks local repository cognition to establish facts.

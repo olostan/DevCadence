@@ -2,7 +2,18 @@
 
 ## Status
 
-The control-plane core (M1) is implemented and M2 is being developed separately. Sections below describing cognition runtimes, environment intelligence and principal-host setup define intended M3/M4 behavior; no model integration is required by the current core.
+The control-plane core (M1), the repository/worktree/process substrate (M2) and
+environment intelligence with cognition routing (M3A) are implemented and merged.
+
+Sections below describing hardware, runtime, coding-CLI and principal-host
+**discovery** are therefore implemented behaviour, observable through
+`devcadience environment inspect` and `devcadience cognition list`.
+
+Sections describing guided **setup, remediation, installation, credential
+creation and the terminal UX** remain intended M3B behaviour; principal-host
+**integration** remains intended M4A behaviour. No model integration is required
+to build or test the control plane, and none of the implemented commands mutates
+the machine.
 
 ## 1. Target environment
 
@@ -101,6 +112,30 @@ Binaries:
 ## 7A. Guided bootstrap (M3)
 
 The intended normal onboarding path is not manual runtime installation.
+
+### Implemented in M3A: read-only inspection
+
+These commands exist today. All are read-only and none mutates the machine.
+
+```bash
+devcadience environment inspect                   # observed hardware/software facts
+devcadience environment inspect --depth inventory # filesystem only; runs no command
+devcadience environment inspect --json
+devcadience cognition list                        # endpoints, health, assessment
+devcadience cognition list --depth inference      # also runs synthetic inference probes
+devcadience cognition probe <endpoint-id>         # verify one endpoint explicitly
+devcadience cognition route --role implementer    # explainable routing decision
+devcadience cognition route --source-exposure local_only --max-cost local_compute
+```
+
+`environment inspect` refuses `--depth inference`: an ordinary environment query
+must never load a model as a side effect. Verification is requested explicitly
+through `cognition probe`, which uses only models that already exist locally and
+never downloads one.
+
+### Intended in M3B: guided mutation
+
+The remaining commands plan and apply changes, and do not exist yet.
 
 Conceptual commands:
 
@@ -253,12 +288,18 @@ No particular consultant provider is required. Missing consultant capability sho
 
 ## 13. Development workflow
 
-During M1/M2, run:
+During M1–M3A, run:
 
 ```bash
 go test ./...
 go vet ./...
 ```
+
+The suite requires no GPU, no local model runtime, no Python, no coding CLI, no
+provider credentials and no network. Environment and cognition behaviour is
+exercised against deterministic fixture machines
+(`internal/environment/fixtures.go`), so a Linux/AMD machine and an Apple Silicon
+machine are both covered whatever host runs the tests.
 
 Additional linters/static analyzers should be introduced with version pinning/CI.
 

@@ -301,8 +301,9 @@ Repeated failure should escalate rather than produce infinite retries.
 
 ## 16. Current phase
 
-M0 (normative baseline), M1 (domain core and canonical state), and M2
-(repository/worktree/process execution) are complete.
+M0 (normative baseline), M1 (domain core and canonical state), M2
+(repository/worktree/process execution) and M3A (environment intelligence and
+cognition runtime) are complete.
 
 The control plane now has typed protocol records, an append-only engineering
 event journal, deterministic ProjectState reduction, task/attempt state
@@ -311,16 +312,25 @@ inspection, isolated worktrees, controlled external processes,
 content-addressed artifacts, validation profiles, candidate metadata and
 non-mutating integration checks. None of that requires a model runtime.
 
-The next milestone is **M3 — Environment intelligence, cognition runtime, and
-guided bootstrap**:
+**M3A** adds environment intelligence and the cognition runtime. DevCadience
+discovers hardware and software from operating-system facts, assesses accelerator
+backend candidates as a pure function of those facts, discovers cognition
+endpoints across local runtimes / authenticated coding CLIs / remote APIs,
+verifies local acceleration only from an authoritative runtime signal produced by
+real inference, and capability-routes roles deterministically under privacy and
+cost policy. Everything in M3A is read-only; nothing mutates the machine.
 
-- **M3A** discovers hardware/software/authentication/cognition endpoints,
-  verifies real local acceleration where configured, and capability-routes
-  roles across deterministic tools, local models and policy-authorized remote
-  cognition.
-- **M3B** provides guided `setup`/`doctor`, remediation planning,
-  credential references, deployment-profile recommendations and a restrained
-  terminal UI suitable for local terminals, SSH and non-interactive use.
+When working on this area, note the contracts settled by
+[ADR-0013](docs/adr/0013-environment-intelligence-and-cognition-contracts.md):
+facts are separate from assessment, a capability grade requires provenance,
+`verified` acceleration requires authoritative evidence and is refused by record
+validation without it, machine profiles are computed rather than persisted, and
+routing is a filter plus an explicit ordering with no score.
+
+The next milestone is **M3B — guided bootstrap**: `setup`/`doctor`, remediation
+planning, installation recipes, credential references, deployment-profile
+recommendations and a restrained terminal UI suitable for local terminals, SSH and
+non-interactive use.
 
 Do not reintroduce the old assumption that M3 means "install one local model."
 A strong local model—and even a local LLM at all—is optional capability.
@@ -336,7 +346,7 @@ After M3:
   no-local-model/cloud-cognition profiles, and across greenfield plus
   brownfield project entry paths.
 
-ADRs 0011 and 0012 are accepted and normative for this direction.
+ADRs 0011, 0012 and 0013 are accepted and normative for this direction.
 
 The overall implementation objective is still to prove the central hypothesis
 without prematurely adding dashboard complexity, generalized distributed

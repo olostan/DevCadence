@@ -331,9 +331,10 @@ If that hypothesis fails, the architecture must be revised before adding autonom
 
 ## Running the control plane
 
-M1 and M2 are implemented, so the control plane can be built and can safely
-operate on real repositories without any model runtime. M3 will add cognition
-endpoint discovery/routing and guided environment setup.
+M1, M2 and M3A are implemented, so the control plane can be built, can safely
+operate on real repositories, and can describe the machine and its cognition
+endpoints from observed evidence — all without requiring any model runtime.
+M3B will add guided setup, remediation planning and the terminal UX.
 
 ```bash
 go build -o bin/devcadience ./cmd/devcadience
@@ -426,12 +427,31 @@ Every one of these is a thin adapter over `internal/repository`,
 
 ## Status
 
-DevCadience has completed **M0 (normative baseline)**, **M1 (domain core and canonical state)**, and **M2 (repository, worktree and process execution)**.
+DevCadience has completed **M0 (normative baseline)**, **M1 (domain core and canonical state)**, **M2 (repository, worktree and process execution)** and **M3A (environment intelligence and cognition runtime)**.
 
 M2 is merged on `main`: DevCadience can operate deterministically on real Git repositories using isolated worktrees, controlled subprocesses, content-addressed artifacts, validation profiles, commit-bound evidence and non-mutating candidate/integration inspection without requiring any LLM.
 
+M3A adds environment intelligence on that substrate. DevCadience discovers the
+machine from operating-system facts rather than from vendor tooling, assesses
+which accelerator backends are plausible, discovers cognition endpoints across
+local runtimes, authenticated coding CLIs and remote APIs, verifies local
+acceleration only from an authoritative runtime signal produced by real inference
+(DCI-106), and routes roles deterministically and explainably under privacy and
+cost policy. A machine with no local model — or no AI software at all — is a
+supported operating state rather than a failure, and nothing in M3A mutates the
+machine.
+
+```bash
+bin/devcadience environment inspect         # hardware, software, backend candidates
+bin/devcadience cognition list              # endpoints, health, readiness assessment
+bin/devcadience cognition probe <endpoint>  # explicit synthetic inference probe
+bin/devcadience cognition route --role implementer
+```
+
+See [docs/adr/0013-environment-intelligence-and-cognition-contracts.md](docs/adr/0013-environment-intelligence-and-cognition-contracts.md)
+for the durable contracts this settled.
+
 The active roadmap now proceeds through:
-- **M3A:** environment intelligence + cognition runtime/capability routing;
 - **M3B:** guided blank-machine setup/doctor/auth/TUI;
 - **M4A:** semantic MCP + Antigravity/Cursor/VS Code principal-host integration;
 - **M4B:** brownfield Project Adoption & Retrospective Reconstruction;

@@ -29,3 +29,25 @@ test suite can both infer which schema governs a file without a manifest.
    records must stay interpretable (DCI-093).
 4. Fixtures contain no secrets, no real credentials and no real repository
    paths.
+5. A fixture asserting something the contract *forbids* is as valuable as one
+   asserting what it permits. The M3A additions are mostly of that kind: the
+   `machine-capability-profile.invalid-*` documents cover a `verified` backend
+   with no authoritative signal, a remote endpoint claiming local acceleration, a
+   graded capability with no provenance and a local runtime reporting itself
+   authenticated — each a plausible mistake that would otherwise produce a
+   confident, wrong record.
+
+## Machine and cognition fixtures
+
+`machine-capability-profile.valid.json` describes a fully exercised machine —
+Apple Silicon, verified Metal offload from an authoritative runtime signal, a
+coding CLI whose authentication is honestly `unknown`. `*.valid-blank-machine.json`
+is the opposite extreme: a container with no Git, no accelerator and no cognition
+endpoint at all, which must still be a valid document with an explicit assessment.
+`project-state.valid-cognition.json` carries the compact ProjectState projection.
+
+Fixture *machines* — as opposed to fixture documents — live in
+`internal/environment/fixtures.go`, because the discovery tests need probe
+behaviour rather than a finished document. Both exist for the same reason: the
+test suite must cover a Linux/AMD machine and an Apple Silicon machine without
+running on either.

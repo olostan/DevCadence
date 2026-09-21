@@ -48,7 +48,7 @@ Package names for future M3/M4 subsystems are directional and should still be
 challenged against actual implementation boundaries when those milestones
 start.
 
-As of M2 the implemented layout is:
+As of M3A the implemented layout is:
 
 ~~~text
 cmd/devcadience/            CLI adapter (no domain logic)
@@ -68,12 +68,35 @@ internal/
   process/                  controlled external-process runner (M2)
   artifacts/                content-addressed artifact store (M2)
   validation/               validation-profile loading and execution (M2)
+  environment/              machine discovery + backend assessment (M3A)
+  cognition/                endpoint contract, acceleration, routing (M3A)
+    ollama/ mlx/            local runtime adapters (M3A)
+    codingcli/ remoteapi/   coding-CLI and remote-API adapters (M3A)
+  principalhosts/           principal-host presence detection (M3A)
 ~~~
 
-Packages for future milestones (`agents`, `cognition`, `environment`,
-`onboarding`, `principalhosts`, `adoption`, `consultants`, `health`,
-`learning`, `policy`) are created only when the milestone that needs a real
-responsibility boundary arrives. An empty package is not a boundary.
+Packages for future milestones (`agents`, `onboarding`, `adoption`,
+`consultants`, `health`, `learning`, `policy`) are created only when the
+milestone that needs a real responsibility boundary arrives. An empty package is
+not a boundary.
+
+The M3A boundaries are load-bearing rather than cosmetic, and
+`tests/boundaries_test.go` enforces them:
+
+- `environment` produces **facts** plus a pure assessment of them. It reads the
+  machine through an injected `SysProbe` and `CommandProbe`, never through
+  `os/exec`, a direct file read, or `runtime.GOOS` outside its one constructor —
+  which is what lets a Linux/AMD machine and an Apple Silicon machine both be
+  exercised as fixtures on whatever host runs the tests.
+- `cognition` owns the `Adapter` contract and the pure evidence and decision
+  logic. It must stay buildable with no adapter present.
+- Adapter subpackages are the only place a runtime, CLI or provider exists. They
+  speak only in `protocol` types, may not import `storage`, `controlplane`,
+  `state` or `events`, and are selected at the edge in `cmd/devcadience`.
+- `principalhosts` is deliberately separate from `cognition`: a host is a
+  frontend a human drives, not a source of cognition (DCI-107).
+
+See [ADR-0013](docs/adr/0013-environment-intelligence-and-cognition-contracts.md).
 
 ## 2. Primary implementation language
 
@@ -164,6 +187,19 @@ plane routes on today: `ErrInvalidTransition`, `ErrInvalidArgument`,
 by category, so `errors.Is(err, errs.ErrNotFound)` holds regardless of
 message, and an error that did not originate in the taxonomy classifies as
 `internal` rather than silently acquiring a routable category.
+
+M3A adds `ErrUnsupported`, `ErrUnauthenticated`, `ErrProbeFailed`,
+`ErrProbeTimeout` and `ErrNoEligibleEndpoint`, because capability absence must be
+routable without being mistaken for a defect (DCI-104). The distinctions are
+deliberate: absence (`not_found`) may be remediable by installing something while
+an unsupported version may not; an unauthenticated endpoint is not a policy
+denial, since nothing forbade the action; and a probe timeout says nothing about
+whether a capability works, only that it did not answer in time.
+
+Most capability absence is not an error at all. A missing binary, an unreadable
+device node, malformed vendor output and a runtime with no model are **facts**,
+carried as typed statuses and per-component findings rather than as returned
+errors, so an absent optional tool cannot abort unrelated discovery.
 
 Human-readable messages supplement, not replace, machine-readable status.
 

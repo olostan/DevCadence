@@ -128,14 +128,19 @@ recent_semantic_changes:
       Task retry now creates immutable Attempt records.
 
 capabilities:
-  local_models:
-    - profile: local-strong-coder
-      available: true
-  consultants:
-    codex:
-      available: unknown
-    claude:
-      available: unknown
+  cognition:
+    assessment: ready_with_reduced_capability
+    machine_fingerprint: sha256:0e1d...
+    endpoints:
+      - id: ollama:local-small
+        kind: local_runtime
+        locality: local
+        health: ready
+        auth_status: not_applicable
+        cost_class: local_compute
+        required_source_exposure: local_only
+        acceleration_verified: true
+        acceleration_backend: vulkan
 ```
 
 ## 4. State provenance
@@ -267,9 +272,57 @@ identifiers.
 
 ### 7.3 Capabilities
 
-`capabilities` is a typed object with `local_models` and `consultants`, not a
-free-form map (ENGINEERING_STANDARDS.md §4). M1 leaves it empty; no model
-runtime exists until M3.
+`capabilities` is a typed object, not a free-form map
+(ENGINEERING_STANDARDS.md §4). Its current field is `cognition`, the compact
+projection of discovered cognition capability added by M3A
+([ADR-0013](adr/0013-environment-intelligence-and-cognition-contracts.md) §4):
+
+```yaml
+capabilities:
+  cognition:
+    assessment: ready_with_reduced_capability
+    observed_at: 2026-09-21T10:59:00.000000Z
+    machine_fingerprint: sha256:0e1d...
+    profile_ref: artifact:machine-capability-profile:sha256:9f1c
+    endpoints:
+      - id: ollama:local-small
+        kind: local_runtime
+        locality: local
+        health: ready
+        auth_status: not_applicable
+        cost_class: local_compute
+        required_source_exposure: local_only
+        acceleration_verified: true
+        acceleration_backend: vulkan
+    limitations:
+      - no local endpoint has a graded implementation capability
+```
+
+It is a **projection, not a copy**. Capability grades, probe signals,
+measurements, CPU features and device nodes stay in the machine-scoped
+`MachineCapabilityProfile` and are reachable through `profile_ref` (DCI-010,
+DCI-011). Putting them here would make ProjectState grow with every probe, and a
+grade without its provenance would read as evidence while resting on nothing
+(DCI-012).
+
+Machine capability is **global**; only policy is per-project. The hardware and
+installed runtimes are identical for every project on a host, so what differs per
+project is which endpoints its privacy and cost rules permit — a routing input,
+not durable state.
+
+Freshness is explicit because machine facts are "runtime current" (§13). A
+durable record repeating a month-old endpoint health as current project truth
+would be worse than carrying nothing, so `observed_at` says when and
+`machine_fingerprint` says which machine: a reader comparing the fingerprint
+against a fresh discovery learns immediately whether the projection still
+describes the machine in front of it.
+
+The M1 fields `local_models` and `consultants` are **deprecated** and never
+written by current builds. They remain in the Go type and the schema so that
+ProjectState documents written before M3A stay readable under strict decoding
+(DCI-092, DCI-093); deleting them would break historical records for the sake of
+two optional fields. Consultant selection is an M6 policy over discovered
+endpoints rather than a separate capability list.
 
 ### 7.3a Evidence lineage is checked, not carried
 

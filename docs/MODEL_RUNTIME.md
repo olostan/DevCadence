@@ -4,6 +4,14 @@
 
 This document defines how DevCadience discovers, verifies, represents and routes model cognition.
 
+The discovery, verification, representation and routing described here are
+**implemented** as of M3A, in `internal/environment` and `internal/cognition`.
+Two things remain forward-looking: evaluation-derived capability grades (§4, §15)
+need an evaluation subsystem no milestone has built, so M3A records `unknown` or
+an explicit operator declaration instead of inventing a grade; and distributed
+workers (§21) are unimplemented by design. The durable contracts are settled in
+[adr/0013-environment-intelligence-and-cognition-contracts.md](adr/0013-environment-intelligence-and-cognition-contracts.md).
+
 The original bootstrap target of a 48 GB Apple Silicon machine remains a valuable **strong-local reference profile**, but it is not an architectural prerequisite.
 
 DevCadience must also run usefully on machines where:
@@ -163,6 +171,26 @@ flowchart LR
     Available --> Choice
     Eval --> Choice
 ```
+
+The implemented router (M3A) applies hard constraints first, recording a reason
+for every rejection, then orders the survivors explicitly:
+
+```text
+operator preference  ->  cheapest cost class  ->  most private exposure
+                     ->  best capability grade  ->  identifier
+```
+
+Cost precedes capability grade because every survivor already *satisfies* the
+requirement, so the choice among them is the least expensive and most private one.
+The identifier tiebreak makes ties deterministic rather than dependent on
+discovery order. There is no score, no weight and no confidence value, and a
+decision distinguishes "ineligible" from "eligible but not chosen".
+
+Two safety properties: an unset policy fails closed to `local_only` /
+`local_compute`, so a caller who configured nothing cannot authorise remote
+cognition by omission; and operator preference orders eligible endpoints without
+ever making an ineligible one eligible, so preference cannot route around a
+privacy constraint.
 
 A conceptual preference sequence may look like:
 
