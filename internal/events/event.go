@@ -144,7 +144,7 @@ func (e *Event) UnmarshalJSON(data []byte) error {
 	if err != nil {
 		return err
 	}
-	*e = Event{
+	decoded := Event{
 		Seq:           w.Seq,
 		SchemaVersion: w.SchemaVersion,
 		EventID:       w.EventID,
@@ -156,5 +156,14 @@ func (e *Event) UnmarshalJSON(data []byte) error {
 		Payload:       payload,
 		PayloadDigest: w.PayloadDigest,
 	}
+	// Decoding is the boundary where an event arrives from outside this
+	// process, so the envelope is checked here rather than trusting each
+	// caller to remember. The storage read path validates too; an event that
+	// reaches Go through any other route must meet the same bar, and a
+	// half-valid Event value should never exist for a caller to act on.
+	if err := decoded.Validate(); err != nil {
+		return err
+	}
+	*e = decoded
 	return nil
 }

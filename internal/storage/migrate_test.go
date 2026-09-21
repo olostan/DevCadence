@@ -187,3 +187,90 @@ func TestReadOnlyOpenCreatesNothingOnDisk(t *testing.T) {
 		t.Fatalf("a read-only open created %v", names)
 	}
 }
+
+// TestMigrationHistoryThisBuildCannotAccountForIsRefused covers the two silent
+// histories a checksum check alone misses.
+//
+// Both mean the recorded version is not one this build can reason about, so
+// reading or writing against it would be guessing at the schema.
+func TestMigrationHistoryThisBuildCannotAccountForIsRefused(t *testing.T) {
+	ctx := context.Background()
+	for _, tc := range []struct {
+		name    string
+		corrupt string
+		what    string
+	}{
+		{
+			name: "applied migration this build does not carry",
+			corrupt: `INSERT INTO schema_migrations (version, name, checksum, applied_at)
+                      VALUES (99, 'from_the_future', 'sha256:ffff', '2026-01-02T03:04:05.000000Z')`,
+			what: "a database migrated by a newer build",
+		},
+		{
+			name: "gap in the applied history",
+			corrupt: `INSERT INTO schema_migrations (version, name, checksum, applied_at)
+                      VALUES (3, 'orphan', 'sha256:eeee', '2026-01-02T03:04:05.000000Z')`,
+			what: "a non-contiguous migration history",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "control-plane.db")
+			store, err := storage.Open(ctx, storage.Config{Path: path, Clock: testsupport.NewClock()})
+			if err != nil {
+				t.Fatalf("open: %v", err)
+			}
+			if err := store.Write(ctx, func(tx *storage.Tx) error {
+				return tx.ExecForTest(ctx, tc.corrupt)
+			}); err != nil {
+				t.Fatalf("seed history: %v", err)
+			}
+			if err := store.Close(); err != nil {
+				t.Fatalf("close: %v", err)
+			}
+
+			// Both the migrating path and the read-only path must refuse it:
+			// a read-only command reporting from a schema it does not
+			// understand is the quieter of the two failures.
+			for _, readOnly := range []bool{false, true} {
+				_, err := storage.Open(ctx, storage.Config{
+					Path: path, Clock: testsupport.NewClock(), ReadOnly: readOnly,
+				})
+				if err == nil {
+					t.Fatalf("%s was opened (read_only=%v)", tc.what, readOnly)
+				}
+				if got := errs.CategoryOf(err); got != errs.CategoryIntegrity {
+					t.Fatalf("read_only=%v: category = %s, want integrity (%v)", readOnly, got, err)
+				}
+			}
+		})
+	}
+}
+
+// TestReadOnlyOpenVerifiesMigrationChecksums closes the other half: read-only
+// skipped applying migrations and verifying them.
+func TestReadOnlyOpenVerifiesMigrationChecksums(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "control-plane.db")
+	store, err := storage.Open(ctx, storage.Config{Path: path, Clock: testsupport.NewClock()})
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	if err := store.Write(ctx, func(tx *storage.Tx) error {
+		return tx.ExecForTest(ctx, `UPDATE schema_migrations SET checksum = 'sha256:tampered'`)
+	}); err != nil {
+		t.Fatalf("tamper: %v", err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+
+	_, err = storage.Open(ctx, storage.Config{
+		Path: path, Clock: testsupport.NewClock(), ReadOnly: true,
+	})
+	if err == nil {
+		t.Fatal("a read-only open accepted an edited migration history")
+	}
+	if got := errs.CategoryOf(err); got != errs.CategoryIntegrity {
+		t.Fatalf("category = %s, want integrity (%v)", got, err)
+	}
+}

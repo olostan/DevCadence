@@ -111,3 +111,27 @@ func TestValidRejectsMalformedIdentifiers(t *testing.T) {
 		}
 	}
 }
+
+// TestValidChecksThePrefixToo keeps the shape check honest about the shape it
+// documents. A prefix of arbitrary bytes would let identifiers this package
+// never produced pass a check whose only job is to say whether they look like
+// it did.
+func TestValidChecksThePrefixToo(t *testing.T) {
+	generated := ids.NewULIDSource().New("tsk")
+	body := generated[len("tsk_"):]
+	for _, tc := range []struct {
+		id   string
+		want bool
+	}{
+		{"tsk_" + body, true},
+		{body, true},
+		{"TSK_" + body, false},
+		{"evt-1_" + body, false},
+		{"tsk9_" + body, false},
+		{"_" + body, false},
+	} {
+		if got := ids.Valid(tc.id); got != tc.want {
+			t.Errorf("Valid(%q) = %v, want %v", tc.id, got, tc.want)
+		}
+	}
+}

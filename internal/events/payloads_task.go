@@ -209,6 +209,16 @@ func (p *AttemptStarted) Validate() error {
 	if p.WorkPackageVersion < 1 {
 		return errs.New(errs.CategoryInvalidArgument, "AttemptStarted: work_package_version must be >= 1")
 	}
+	// The attempt is the durable claim about what the work was executed
+	// against, and staleness is detected from the state revision plus the base
+	// commit (docs/PROJECT_STATE.md §7). WorkPackageApproved already requires
+	// the revision; an attempt that omits it would make its own plan's
+	// staleness undetectable at the point it actually mattered.
+	if p.ProjectStateRevision == "" {
+		return errs.New(errs.CategoryInvalidArgument,
+			"AttemptStarted: project_state_revision is required; "+
+				"an attempt records the state its plan was written against")
+	}
 	return nil
 }
 

@@ -159,6 +159,15 @@ func Valid(id string) bool {
 		if i == 0 || i == len(id)-1 {
 			return false
 		}
+		// The prefix is part of the documented shape, so it is checked like
+		// the rest of it. Accepting any bytes before the underscore would let
+		// "TSK_…" or "evt-1_…" pass a check whose whole purpose is to say
+		// whether stored data looks like this package produced it.
+		for j := 0; j < i; j++ {
+			if id[j] < 'a' || id[j] > 'z' {
+				return false
+			}
+		}
 		body = id[i+1:]
 	}
 	if len(body) != Length {

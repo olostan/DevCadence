@@ -2,6 +2,7 @@ package events_test
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/olostan/DevCadience/internal/errs"
@@ -171,6 +172,10 @@ func TestPayloadValidationRejectsIncompleteFacts(t *testing.T) {
 			Status: protocol.ValidationPass, RecordDigest: "sha256:x",
 			FailedChecks: []string{"chk_test"},
 		}},
+		{"attempt that records no project state revision", &events.AttemptStarted{
+			TaskID: "t", AttemptID: "att", WorkPackageID: "wp", WorkPackageVersion: 1,
+			WorkerRole: "implementer",
+		}},
 		{"acceptance without a decision owner", &events.ChangeAccepted{
 			TaskID: "t", AttemptID: "att", CandidateCommit: "c", SemanticSummary: "s",
 		}},
@@ -229,5 +234,35 @@ func TestAcceptanceRequiresReviewEvidence(t *testing.T) {
 				t.Fatalf("category = %s, want %s (%v)", got, errs.CategoryInvalidArgument, err)
 			}
 		})
+	}
+}
+
+// TestDecodingAnEventValidatesTheEnvelope closes the last route by which an
+// unsupported event could reach a caller as a usable value.
+//
+// The storage read path validates, but decoding is the boundary where an
+// event arrives from outside this process, and a half-valid Event should
+// never exist for a caller to act on.
+func TestDecodingAnEventValidatesTheEnvelope(t *testing.T) {
+	valid := envelope(&events.RiskRecorded{
+		RiskID: "R-001", Severity: protocol.SeverityLow, Statement: "noted",
+	})
+	document, err := json.Marshal(valid)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	// Control: the well-formed envelope round-trips.
+	var round events.Event
+	if err := json.Unmarshal(document, &round); err != nil {
+		t.Fatalf("a valid event did not decode: %v", err)
+	}
+
+	tampered := strings.Replace(string(document), `"schema_version":"1.0"`, `"schema_version":"99.0"`, 1)
+	if tampered == string(document) {
+		t.Fatal("test did not modify the schema version")
+	}
+	var decoded events.Event
+	if err := json.Unmarshal([]byte(tampered), &decoded); err == nil {
+		t.Fatal("an event with an unsupported schema version decoded successfully")
 	}
 }

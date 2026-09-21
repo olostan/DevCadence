@@ -208,7 +208,8 @@ func TestInconsistentHistoriesAreRejected(t *testing.T) {
 				return testsupport.NewScenario(t, "example").
 					Add(&events.ProjectInitialized{Name: "a", MilestoneID: "M1", MilestoneTitle: "t"}).
 					Add(&events.AttemptStarted{TaskID: "tsk_missing", AttemptID: "att_1",
-						WorkPackageID: "wp_1", WorkPackageVersion: 1, WorkerRole: "implementer"}).
+						WorkPackageID: "wp_1", WorkPackageVersion: 1,
+						ProjectStateRevision: "ps_000000001", WorkerRole: "implementer"}).
 					Stream()
 			},
 			category: errs.CategoryNotFound,

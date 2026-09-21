@@ -145,6 +145,13 @@ func Open(ctx context.Context, cfg Config) (*Store, error) {
 			return nil, errs.New(errs.CategoryNotFound,
 				"database %s has no DevCadience schema; run `devcadience project init` first", cfg.Path)
 		}
+		// Read-only skips applying migrations, not verifying them: reporting
+		// from a schema this build does not understand is a quieter failure
+		// than refusing to open.
+		if err := store.verifySchema(ctx); err != nil {
+			_ = db.Close()
+			return nil, err
+		}
 		return store, nil
 	}
 	if err := store.migrate(ctx); err != nil {

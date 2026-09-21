@@ -107,6 +107,9 @@ func (s *Store) migrate(ctx context.Context) error {
 	for _, a := range applied {
 		byVersion[a.Version] = a
 	}
+	if err := verifyAppliedMigrations(migrations, applied); err != nil {
+		return err
+	}
 	for _, m := range migrations {
 		if existing, done := byVersion[m.Version]; done {
 			// A changed checksum means a migration that already ran has been
@@ -122,6 +125,80 @@ func (s *Store) migrate(ctx context.Context) error {
 		}
 		if err := s.applyMigration(ctx, m); err != nil {
 			return err
+		}
+	}
+	return nil
+}
+
+// verifyAppliedMigrations refuses a database whose migration history this
+// build cannot account for.
+//
+// Checking only the migrations this build *has* leaves two histories
+// undetected, and both are worse than a checksum mismatch because they are
+// silent:
+//
+//   - a migration recorded as applied that this build does not carry, which
+//     means the database was migrated by a newer binary and now holds a schema
+//     this one does not understand;
+//   - a gap in the applied versions, which means the recorded history is not a
+//     prefix of any real migration sequence.
+//
+// In both cases the database is not at a version this build can reason about,
+// and proceeding would read and write a schema it is guessing at. Migrations
+// are ordered and contiguous by construction (TestMigrationsAreOrderedAndUniquelyVersioned),
+// so the applied set must be a contiguous prefix of them.
+func verifyAppliedMigrations(embedded []Migration, applied []AppliedMigration) error {
+	known := make(map[int]bool, len(embedded))
+	for _, m := range embedded {
+		known[m.Version] = true
+	}
+	highest := 0
+	for _, a := range applied {
+		if !known[a.Version] {
+			return errs.New(errs.CategoryIntegrity,
+				"database has migration %04d_%s applied, which this build does not carry; "+
+					"it was migrated by a newer DevCadience and must not be used with this one",
+				a.Version, a.Name)
+		}
+		if a.Version > highest {
+			highest = a.Version
+		}
+	}
+	// A contiguous prefix has exactly as many entries as its highest version.
+	if highest != len(applied) {
+		return errs.New(errs.CategoryIntegrity,
+			"database migration history is not contiguous: %d migrations applied but the highest is %04d; "+
+				"the recorded history is not a prefix of any real migration sequence",
+			len(applied), highest)
+	}
+	return nil
+}
+
+// verifySchema checks a database this build will only read: the applied
+// migrations must be ones it carries, contiguous, and unedited. A read-only
+// command skips migration *application*, but skipping verification too would
+// let `state show` report from a schema the build does not understand.
+func (s *Store) verifySchema(ctx context.Context) error {
+	embedded, err := LoadMigrations()
+	if err != nil {
+		return err
+	}
+	applied, err := s.AppliedMigrations(ctx)
+	if err != nil {
+		return err
+	}
+	if err := verifyAppliedMigrations(embedded, applied); err != nil {
+		return err
+	}
+	byVersion := make(map[int]Migration, len(embedded))
+	for _, m := range embedded {
+		byVersion[m.Version] = m
+	}
+	for _, a := range applied {
+		if byVersion[a.Version].Checksum != a.Checksum {
+			return errs.New(errs.CategoryIntegrity,
+				"migration %04d_%s was applied with checksum %s but this build has %s",
+				a.Version, a.Name, a.Checksum, byVersion[a.Version].Checksum)
 		}
 	}
 	return nil
