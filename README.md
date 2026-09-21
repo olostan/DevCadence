@@ -1,10 +1,12 @@
 # DevCadience
 
-**DevCadience is a local-first intelligent software-development control plane.** It combines scarce frontier-model reasoning with abundant local-model cognition through explicit engineering protocols, evidence-backed project state, deterministic verification, independent review, and risk-based escalation.
+**DevCadience is a local-first intelligent software-development control plane.** It combines scarce frontier-model reasoning with capability-routed execution cognition through explicit engineering protocols, evidence-backed project state, deterministic verification, independent review, and risk-based escalation.
+
+Local-first means that repository authority, canonical state, deterministic execution, evidence and acceptance remain under the local control plane. Model inference itself may be local or remote according to capability, privacy, cost and policy.
 
 The central idea is simple:
 
-> Spend frontier intelligence on the decisions where intelligence has the greatest leverage. Spend local inference on the high-volume work of repository exploration, implementation, testing, critique, and repeated verification.
+> Spend frontier intelligence on the decisions where intelligence has the greatest leverage. Spend lower-cost cognition and deterministic compute on the high-volume work of repository exploration, implementation, testing, critique, and repeated verification.
 
 DevCadience is not intended to be another chat-based coding assistant. It is designed as a persistent engineering organization that can accompany a project from a vague idea through research, architecture, implementation, refactoring, long-term evolution, and learning from previous mistakes.
 
@@ -12,7 +14,9 @@ DevCadience is not intended to be another chat-based coding assistant. It is des
 
 Modern frontier models are valuable because they can reason deeply, compare alternatives, research current external knowledge, consult other models, design interfaces and algorithms, and produce detailed implementation guidance. Their weakness in long coding sessions is economic and contextual: repeatedly ingesting large repositories, compiler output, logs, test failures, and nearly identical source revisions wastes limited context and paid or quota-bound inference.
 
-Strong local models have the complementary profile. On modern Apple Silicon they can repeatedly inspect source, search a repository, implement detailed plans, compile, test, debug, and review changes at essentially zero marginal token cost. They should not routinely be asked to rediscover architecture while coding.
+Strong local models are one excellent execution option, but not a prerequisite. A capable Apple Silicon workstation may run strong local coding/review models; a modest Linux box may use deterministic tools plus a small local model and economical remote implementation; a machine with no local LLM may still keep repository execution and evidence local while routing model cognition remotely.
+
+The invariant is not “cloud versus local.” It is **high-leverage cognition versus high-volume cognition versus deterministic machinery**, with source exposure and cost controlled explicitly.
 
 DevCadience creates a strict information boundary between those roles.
 
@@ -22,13 +26,14 @@ DevCadience creates a strict information boundary between those roles.
 flowchart TB
     H["Human / Project Owner"]
     P["Frontier Principal Engineer<br/>deep reasoning, research, alternatives,<br/>architecture, algorithms, pseudocode"]
-    C["Engineering Control Plane<br/>state, policy, task graph, evidence, learning"]
+    C["Engineering Control Plane<br/>state, policy, task graph, evidence, routing, learning"]
 
-    subgraph Local["Abundant local cognition"]
-      S["Repository Scout"]
-      I["Implementer"]
-      R["Independent Reviewers"]
-      F["Failure / Health Analysts"]
+    subgraph Exec["Capability-routed execution cognition"]
+      D["Deterministic repository tools"]
+      S["Small local cognition"]
+      L["Strong local cognition"]
+      E["Economical remote cognition"]
+      R["Independent reviewers"]
     end
 
     subgraph Tools["Deterministic evidence"]
@@ -38,32 +43,35 @@ flowchart TB
       A["Static / security analysis"]
     end
 
-    E["Evidence Packets / Change Reports"]
-    X["Optional frontier consultants<br/>OpenAI/Codex · Claude · others"]
+    EP["Evidence Packets / Change Reports"]
+    X["Optional consultants<br/>available configured endpoints"]
 
     H --> P
     P <--> C
     P -. independent consultation .-> X
+    C --> D
     C --> S
-    C --> I
+    C --> L
+    C --> E
     C --> R
-    C --> F
+    D --> G
     S --> G
-    I --> G
+    L --> G
+    E --> G
     R --> G
     G --> B
     G --> T
     G --> A
-    B --> E
-    T --> E
-    A --> E
-    S --> E
-    R --> E
-    E --> C
+    B --> EP
+    T --> EP
+    A --> EP
+    D --> EP
+    R --> EP
+    EP --> C
     C --> P
 ```
 
-Frontier consultants such as OpenAI/Codex or Claude may be invoked through provider adapters when independent reasoning, adversarial review, or escalation is warranted.
+No individual model provider, local runtime, consultant subscription, or principal host is mandatory. The control plane discovers what is available and routes within explicit policy.
 
 ## Non-goals
 
@@ -114,6 +122,28 @@ The Discovery Principal maintains an **Ambiguity Ledger**, asks only the highest
 Architecture is gated by **Specification Readiness**: remaining unknowns must either be resolved or explicitly safe to defer.
 
 See [docs/DISCOVERY_AND_SPECIFICATION.md](docs/DISCOVERY_AND_SPECIFICATION.md).
+
+## Existing-project adoption
+
+DevCadience is not only for projects created under DevCadience from Day 0.
+
+An existing repository may start with no useful documentation, stale design notes, undocumented contracts, or code/tests that disagree with prose. DevCadience treats that as a **brownfield adoption** problem rather than pretending registration equals understanding.
+
+The adoption workflow inventories the repository, harvests existing docs, reconstructs contracts from source/tests/schemas/history, exposes contradictions and human-authority questions, and materializes a mandatory canonical project documentation baseline in Git.
+
+A brownfield repository is not READY for normal DevCadience-managed implementation until that baseline is committed and the Adoption Readiness Gate passes.
+
+See [docs/PROJECT_ADOPTION.md](docs/PROJECT_ADOPTION.md).
+
+## Adaptive environment onboarding
+
+DevCadience also assumes the machine itself may be blank: no Ollama, no MLX, no GPU runtime, no AI CLI, no provider credentials and no supported principal host.
+
+`devcadience doctor` / `devcadience setup` are intended to discover hardware and software, verify actual acceleration rather than infer it, find existing authenticated cognition endpoints, recommend a deployment profile, and guide approved installation/configuration.
+
+Initial principal hosts are deliberately bounded to **Antigravity, Cursor, and Visual Studio Code**. Antigravity is the reference integration, not a dependency.
+
+See [docs/ENVIRONMENT_INTELLIGENCE_AND_ONBOARDING.md](docs/ENVIRONMENT_INTELLIGENCE_AND_ONBOARDING.md) and [docs/PRINCIPAL_HOSTS.md](docs/PRINCIPAL_HOSTS.md).
 
 ## The most important artifact: Engineering Work Package
 
@@ -179,10 +209,14 @@ The principal engineer is required to assume it can be confidently wrong. For sy
 
 The first plausible solution is not automatically the final solution.
 
-## Local execution philosophy
+## High-volume execution philosophy
 
-Local inference is treated as abundant. DevCadience may intentionally use:
+High-volume cognition is treated as a routable resource. DevCadience may intentionally use:
+- deterministic repository search/indexing before any model call;
 - repeated repository scouting;
+- small local models for ranking/extraction/compression;
+- strong local models where hardware supports them;
+- economical remote coding/review endpoints where policy permits;
 - independent clean-context reviewers;
 - different models for different review vectors;
 - N-version implementation for risky work;
@@ -191,7 +225,7 @@ Local inference is treated as abundant. DevCadience may intentionally use:
 - repeated refactoring reviews;
 - overnight execution and verification.
 
-The scheduler optimizes primarily for correctness and durable quality, not lowest latency.
+The scheduler optimizes primarily for correctness, durable quality, privacy and cost—not merely lowest latency or highest local hardware utilization.
 
 ## Bounded review convergence
 
@@ -234,6 +268,9 @@ Start here:
 | [docs/README.md](docs/README.md) | Visual documentation map and recommended reading paths |
 | [docs/VISION.md](docs/VISION.md) | Product vision, goals, philosophy, success criteria |
 | [docs/DISCOVERY_AND_SPECIFICATION.md](docs/DISCOVERY_AND_SPECIFICATION.md) | Day-0 human collaboration, ambiguity resolution, requirements provenance, spec red-team and readiness |
+| [docs/PROJECT_ADOPTION.md](docs/PROJECT_ADOPTION.md) | Brownfield reconstruction, mandatory canonical baseline, adoption readiness |
+| [docs/ENVIRONMENT_INTELLIGENCE_AND_ONBOARDING.md](docs/ENVIRONMENT_INTELLIGENCE_AND_ONBOARDING.md) | Blank-machine discovery, acceleration verification, guided setup and capability profiles |
+| [docs/PRINCIPAL_HOSTS.md](docs/PRINCIPAL_HOSTS.md) | Antigravity/Cursor/VS Code principal-host contract and onboarding |
 | [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md) | Functional/non-functional requirements and bootstrap acceptance |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | System architecture and component boundaries |
 | [docs/LIFECYCLE.md](docs/LIFECYCLE.md) | Day-0 through long-term project lifecycle |
@@ -243,7 +280,7 @@ Start here:
 | [docs/LOCAL_AGENTS.md](docs/LOCAL_AGENTS.md) | Scout, implementer, reviewer and validator roles |
 | [docs/MCP_API.md](docs/MCP_API.md) | Semantic principal-facing MCP surface |
 | [docs/ANTIGRAVITY_INTEGRATION.md](docs/ANTIGRAVITY_INTEGRATION.md) | Concrete Antigravity workspace, MCP, plugin, skill, rules and permissions setup |
-| [docs/MODEL_RUNTIME.md](docs/MODEL_RUNTIME.md) | Ollama/MLX-style local runtime and resource management |
+| [docs/MODEL_RUNTIME.md](docs/MODEL_RUNTIME.md) | Cognition endpoints, local/remote capability routing and resource management |
 | [docs/CONSULTANTS.md](docs/CONSULTANTS.md) | Frontier consultant adapters and independent-review rules |
 | [docs/VERIFICATION.md](docs/VERIFICATION.md) | Deterministic and model-assisted verification |
 | [docs/REVIEW_AND_CONVERGENCE.md](docs/REVIEW_AND_CONVERGENCE.md) | Bounded review campaigns, finding adjudication, rising reopen thresholds and closure/freeze |
@@ -254,30 +291,41 @@ Start here:
 | [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) | Milestones and bootstrap plan |
 | [docs/SETUP.md](docs/SETUP.md) | Proposed local setup and development environment |
 | [docs/adr/0000-template.md](docs/adr/0000-template.md) | Architecture Decision Record template |
-| [docs/adr/](docs/adr/) | Accepted ADRs (0001–0006 during M1, 0007–0009 during M2) |
+| [docs/adr/](docs/adr/) | Accepted ADRs, including bounded review convergence, adaptive onboarding/cognition, and mandatory brownfield adoption |
 
 Machine-readable schema definitions live under [schemas/](schemas/). Frontier behavior sources include [skills/antigravity-discovery/](skills/antigravity-discovery/) for Day-0 specification work and [skills/antigravity-principal/](skills/antigravity-principal/) for architecture/delivery. The installable Antigravity adapter skeleton lives under [integrations/antigravity/devcadience/](integrations/antigravity/devcadience/). Local role templates are under [prompts/](prompts/) and an illustrative project policy is in [config/project.example.yaml](config/project.example.yaml).
 
 ## Proposed implementation shape
 
-The initial implementation is expected to use:
+The bootstrap implementation uses or targets:
 - a local daemon/control plane, preferably Go;
 - SQLite for durable control-plane state and event metadata;
 - Git and isolated worktrees for concurrent change execution;
-- MCP as the semantic interface exposed to Antigravity or other principal frontends;
-- Ollama and/or MLX-LM adapters for local model execution;
-- pluggable worker harnesses rather than a hard dependency on one coding agent;
-- optional consultant adapters for Codex, Claude, or other frontier systems;
-- deterministic test/lint/build/static-analysis runners;
-- a CLI first, with a web dashboard later.
+- deterministic repository/search/build/test tooling as the cheapest evidence layer;
+- capability-routed cognition endpoints rather than one mandatory local model;
+- Ollama and/or MLX-LM where local hardware makes them useful;
+- authenticated coding/agent CLIs and remote APIs where policy permits;
+- MCP as the semantic interface exposed to supported principal hosts;
+- first-class principal-host integration for Antigravity, Cursor and Visual Studio Code;
+- optional consultant adapters discovered from what the operator actually has;
+- a CLI-first guided setup/doctor experience, with a web dashboard later.
 
 These are architectural defaults, not unchangeable dogma. Changes require evidence and an ADR when they affect durable boundaries.
 
 ## Bootstrap success criterion
 
-The first important experiment is intentionally narrow:
+The first important experiment is intentionally focused:
 
-> Can a frontier principal successfully drive several real implementation tasks through DevCadience while consuming compact state/evidence and almost no raw repository source, with the resulting changes matching a detailed frontier-authored Work Package and passing deterministic plus independent local review?
+> Can a frontier principal successfully drive real implementation tasks through DevCadience using compact state/evidence, while repository-heavy work is handled by the cheapest policy-compliant cognition and deterministic tools, with strong validation/review and materially less frontier repository context?
+
+The proof must work across materially different deployment profiles:
+- strong local cognition;
+- hybrid thin-node operation;
+- no-local-model/cloud-cognition operation.
+
+It must also prove both:
+- a DevCadience-native/greenfield project;
+- a brownfield repository reconstructed into the mandatory canonical documentation baseline before managed work begins.
 
 If that hypothesis fails, the architecture must be revised before adding autonomous campaigns or self-improvement.
 
@@ -377,32 +425,16 @@ Every one of these is a thin adapter over `internal/repository`,
 
 ## Status
 
-DevCadience has completed **M0 (normative baseline)**, **M1 (domain core and
-canonical state)** and **M2 (repository, worktree and process execution)**.
+DevCadience has completed **M0 (normative baseline)**, **M1 (domain core and canonical state)**, and **M2 (repository, worktree and process execution)**.
 
-M1 delivered typed protocol records — including the Day-0 discovery and
-specification contracts — an append-only engineering event journal, a
-deterministic ProjectState reducer, the task and attempt state machines,
-SQLite persistence with explicit migrations, JSON Schema validation tooling
-and a CLI.
+M2 is merged on `main`: DevCadience can operate deterministically on real Git repositories using isolated worktrees, controlled subprocesses, content-addressed artifacts, validation profiles, commit-bound evidence and non-mutating candidate/integration inspection without requiring any LLM.
 
-The discovery *records*, *events* and *state projection* are implemented, so
-current product intent is reconstructable from durable records. The discovery
-*workflow* that produces them — asking the questions, running the experiments,
-assessing readiness — is not part of M1.
+The active roadmap now proceeds through:
+- **M3A:** environment intelligence + cognition runtime/capability routing;
+- **M3B:** guided blank-machine setup/doctor/auth/TUI;
+- **M4A:** semantic MCP + Antigravity/Cursor/VS Code principal-host integration;
+- **M4B:** brownfield Project Adoption & Retrospective Reconstruction;
+- **M5:** end-to-end proof across strong-local, hybrid-thin and no-local-model profiles, including a brownfield adoption path.
 
-M2 delivered repository registration and deterministic Git inspection
-(`internal/repository`), an isolated per-attempt worktree manager
-(`internal/worktrees`), a controlled external-process runner with no shell
-and no implicit environment inheritance (`internal/process`), a
-content-addressed artifact store (`internal/artifacts`), and validation-
-profile execution that produces the real M1 `ValidationResult`/
-`ValidationCompleted` pair (`internal/validation`). DevCadience can now drive
-a real synthetic repository through a full attempt/candidate/validation cycle
-with no model runtime involved. See
-[docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md#m2--repository-worktree-and-process-execution).
-
-Everything above that — local model runtimes, the semantic MCP surface,
-consultants, health and learning — remains unimplemented and belongs to
-[M3 onward](docs/IMPLEMENTATION_PLAN.md).
+See [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md).
 
