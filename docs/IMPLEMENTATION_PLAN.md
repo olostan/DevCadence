@@ -136,7 +136,9 @@ Local agents can perform a small real repository change from a manually authored
 Allow Antigravity/Gemini to operate only through compact semantic operations.
 
 ### Deliverables
-- stdio MCP adapter;
+- stdio MCP adapter with no-argument `devcadience-mcp` launch contract;
+- versioned Antigravity plugin/configuration under `integrations/antigravity/`;
+- strict principal-workspace setup documentation;
 - project_state;
 - investigate;
 - create_work_package;
