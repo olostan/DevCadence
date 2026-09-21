@@ -8,9 +8,11 @@ Exact MCP transport/configuration is adapter-level and may evolve without changi
 
 ### Bootstrap executable contract
 
-The `devcadience-mcp` binary MUST start the stdio MCP server when invoked with no arguments. This makes it directly usable from Antigravity's `mcp_config.json` `command` field. Additional subcommands/flags MAY be added later, but the no-argument stdio behavior is a compatibility contract for the Antigravity plugin.
+The `devcadience-mcp` binary MUST start the stdio MCP server when invoked with no arguments. The no-argument stdio behavior is a host-neutral compatibility contract intended to make integration straightforward from supported principal hosts.
 
-See [ANTIGRAVITY_INTEGRATION.md](ANTIGRAVITY_INTEGRATION.md).
+Antigravity is the reference host; Cursor and Visual Studio Code are also initial first-class host targets. Host-specific configuration remains adapter-level.
+
+See [PRINCIPAL_HOSTS.md](PRINCIPAL_HOSTS.md) and [ANTIGRAVITY_INTEGRATION.md](ANTIGRAVITY_INTEGRATION.md).
 
 ## 1. API design principle
 
