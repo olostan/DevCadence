@@ -221,6 +221,7 @@ Start here:
 | [docs/PROJECT_STATE.md](docs/PROJECT_STATE.md) | Canonical Engineering State Model |
 | [docs/LOCAL_AGENTS.md](docs/LOCAL_AGENTS.md) | Scout, implementer, reviewer and validator roles |
 | [docs/MCP_API.md](docs/MCP_API.md) | Semantic principal-facing MCP surface |
+| [docs/ANTIGRAVITY_INTEGRATION.md](docs/ANTIGRAVITY_INTEGRATION.md) | Concrete Antigravity workspace, MCP, plugin, skill, rules and permissions setup |
 | [docs/MODEL_RUNTIME.md](docs/MODEL_RUNTIME.md) | Ollama/MLX-style local runtime and resource management |
 | [docs/CONSULTANTS.md](docs/CONSULTANTS.md) | Frontier consultant adapters and independent-review rules |
 | [docs/VERIFICATION.md](docs/VERIFICATION.md) | Deterministic and model-assisted verification |
@@ -232,7 +233,7 @@ Start here:
 | [docs/SETUP.md](docs/SETUP.md) | Proposed local setup and development environment |
 | [docs/adr/0000-template.md](docs/adr/0000-template.md) | Architecture Decision Record template |
 
-Machine-readable schema definitions live under [schemas/](schemas/). The initial Antigravity operating skill is under [skills/antigravity-principal/](skills/antigravity-principal/), with local role templates under [prompts/](prompts/) and an illustrative project policy in [config/project.example.yaml](config/project.example.yaml).
+Machine-readable schema definitions live under [schemas/](schemas/). The reusable principal behavior source is under [skills/antigravity-principal/](skills/antigravity-principal/), while the installable Antigravity adapter skeleton lives under [integrations/antigravity/devcadience/](integrations/antigravity/devcadience/). Local role templates are under [prompts/](prompts/) and an illustrative project policy is in [config/project.example.yaml](config/project.example.yaml).
 
 ## Proposed implementation shape
 
