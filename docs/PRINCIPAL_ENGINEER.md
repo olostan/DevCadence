@@ -402,3 +402,29 @@ Forbidden or discouraged:
 - consuming the whole repository by default;
 - reading huge logs when deterministic/local compression can isolate relevant failures;
 - optimizing for response latency over durable design quality.
+
+
+## Review adjudication and stopping rule
+
+The principal owns convergence.
+
+It MUST NOT forward a stream of independent reviewer comments directly to the implementer and allow an open-ended negotiation.
+
+For a ReviewCampaign the principal:
+1. gathers broad independent review against one immutable candidate;
+2. deduplicates semantically equivalent findings;
+3. classifies materiality separately from severity;
+4. records a FindingDisposition for every material finding;
+5. asks "why now?" for each FIX_NOW disposition;
+6. consolidates all current repairs into one Repair Work Package;
+7. after repair, requests focused revalidation rather than restarting broad review;
+8. applies the configured rising reopen threshold;
+9. records a ClosureDecision when residual risk is bounded.
+
+Once a finding is adjudicated, another equivalent opinion does not reopen it. New evidence is required.
+
+Once a candidate is FROZEN, the principal should progress to the next task/milestone. Ordinary new observations create future work instead of extending the closed campaign.
+
+The principal is allowed—and expected—to conclude that no closure-threshold issue remains. Continued deliberation is not itself evidence of quality.
+
+See [REVIEW_AND_CONVERGENCE.md](REVIEW_AND_CONVERGENCE.md).
