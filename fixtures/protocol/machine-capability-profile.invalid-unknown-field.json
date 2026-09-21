@@ -1,0 +1,19 @@
+{
+  "schema_version": "1.0",
+  "profile_id": "mcp_bad_4",
+  "machine_fingerprint": "sha256:dd",
+  "observed_at": "2026-09-21T10:20:00.000000Z",
+  "knowledge_revision": "r1",
+  "probe_depth": "health",
+  "environment": {
+    "observed_at": "2026-09-21T10:20:00.000000Z",
+    "host": {"family": "linux", "arch": "amd64"},
+    "cpu": {},
+    "memory": {},
+    "virtualization": {"container": "none"}
+  },
+  "accelerator_candidates": [],
+  "endpoints": [],
+  "assessment": "ready",
+  "subscription_tier": "pro"
+}

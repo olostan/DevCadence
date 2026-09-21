@@ -1,0 +1,37 @@
+{
+  "schema_version": "1.0",
+  "profile_id": "mcp_bad_2",
+  "machine_fingerprint": "sha256:bb",
+  "observed_at": "2026-09-21T10:20:00.000000Z",
+  "knowledge_revision": "r1",
+  "probe_depth": "inference",
+  "environment": {
+    "observed_at": "2026-09-21T10:20:00.000000Z",
+    "host": {"family": "linux", "arch": "amd64"},
+    "cpu": {},
+    "memory": {},
+    "virtualization": {"container": "none"}
+  },
+  "accelerator_candidates": [],
+  "endpoints": [
+    {
+      "id": "api:remote",
+      "kind": "remote_api",
+      "locality": "remote",
+      "health": "ready",
+      "auth_status": "authenticated",
+      "structured_output": "declared",
+      "tool_use": "unknown",
+      "cost_class": "remote_economy",
+      "required_source_exposure": "focused_snippets",
+      "acceleration": {
+        "backend": "cuda",
+        "state": "verified",
+        "signals": [{"source": "provider", "trust": "authoritative", "backend": "cuda", "offloaded": true}],
+        "verified_at": "2026-09-21T10:20:00.000000Z"
+      },
+      "observed_at": "2026-09-21T10:20:00.000000Z"
+    }
+  ],
+  "assessment": "ready"
+}

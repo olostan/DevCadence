@@ -283,16 +283,38 @@ type SemanticChange struct {
 // Capabilities describes the cognition currently available to the project.
 //
 // It is an explicit type rather than a free-form object because durable
-// records may not use untyped maps (ENGINEERING_STANDARDS.md §4). In M1 it is
-// always empty: no model runtime exists yet.
+// records may not use untyped maps (ENGINEERING_STANDARDS.md §4).
+//
+// The shape has two generations, which is deliberate rather than untidy. M1
+// reserved `local_models` and `consultants` when the architecture assumed a
+// local model plus a set of consultant subscriptions. ADR-0011 replaced that
+// model: cognition is now a set of capability-routed endpoints that may be
+// local runtimes, authenticated CLIs or remote APIs, and "consultant" became a
+// role played by an endpoint rather than a separate universe. The `cognition`
+// field below is the current projection.
+//
+// The M1 fields are retained, deprecated and never written by this build.
+// Deleting them would make every historical ProjectState document
+// unreadable under strict decoding (DCI-092, DCI-093), which the compatibility
+// policy forbids; keeping them as read-only legacy shape costs two fields and
+// preserves the ability to inspect old trajectories. See
+// docs/adr/0013-environment-intelligence-and-cognition-contracts.md §4.
 type Capabilities struct {
-	LocalModels []ModelCapability      `json:"local_models,omitempty"`
+	// Cognition is the compact projection of discovered cognition capability.
+	Cognition *CognitionCapabilities `json:"cognition,omitempty"`
+
+	// LocalModels is the deprecated M1 representation. Readable for
+	// historical documents; never written.
+	LocalModels []ModelCapability `json:"local_models,omitempty"`
+	// Consultants is the deprecated M1 representation. Readable for
+	// historical documents; never written.
 	Consultants []ConsultantCapability `json:"consultants,omitempty"`
 }
 
-// ModelCapability reports a configured local model profile. Concrete
-// capability measurement belongs to M3 (ENGINEERING_STANDARDS.md §14); this
-// type only reserves the contract.
+// ModelCapability reports a configured local model profile.
+//
+// Deprecated: superseded by CognitionEndpointSummary (ADR-0011, ADR-0013). It
+// remains part of the contract so documents written before M3A stay readable.
 type ModelCapability struct {
 	Profile   string `json:"profile"`
 	Runtime   string `json:"runtime,omitempty"`
@@ -300,9 +322,129 @@ type ModelCapability struct {
 }
 
 // ConsultantCapability reports a configured frontier consultant adapter.
+//
+// Deprecated: superseded by CognitionEndpointSummary (ADR-0011, ADR-0013).
+// Consultant selection is an M6 policy over discovered endpoints, not a
+// separate capability list.
 type ConsultantCapability struct {
 	Name      string `json:"name"`
 	Available bool   `json:"available"`
+}
+
+// CognitionCapabilities is the compact, project-facing projection of the
+// machine's cognition capability.
+//
+// It is a projection, not a copy. The full MachineCapabilityProfile carries
+// CPU features, device nodes, probe signals and measurements; none of that
+// belongs in the principal's normal view of a project (DCI-010), and putting
+// it here would make ProjectState grow with every probe. What a project-level
+// reader needs is: can cognition happen at all, through which endpoints, at
+// what cost and exposure, and how stale is that answer.
+//
+// Freshness is explicit for a reason. Machine facts are "runtime current"
+// (docs/PROJECT_STATE.md §13): a durable project record that repeats a
+// month-old endpoint health as though it were current project truth would be
+// worse than carrying nothing. MachineFingerprint plus ObservedAt let a reader
+// tell whether the projection still describes the machine in front of it.
+type CognitionCapabilities struct {
+	Assessment CognitionAssessment `json:"assessment"`
+	// ObservedAt is when the underlying profile was observed, not when this
+	// state was reduced.
+	ObservedAt *Timestamp `json:"observed_at,omitempty"`
+	// MachineFingerprint identifies the machine the projection describes.
+	MachineFingerprint *string `json:"machine_fingerprint,omitempty"`
+	// ProfileRef points at the full MachineCapabilityProfile when one was
+	// retained, so detail stays retrievable without being inlined (DCI-011).
+	ProfileRef *string `json:"profile_ref,omitempty"`
+
+	Endpoints []CognitionEndpointSummary `json:"endpoints,omitempty"`
+	// Limitations states what this configuration cannot do, sorted.
+	Limitations []string `json:"limitations,omitempty"`
+}
+
+// CognitionEndpointSummary is one endpoint reduced to what a project-level
+// decision needs.
+//
+// Capability grades are deliberately absent: a grade without its provenance
+// invites exactly the unevidenced claim DCI-012 forbids, and the provenance
+// belongs with the full profile. A reader that needs grades reads the profile.
+type CognitionEndpointSummary struct {
+	ID        string         `json:"id"`
+	Kind      EndpointKind   `json:"kind"`
+	Locality  Locality       `json:"locality"`
+	Health    EndpointHealth `json:"health"`
+	Auth      AuthStatus     `json:"auth_status"`
+	CostClass CostClass      `json:"cost_class"`
+	// RequiredSourceExposure is what the endpoint needs, so a privacy
+	// question can be answered from the projection alone.
+	RequiredSourceExposure SourceExposure `json:"required_source_exposure"`
+	// AccelerationVerified is true only for a local endpoint whose non-CPU
+	// backend was empirically verified (DCI-106).
+	AccelerationVerified bool `json:"acceleration_verified,omitempty"`
+	// AccelerationBackend names the backend the state refers to, so
+	// "verified: false" can be distinguished from "no backend considered".
+	AccelerationBackend *BackendKind `json:"acceleration_backend,omitempty"`
+}
+
+// Validate checks the projection's enumerations.
+func (c *CognitionCapabilities) Validate() error {
+	const kind = "ProjectState"
+	if !c.Assessment.Valid() {
+		return enumError(kind, "capabilities.cognition.assessment", string(c.Assessment),
+			"ready", "ready_with_reduced_capability", "model_cognition_unavailable",
+			"partially_ready", "unknown")
+	}
+	seen := make(map[string]bool, len(c.Endpoints))
+	for _, e := range c.Endpoints {
+		if err := requireNonEmpty(kind, "capabilities.cognition.endpoints[].id", e.ID); err != nil {
+			return err
+		}
+		if seen[e.ID] {
+			return errs.New(errs.CategoryInvalidArgument,
+				"%s: capabilities.cognition.endpoints[] lists %q twice", kind, e.ID)
+		}
+		seen[e.ID] = true
+		if !e.Kind.Valid() {
+			return enumError(kind, "capabilities.cognition.endpoints[].kind", string(e.Kind),
+				"local_runtime", "authenticated_cli", "remote_api")
+		}
+		if !e.Locality.Valid() {
+			return enumError(kind, "capabilities.cognition.endpoints[].locality", string(e.Locality),
+				"local", "remote_inference_local_tools", "remote")
+		}
+		if !e.Health.Valid() {
+			return enumError(kind, "capabilities.cognition.endpoints[].health", string(e.Health),
+				"not_installed", "installed", "not_configured", "unhealthy",
+				"unverified", "ready", "unsupported", "unknown")
+		}
+		if !e.Auth.Valid() {
+			return enumError(kind, "capabilities.cognition.endpoints[].auth_status", string(e.Auth),
+				"not_applicable", "authenticated", "unauthenticated", "expired", "unknown", "error")
+		}
+		if !e.CostClass.Valid() {
+			return enumError(kind, "capabilities.cognition.endpoints[].cost_class", string(e.CostClass),
+				"local_compute", "subscription_included", "remote_economy",
+				"remote_strong", "frontier_expensive", "unknown")
+		}
+		if !e.RequiredSourceExposure.Valid() {
+			return enumError(kind, "capabilities.cognition.endpoints[].required_source_exposure",
+				string(e.RequiredSourceExposure),
+				"local_only", "semantic_evidence_only", "focused_snippets",
+				"selected_files", "tool_mediated_worktree", "unrestricted_authorized")
+		}
+		if e.AccelerationBackend != nil && !e.AccelerationBackend.Valid() {
+			return enumError(kind, "capabilities.cognition.endpoints[].acceleration_backend",
+				string(*e.AccelerationBackend), "cpu", "metal", "cuda", "rocm", "vulkan", "unknown")
+		}
+		// A remote endpoint cannot have verified local acceleration; the
+		// inference is not happening here.
+		if e.AccelerationVerified && e.Locality != LocalityLocal {
+			return errs.New(errs.CategoryInvalidArgument,
+				"%s: capabilities.cognition.endpoints[%s] is %s and cannot report verified local acceleration",
+				kind, e.ID, e.Locality)
+		}
+	}
+	return nil
 }
 
 // RecordKind implements Record.
@@ -412,6 +554,11 @@ func (s *ProjectState) Validate() error {
 	}
 	if s.Review != nil {
 		if err := s.Review.Validate(); err != nil {
+			return err
+		}
+	}
+	if s.Capabilities != nil && s.Capabilities.Cognition != nil {
+		if err := s.Capabilities.Cognition.Validate(); err != nil {
 			return err
 		}
 	}

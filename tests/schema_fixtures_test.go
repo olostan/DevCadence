@@ -159,6 +159,9 @@ func TestFixturesRoundTripWithoutSemanticLoss(t *testing.T) {
 		{"discovery-experiment.valid.json", decodeInto[protocol.DiscoveryExperiment]},
 		{"specification-readiness.valid.json", decodeInto[protocol.SpecificationReadiness]},
 		{"specification-review-result.valid.json", decodeInto[protocol.SpecificationReviewResult]},
+		{"machine-capability-profile.valid.json", decodeInto[protocol.MachineCapabilityProfile]},
+		{"machine-capability-profile.valid-blank-machine.json", decodeInto[protocol.MachineCapabilityProfile]},
+		{"project-state.valid-cognition.json", decodeInto[protocol.ProjectState]},
 	}
 	for _, tc := range cases {
 		t.Run(tc.file, func(t *testing.T) {

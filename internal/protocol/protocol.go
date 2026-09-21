@@ -427,6 +427,8 @@ func NewRecord(kind string) (Record, error) {
 		return &DiscoveryExperiment{}, nil
 	case "SpecificationReadiness":
 		return &SpecificationReadiness{}, nil
+	case "MachineCapabilityProfile":
+		return &MachineCapabilityProfile{}, nil
 	}
 	return nil, errs.New(errs.CategoryInvalidArgument, "unknown record kind %q", kind)
 }
