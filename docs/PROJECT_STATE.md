@@ -1,0 +1,357 @@
+# Canonical Engineering State Model
+
+## Scope
+
+The Engineering State Model is DevCadience's compact, durable representation of what matters about a project **now**. It exists so the principal can reason effectively without reconstructing the project from repository source or chat history.
+
+## 1. Design goals
+
+ProjectState must be:
+- compact enough for frequent frontier use;
+- semantically rich;
+- reconstructable and auditable;
+- linked to raw evidence;
+- explicit about uncertainty;
+- versioned;
+- independent of one model/provider;
+- resistant to accidental free-form drift.
+
+ProjectState is not:
+- a repository index;
+- an LLM transcript;
+- a dumping ground for every test log;
+- a replacement for Git;
+- a replacement for ADRs/specifications.
+
+## 2. Conceptual state
+
+```mermaid
+flowchart TB
+    Identity["Project identity"]
+    Vision["Vision / current product intent"]
+    Milestone["Active milestone"]
+    Components["Component states & contracts"]
+    Tasks["Task/dependency state"]
+    Decisions["Active ADRs / invariants"]
+    Validation["Validation & quality state"]
+    Health["Code/architecture health"]
+    Risks["Risks / unknowns / decisions required"]
+    Agents["Available capabilities"]
+    Recent["Recent semantic changes"]
+
+    PS["ProjectState"]
+
+    Identity --> PS
+    Vision --> PS
+    Milestone --> PS
+    Components --> PS
+    Tasks --> PS
+    Decisions --> PS
+    Validation --> PS
+    Health --> PS
+    Risks --> PS
+    Agents --> PS
+    Recent --> PS
+```
+
+## 3. Example
+
+```yaml
+schema_version: "1.0"
+project_id: devcadience
+state_revision: "ps_000184"
+git:
+  accepted_commit: 91acd82
+  dirty: false
+
+product:
+  vision_ref: docs/VISION.md
+  current_outcome: >
+    Prove compact frontier context plus local implementation can
+    deliver real changes with strong evidence and lower frontier
+    repository-token consumption.
+
+milestone:
+  id: M1
+  title: Bootstrap Vertical Slice
+  progress:
+    completed: 4
+    total: 11
+
+components:
+  control_plane:
+    status: active
+    contract_state: evolving
+  evidence:
+    status: planned
+  local_runtime:
+    status: implementing
+
+tasks:
+  ready: [DC-012, DC-013]
+  running: [DC-010]
+  blocked: [DC-011]
+  awaiting_principal: [DC-014]
+
+invariants:
+  active:
+    - DCI-001
+    - DCI-010
+    - DCI-020
+
+validation:
+  baseline:
+    go_test: pass
+    go_vet: pass
+  last_full_run: 2026-09-20T20:00:00Z
+
+health:
+  status: green
+  known_debt: []
+
+risks:
+  - id: R-003
+    severity: medium
+    statement: >
+      Structured output reliability for the selected local runtime
+      has not yet been measured.
+
+decisions_required:
+  - id: DR-005
+    question: >
+      Use content-addressed filesystem artifacts or SQLite blobs
+      during bootstrap?
+
+recent_semantic_changes:
+  - task: DC-009
+    summary: >
+      Task retry now creates immutable Attempt records.
+
+capabilities:
+  local_models:
+    - profile: local-strong-coder
+      available: true
+  consultants:
+    codex:
+      available: unknown
+    claude:
+      available: unknown
+```
+
+## 4. State provenance
+
+Each semantic fact should be traceable.
+
+```mermaid
+flowchart LR
+    Git["Git facts"]
+    Events["Engineering events"]
+    Docs["ADRs / invariants / specs"]
+    Checks["Validation results"]
+    Reviews["Review results"]
+    Config["Capabilities/configuration"]
+    Reducer["State reducer"]
+    PS["ProjectState revision"]
+
+    Git --> Reducer
+    Events --> Reducer
+    Docs --> Reducer
+    Checks --> Reducer
+    Reviews --> Reducer
+    Config --> Reducer
+    Reducer --> PS
+```
+
+ProjectState fields that are derived should identify or make retrievable the evidence that produced them.
+
+## 5. Event-sourced orientation
+
+DevCadience should prefer durable transition facts over arbitrary state mutation.
+
+```mermaid
+sequenceDiagram
+    participant Action as Engineering action
+    participant Journal as Event journal
+    participant Reducer as State reducer
+    participant View as ProjectState
+    participant Principal as Principal
+
+    Action->>Journal: append TaskAccepted / DecisionRecorded / ...
+    Journal->>Reducer: new event
+    Reducer->>View: materialize revision N+1
+    View-->>Principal: compact state
+```
+
+The system may keep mutable/materialized tables for query performance. The logical history remains explicit.
+
+## 6. Recommended event envelope
+
+```yaml
+schema_version: "1.0"
+event_id: evt_...
+project_id: ...
+event_type: TaskAccepted
+occurred_at: ...
+actor:
+  kind: control_plane
+  id: ...
+correlation:
+  task_id: DC-012
+  attempt_id: att_...
+payload:
+  ...
+```
+
+Events represent facts that happened. They should not be retroactively edited because a later model dislikes the result.
+
+Corrections produce compensating/new events.
+
+## 7. State revision semantics
+
+Each ProjectState has:
+- immutable state revision ID;
+- accepted Git commit;
+- event-journal high-water mark;
+- schema version;
+- generation timestamp.
+
+An Engineering Work Package references an explicit ProjectState revision and base Git commit.
+
+That allows detection of stale plans.
+
+## 8. Semantic recent changes
+
+Git diffs are too low-level for frontier incremental memory.
+
+After accepted work, generate a semantic change entry:
+
+```yaml
+task: DC-042
+commit: c81af61
+changes:
+  - >
+    Work Packages now distinguish SHOULD from SUGGESTED guidance.
+  - >
+    ReviewResult records justified deviations separately.
+public_contracts:
+  changed: true
+  refs:
+    - schemas/work-package.schema.json
+invariants:
+  changed: false
+migration:
+  required: false
+```
+
+The principal can update its mental model using semantic deltas rather than reconstructing the whole system.
+
+## 9. Component state
+
+Component records should answer:
+- what responsibility does this component own?
+- what stable contracts exist?
+- is the contract stable/evolving/deprecated?
+- what components depend on it?
+- what architectural constraints matter?
+- what active work touches it?
+
+Avoid listing every file. File/package maps belong to repository indexes and EvidencePackets.
+
+## 10. Risk and unknown state
+
+Unknowns are first-class.
+
+```mermaid
+stateDiagram-v2
+    [*] --> Unknown
+    Unknown --> Investigating
+    Investigating --> VerifiedFact
+    Investigating --> AcceptedRisk
+    Investigating --> Invalidated
+    AcceptedRisk --> Investigating: new evidence
+    VerifiedFact --> Investigating: evidence becomes stale
+```
+
+The principal should not be presented with unverified unknowns as if they were established architecture.
+
+## 11. Decision-required queue
+
+Some issues should stop local autonomy without blocking unrelated work.
+
+A DecisionRequired object records:
+- question;
+- why it matters;
+- deadline/dependency;
+- evidence;
+- alternatives;
+- recommended decision authority: local policy / principal / consultant / human.
+
+## 12. State compaction
+
+Project history may become enormous. Current state should remain bounded.
+
+Compaction rules:
+- completed task details leave the current snapshot except for relevant recent semantic changes;
+- old risks become archived records;
+- superseded decisions remain referenced through ADR history, not copied into state;
+- evidence is represented by handles;
+- large review/test results are summarized with artifact refs.
+
+Do not compact away unresolved constraints merely because they are old.
+
+## 13. Freshness
+
+Each fact category may have a freshness policy.
+
+Examples:
+- accepted Git commit: exact/current;
+- dependency vulnerability data: time-sensitive;
+- model capability benchmarks: time-sensitive;
+- architecture invariant: current until superseded;
+- task state: current;
+- local hardware availability: runtime current.
+
+ProjectState should distinguish stale external knowledge when it can materially affect decisions.
+
+## 14. Project state and principal sessions
+
+A new principal session should be able to start with:
+1. ProjectState;
+2. active milestone;
+3. relevant ADR/invariant excerpts;
+4. requested EvidencePackets.
+
+The system should not depend on restoring a giant previous conversation.
+
+## 15. State consistency checks
+
+Automated checks should detect:
+- task marked DONE without accepted commit;
+- active Work Package based on obsolete commit beyond policy tolerance;
+- invariant reference that no longer exists;
+- current component contract conflicting with active ADR;
+- validation summary newer/older than claimed commit;
+- duplicated active task ownership;
+- state revision not matching journal high-water mark.
+
+## 16. Failure recovery
+
+```mermaid
+flowchart TD
+    DB["SQLite/materialized state unavailable or suspect"]
+    Journal["Load event journal"]
+    Git["Read accepted Git facts"]
+    Docs["Load normative docs/ADRs"]
+    Reduce["Rebuild materialized state"]
+    Compare["Compare hashes/invariants"]
+    Ready["Recovered ProjectState"]
+
+    DB --> Journal
+    Journal --> Reduce
+    Git --> Reduce
+    Docs --> Reduce
+    Reduce --> Compare
+    Compare --> Ready
+```
+
+Bootstrap may implement only a subset, but the persistence architecture should preserve this direction.
