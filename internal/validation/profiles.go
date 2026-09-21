@@ -9,6 +9,7 @@
 package validation
 
 import (
+	"strings"
 	"time"
 
 	"github.com/olostan/DevCadience/internal/errs"
@@ -122,7 +123,7 @@ func buildProfiles(raw map[string][]CheckSpec) (map[string]Profile, error) {
 		}
 		for i := range profile.Checks {
 			if profile.Checks[i].ID == "" {
-				profile.Checks[i].ID = defaultCheckID(name, i, profile.Checks[i])
+				profile.Checks[i].ID = defaultCheckID(profile.Checks[i])
 			}
 			if profile.Checks[i].Kind == "" {
 				profile.Checks[i].Kind = profile.Checks[i].ID
@@ -142,6 +143,7 @@ func (p Profile) Validate() error {
 	if len(p.Checks) == 0 {
 		return errs.New(errs.CategoryInvalidArgument, "validation: profile %q has no checks", p.Name)
 	}
+	seen := make(map[string]int, len(p.Checks))
 	for i, c := range p.Checks {
 		if len(c.Argv) == 0 {
 			return errs.New(errs.CategoryInvalidArgument, "validation: profile %q check %d has an empty argv", p.Name, i)
@@ -150,13 +152,35 @@ func (p Profile) Validate() error {
 			return errs.New(errs.CategoryInvalidArgument,
 				"validation: profile %q check %d (%v) requires a positive timeout", p.Name, i, c.Argv)
 		}
+		// The effective ID (explicit, or the joined-argv default every
+		// check will actually be assigned) must be unique within the
+		// profile: ValidationCompleted.FailedChecks and every stored
+		// CheckResult are keyed by ID, and a collision - e.g. two checks
+		// both defaulting to "go" from "go test ..." and "go vet ..." -
+		// would make a journal reader unable to tell which check failed.
+		id := c.ID
+		if id == "" {
+			id = defaultCheckID(c)
+		}
+		if prev, ok := seen[id]; ok {
+			return errs.New(errs.CategoryInvalidArgument,
+				"validation: profile %q checks %d and %d both resolve to check id %q; give one an explicit id",
+				p.Name, prev, i, id)
+		}
+		seen[id] = i
 	}
 	return nil
 }
 
-func defaultCheckID(profile string, index int, c CheckSpec) string {
+// defaultCheckID is the ID a check without an explicit one is assigned: its
+// full argv joined by "-", so that two checks sharing an executable name
+// (e.g. "go test ./..." and "go vet ./...") do not collide on the
+// executable name alone. Validate (called by both LoadProfiles and
+// RunProfile) rejects any profile where this would still produce a
+// duplicate ID, so every check ID persisted in evidence is unambiguous.
+func defaultCheckID(c CheckSpec) string {
 	if len(c.Argv) > 0 {
-		return c.Argv[0]
+		return strings.Join(c.Argv, "-")
 	}
-	return profile + "-" + string(rune('a'+index))
+	return ""
 }

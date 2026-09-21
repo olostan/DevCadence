@@ -296,6 +296,22 @@ func resolveExecutable(name string, env []string) (string, error) {
 		if dir == "" {
 			continue
 		}
+		if !filepath.IsAbs(dir) {
+			// A relative PATH entry (".", "./tools", "tools", …) would be
+			// joined with name and passed to os.Stat relative to this
+			// daemon's own current directory, not Spec.Dir — the very
+			// ambient-state dependency the absolute-path branch above
+			// already refuses for a path-shaped executable name. Worse,
+			// the child process itself runs with Spec.Dir as its working
+			// directory, so a relative PATH entry would make this
+			// pre-check resolve a different file than the one the shell
+			// (or the child's own exec) would actually run, silently
+			// defeating the controlled-resolution guarantee
+			// (docs/SECURITY.md §6). Reject it outright rather than
+			// guessing which directory it should be relative to.
+			return "", errs.New(errs.CategoryInvalidArgument,
+				"process: PATH entry %q is relative; only absolute PATH directories are supported for resolving %q", dir, name)
+		}
 		candidate := filepath.Join(dir, name)
 		info, err := os.Stat(candidate)
 		if err != nil || info.IsDir() {

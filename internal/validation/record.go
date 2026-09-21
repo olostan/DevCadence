@@ -119,6 +119,25 @@ func ExecuteAndRecord(ctx context.Context, svc *controlplane.Service, in Execute
 		return ExecuteResult{}, err
 	}
 
+	// The pre-run HEAD and dirty checks above only prove in.Commit was
+	// correct at the moment checks started. A concurrent checkout, or a
+	// check within the profile itself, can move HEAD during execution
+	// without necessarily leaving the tree "dirty" in the git-status sense
+	// (a clean checkout of a different commit is still clean). Re-resolve
+	// HEAD after RunProfile returns and refuse to build or persist a
+	// ValidationResult claiming in.Commit if it no longer matches: the
+	// checks must have run against exactly in.Commit's tree for their
+	// entire duration, not merely at the start of it.
+	postHead, err := headCommit(ctx, in.Run)
+	if err != nil {
+		return ExecuteResult{}, err
+	}
+	if postHead != in.Commit {
+		return ExecuteResult{}, errs.New(errs.CategoryIntegrity,
+			"validation: %s's HEAD changed to %s during validation of claimed commit %s; refusing to record a validation for a moving target",
+			in.Run.Dir, postHead, in.Commit)
+	}
+
 	result := protocol.ValidationResult{
 		SchemaVersion: protocol.SchemaVersion1,
 		ValidationID:  idSource.New("val"),

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/olostan/DevCadience/internal/artifacts"
+	"github.com/olostan/DevCadience/internal/errs"
 	"github.com/olostan/DevCadience/internal/ids"
 	"github.com/olostan/DevCadience/internal/protocol"
 	"github.com/olostan/DevCadience/internal/validation"
@@ -40,6 +41,43 @@ func TestRunProfilePassAndFail(t *testing.T) {
 	}
 	if len(checks) != 2 || checks[0].Status != protocol.CheckPass || checks[1].Status != protocol.CheckFail {
 		t.Fatalf("checks = %+v", checks)
+	}
+}
+
+// TestRunProfileDefaultsMatchJoinedArgvAndRejectCollisions proves RunProfile
+// applies the same joined-argv default ID (and the same duplicate-id
+// rejection) as LoadProfiles' buildProfiles, for a Profile constructed
+// programmatically rather than loaded from YAML. Two checks that would
+// otherwise both default to the executable name alone ("true") must not
+// silently collapse onto one ambiguous CheckResult ID.
+func TestRunProfileDefaultsMatchJoinedArgvAndRejectCollisions(t *testing.T) {
+	dir := t.TempDir()
+	profile := validation.Profile{
+		Name: "dup",
+		Checks: []validation.CheckSpec{
+			{Argv: []string{"true", "a"}, Timeout: 5000000000},
+			{Argv: []string{"true", "b"}, Timeout: 5000000000},
+		},
+	}
+	_, _, err := validation.RunProfile(context.Background(), profile, validation.RunOptions{
+		Dir: dir, ProjectID: "proj-a", Artifacts: newArtifactStore(t),
+	})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+
+	collidingProfile := validation.Profile{
+		Name: "dup-collide",
+		Checks: []validation.CheckSpec{
+			{Argv: []string{"true"}, Timeout: 5000000000},
+			{Argv: []string{"true"}, Timeout: 5000000000},
+		},
+	}
+	_, _, err = validation.RunProfile(context.Background(), collidingProfile, validation.RunOptions{
+		Dir: dir, ProjectID: "proj-a", Artifacts: newArtifactStore(t),
+	})
+	if errs.CategoryOf(err) != errs.CategoryInvalidArgument {
+		t.Fatalf("category = %v, want a refusal for two checks defaulting to the same id (err=%v)", errs.CategoryOf(err), err)
 	}
 }
 

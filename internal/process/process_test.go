@@ -207,6 +207,52 @@ func TestRunNoPathCannotResolveByName(t *testing.T) {
 	}
 }
 
+// TestRunRelativePathEntryRejected proves a relative PATH entry is refused
+// rather than silently resolved against this daemon's own working
+// directory. A relative entry such as "./tools" would let os.Stat here
+// find a binary the child process (which runs with Spec.Dir, not this
+// process's cwd, as its working directory) would resolve differently or
+// not at all, defeating the explicit-directory/controlled-resolution
+// guarantee docs/SECURITY.md §6 requires.
+func TestRunRelativePathEntryRejected(t *testing.T) {
+	r := NewRunner()
+	dir := testDir(t)
+	_, err := r.Run(context.Background(), Spec{
+		Executable: "echo", Dir: dir, Env: []string{"HOME=/tmp", "PATH=./tools"}, Timeout: time.Second,
+	})
+	if err == nil {
+		t.Fatal("expected a relative PATH entry to be refused")
+	}
+	if errs.CategoryOf(err) != errs.CategoryInvalidArgument {
+		t.Fatalf("category = %s, want InvalidArgument", errs.CategoryOf(err))
+	}
+}
+
+// TestRunRelativePathEntryRejectedBeforeLaterAbsoluteMatch proves a relative
+// PATH entry is refused as soon as the lookup reaches it, even when a later
+// absolute directory in the same PATH would otherwise have resolved the
+// executable: an ambiguous PATH entry must not be silently skipped over in
+// search of a match elsewhere.
+func TestRunRelativePathEntryRejectedBeforeLaterAbsoluteMatch(t *testing.T) {
+	r := NewRunner()
+	dir := testDir(t)
+	echoPath, err := exeLookup("echo")
+	if err != nil {
+		t.Skip("echo not found on system PATH")
+	}
+	_, err = r.Run(context.Background(), Spec{
+		Executable: "echo", Dir: dir,
+		Env:     []string{"HOME=/tmp", "PATH=tools" + string(os.PathListSeparator) + filepath.Dir(echoPath)},
+		Timeout: time.Second,
+	})
+	if err == nil {
+		t.Fatal("expected the leading relative PATH entry to be refused rather than skipped for a later absolute match")
+	}
+	if errs.CategoryOf(err) != errs.CategoryInvalidArgument {
+		t.Fatalf("category = %s, want InvalidArgument", errs.CategoryOf(err))
+	}
+}
+
 func TestRunAbsolutePathIgnoresEnvPath(t *testing.T) {
 	r := NewRunner()
 	dir := testDir(t)

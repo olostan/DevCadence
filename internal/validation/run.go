@@ -77,7 +77,11 @@ func RunProfile(ctx context.Context, profile Profile, opts RunOptions) ([]protoc
 
 	for _, spec := range profile.Checks {
 		if spec.ID == "" {
-			spec.ID = spec.Argv[0]
+			// Same default (and the same uniqueness guarantee, enforced by
+			// profile.Validate above) LoadProfiles' buildProfiles applies,
+			// so a programmatically constructed Profile that skips
+			// LoadProfiles still gets unambiguous per-check IDs.
+			spec.ID = defaultCheckID(spec)
 		}
 		if spec.Kind == "" {
 			spec.Kind = spec.ID

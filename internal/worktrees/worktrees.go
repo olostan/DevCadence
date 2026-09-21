@@ -255,6 +255,17 @@ func (m *Manager) Cleanup(ctx context.Context, repo *repository.Repository, proj
 	if wt.Status == StatusRemoved {
 		return nil
 	}
+	if wt.Status == StatusMissing {
+		// The manifest already recorded this worktree as missing on a
+		// previous call. Something occupying wt.Path again now is not
+		// proof it is still the same worktree — it could be a replacement
+		// directory, an unrelated worktree, or something else entirely —
+		// so an ordinary Cleanup must not silently fall through isDirty
+		// and `git worktree remove` on whatever is there now. Only Recover
+		// may reconcile a StatusMissing entry back to a known state.
+		return errs.New(errs.CategoryIntegrity,
+			"worktrees: %s is recorded as missing; it must be reconciled with Recover before Cleanup can act on it", id)
+	}
 	if _, statErr := os.Stat(wt.Path); os.IsNotExist(statErr) {
 		wt.Status = StatusMissing
 		wt.UpdatedAt = nowRFC3339()
@@ -351,6 +362,18 @@ func (m *Manager) Recover(ctx context.Context, repo *repository.Repository, proj
 		return errs.Wrap(errs.CategoryInternal, statErr, "worktrees: stat %s", wt.Path)
 	}
 
+	if dirExists && confirmGone {
+		// confirmGone is documented as the caller confirming the directory
+		// is (or should be treated as) absent. A directory that is
+		// actually present contradicts that confirmation: interpreting the
+		// combination as destructive permission would let a stale or
+		// mistaken confirmGone=true force-remove a worktree, and any
+		// uncommitted evidence in it, that in fact still exists. Refuse
+		// the contradictory input instead of guessing which side is right.
+		return errs.New(errs.CategoryInvalidArgument,
+			"worktrees: %s's directory %s still exists; confirmGone=true contradicts that and will not be used to force its removal "+
+				"(retry with confirmGone=false to adopt or verify it, or use Cleanup to remove it explicitly)", id, wt.Path)
+	}
 	if dirExists && !confirmGone {
 		// The directory is there, but its mere presence is not proof it is
 		// still *this* worktree: the original could have been deleted and
@@ -647,7 +670,60 @@ func (m *Manager) load(projectID string) (*manifest, error) {
 	if m2.Worktrees == nil {
 		m2.Worktrees = map[string]*Worktree{}
 	}
+	// A syntactically valid manifest is not necessarily a trustworthy one:
+	// it is plain JSON on disk that a hand edit, a partial write outside
+	// save's atomic path, or a bug elsewhere could corrupt while still
+	// parsing cleanly. A nil entry would panic the first time Cleanup or
+	// Recover dereferences it; an entry whose stored Path does not match
+	// what its own validated project/task/attempt identifiers compute to
+	// would let Cleanup/Recover run `git worktree remove` against a path
+	// this manager does not actually own (docs/SECURITY.md §6: a worktree
+	// path is derived only from validated identifiers, never trusted
+	// verbatim). Validate every entry and recompute its path from those
+	// identifiers — never trust the stored Path field — before handing the
+	// manifest back to any caller.
+	for key, wt := range m2.Worktrees {
+		if err := validateManifestEntry(projectID, key, wt); err != nil {
+			return nil, errs.Wrap(errs.CategoryIntegrity, err, "worktrees: manifest %s is corrupt", path)
+		}
+		wt.Path = filepath.Join(m.root, projectID, wt.TaskID, wt.AttemptID)
+	}
 	return &m2, nil
+}
+
+// validateManifestEntry checks that a decoded manifest entry is internally
+// consistent before it is trusted: non-nil, addressed to the project the
+// manifest was loaded for, keyed and identified consistently, built from
+// path-safe task/attempt identifiers, and carrying a recognised Status.
+func validateManifestEntry(projectID, key string, wt *Worktree) error {
+	if wt == nil {
+		return errs.New(errs.CategoryIntegrity, "entry %q is nil", key)
+	}
+	if wt.ProjectID != projectID {
+		return errs.New(errs.CategoryIntegrity,
+			"entry %q has project id %q, expected %q", key, wt.ProjectID, projectID)
+	}
+	if !idComponent.MatchString(wt.TaskID) {
+		return errs.New(errs.CategoryIntegrity, "entry %q has an invalid task id %q", key, wt.TaskID)
+	}
+	if !idComponent.MatchString(wt.AttemptID) {
+		return errs.New(errs.CategoryIntegrity, "entry %q has an invalid attempt id %q", key, wt.AttemptID)
+	}
+	expectedID := worktreeID(wt.TaskID, wt.AttemptID)
+	if wt.ID != expectedID {
+		return errs.New(errs.CategoryIntegrity,
+			"entry %q has id %q, expected %q from its task/attempt ids", key, wt.ID, expectedID)
+	}
+	if key != expectedID {
+		return errs.New(errs.CategoryIntegrity,
+			"entry is stored under key %q but its task/attempt ids compute to %q", key, expectedID)
+	}
+	switch wt.Status {
+	case StatusActive, StatusRemoved, StatusMissing:
+	default:
+		return errs.New(errs.CategoryIntegrity, "entry %q has an unrecognized status %q", key, wt.Status)
+	}
+	return nil
 }
 
 // save writes the manifest atomically (temp file + rename), so a crash mid

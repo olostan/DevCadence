@@ -332,6 +332,67 @@ func TestExecuteAndRecordDirtyWorktreeRefused(t *testing.T) {
 	}
 }
 
+// TestExecuteAndRecordHEADChangedDuringRunRefused proves ExecuteAndRecord
+// re-checks HEAD after RunProfile returns, distinct from the dirty-worktree
+// check above: a check can move HEAD to a different, valid commit (e.g. via
+// `git checkout`) without ever leaving the tree dirty in the git-status
+// sense, since checking out a clean branch is itself a clean checkout. The
+// pre-run HEAD and dirty checks alone would let such a run's checks and
+// results be persisted as evidence for in.Commit even though they did not
+// run against in.Commit for their whole duration. The HEAD move is done by
+// the profile's own check argv, since RunProfile executes checks as real
+// subprocesses in Run.Dir — the realistic way a mid-run HEAD change
+// happens.
+func TestExecuteAndRecordHEADChangedDuringRunRefused(t *testing.T) {
+	h := testsupport.NewHarness(t)
+	initHarnessProject(t, h)
+	fixture := testsupport.NewGitRepo(t)
+	head := fixture.Head()
+	fixture.Git("checkout", "--quiet", "-b", "diverged")
+	fixture.WriteFile("other.txt", "other\n")
+	fixture.Commit("diverge")
+	fixture.Git("checkout", "--quiet", "main")
+	// Back on main: HEAD is the original commit again and the tree is clean.
+
+	store, err := artifacts.NewStore(filepath.Join(t.TempDir(), "artifacts"), ids.NewSequential())
+	if err != nil {
+		t.Fatalf("new store: %v", err)
+	}
+	before, err := h.Service.Events(context.Background(), storage.EventQuery{ProjectID: "example"})
+	if err != nil {
+		t.Fatalf("events: %v", err)
+	}
+
+	_, err = validation.ExecuteAndRecord(context.Background(), h.Service, validation.ExecuteInput{
+		ProjectID: "example",
+		Subject:   protocol.ValidationSubject{Kind: protocol.ScopeBaseline},
+		Commit:    head, // correct and clean at the start of the run
+		Profile: validation.Profile{
+			Name: "baseline",
+			Checks: []validation.CheckSpec{
+				// Succeeds, but cleanly moves HEAD to a different commit
+				// mid-run.
+				{ID: "moves-head", Argv: []string{"git", "checkout", "--quiet", "diverged"}, Timeout: 5000000000},
+			},
+		},
+		Run: validation.RunOptions{Dir: fixture.Path, Artifacts: store},
+		IDs: h.IDs,
+	})
+	if err == nil {
+		t.Fatal("expected a HEAD change during validation to be refused even though the checks themselves succeeded")
+	}
+	if errs.CategoryOf(err) != errs.CategoryIntegrity {
+		t.Fatalf("category = %v", errs.CategoryOf(err))
+	}
+	after, err := h.Service.Events(context.Background(), storage.EventQuery{ProjectID: "example"})
+	if err != nil {
+		t.Fatalf("events: %v", err)
+	}
+	if len(before) != len(after) {
+		t.Fatalf("journal grew from %d to %d after a refused HEAD-changed-during-run validation", len(before), len(after))
+	}
+}
+
 // TestExecuteAndRecordDirNotAGitRepoRefused proves a validation run against a
 // directory that is not a Git repository at all is refused rather than
 // silently accepted as satisfying an arbitrary claimed commit.
