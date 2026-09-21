@@ -31,7 +31,7 @@ For work touching state or schemas, read docs/PROJECT_STATE.md and all affected 
 
 For security or external execution, read docs/SECURITY.md.
 
-For changes to review, quality, or learning, read docs/VERIFICATION.md, docs/REFACTORING_AND_HEALTH.md, and docs/LEARNING.md.
+For changes to review, quality, or learning, read docs/VERIFICATION.md, docs/REVIEW_AND_CONVERGENCE.md, docs/REFACTORING_AND_HEALTH.md, and docs/LEARNING.md.
 
 ## 3. First principle: do not spend intelligence on repository noise
 
@@ -153,6 +153,25 @@ A model saying “tests pass” is not sufficient. Capture deterministic evidenc
 - schema or API diffs where applicable.
 
 Model review and deterministic validation are separate signals.
+
+## 8A. Review convergence and closure
+
+Review is evidence gathering, not a search for perfection.
+
+For substantial candidate review:
+- prefer independent reviewers examining the same immutable candidate in parallel;
+- do not send raw reviewer suggestions directly to implementers;
+- principal/adjudicator deduplicates and classifies findings before repair;
+- consolidate all FIX_NOW findings into one Repair Work Package per repair round;
+- after repair, run focused revalidation rather than another unrestricted broad review;
+- raise the threshold required to reopen code as the campaign converges;
+- treat OPPORTUNISTIC findings as future work, not current blockers;
+- a frozen decision may be reopened only by materially new evidence or changed requirements;
+- reporting zero closure-threshold findings is valid.
+
+Review and repair rounds are bounded by policy. Hitting the bound with unresolved blockers escalates rather than creating an infinite loop.
+
+See docs/REVIEW_AND_CONVERGENCE.md.
 
 ## 9. Reviewer independence
 
