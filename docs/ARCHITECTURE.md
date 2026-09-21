@@ -268,8 +268,10 @@ Stores versioned frontier-authored implementation blueprints.
 ### 6.6 Evidence service
 Stores structured claims and references to raw artifacts without forcing raw artifacts into every model context.
 
-### 6.7 Agent runtime
-Executes role-specific workers through replaceable model/harness adapters.
+### 6.7 Cognition runtime and capability router
+Executes role-specific workers through replaceable cognition endpoints and harness adapters. Endpoints may be local runtimes, authenticated CLIs or remote APIs. Role requirements, privacy policy, cost and measured capability drive routing; a strong local LLM is not required for control-plane validity.
+
+Environment discovery, acceleration verification and guided onboarding are defined in [ENVIRONMENT_INTELLIGENCE_AND_ONBOARDING.md](ENVIRONMENT_INTELLIGENCE_AND_ONBOARDING.md).
 
 ### 6.8 Repository/worktree manager
 Provides controlled repository reads, isolated mutations, commits, diffs and integration staging.
@@ -391,7 +393,7 @@ classDiagram
 
 ## 8. Agent role architecture
 
-Models are not roles.
+Models are not roles, and locality is not a role.
 
 ```mermaid
 flowchart TB
@@ -401,50 +403,59 @@ flowchart TB
     Profiles --> Impl["Implementer"]
     Profiles --> CR["Correctness Reviewer"]
     Profiles --> AR["Architecture Reviewer"]
-    Profiles --> SR["Security Reviewer"]
     Profiles --> TD["Test Designer"]
-    Profiles --> FA["Failure Analyst"]
-    Profiles --> HR["Health Reviewer"]
 
-    subgraph Models["Replaceable model/runtime implementations"]
-      Q["Qwen-class local coder"]
-      D["Devstral-class local coder"]
-      Small["Smaller fast local model"]
-      Future["Future local models"]
+    Router["Capability Router"]
+    Scout --> Router
+    Impl --> Router
+    CR --> Router
+    AR --> Router
+    TD --> Router
+
+    subgraph Endpoints["Replaceable cognition endpoints"]
+      Deterministic["Deterministic tools"]
+      Small["Small local model"]
+      StrongLocal["Strong local coder"]
+      Economy["Economical remote model/CLI"]
+      StrongRemote["Strong remote coding/review"]
+      Frontier["Frontier cognition"]
     end
 
-    Scout -. routed to .-> Q
-    Impl -. routed to .-> Q
-    CR -. routed to .-> D
-    AR -. routed to .-> D
-    TD -. routed to .-> Small
-    HR -. routed to .-> Future
+    Router --> Deterministic
+    Router --> Small
+    Router --> StrongLocal
+    Router --> Economy
+    Router --> StrongRemote
+    Router --> Frontier
 ```
 
-Role policy determines authority and expected output. Model capability profiles determine routing.
+Role policy determines authority and required output. Cognition capability profiles determine routing.
+
+A node with no strong local model may still run repository work, deterministic tools and validation locally while routing implementation cognition to an allowed remote endpoint.
 
 ## 9. Consultant architecture
+
+Consultants are optional cognition endpoints selected from what is available and policy-allowed.
 
 ```mermaid
 flowchart LR
     Principal["Principal"]
+    Discovery["Environment/cognition discovery"]
     ConsultSvc["Consultant Service"]
-    Codex["Codex adapter"]
-    Claude["Claude adapter"]
-    Other["Other frontier adapter"]
+    C1["Available endpoint A"]
+    C2["Available endpoint B"]
+    C3["Future endpoint"]
     Result["Normalized ConsultationResult"]
 
+    Discovery --> ConsultSvc
     Principal --> ConsultSvc
-    ConsultSvc --> Codex
-    ConsultSvc --> Claude
-    ConsultSvc --> Other
-    Codex --> Result
-    Claude --> Result
-    Other --> Result
+    ConsultSvc --> C1 --> Result
+    ConsultSvc --> C2 --> Result
+    ConsultSvc --> C3 --> Result
     Result --> Principal
 ```
 
-The control plane should be able to issue independent consultant prompts before revealing the principal's candidate solution when avoiding anchoring is useful.
+No particular vendor subscription is required. The control plane can issue independent consultant prompts before revealing the principal's candidate solution when avoiding anchoring is useful. If no consultant endpoint exists, the system remains operational with reduced cognitive diversity.
 
 ## 10. Storage architecture
 
@@ -494,53 +505,69 @@ flowchart TB
 
 Parallel tasks cannot mutate one shared working directory.
 
-## 12. Model-runtime resource plane
+## 12. Cognition resource plane
 
-The local runtime is itself managed infrastructure.
+Local inference is managed infrastructure, but it is one endpoint class rather than the whole cognition architecture.
 
 ```mermaid
 flowchart LR
     Scheduler["Scheduler"]
-    Resource["Resource Manager"]
-    Ollama["Ollama"]
-    MLX["MLX-LM"]
-    Harness["Worker Harness"]
-    Mac["Apple Silicon<br/>unified memory"]
+    Router["Capability Router"]
+    Env["Environment Capability Profile"]
+    Local["Local runtimes<br/>Ollama / MLX-LM / future"]
+    Remote["Remote/CLI cognition endpoints"]
+    Tools["Deterministic repository tools"]
 
-    Scheduler --> Resource
-    Resource --> Ollama
-    Resource --> MLX
-    Ollama --> Harness
-    MLX --> Harness
-    Harness --> Mac
-    Resource -. observes memory/load .-> Mac
+    Scheduler --> Router
+    Env --> Router
+    Router --> Local
+    Router --> Remote
+    Router --> Tools
 ```
 
-Resource policy accounts for model weights, context/KV cache, OS/tooling headroom, concurrency, model switching cost and validation workload.
+Routing accounts for:
+- required role quality/risk;
+- verified local acceleration and memory/context resources;
+- provider/endpoint health;
+- privacy/source-exposure policy;
+- monetary/quota cost;
+- historical evaluation outcomes.
+
+The absence of local inference is a supported capability state.
 
 ## 13. Deployment topology: bootstrap
 
-The first usable topology should remain simple:
+The bootstrap keeps local authority simple while allowing cognition placement to vary.
 
 ```mermaid
 flowchart LR
-    AG["Antigravity<br/>Principal"]
+    Host["Principal Host<br/>Antigravity / Cursor / VS Code"]
     MCP["devcadience-mcp<br/>stdio"]
     D["devcadience daemon"]
     DB["SQLite"]
     Repo["Target Git repo"]
-    Local["Ollama / MLX-LM"]
     Tools["Build/Test Tools"]
+    Local["Optional local cognition"]
+    Remote["Optional remote cognition"]
 
-    AG <--> MCP
+    Host <--> MCP
     MCP <--> D
     D <--> DB
     D <--> Repo
-    D <--> Local
     D <--> Tools
+    D <--> Local
+    D <--> Remote
 ```
 
-No remote service is required for the bootstrap.
+The initial first-class principal-host set is Antigravity, Cursor and Visual Studio Code. Antigravity is the reference integration, not a core dependency. See [PRINCIPAL_HOSTS.md](PRINCIPAL_HOSTS.md).
+
+No DevCadience-hosted cloud service is required. Remote model cognition may be used only when configured/policy-allowed.
+
+Supported bootstrap profiles include:
+- strong-local;
+- hybrid-thin;
+- cloud-cognition with local control plane;
+- offline deterministic operation.
 
 ## 14. Future topology
 
