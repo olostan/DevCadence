@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/olostan/DevCadience/schemas/review-result.schema.json",
+  "title": "DevCadience ReviewResult",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "review_id", "project_id", "attempt_id", "work_package_id", "dimension", "verdict", "findings", "must_compliance", "principal_escalation_recommended"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "review_id": {"type": "string"},
+    "project_id": {"type": "string"},
+    "attempt_id": {"type": "string"},
+    "work_package_id": {"type": "string"},
+    "dimension": {"enum": ["correctness", "architecture", "invariants", "security", "test_adequacy", "concurrency", "performance", "maintainability", "other"]},
+    "reviewer_profile": {"type": ["string", "null"]},
+    "model_identity": {"type": ["string", "null"]},
+    "verdict": {"enum": ["pass", "concern", "fail", "unable_to_verify"]},
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["severity", "statement"],
+        "properties": {
+          "severity": {"enum": ["info", "low", "medium", "high", "critical"]},
+          "statement": {"type": "string"},
+          "evidence_refs": {"type": "array", "items": {"type": "string"}},
+          "repair_requested": {"type": "boolean"}
+        }
+      }
+    },
+    "must_compliance": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["guidance_id", "status"],
+        "properties": {
+          "guidance_id": {"type": "string"},
+          "status": {"enum": ["satisfied", "violated", "not_applicable", "unable_to_verify"]},
+          "note": {"type": ["string", "null"]}
+        }
+      }
+    },
+    "deviations": {"type": "array", "items": {"type": "string"}},
+    "uncertainties": {"type": "array", "items": {"type": "string"}},
+    "principal_escalation_recommended": {"type": "boolean"}
+  }
+}
