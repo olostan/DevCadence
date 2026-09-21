@@ -134,38 +134,59 @@ func driveToReviewing(t *testing.T, h *testsupport.Harness) string {
 		wpID      = "wp_0001"
 		attemptID = "att_0001"
 		candidate = "cafebabe1234567"
-		digest    = "sha256:0000000000000000000000000000000000000000000000000000000000000000"
 	)
-	for _, payload := range []events.Payload{
-		&events.TaskDesignStarted{TaskID: taskID, Reason: "initial design"},
-		&events.WorkPackageApproved{
-			TaskID: taskID, WorkPackageID: wpID, WorkPackageVersion: 1, RecordDigest: digest,
-			ProjectStateRevision: "ps_000000003", BaseCommit: "91acd8273f1",
-			ChangeClass: protocol.ChangeSystemic,
+	// The evidence these events reference is written with them, so the
+	// lineage failures under test are the only thing wrong in each case.
+	workPackage := testsupport.WorkPackage("example", taskID, wpID, 1)
+	validation := testsupport.AttemptValidation(
+		"example", "val_0001", taskID, attemptID, candidate, protocol.ValidationPass)
+	review := testsupport.Review(
+		"example", "rev_0001", attemptID, wpID, protocol.DimensionCorrectness, protocol.VerdictPass)
+
+	for _, step := range []struct {
+		payload events.Payload
+		records []controlplane.RecordToStore
+	}{
+		{payload: &events.TaskDesignStarted{TaskID: taskID, Reason: "initial design"}},
+		{
+			payload: &events.WorkPackageApproved{
+				TaskID: taskID, WorkPackageID: wpID, WorkPackageVersion: 1,
+				RecordDigest:         testsupport.Digest(t, workPackage),
+				ProjectStateRevision: workPackage.ProjectStateRevision,
+				BaseCommit:           workPackage.BaseCommit,
+				ChangeClass:          protocol.ChangeSystemic,
+			},
+			records: []controlplane.RecordToStore{{Version: 1, Record: workPackage}},
 		},
-		&events.TaskDelegated{TaskID: taskID, WorkPackageID: wpID, WorkerRole: "implementer"},
-		&events.AttemptStarted{
+		{payload: &events.TaskDelegated{TaskID: taskID, WorkPackageID: wpID, WorkerRole: "implementer"}},
+		{payload: &events.AttemptStarted{
 			TaskID: taskID, AttemptID: attemptID, WorkPackageID: wpID, WorkPackageVersion: 1,
 			ProjectStateRevision: "ps_000000003", WorkerRole: "implementer",
-		},
-		&events.CandidateProduced{
+		}},
+		{payload: &events.CandidateProduced{
 			TaskID: taskID, AttemptID: attemptID, CandidateCommit: candidate, Summary: "done",
+		}},
+		{
+			payload: &events.ValidationCompleted{
+				TaskID: taskID, AttemptID: attemptID, ValidationID: "val_0001",
+				Scope: events.ScopeAttempt, Status: protocol.ValidationPass,
+				Commit: candidate, RecordDigest: testsupport.Digest(t, validation),
+			},
+			records: []controlplane.RecordToStore{{Version: 1, Record: validation}},
 		},
-		&events.ValidationCompleted{
-			TaskID: taskID, AttemptID: attemptID, ValidationID: "val_0001",
-			Scope: events.ScopeAttempt, Status: protocol.ValidationPass,
-			Commit: candidate, RecordDigest: digest,
-		},
-		&events.ReviewCompleted{
-			TaskID: taskID, AttemptID: attemptID, ReviewID: "rev_0001",
-			Dimension: protocol.DimensionCorrectness, Verdict: protocol.VerdictPass,
-			RecordDigest: digest,
+		{
+			payload: &events.ReviewCompleted{
+				TaskID: taskID, AttemptID: attemptID, ReviewID: "rev_0001",
+				Dimension: protocol.DimensionCorrectness, Verdict: protocol.VerdictPass,
+				RecordDigest: testsupport.Digest(t, review),
+			},
+			records: []controlplane.RecordToStore{{Version: 1, Record: review}},
 		},
 	} {
 		if _, err := h.Service.AppendTypedEvent(ctx, controlplane.AppendTypedEventInput{
-			ProjectID: "example", Payload: payload,
+			ProjectID: "example", Payload: step.payload, Records: step.records,
 		}); err != nil {
-			t.Fatalf("append %s: %v", payload.Type(), err)
+			t.Fatalf("append %s: %v", step.payload.Type(), err)
 		}
 	}
 	return taskID

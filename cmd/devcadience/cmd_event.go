@@ -12,6 +12,7 @@ import (
 	"github.com/olostan/DevCadience/internal/controlplane"
 	"github.com/olostan/DevCadience/internal/errs"
 	"github.com/olostan/DevCadience/internal/events"
+	"github.com/olostan/DevCadience/internal/protocol"
 	"github.com/olostan/DevCadience/internal/storage"
 )
 
@@ -42,6 +43,8 @@ func runEventAppend(ctx context.Context, e *env, args []string) error {
 	eventType := fs.String("type", "", "event type, e.g. TaskDelegated (see `devcadience event types`)")
 	payloadArg := fs.String("payload", "-", "payload JSON: inline, @file, or - for stdin")
 	taskAlias := fs.String("task", "", "task alias; fills task_id in the payload when it is not set")
+	recordArg := fs.String("record", "", "durable record JSON (inline or @file) written atomically with the event; "+
+		"required when the payload references a record that is not already stored")
 	actorKind := fs.String("actor-kind", "control_plane", "actor kind recorded on the event")
 	actorID := fs.String("actor-id", "devcadience", "actor identifier recorded on the event")
 	if err := parseFlags(fs, e, args); err != nil {
@@ -79,9 +82,18 @@ func runEventAppend(ctx context.Context, e *env, args []string) error {
 	if err != nil {
 		return err
 	}
+	// A payload that claims a durable record is verified against the store,
+	// so the operator supplies that record here and the two are written in
+	// one transaction. This is the same shape a validator or reviewer will
+	// use in M2/M3: produce the record, emit the event, one atomic command.
+	records, err := recordsFor(payload, *recordArg)
+	if err != nil {
+		return err
+	}
 	result, err := service.AppendTypedEvent(ctx, controlplane.AppendTypedEventInput{
 		ProjectID:   *projectID,
 		Payload:     payload,
+		Records:     records,
 		Correlation: events.CorrelationFor(payload),
 		Actor:       actorFromFlags(*actorKind, *actorID),
 	})
@@ -207,4 +219,35 @@ func withTaskID(raw []byte, taskID string) ([]byte, error) {
 		return nil, errs.Wrap(errs.CategoryInternal, err, "rewrite payload with task id")
 	}
 	return out, nil
+}
+
+// recordsFor decodes a record supplied with -record into the kind the payload
+// references. Decoding through the payload's own declared reference means the
+// operator cannot accidentally attach a document of the wrong kind.
+func recordsFor(payload events.Payload, arg string) ([]controlplane.RecordToStore, error) {
+	if arg == "" {
+		return nil, nil
+	}
+	referencing, ok := payload.(events.RecordReferencing)
+	if !ok {
+		return nil, errs.New(errs.CategoryInvalidArgument,
+			"event type %s references no durable record, so -record does not apply", payload.Type())
+	}
+	ref := referencing.ReferencedRecord()
+	raw, err := readPayload(arg, nil)
+	if err != nil {
+		return nil, err
+	}
+	record, err := protocol.NewRecord(ref.Kind)
+	if err != nil {
+		return nil, err
+	}
+	if err := protocol.Unmarshal(raw, record); err != nil {
+		return nil, err
+	}
+	version := ref.Version
+	if version <= 0 {
+		version = 1
+	}
+	return []controlplane.RecordToStore{{Version: version, Record: record}}, nil
 }

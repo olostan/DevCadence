@@ -7,6 +7,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/olostan/DevCadience/internal/protocol"
+	"github.com/olostan/DevCadience/internal/testsupport"
 )
 
 // cli runs the CLI in-process and returns stdout, stderr and the error.
@@ -66,32 +69,82 @@ func TestCLIDrivesASyntheticProjectToDone(t *testing.T) {
 	c.mustRun("task", "create", "-project", "demo", "-alias", "DC-001",
 		"-title", "Bounded journal reads", "-class", "systemic")
 
-	steps := [][]string{
-		{"TaskDesignStarted", `{"reason":"initial design"}`},
-		{"WorkPackageApproved", `{"work_package_id":"wp_1","work_package_version":1,` +
-			`"record_digest":"sha256:0","project_state_revision":"ps_000000003",` +
-			`"base_commit":"91acd8273f1","change_class":"systemic"}`},
-		{"TaskDelegated", `{"work_package_id":"wp_1","worker_role":"implementer","max_attempts":3}`},
-		{"AttemptStarted", `{"attempt_id":"att_1","work_package_id":"wp_1","work_package_version":1,` +
+	// The task's opaque id is needed inside the durable records, which name
+	// what they are about rather than relying on the CLI's alias resolution.
+	var detail struct {
+		Task struct {
+			ID string `json:"task_id"`
+		} `json:"Task"`
+	}
+	if err := json.Unmarshal([]byte(c.mustRun("task", "show", "-project", "demo",
+		"-task", "DC-001", "-json")), &detail); err != nil {
+		t.Fatalf("task show -json: %v", err)
+	}
+	taskID := detail.Task.ID
+
+	// Each event that claims durable evidence is appended together with the
+	// record it claims, through `event append -record`. The walkthrough
+	// therefore demonstrates the invariant M2 and M3 will rely on rather
+	// than working around it with placeholder digests.
+	workPackage := testsupport.WorkPackage("demo", taskID, "wp_1", 1)
+	attemptValidation := testsupport.AttemptValidation(
+		"demo", "val_1", taskID, "att_1", "cafebabe1234", protocol.ValidationPass)
+	review := testsupport.Review(
+		"demo", "rev_1", "att_1", "wp_1", protocol.DimensionCorrectness, protocol.VerdictPass)
+	integrationValidation := testsupport.IntegrationValidation(
+		"demo", "val_2", taskID, "deadbeef9988", protocol.ValidationPass)
+
+	steps := []struct {
+		eventType string
+		payload   string
+		record    protocol.Record
+	}{
+		{eventType: "TaskDesignStarted", payload: `{"reason":"initial design"}`},
+		{
+			eventType: "WorkPackageApproved",
+			payload: `{"work_package_id":"wp_1","work_package_version":1,` +
+				`"record_digest":"` + mustDigest(t, workPackage) + `","project_state_revision":"ps_000000003",` +
+				`"base_commit":"91acd8273f1","change_class":"systemic"}`,
+			record: workPackage,
+		},
+		{eventType: "TaskDelegated", payload: `{"work_package_id":"wp_1","worker_role":"implementer","max_attempts":3}`},
+		{eventType: "AttemptStarted", payload: `{"attempt_id":"att_1","work_package_id":"wp_1","work_package_version":1,` +
 			`"project_state_revision":"ps_000000003","worker_role":"implementer"}`},
-		{"CandidateProduced", `{"attempt_id":"att_1","candidate_commit":"cafebabe1234",` +
+		{eventType: "CandidateProduced", payload: `{"attempt_id":"att_1","candidate_commit":"cafebabe1234",` +
 			`"summary":"implemented"}`},
-		{"ValidationCompleted", `{"attempt_id":"att_1","validation_id":"val_1","scope":"attempt",` +
-			`"status":"pass","commit":"cafebabe1234","record_digest":"sha256:0"}`},
-		{"ReviewCompleted", `{"attempt_id":"att_1","review_id":"rev_1","dimension":"correctness",` +
-			`"verdict":"pass","record_digest":"sha256:0"}`},
-		{"ChangeAccepted", `{"attempt_id":"att_1","work_package_id":"wp_1",` +
+		{
+			eventType: "ValidationCompleted",
+			payload: `{"attempt_id":"att_1","validation_id":"val_1","scope":"attempt",` +
+				`"status":"pass","commit":"cafebabe1234","record_digest":"` +
+				mustDigest(t, attemptValidation) + `"}`,
+			record: attemptValidation,
+		},
+		{
+			eventType: "ReviewCompleted",
+			payload: `{"attempt_id":"att_1","review_id":"rev_1","dimension":"correctness",` +
+				`"verdict":"pass","record_digest":"` + mustDigest(t, review) + `"}`,
+			record: review,
+		},
+		{eventType: "ChangeAccepted", payload: `{"attempt_id":"att_1","work_package_id":"wp_1",` +
 			`"candidate_commit":"cafebabe1234","semantic_summary":"Bounded reads.",` +
 			`"validation_ids":["val_1"],"review_ids":["rev_1"],` +
 			`"decided_by":"principal"}`},
-		{"IntegrationStarted", `{"integration_id":"int_1"}`},
-		{"IntegrationValidationStarted", `{"integration_id":"int_1","integrated_commit":"deadbeef9988"}`},
-		{"ValidationCompleted", `{"validation_id":"val_2","scope":"integration","status":"pass",` +
-			`"commit":"deadbeef9988","record_digest":"sha256:0"}`},
+		{eventType: "IntegrationStarted", payload: `{"integration_id":"int_1"}`},
+		{eventType: "IntegrationValidationStarted", payload: `{"integration_id":"int_1","integrated_commit":"deadbeef9988"}`},
+		{
+			eventType: "ValidationCompleted",
+			payload: `{"validation_id":"val_2","scope":"integration","status":"pass",` +
+				`"commit":"deadbeef9988","record_digest":"` + mustDigest(t, integrationValidation) + `"}`,
+			record: integrationValidation,
+		},
 	}
 	for _, step := range steps {
-		c.mustRun("event", "append", "-project", "demo", "-type", step[0],
-			"-task", "DC-001", "-payload", step[1])
+		args := []string{"event", "append", "-project", "demo", "-type", step.eventType,
+			"-task", "DC-001", "-payload", step.payload}
+		if step.record != nil {
+			args = append(args, "-record", string(mustJSON(t, step.record)))
+		}
+		c.mustRun(args...)
 	}
 
 	var projectState map[string]any
@@ -216,4 +269,24 @@ func TestCLITaskStatesPrintsTheLifecycle(t *testing.T) {
 			t.Fatalf("task states output is missing %s:\n%s", want, out)
 		}
 	}
+}
+
+// mustDigest is the digest the store will compute for a record, so the test
+// can write the event that references it.
+func mustDigest(t *testing.T, record protocol.Record) string {
+	t.Helper()
+	digest, err := protocol.Digest(record)
+	if err != nil {
+		t.Fatalf("digest %s: %v", record.RecordKind(), err)
+	}
+	return digest
+}
+
+func mustJSON(t *testing.T, record protocol.Record) []byte {
+	t.Helper()
+	document, err := protocol.CanonicalJSON(record)
+	if err != nil {
+		t.Fatalf("canonicalise %s: %v", record.RecordKind(), err)
+	}
+	return document
 }

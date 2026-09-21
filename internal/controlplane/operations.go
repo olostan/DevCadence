@@ -157,26 +157,35 @@ func (s *Service) ApproveWorkPackage(ctx context.Context, in ApproveWorkPackageI
 	})
 }
 
-// AppendTypedEventInput appends an already-built typed payload.
+// AppendTypedEventInput appends an already-built typed payload, optionally
+// with the durable records it references.
 //
 // It exists so that the CLI can drive a synthetic project through its whole
 // lifecycle without the control plane needing a bespoke method for every
 // transition. The payload is still typed, registered and validated: this is
 // not an escape hatch around the protocol.
+//
+// Records matters: a payload claiming a durable record is verified against
+// the store, so a caller using this path must either supply that record here
+// or reference one already stored. The helper stays useful for bootstrap and
+// tests without becoming the one way to append an unbacked evidence claim.
 type AppendTypedEventInput struct {
 	ProjectID   string
 	Payload     events.Payload
+	Records     []RecordToStore
 	Correlation events.Correlation
 	Actor       protocol.Actor
 }
 
-// AppendTypedEvent appends one typed event.
+// AppendTypedEvent appends one typed event together with any records it
+// references.
 func (s *Service) AppendTypedEvent(ctx context.Context, in AppendTypedEventInput) (Result, error) {
 	return s.Apply(ctx, Command{
 		ProjectID:   in.ProjectID,
 		Actor:       defaultActor(in.Actor, protocol.ActorControlPlane, "devcadience"),
 		Correlation: in.Correlation,
 		Payload:     in.Payload,
+		Records:     in.Records,
 	})
 }
 

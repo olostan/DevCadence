@@ -300,29 +300,16 @@ func (p *AttemptFailed) Validate() error {
 	return nil
 }
 
-// ValidationScope distinguishes validating one attempt's candidate from
-// validating an integrated result. The two drive different transitions, so
-// the distinction is durable rather than inferred.
-type ValidationScope string
+// ValidationScope is protocol.ValidationScope. The compact event and the
+// durable ValidationResult name the same three scopes, so they share one
+// enumeration rather than keeping two that must be kept in step by hand.
+type ValidationScope = protocol.ValidationScope
 
 const (
-	// ScopeAttempt validates a candidate produced by one attempt.
-	ScopeAttempt ValidationScope = "attempt"
-	// ScopeIntegration validates the combined, integrated result.
-	ScopeIntegration ValidationScope = "integration"
-	// ScopeBaseline validates the accepted commit outside any task. It is the
-	// source of ProjectState.validation.
-	ScopeBaseline ValidationScope = "baseline"
+	ScopeAttempt     = protocol.ScopeAttempt
+	ScopeIntegration = protocol.ScopeIntegration
+	ScopeBaseline    = protocol.ScopeBaseline
 )
-
-// Valid reports whether the scope is known.
-func (s ValidationScope) Valid() bool {
-	switch s {
-	case ScopeAttempt, ScopeIntegration, ScopeBaseline:
-		return true
-	}
-	return false
-}
 
 // ValidationCompleted records deterministic evidence.
 //
@@ -367,6 +354,21 @@ func (p *ValidationCompleted) Validate() error {
 	}
 	if p.Scope == ScopeAttempt && p.AttemptID == "" {
 		return errs.New(errs.CategoryInvalidArgument, "ValidationCompleted: attempt_id is required for scope attempt")
+	}
+	if p.Scope != ScopeAttempt && p.AttemptID != "" {
+		return errs.New(errs.CategoryInvalidArgument,
+			"ValidationCompleted: attempt_id is not meaningful for scope %s", p.Scope)
+	}
+	if p.Scope == ScopeBaseline && p.TaskID != "" {
+		return errs.New(errs.CategoryInvalidArgument,
+			"ValidationCompleted: scope baseline validates the accepted commit outside any task")
+	}
+	// Every scope names the commit it validated. Evidence that does not say
+	// what it is about cannot be read as covering anything in particular, and
+	// the durable ValidationResult requires it too.
+	if p.Commit == "" {
+		return errs.New(errs.CategoryInvalidArgument,
+			"ValidationCompleted: commit is required; evidence must name the tree it validated")
 	}
 	if p.Status == protocol.ValidationPass && len(p.FailedChecks) > 0 {
 		return errs.New(errs.CategoryIntegrity,

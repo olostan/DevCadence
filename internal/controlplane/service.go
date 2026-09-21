@@ -137,6 +137,14 @@ func (s *Service) Apply(ctx context.Context, cmd Command) (Result, error) {
 			result.RecordDigests[record.Record.RecordID()] = digest
 		}
 
+		// A payload claiming a durable record is verified against the store
+		// before anything is appended. Records supplied in this command were
+		// persisted just above, so a caller may either write the record here
+		// or reference one already stored (ADR-0002 §4d).
+		if err := checkReferencedRecord(ctx, tx, cmd.ProjectID, cmd.Payload); err != nil {
+			return err
+		}
+
 		// Correlation is derived from the typed payload here rather than
 		// taken from the caller. Task history and observability read the
 		// indexed correlation columns, so an adapter that omitted or

@@ -297,6 +297,28 @@ Retry does not overwrite the prior attempt.
 
 ValidationResult is produced by deterministic machinery where possible.
 
+**Subject.** A ValidationResult states what it validated through an explicit
+`subject` object rather than through optional top-level identifiers:
+
+| `subject.kind` | required | forbidden |
+| --- | --- | --- |
+| `attempt` | `task_id`, `attempt_id` | — |
+| `integration` | `task_id` | `attempt_id` |
+| `baseline` | — | `task_id`, `attempt_id` |
+
+`commit` is required for every scope: a run always validates some tree, and
+evidence that does not name what it is about cannot be read as covering
+anything in particular.
+
+The three scopes match `ValidationCompleted.scope` exactly, and the two share
+one enumeration (`protocol.ValidationScope`). A subject object rather than
+optional fields is what lets "required here, forbidden there" be stated at
+all: with bare optional fields, an integration result carrying an attempt id
+and an attempt result missing one are both merely absent-field cases, and
+neither the type nor the schema could reject them. The subject carries no
+integration identifier because `ValidationCompleted` has none either, and a
+field the event cannot corroborate could not be cross-checked.
+
 Each check includes:
 - check name/type;
 - exact command/tool;

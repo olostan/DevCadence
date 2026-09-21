@@ -212,3 +212,20 @@ remains reconstructable from the journal.
 - [ ] Decide how Git-derived facts enter the reduction without breaking
       purity (M2).
 - [ ] Measure prefix-replay cost for historical revisions (M2).
+
+## Clarification: record resolution belongs to the application transaction
+
+Verifying that an event's `record_digest` resolves to a durable document
+requires the record store. That check therefore lives in
+`controlplane.Service.Apply`, never in the reducer: giving the reducer store
+access would end its purity, make `ProjectState` depend on more than the event
+prefix, and break byte-identical rebuild.
+
+The division is exact:
+
+- the **reducer** proves journal-internal consistency — that events refer to
+  tasks, attempts and candidates the journal itself established;
+- the **control plane** proves that referenced immutable evidence exists and
+  matches its digest (ADR-0002 §4d).
+
+Both guarantees are required, and neither implies the other.

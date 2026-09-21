@@ -66,16 +66,96 @@ type CheckResult struct {
 	OutputTruncated  bool        `json:"output_truncated,omitempty"`
 }
 
-// ValidationResult is the deterministic evidence for one attempt or
-// integration (docs/PROTOCOLS.md §10).
+// ValidationScope distinguishes validating one attempt's candidate from
+// validating an integrated result or the accepted baseline. The three drive
+// different task transitions, so the distinction is durable rather than
+// inferred.
+//
+// It lives here, not in internal/events, because the durable ValidationResult
+// and the compact ValidationCompleted event must name the same three scopes.
+// Two enumerations that must agree are one enumeration written twice.
+type ValidationScope string
+
+const (
+	// ScopeAttempt validates a candidate produced by one attempt.
+	ScopeAttempt ValidationScope = "attempt"
+	// ScopeIntegration validates the combined, integrated result.
+	ScopeIntegration ValidationScope = "integration"
+	// ScopeBaseline validates the accepted commit outside any task. It is the
+	// source of ProjectState.validation.
+	ScopeBaseline ValidationScope = "baseline"
+)
+
+// Valid reports whether the scope is known.
+func (s ValidationScope) Valid() bool {
+	switch s {
+	case ScopeAttempt, ScopeIntegration, ScopeBaseline:
+		return true
+	}
+	return false
+}
+
+// ValidationSubject states what a validation run validated.
+//
+// The subject is an explicit object rather than a set of optional top-level
+// fields because the three scopes need different identifiers, and optional
+// fields cannot express "required here, forbidden there". A reader does not
+// have to infer the scope from which identifiers happen to be present: the
+// record says what it is, and the combination is checked.
+//
+// It deliberately carries no integration identifier. The ValidationCompleted
+// event has none either, and a field the event cannot corroborate could not
+// be verified when the event and the record are cross-checked.
+type ValidationSubject struct {
+	Kind      ValidationScope `json:"kind"`
+	TaskID    string          `json:"task_id,omitempty"`
+	AttemptID string          `json:"attempt_id,omitempty"`
+}
+
+// Validate enforces the identifiers each scope requires and forbids.
+func (s ValidationSubject) Validate(kind string) error {
+	if !s.Kind.Valid() {
+		return enumError(kind, "subject.kind", string(s.Kind), "attempt", "integration", "baseline")
+	}
+	switch s.Kind {
+	case ScopeAttempt:
+		if s.TaskID == "" || s.AttemptID == "" {
+			return errs.New(errs.CategoryInvalidArgument,
+				"%s: subject.task_id and subject.attempt_id are required for scope attempt", kind)
+		}
+	case ScopeIntegration:
+		if s.TaskID == "" {
+			return errs.New(errs.CategoryInvalidArgument,
+				"%s: subject.task_id is required for scope integration", kind)
+		}
+		if s.AttemptID != "" {
+			return errs.New(errs.CategoryInvalidArgument,
+				"%s: subject.attempt_id is not meaningful for scope integration; "+
+					"an integration validates the merged result, not one attempt's candidate", kind)
+		}
+	case ScopeBaseline:
+		if s.TaskID != "" || s.AttemptID != "" {
+			return errs.New(errs.CategoryInvalidArgument,
+				"%s: scope baseline validates the accepted commit outside any task, "+
+					"so subject.task_id and subject.attempt_id must be empty", kind)
+		}
+	}
+	return nil
+}
+
+// ValidationResult is the deterministic evidence for one attempt, integration
+// or baseline run (docs/PROTOCOLS.md §10).
 type ValidationResult struct {
 	SchemaVersion SchemaVersion     `json:"schema_version"`
 	ValidationID  string            `json:"validation_id"`
 	ProjectID     string            `json:"project_id"`
-	AttemptID     string            `json:"attempt_id"`
-	Commit        string            `json:"commit"`
-	Status        ValidationOutcome `json:"status"`
-	Checks        []CheckResult     `json:"checks"`
+	Subject       ValidationSubject `json:"subject"`
+	// Commit is required for every scope: a validation run always validates
+	// some tree, and evidence that does not name what it is about cannot be
+	// read as covering anything in particular.
+	Commit string            `json:"commit"`
+	Status ValidationOutcome `json:"status"`
+	Checks []CheckResult     `json:"checks"`
 }
 
 // RecordKind implements Record.
@@ -97,12 +177,14 @@ func (v *ValidationResult) Validate() error {
 	for field, value := range map[string]string{
 		"validation_id": v.ValidationID,
 		"project_id":    v.ProjectID,
-		"attempt_id":    v.AttemptID,
 		"commit":        v.Commit,
 	} {
 		if err := requireNonEmpty(kind, field, value); err != nil {
 			return err
 		}
+	}
+	if err := v.Subject.Validate(kind); err != nil {
+		return err
 	}
 	if !v.Status.Valid() {
 		return enumError(kind, "status", string(v.Status), "pass", "fail", "error", "cancelled")

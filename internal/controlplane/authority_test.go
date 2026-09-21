@@ -57,20 +57,30 @@ func storeDecisionAndRequirement(
 		Actor:     protocol.Actor{Kind: protocol.ActorHuman, ID: "operator"},
 		Payload: &events.ProductDecisionRecorded{
 			ProductDecisionID: "PD-001", Question: "Offline?", Answer: "Yes.",
-			RecordDigest: "sha256:0", Status: status,
+			RecordDigest: testsupport.Digest(t, decision(status)), Status: status,
 		},
 		Records: []controlplane.RecordToStore{{Version: 1, Record: decision(status)}},
 	}); err != nil {
 		t.Fatalf("store decision: %v", err)
 	}
+	unrelated := decision(protocol.ProductDecisionConfirmed)
+	unrelated.DecisionID = "PD-002"
+	unrelated.Question = "Anything else?"
+	unrelated.Answer = "No."
 	_, err := h.Service.Apply(ctx, controlplane.Command{
 		ProjectID: "example",
 		Actor:     protocol.Actor{Kind: protocol.ActorHuman, ID: "operator"},
 		Payload: &events.ProductDecisionRecorded{
 			ProductDecisionID: "PD-002", Question: "Anything else?", Answer: "No.",
-			RecordDigest: "sha256:0", Status: protocol.ProductDecisionConfirmed,
+			RecordDigest: testsupport.Digest(t, unrelated), Status: protocol.ProductDecisionConfirmed,
 		},
-		Records: []controlplane.RecordToStore{{Version: 1, Record: confirmedRequirement()}},
+		// The unrelated decision is what the payload is about; the
+		// requirement simply rides along, which is the whole point — a
+		// durable record can reach the store without its own event.
+		Records: []controlplane.RecordToStore{
+			{Version: 1, Record: unrelated},
+			{Version: 1, Record: confirmedRequirement()},
+		},
 	})
 	return err
 }

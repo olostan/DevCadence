@@ -238,3 +238,24 @@ following CONTRIBUTING.md.
 - [x] Record the unknown-field policy in `schemas/README.md`.
 - [x] Align docs/PROTOCOLS.md §18 with this decision.
 - [ ] Revisit if a multi-version or multi-machine topology is introduced (M9).
+
+## ValidationResult subject (pre-first-release refinement)
+
+`ValidationResult` originally required `attempt_id` and `commit`, which
+modelled attempt-scoped validation only, while `ValidationCompleted` already
+carried three scopes (`attempt`, `integration`, `baseline`). A durable record
+that cannot express two of the three scopes its own event vocabulary defines
+is an inconsistency, not an extension point, and M2 is about to produce real
+validation records.
+
+Under §8 (pre-first-release refinement) the record was changed in place rather
+than versioned: `attempt_id` is replaced by a `subject` object carrying
+`kind` plus the identifiers that scope requires, and `commit` remains required
+for every scope. The scope enumeration now lives in `internal/protocol` and is
+aliased by `internal/events`, so the record and the event cannot drift apart.
+
+The alternative — making `attempt_id` optional — was rejected: optional fields
+cannot state "required here, forbidden there", so an integration result
+carrying an attempt id and an attempt result missing one would both have been
+accepted, and the control plane could not have cross-checked the event against
+the record.

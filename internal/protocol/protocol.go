@@ -389,3 +389,42 @@ func (r *SpecificationReadiness) ProjectOf() string { return r.ProjectID }
 // because a lesson may be promoted beyond the project that produced it
 // (DCI-073). It is stored under the project that proposed it, and nothing
 // cross-checks a field it does not have.
+
+// NewRecord allocates an empty record of the named kind.
+//
+// The mapping is an explicit switch rather than a reflective registry so that
+// adding a protocol type is a visible edit here, and so the set of durable
+// kinds stays readable in one place. It lets a caller holding only a kind
+// name — the CLI decoding a record supplied alongside an event — decode into
+// the right typed document instead of a map.
+func NewRecord(kind string) (Record, error) {
+	switch kind {
+	case "ProjectState":
+		return &ProjectState{}, nil
+	case "EngineeringWorkPackage":
+		return &EngineeringWorkPackage{}, nil
+	case "EvidencePacket":
+		return &EvidencePacket{}, nil
+	case "ValidationResult":
+		return &ValidationResult{}, nil
+	case "ReviewResult":
+		return &ReviewResult{}, nil
+	case "DecisionRecord":
+		return &DecisionRecord{}, nil
+	case "LessonCandidate":
+		return &LessonCandidate{}, nil
+	case "ProblemModel":
+		return &ProblemModel{}, nil
+	case "AmbiguityLedger":
+		return &AmbiguityLedger{}, nil
+	case "ProductDecision":
+		return &ProductDecision{}, nil
+	case "Requirement":
+		return &Requirement{}, nil
+	case "DiscoveryExperiment":
+		return &DiscoveryExperiment{}, nil
+	case "SpecificationReadiness":
+		return &SpecificationReadiness{}, nil
+	}
+	return nil, errs.New(errs.CategoryInvalidArgument, "unknown record kind %q", kind)
+}

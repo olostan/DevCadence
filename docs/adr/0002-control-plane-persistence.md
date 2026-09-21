@@ -190,6 +190,31 @@ No external consultant was involved; M6 is where consultant adapters arrive.
    schemas so the safe behaviour needs no opt-in. A record kind with no
    registered schema is refused, which stops a newly added protocol type
    bypassing the rule by omission.
+4d. **An event claiming a durable record is verified before it is appended.**
+   Every payload carrying `record_digest` names a durable document. The
+   control-plane transaction resolves that reference before the append: the
+   record must exist in the project — already stored, or written from
+   `Command.Records` in this same transaction — its kind, id and version must
+   match what the event names, its stored digest must equal the claimed
+   digest, and the compact facts the event repeats (status, commit, verdict,
+   dimension, scope, subject) must agree with the document they summarise.
+
+   The two integrity guarantees are separate and both are required:
+
+   > Reducer lineage proves journal-internal consistency.
+   > Control-plane reference validation proves that referenced immutable
+   > evidence actually exists and matches the digest.
+
+   Lineage cannot see the record store; reference validation cannot see the
+   task graph. Without the second, a caller could append a validation and a
+   review naming records that were never written, and an acceptance citing
+   them would pass every lineage check while resting on nothing.
+
+   The rule is generic, carried by the typed `events.RecordReferencing`
+   interface rather than by per-event guards, and a drift test fails the
+   build if a payload grows a `record_digest` field without implementing it.
+   A failure returns from inside the write transaction, so the record write,
+   the journal append and the projection update roll back together.
 5. **Migrations:** ordered `NNNN_name.sql` files embedded in the binary, each
    applied in its own transaction together with its bookkeeping row. The
    baseline migration creates `schema_migrations` itself, so a database is

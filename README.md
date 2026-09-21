@@ -299,6 +299,20 @@ project is driven through its lifecycle:
 bin/devcadience event append -project demo -type TaskDesignStarted   -task DC-001 -payload '{"reason":"initial design"}'
 ```
 
+An event that references a durable record — a Work Package, a validation or a
+review result — is appended together with that record, in one transaction:
+
+```bash
+bin/devcadience event append -project demo -type ValidationCompleted -task DC-001 \
+  -payload '{"attempt_id":"att_1","validation_id":"val_1","scope":"attempt","status":"pass","commit":"cafebabe1234","record_digest":"sha256:..."}' \
+  -record @validation-result.json
+```
+
+The control plane refuses the event unless that record exists with the digest
+and the identity the payload claims, so the journal cannot assert that
+evidence exists when it does not. `-record` accepts inline JSON or `@file`,
+and the record may equally have been stored by an earlier command.
+
 The materialised state is derived, never authoritative. It can be destroyed
 and rebuilt from the journal alone:
 

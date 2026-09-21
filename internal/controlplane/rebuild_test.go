@@ -33,56 +33,89 @@ func driveLifecycle(t *testing.T, h *testsupport.Harness) string {
 		attemptID  = "att_000000000000000000000001"
 		candidate  = "cafebabe1234567"
 		integrated = "deadbeef7654321"
-		digest     = "sha256:0000000000000000000000000000000000000000000000000000000000000000"
 	)
-	steps := []events.Payload{
-		&events.TaskDesignStarted{TaskID: taskID, Reason: "initial design"},
-		&events.WorkPackageApproved{
-			TaskID: taskID, WorkPackageID: wpID, WorkPackageVersion: 1, RecordDigest: digest,
-			ProjectStateRevision: "ps_000000003", BaseCommit: "91acd8273f1",
-			ChangeClass: protocol.ChangeSystemic,
+	// Every event that claims a durable record is written together with that
+	// record, and the digest is the one the store will compute. This is the
+	// shape a real validator or reviewer will use in M2/M3: produce the
+	// evidence, emit the event summarising it, one atomic command.
+	workPackage := testsupport.WorkPackage("example", taskID, wpID, 1)
+	attemptValidation := testsupport.AttemptValidation(
+		"example", "val_0001", taskID, attemptID, candidate, protocol.ValidationPass)
+	review := testsupport.Review(
+		"example", "rev_0001", attemptID, wpID, protocol.DimensionCorrectness, protocol.VerdictPass)
+	integrationValidation := testsupport.IntegrationValidation(
+		"example", "val_0002", taskID, integrated, protocol.ValidationPass)
+
+	steps := []struct {
+		payload events.Payload
+		records []controlplane.RecordToStore
+	}{
+		{payload: &events.TaskDesignStarted{TaskID: taskID, Reason: "initial design"}},
+		{
+			payload: &events.WorkPackageApproved{
+				TaskID: taskID, WorkPackageID: wpID, WorkPackageVersion: 1,
+				RecordDigest:         testsupport.Digest(t, workPackage),
+				ProjectStateRevision: workPackage.ProjectStateRevision,
+				BaseCommit:           workPackage.BaseCommit,
+				ChangeClass:          protocol.ChangeSystemic,
+			},
+			records: []controlplane.RecordToStore{{Version: 1, Record: workPackage}},
 		},
-		&events.TaskDelegated{TaskID: taskID, WorkPackageID: wpID, WorkerRole: "implementer", MaxAttempts: 3},
-		&events.AttemptStarted{
+		{payload: &events.TaskDelegated{
+			TaskID: taskID, WorkPackageID: wpID, WorkerRole: "implementer", MaxAttempts: 3,
+		}},
+		{payload: &events.AttemptStarted{
 			TaskID: taskID, AttemptID: attemptID, WorkPackageID: wpID, WorkPackageVersion: 1,
 			ProjectStateRevision: "ps_000000003", BaseCommit: "91acd8273f1", WorkerRole: "implementer",
-		},
-		&events.CandidateProduced{
+		}},
+		{payload: &events.CandidateProduced{
 			TaskID: taskID, AttemptID: attemptID, CandidateCommit: candidate,
 			Summary: "Bounded reads implemented.", RepairIterations: 1,
+		}},
+		{
+			payload: &events.ValidationCompleted{
+				TaskID: taskID, AttemptID: attemptID, ValidationID: "val_0001",
+				Scope: events.ScopeAttempt, Status: protocol.ValidationPass,
+				Commit: candidate, RecordDigest: testsupport.Digest(t, attemptValidation),
+			},
+			records: []controlplane.RecordToStore{{Version: 1, Record: attemptValidation}},
 		},
-		&events.ValidationCompleted{
-			TaskID: taskID, AttemptID: attemptID, ValidationID: "val_0001",
-			Scope: events.ScopeAttempt, Status: protocol.ValidationPass,
-			Commit: candidate, RecordDigest: digest,
+		{
+			payload: &events.ReviewCompleted{
+				TaskID: taskID, AttemptID: attemptID, ReviewID: "rev_0001",
+				Dimension: protocol.DimensionCorrectness, Verdict: protocol.VerdictPass,
+				RecordDigest: testsupport.Digest(t, review),
+			},
+			records: []controlplane.RecordToStore{{Version: 1, Record: review}},
 		},
-		&events.ReviewCompleted{
-			TaskID: taskID, AttemptID: attemptID, ReviewID: "rev_0001",
-			Dimension: protocol.DimensionCorrectness, Verdict: protocol.VerdictPass, RecordDigest: digest,
-		},
-		&events.ChangeAccepted{
+		{payload: &events.ChangeAccepted{
 			TaskID: taskID, AttemptID: attemptID, WorkPackageID: wpID, CandidateCommit: candidate,
 			SemanticSummary: "Journal reads accept an inclusive upper bound.",
 			ValidationIDs:   []string{"val_0001"},
 			ReviewIDs:       []string{"rev_0001"},
 			DecidedBy:       protocol.AuthorityPrincipal,
-		},
-		&events.IntegrationStarted{TaskID: taskID, IntegrationID: "int_0001"},
-		&events.IntegrationValidationStarted{
+		}},
+		{payload: &events.IntegrationStarted{TaskID: taskID, IntegrationID: "int_0001"}},
+		{payload: &events.IntegrationValidationStarted{
 			TaskID: taskID, IntegrationID: "int_0001", IntegratedCommit: integrated,
-		},
-		&events.ValidationCompleted{
-			TaskID: taskID, ValidationID: "val_0002", Scope: events.ScopeIntegration,
-			Status: protocol.ValidationPass, Commit: integrated, RecordDigest: digest,
+		}},
+		{
+			payload: &events.ValidationCompleted{
+				TaskID: taskID, ValidationID: "val_0002", Scope: events.ScopeIntegration,
+				Status: protocol.ValidationPass, Commit: integrated,
+				RecordDigest: testsupport.Digest(t, integrationValidation),
+			},
+			records: []controlplane.RecordToStore{{Version: 1, Record: integrationValidation}},
 		},
 	}
-	for _, payload := range steps {
+	for _, step := range steps {
 		if _, err := h.Service.AppendTypedEvent(ctx, controlplane.AppendTypedEventInput{
 			ProjectID:   "example",
-			Payload:     payload,
-			Correlation: events.CorrelationFor(payload),
+			Payload:     step.payload,
+			Records:     step.records,
+			Correlation: events.CorrelationFor(step.payload),
 		}); err != nil {
-			t.Fatalf("append %s: %v", payload.Type(), err)
+			t.Fatalf("append %s: %v", step.payload.Type(), err)
 		}
 	}
 	return taskID
@@ -121,6 +154,30 @@ func TestSyntheticProjectReachesDoneDeterministically(t *testing.T) {
 	second := render()
 	if first != second {
 		t.Fatalf("two runs of one scenario produced different state:\n%s\n%s", first, second)
+	}
+}
+
+// TestAcceptedLifecycleRestsOnRealRecords checks the point of the exercise:
+// after a full run to DONE, the evidence the journal cites is actually in the
+// record store, not merely named by it.
+func TestAcceptedLifecycleRestsOnRealRecords(t *testing.T) {
+	ctx := context.Background()
+	h := testsupport.NewHarness(t)
+	driveLifecycle(t, h)
+
+	for _, want := range []struct{ kind, id string }{
+		{"EngineeringWorkPackage", "wp_000000000000000000000001"},
+		{"ValidationResult", "val_0001"},
+		{"ReviewResult", "rev_0001"},
+		{"ValidationResult", "val_0002"},
+	} {
+		stored, err := h.Service.Record(ctx, "example", want.kind, want.id, 1)
+		if err != nil {
+			t.Fatalf("%s %s is cited by the journal but not stored: %v", want.kind, want.id, err)
+		}
+		if stored.Digest == "" {
+			t.Fatalf("%s %s has no digest", want.kind, want.id)
+		}
 	}
 }
 

@@ -2,7 +2,7 @@
   "schema_version": "1.0",
   "validation_id": "val_000000000000000000000008",
   "project_id": "example",
-  "attempt_id": "att_000000000000000000000005",
+  "subject": {"kind": "attempt", "task_id": "tsk_000000000000000000000012", "attempt_id": "att_000000000000000000000005"},
   "commit": "cafebabe1234567",
   "status": "pass",
   "checks": [

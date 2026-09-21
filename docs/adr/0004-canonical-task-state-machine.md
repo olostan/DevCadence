@@ -183,6 +183,14 @@ rather than stored as a decision that merely looks justified. Specifically:
   the evidence citations;
 - an **escalation** that cites an attempt must cite one of the task's own.
 
+These lineage checks are journal-internal by construction: the reducer is
+pure and cannot open the record store. That an evidence id also names a
+durable `ValidationResult` or `ReviewResult` that really exists, with the
+digest the event claims, is verified in the control-plane transaction before
+the event is appended (ADR-0002 §4d). Lineage without that check would let a
+fabricated validation id and digest pass every test here and still support an
+acceptance resting on nothing.
+
 Validation and review evidence is indexed reducer-internally by id, carrying
 only the task, attempt and candidate it belongs to. That index is not part of
 ProjectState: docs/PROJECT_STATE.md §1 keeps the principal's view compact, and

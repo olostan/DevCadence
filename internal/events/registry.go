@@ -132,3 +132,20 @@ func CorrelationFor(payload Payload) Correlation {
 	}
 	return Correlation{}
 }
+
+// NewPayload allocates an empty payload of the registered type.
+//
+// It exists for checks that must reason about every event shape the build
+// knows — the drift test that no payload carries a record digest without
+// implementing RecordReferencing — without each of them reaching into the
+// registry's internals.
+func NewPayload(t Type) (Payload, error) {
+	registry.mu.RLock()
+	factory, ok := registry.items[t]
+	registry.mu.RUnlock()
+	if !ok {
+		return nil, errs.New(errs.CategorySchemaVersionUnsupported,
+			"event type %q is not registered in this build", string(t))
+	}
+	return factory(), nil
+}
