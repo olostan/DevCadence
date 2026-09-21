@@ -589,3 +589,40 @@ The three campaign record schemas — `review-campaign`, `finding-disposition`
 and `closure-decision` — have no Go twin at all, and so cannot diverge from
 one. They are listed in `tests/schema_fixtures_test.go` as awaiting their M6
 implementation; an unlisted schema without a Go type still fails that test.
+
+
+## 19. Future project-adoption projection
+
+Brownfield adoption introduces a project-readiness dimension separate from ordinary task state.
+
+A future M4B projection may expose a compact shape such as:
+
+```yaml
+adoption:
+  status: reconciling
+  source_commit: abc123
+  canonical_docs_root: docs/devcadience
+  required_artifacts:
+    ready: 6
+    blocked: 2
+  contradictions:
+    material_open: 1
+  decisions_required:
+    human: 1
+  baseline_candidate_commit: def456
+  readiness:
+    verdict: not_ready
+    latest_ref: adoption_ready_...
+```
+
+This is a **future conceptual projection**, not part of the current M1 ProjectState schema. M4B must add the durable records/events/schema changes deliberately rather than smuggling adoption state into an untyped map.
+
+Once READY, ProjectState should retain only the compact adoption baseline identity/provenance necessary to establish:
+- which source revision was retrospectively reconstructed;
+- which committed canonical baseline established managed-project readiness;
+- where the canonical documentation root lives;
+- which AdoptionDecision accepted it.
+
+The full reconstruction corpus, old-document harvest, contradiction history and review evidence remain separate retrievable records/artifacts.
+
+See [PROJECT_ADOPTION.md](PROJECT_ADOPTION.md) and ADR-0012.
