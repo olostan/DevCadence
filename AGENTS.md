@@ -264,7 +264,12 @@ journal, a deterministic ProjectState reducer, task and attempt state
 machines, SQLite persistence with explicit migrations, schema validation and a
 CLI. No model runtime exists or is contacted.
 
-Five ADRs were accepted during M1 and are normative; see
+The Day-0 discovery and specification contracts (ProblemModel,
+AmbiguityLedger, ProductDecision, Requirement, DiscoveryExperiment,
+SpecificationReadiness) have typed representations and persistence; the
+discovery workflow that produces them does not exist yet.
+
+Six ADRs are accepted and normative; see
 [docs/README.md](docs/README.md#accepted-adrs).
 
 The next milestone is M2: repository registration, Git inspection, isolated

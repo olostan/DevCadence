@@ -1,0 +1,44 @@
+{
+  "schema_version": "1.0",
+  "ambiguity_ledger_id": "al_000000000000000000000001",
+  "project_id": "example",
+  "revision": 5,
+  "entries": [
+    {
+      "id": "AQ-027",
+      "question": "Should a rejected change keep its candidate commit, or should the worktree be discarded?",
+      "origin": "Principal noticed the retention policy is unstated while designing the attempt model.",
+      "category": "retention",
+      "resolution_authority": "human",
+      "architectural_impact": "medium",
+      "security_privacy_impact": "low",
+      "irreversibility": "high",
+      "cost_of_wrong_assumption": "high",
+      "why_it_matters": "Discarding a rejected candidate destroys the trajectory a postmortem would need; keeping it grows storage without bound.",
+      "possible_interpretations": [
+        "Keep every rejected candidate indefinitely.",
+        "Keep rejected candidates for a bounded retention window.",
+        "Keep only the diff and the evidence, not the worktree."
+      ],
+      "status": "awaiting_human",
+      "resolution": null,
+      "safe_deferral_boundary": "Work may proceed until the first long autonomous campaign, which is when storage growth becomes material.",
+      "evidence_refs": ["ev_retention_policy_absent"],
+      "requirement_refs": []
+    },
+    {
+      "id": "AQ-031",
+      "question": "Does 'local-first' forbid an optional remote artifact store, or only a mandatory one?",
+      "origin": "NFR-002 says no mandatory cloud service; docs/ARCHITECTURE.md §14 contemplates remote artifact stores.",
+      "category": "architecture",
+      "resolution_authority": "principal",
+      "architectural_impact": "high",
+      "cost_of_wrong_assumption": "medium",
+      "why_it_matters": "It decides whether the artifact reference format has to carry a remote locator scheme from the start.",
+      "status": "resolved",
+      "resolution": "Optional is permitted; NFR-002 forbids only a mandatory service. ArtifactRef carries an opaque locator, so a remote scheme is additive.",
+      "evidence_refs": ["ev_nfr_002", "ev_architecture_14"],
+      "product_decision_ref": "pd_000000000000000000000001"
+    }
+  ]
+}

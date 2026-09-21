@@ -280,7 +280,7 @@ func TestRisksAndDecisionsAppearAndClear(t *testing.T) {
 		Add(&events.DecisionRecorded{
 			DecisionID: "dec_1", RecordDigest: "sha256:x", Question: "Blobs or artifact store?",
 			Selected: "artifact_store", ResolvesDecisionRequired: "DR-001",
-			ADRRef: "docs/adr/0001-control-plane-persistence.md",
+			ADRRef: "docs/adr/0002-control-plane-persistence.md",
 		}).
 		Add(&events.HealthReportRecorded{ReportID: "hr_1", Status: protocol.HealthWatch,
 			KnownDebt: []string{"Projection rebuild replays the whole journal."}}).

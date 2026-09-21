@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/olostan/DevCadience/internal/errs"
 	"github.com/olostan/DevCadience/internal/schema"
@@ -91,12 +92,11 @@ func runSchemaValidate(_ context.Context, e *env, args []string) error {
 // `<schema-name>.<anything>.json`, which is how fixtures/ is organised.
 func inferSchemaName(file string) (schema.Name, error) {
 	base := filepath.Base(file)
-	for _, candidate := range []schema.Name{
-		schema.NameProjectState, schema.NameEngineeringWorkPackage, schema.NameEvidencePacket,
-		schema.NameValidationResult, schema.NameReviewResult, schema.NameDecisionRecord,
-		schema.NameLessonCandidate,
-	} {
-		if len(base) > len(candidate) && base[:len(candidate)] == string(candidate) {
+	// AllNames is ordered longest first, so a fixture named
+	// "product-decision.valid.json" cannot be mistaken for a shorter name
+	// that happens to be a prefix.
+	for _, candidate := range schema.AllNames() {
+		if strings.HasPrefix(base, string(candidate)+".") {
 			return candidate, nil
 		}
 	}

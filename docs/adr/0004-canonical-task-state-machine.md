@@ -1,4 +1,4 @@
-# ADR-0003: Canonical task state machine, block semantics and ProjectState task buckets
+# ADR-0004: Canonical task state machine, block semantics and ProjectState task buckets
 
 - **Status:** Accepted
 - **Date:** 2026-09-21

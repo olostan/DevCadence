@@ -41,6 +41,17 @@ const (
 	NameLessonCandidate        Name = "lesson-candidate"
 )
 
+// Names of the discovery and specification schemas added by
+// docs/adr/0001-discovery-specification-subsystem.md.
+const (
+	NameProblemModel           Name = "problem-model"
+	NameAmbiguityLedger        Name = "ambiguity-ledger"
+	NameProductDecision        Name = "product-decision"
+	NameRequirement            Name = "requirement"
+	NameDiscoveryExperiment    Name = "discovery-experiment"
+	NameSpecificationReadiness Name = "specification-readiness"
+)
+
 // RecordKindToSchema maps a Go record kind to the schema that governs it.
 // It is the explicit statement of which twin belongs to which, so that a new
 // protocol type cannot be added without deciding on its schema.
@@ -52,6 +63,12 @@ var RecordKindToSchema = map[string]Name{
 	"ReviewResult":           NameReviewResult,
 	"DecisionRecord":         NameDecisionRecord,
 	"LessonCandidate":        NameLessonCandidate,
+	"ProblemModel":           NameProblemModel,
+	"AmbiguityLedger":        NameAmbiguityLedger,
+	"ProductDecision":        NameProductDecision,
+	"Requirement":            NameRequirement,
+	"DiscoveryExperiment":    NameDiscoveryExperiment,
+	"SpecificationReadiness": NameSpecificationReadiness,
 }
 
 // Set is a compiled collection of schemas.
@@ -176,6 +193,25 @@ func (s *Set) ValidateRecord(kind string, v any) error {
 		return errs.New(errs.CategoryNotFound, "no schema is registered for record kind %s", kind)
 	}
 	return s.ValidateValue(name, v)
+}
+
+// AllNames returns every schema name this build knows, longest first so that
+// a prefix match cannot pick a shorter name that is a prefix of a longer one.
+func AllNames() []Name {
+	names := []Name{
+		NameProjectState, NameEngineeringWorkPackage, NameEvidencePacket,
+		NameValidationResult, NameReviewResult, NameDecisionRecord,
+		NameLessonCandidate, NameProblemModel, NameAmbiguityLedger,
+		NameProductDecision, NameRequirement, NameDiscoveryExperiment,
+		NameSpecificationReadiness,
+	}
+	sort.Slice(names, func(i, j int) bool {
+		if len(names[i]) != len(names[j]) {
+			return len(names[i]) > len(names[j])
+		}
+		return names[i] < names[j]
+	})
+	return names
 }
 
 // NameForFile derives a schema name from a file name.

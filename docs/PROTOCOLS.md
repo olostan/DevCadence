@@ -460,7 +460,7 @@ Initial policy:
 Unknown fields must not be silently discarded when round-tripping durable records.
 
 The implemented policy, settled by
-[adr/0002-durable-record-compatibility.md](adr/0002-durable-record-compatibility.md),
+[adr/0003-durable-record-compatibility.md](adr/0003-durable-record-compatibility.md),
 is **strict readers**: because every schema declares
 `additionalProperties: false`, an unrecognised field is refused rather than
 preserved or dropped, so loss cannot occur. Records are stored as the

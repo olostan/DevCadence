@@ -1,4 +1,4 @@
-# ADR-0001: SQLite control-plane persistence with an append-only journal and derived projections
+# ADR-0002: SQLite control-plane persistence with an append-only journal and derived projections
 
 - **Status:** Accepted
 - **Date:** 2026-09-21

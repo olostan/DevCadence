@@ -148,7 +148,7 @@ Do not use panics for expected runtime errors. The single deliberate exception
 is a `crypto/rand` failure while generating identifiers: a process that cannot
 generate identifiers cannot produce durable records at all, and continuing
 would risk colliding IDs
-([ADR-0005](docs/adr/0005-identifiers-and-time.md)).
+([ADR-0006](docs/adr/0006-identifiers-and-time.md)).
 
 ## 7. Context and cancellation
 
@@ -253,20 +253,20 @@ contains `MilestoneStarted`, `ComponentDeclared`, `DecisionRequired`,
 `TaskDesignStarted`, `AttemptFailed`, `IntegrationStarted` and
 `IntegrationValidationStarted` — each added because a documented ProjectState
 field or lifecycle transition had no event to derive it from; see
-[docs/adr/0003-canonical-task-state-machine.md](docs/adr/0003-canonical-task-state-machine.md).
+[docs/adr/0004-canonical-task-state-machine.md](docs/adr/0004-canonical-task-state-machine.md).
 `devcadience event types` prints the current vocabulary.
 
 Every event payload is a registered Go type. An unregistered event type cannot
 be appended, and a stored event this build does not recognize is reported
 rather than skipped
-([ADR-0002](docs/adr/0002-durable-record-compatibility.md)).
+([ADR-0003](docs/adr/0003-durable-record-compatibility.md)).
 
 ## 12. State machines
 
 Task states must be explicit and validated.
 
 The canonical lifecycle is the one drawn in [docs/LIFECYCLE.md](docs/LIFECYCLE.md) §12
-and settled by [docs/adr/0003-canonical-task-state-machine.md](docs/adr/0003-canonical-task-state-machine.md):
+and settled by [docs/adr/0004-canonical-task-state-machine.md](docs/adr/0004-canonical-task-state-machine.md):
 
 ~~~text
 PROPOSED
@@ -289,7 +289,7 @@ Retry creates a new Attempt under the same task rather than erasing history.
 ~~~
 
 The complete edge table, the block semantics and the ProjectState task-bucket
-mapping are in ADR-0003. `devcadience task states` prints the implemented
+mapping are in ADR-0004. `devcadience task states` prints the implemented
 machine.
 
 Illegal transitions return errors and do not partially mutate state. In the

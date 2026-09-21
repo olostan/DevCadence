@@ -317,10 +317,14 @@ make race          # the suite under the race detector
 ## Status
 
 DevCadience has completed **M0 (normative baseline)** and **M1 (domain core
-and canonical state)**: typed protocol records, an append-only engineering
-event journal, a deterministic ProjectState reducer, the task and attempt
-state machines, SQLite persistence with explicit migrations, JSON Schema
-validation tooling and a CLI.
+and canonical state)**: typed protocol records — including the Day-0 discovery
+and specification contracts — an append-only engineering event journal, a
+deterministic ProjectState reducer, the task and attempt state machines,
+SQLite persistence with explicit migrations, JSON Schema validation tooling
+and a CLI.
+
+The discovery *records* are typed and persisted; the discovery *workflow*
+that produces them is not part of M1.
 
 Everything above the control-plane core — repository and worktree execution,
 local model runtimes, the semantic MCP surface, consultants, health and

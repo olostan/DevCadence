@@ -1,4 +1,4 @@
-# ADR-0002: Strict readers, explicit unknown-field behaviour, and preserved original bytes
+# ADR-0003: Strict readers, explicit unknown-field behaviour, and preserved original bytes
 
 - **Status:** Accepted
 - **Date:** 2026-09-21

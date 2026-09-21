@@ -95,27 +95,56 @@ Met: `TestSyntheticProjectReachesDoneDeterministically` drives a project from
 `PROPOSED` to `DONE` twice and compares canonical ProjectState byte for byte,
 and `TestCLIDrivesASyntheticProjectToDone` does the same through the CLI.
 
+### Discovery and specification records
+
+The six Day-0 contracts introduced by
+[adr/0001-discovery-specification-subsystem.md](adr/0001-discovery-specification-subsystem.md)
+— ProblemModel, AmbiguityLedger, ProductDecision, Requirement,
+DiscoveryExperiment and SpecificationReadiness — have typed representations in
+`internal/protocol` and persist through the same immutable, versioned,
+content-addressed record store as every other protocol record. Their semantic
+guards are enforced on the write path, not left to prose:
+
+- a Requirement may be `confirmed` only when it traces to a human, directly or
+  through a ProductDecision — the principal cannot confirm its own inference
+  (DCI-005);
+- a ProductDecision's authority is always `human`;
+- a resolved ambiguity must record its resolution;
+- a completed experiment must report a result;
+- a readiness verdict must agree with its own checks, and an unknown that is
+  not safe to defer past architecture forbids any verdict but `not_ready`.
+
+`ProjectState.discovery` carries the compact projection of
+docs/PROJECT_STATE.md §17. M1 implements the field and leaves it unset:
+deriving it needs the discovery event vocabulary, which belongs to the
+milestone that builds the discovery workflow. Producing these records — the
+questioning loop, human reflection and the readiness assessment itself — is
+likewise not M1 work.
+
 ### Architectural decisions taken during M1
-- [adr/0001-control-plane-persistence.md](adr/0001-control-plane-persistence.md)
-- [adr/0002-durable-record-compatibility.md](adr/0002-durable-record-compatibility.md)
-- [adr/0003-canonical-task-state-machine.md](adr/0003-canonical-task-state-machine.md)
-- [adr/0004-deterministic-project-state-identity.md](adr/0004-deterministic-project-state-identity.md)
-- [adr/0005-identifiers-and-time.md](adr/0005-identifiers-and-time.md)
+- [adr/0002-control-plane-persistence.md](adr/0002-control-plane-persistence.md)
+- [adr/0003-durable-record-compatibility.md](adr/0003-durable-record-compatibility.md)
+- [adr/0004-canonical-task-state-machine.md](adr/0004-canonical-task-state-machine.md)
+- [adr/0005-deterministic-project-state-identity.md](adr/0005-deterministic-project-state-identity.md)
+- [adr/0006-identifiers-and-time.md](adr/0006-identifiers-and-time.md)
 
 ### Debt deliberately carried into later milestones
 - Appending an event replays the project journal to rebuild the projection
   (O(n) per write). The fix — a snapshot plus tail replay — is additive and
-  changes no durable contract (ADR-0001, R-M1-01).
+  changes no durable contract (ADR-0002, R-M1-01).
 - The SQLite pool is capped at one connection, serialising reads with writes.
 - `integrating` and `integration_validating` exist and are reachable but have
   no repository behaviour until M2.
 - Git facts are not reducer inputs: `git.accepted_commit` comes from recorded
-  events, and `dirty` and `branch` are unset (ADR-0004, R-M1-05).
+  events, and `dirty` and `branch` are unset (ADR-0005, R-M1-05).
 - `capabilities` is typed but always empty until M3.
 - `LessonCandidateCreated`, `LessonPromoted`, `RefactoringEpochStarted` and
   `ArchitectureReconciled` are recorded and derive nothing (M7/M8).
 - No artifact store: `ArtifactRef` describes where artifacts will live, and
   nothing writes them yet (M2).
+- The discovery workflow is absent: the records and their persistence exist,
+  but no event derives `ProjectState.discovery`, and nothing produces a
+  ProblemModel or a readiness assessment.
 
 ## M2 — Repository, worktree and process execution
 

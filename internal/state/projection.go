@@ -167,7 +167,7 @@ func (p *Projection) AttemptsForTask(taskID string) []*tasks.Attempt {
 // separately allocated counter, means the same history always names the same
 // revision, and the consistency check "state revision matches journal
 // high-water mark" (docs/PROJECT_STATE.md §15) holds structurally. See
-// docs/adr/0004-deterministic-project-state-identity.md.
+// docs/adr/0005-deterministic-project-state-identity.md.
 func StateRevision(highWatermark int64) string {
 	return fmt.Sprintf("ps_%09d", highWatermark)
 }

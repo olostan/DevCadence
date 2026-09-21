@@ -94,7 +94,7 @@ make build         # bin/devcadience
 ```
 
 The build needs no C toolchain: the SQLite driver is pure Go
-([ADR-0001](adr/0001-control-plane-persistence.md)).
+([ADR-0002](adr/0002-control-plane-persistence.md)).
 
 Binaries:
 - `devcadience` — CLI/daemon (implemented in M1);
@@ -118,7 +118,7 @@ Proposed layout:
 
 Per-project configuration references repository paths and policies.
 
-Settled by [ADR-0001](adr/0001-control-plane-persistence.md) §9: the
+Settled by [ADR-0002](adr/0002-control-plane-persistence.md) §9: the
 control-plane database is `$DEVCADIENCE_HOME/state/control-plane.db`, with
 `DEVCADIENCE_HOME` defaulting to `~/.devcadience`. The path must be absolute.
 `devcadience -db <path>` overrides it, which is what the test suite and

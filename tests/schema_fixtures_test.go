@@ -26,12 +26,7 @@ func TestEverySchemaCompiles(t *testing.T) {
 	}
 	// Every schema named in schemas/README.md must exist. A schema that was
 	// documented but never added would otherwise go unnoticed.
-	want := []schema.Name{
-		schema.NameProjectState, schema.NameEngineeringWorkPackage, schema.NameEvidencePacket,
-		schema.NameValidationResult, schema.NameReviewResult, schema.NameDecisionRecord,
-		schema.NameLessonCandidate,
-	}
-	for _, name := range want {
+	for _, name := range schema.AllNames() {
 		if _, err := set.Schema(name); err != nil {
 			t.Errorf("schema %s: %v", name, err)
 		}
@@ -112,7 +107,7 @@ func TestInvalidFixturesAreRejected(t *testing.T) {
 // of its type as the same statement — "nothing is asserted here" — and the Go
 // encoding emits the shortest of those three. That equivalence is a durable
 // compatibility decision, not a testing convenience; see
-// docs/adr/0002-durable-record-compatibility.md. Anything that carries
+// docs/adr/0003-durable-record-compatibility.md. Anything that carries
 // information is compared exactly.
 func TestFixturesRoundTripWithoutSemanticLoss(t *testing.T) {
 	set, err := schema.Default()
@@ -131,6 +126,12 @@ func TestFixturesRoundTripWithoutSemanticLoss(t *testing.T) {
 		{"review-result.valid.json", decodeInto[protocol.ReviewResult]},
 		{"decision-record.valid.json", decodeInto[protocol.DecisionRecord]},
 		{"lesson-candidate.valid.json", decodeInto[protocol.LessonCandidate]},
+		{"problem-model.valid.json", decodeInto[protocol.ProblemModel]},
+		{"ambiguity-ledger.valid.json", decodeInto[protocol.AmbiguityLedger]},
+		{"product-decision.valid.json", decodeInto[protocol.ProductDecision]},
+		{"requirement.valid.json", decodeInto[protocol.Requirement]},
+		{"discovery-experiment.valid.json", decodeInto[protocol.DiscoveryExperiment]},
+		{"specification-readiness.valid.json", decodeInto[protocol.SpecificationReadiness]},
 	}
 	for _, tc := range cases {
 		t.Run(tc.file, func(t *testing.T) {
@@ -207,11 +208,10 @@ func fixtures(t *testing.T, marker string) []string {
 func schemaForFixture(t *testing.T, file string) schema.Name {
 	t.Helper()
 	base := filepath.Base(file)
-	for _, candidate := range []schema.Name{
-		schema.NameEngineeringWorkPackage, schema.NameEvidencePacket, schema.NameProjectState,
-		schema.NameValidationResult, schema.NameReviewResult, schema.NameDecisionRecord,
-		schema.NameLessonCandidate,
-	} {
+	// AllNames is ordered longest first, so a fixture named
+	// "product-decision.valid.json" cannot be mistaken for a shorter name
+	// that happens to be a prefix.
+	for _, candidate := range schema.AllNames() {
 		if strings.HasPrefix(base, string(candidate)+".") {
 			return candidate
 		}

@@ -221,7 +221,7 @@ That allows detection of stale plans.
 
 ### 7.1 Implemented identity (M1)
 
-Settled by [adr/0004-deterministic-project-state-identity.md](adr/0004-deterministic-project-state-identity.md).
+Settled by [adr/0005-deterministic-project-state-identity.md](adr/0005-deterministic-project-state-identity.md).
 
 ProjectState is a **pure function of the event-journal prefix** it summarises:
 
@@ -247,7 +247,7 @@ worktree (ARCHITECTURE.md §11).
 
 `tasks.{ready,running,blocked,awaiting_principal}` are derived from task state
 by one mapping, defined in
-[adr/0003-canonical-task-state-machine.md](adr/0003-canonical-task-state-machine.md):
+[adr/0004-canonical-task-state-machine.md](adr/0004-canonical-task-state-machine.md):
 
 | Task state | Buckets |
 | --- | --- |

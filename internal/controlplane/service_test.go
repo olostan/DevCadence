@@ -283,7 +283,7 @@ func mustTaskID(t *testing.T, h *testsupport.Harness, alias string) string {
 // TestConcurrentAppendsSerialiseConsistently checks that the transaction
 // boundary holds under concurrency.
 //
-// The control plane is single-operator by design (ADR-0001), but the CLI, a
+// The control plane is single-operator by design (ADR-0002), but the CLI, a
 // future MCP adapter and a future scheduler can all call Apply, so two
 // callers reaching it at once must not interleave. Each append must see the
 // journal the previous one committed, or a projection could be built from a

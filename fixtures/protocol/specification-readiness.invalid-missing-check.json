@@ -1,0 +1,13 @@
+{
+  "schema_version": "1.0",
+  "readiness_id": "sr_000000000000000000000003",
+  "project_id": "example",
+  "problem_model_id": "pm_000000000000000000000001",
+  "problem_model_revision": 1,
+  "checks": {
+    "problem_outcome": {"status": "complete"},
+    "primary_workflows": {"status": "complete"},
+    "scope_boundaries": {"status": "complete"}
+  },
+  "verdict": "ready_for_architecture"
+}

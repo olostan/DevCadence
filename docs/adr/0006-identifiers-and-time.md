@@ -1,4 +1,4 @@
-# ADR-0005: ULID identifiers and injected clocks
+# ADR-0006: ULID identifiers and injected clocks
 
 - **Status:** Accepted
 - **Date:** 2026-09-21
@@ -125,7 +125,7 @@ Sortability is the property that earns ULID its place: journal listings, task
 listings and attempt listings all become stable without a secondary key, which
 in turn keeps rendered output deterministic. Injecting both the clock and the
 identifier source is what allows tests to compare whole canonical documents —
-the same property ADR-0004 depends on for rebuild equivalence. Microsecond
+the same property ADR-0005 depends on for rebuild equivalence. Microsecond
 truncation looks like a detail and is not: nanosecond precision would make a
 timestamp written to SQLite differ from the one read back, and a rebuilt
 projection would then never match its original.

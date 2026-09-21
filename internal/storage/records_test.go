@@ -174,3 +174,89 @@ func TestMissingRecordIsNotFound(t *testing.T) {
 		t.Fatalf("category = %s, want not_found (%v)", got, err)
 	}
 }
+
+// TestDiscoveryRecordsPersistThroughTheSameStore is the "persistence
+// foundations" half of the discovery deliverable: the record store is
+// kind-agnostic, so ProblemModels, ledgers, requirements and readiness
+// assessments get immutability, versioning and digests without a second
+// mechanism.
+func TestDiscoveryRecordsPersistThroughTheSameStore(t *testing.T) {
+	ctx := context.Background()
+	store := openStore(t)
+
+	records := []protocol.Record{
+		&protocol.ProblemModel{
+			SchemaVersion: protocol.SchemaVersion1, ProblemModelID: "pm_1",
+			ProjectID: "example", Revision: 1,
+			ProblemStatement: "Acceptances cannot be explained.",
+			DesiredOutcomes:  []string{"An operator can explain an acceptance."},
+		},
+		&protocol.AmbiguityLedger{
+			SchemaVersion: protocol.SchemaVersion1, AmbiguityLedgerID: "al_1",
+			ProjectID: "example", Revision: 1,
+			Entries: []protocol.AmbiguityEntry{{
+				ID: "AQ-001", Question: "Retention?", Origin: "design", Category: "retention",
+				ResolutionAuthority:   protocol.ResolveByHuman,
+				ArchitecturalImpact:   protocol.ImpactMedium,
+				CostOfWrongAssumption: protocol.ImpactHigh,
+				WhyItMatters:          "It decides storage growth.", Status: protocol.AmbiguityOpen,
+			}},
+		},
+		&protocol.ProductDecision{
+			SchemaVersion: protocol.SchemaVersion1, DecisionID: "pd_1", ProjectID: "example",
+			Question: "Offline only?", Answer: "Yes.",
+			Authority: protocol.ProductDecisionAuthorityHuman,
+			Status:    protocol.ProductDecisionConfirmed,
+		},
+		&protocol.Requirement{
+			SchemaVersion: protocol.SchemaVersion1, RequirementID: "req_1", ProjectID: "example",
+			Kind: protocol.RequirementFunctional, Statement: "MUST explain an acceptance.",
+			Strength: protocol.RequirementMust, Status: protocol.RequirementConfirmed,
+			Source: protocol.RequirementSource{Type: protocol.SourceProductDecision},
+		},
+		&protocol.DiscoveryExperiment{
+			SchemaVersion: protocol.SchemaVersion1, ExperimentID: "exp_1", ProjectID: "example",
+			Question: "Fast enough?", Hypothesis: "Yes under 10k events.",
+			Method: "Synthetic journals.", Environment: "in-memory SQLite",
+			Status: protocol.ExperimentPlanned,
+		},
+	}
+
+	for _, record := range records {
+		if err := store.Write(ctx, func(tx *storage.Tx) error {
+			_, err := tx.PutRecord(ctx, "example", 1, record)
+			return err
+		}); err != nil {
+			t.Fatalf("store %s: %v", record.RecordKind(), err)
+		}
+	}
+
+	for _, record := range records {
+		var stored storage.StoredRecord
+		if err := store.Read(ctx, func(tx *storage.Tx) error {
+			var err error
+			stored, err = tx.Record(ctx, record.RecordKind(), record.RecordID(), 1)
+			return err
+		}); err != nil {
+			t.Fatalf("read %s: %v", record.RecordKind(), err)
+		}
+		if stored.Digest == "" {
+			t.Fatalf("%s was stored without a digest", record.RecordKind())
+		}
+		// The stored bytes must still describe the record that was written.
+		want, err := protocol.Digest(record)
+		if err != nil {
+			t.Fatalf("digest %s: %v", record.RecordKind(), err)
+		}
+		if stored.Digest != want {
+			t.Fatalf("%s digest = %s, want %s", record.RecordKind(), stored.Digest, want)
+		}
+	}
+
+	// Immutability applies to them as it does to every other record.
+	if err := store.Write(ctx, func(tx *storage.Tx) error {
+		return tx.ExecForTest(ctx, `UPDATE records SET document = '{}' WHERE record_id = 'pm_1'`)
+	}); err == nil {
+		t.Fatal("a discovery record was mutated in place")
+	}
+}

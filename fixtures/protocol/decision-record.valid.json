@@ -31,5 +31,5 @@
   ],
   "invariant_changes": [],
   "supersedes": null,
-  "adr_ref": "docs/adr/0001-control-plane-persistence.md"
+  "adr_ref": "docs/adr/0002-control-plane-persistence.md"
 }

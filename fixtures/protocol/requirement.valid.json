@@ -1,0 +1,18 @@
+{
+  "schema_version": "1.0",
+  "requirement_id": "req_000000000000000000000001",
+  "project_id": "example",
+  "kind": "functional",
+  "statement": "The system MUST be able to explain why a candidate change was accepted, citing the validation and review results the decision rested on.",
+  "strength": "MUST",
+  "status": "confirmed",
+  "source": {
+    "type": "product_decision",
+    "ref": "pd_000000000000000000000001"
+  },
+  "needs_human_confirmation": false,
+  "evidence_refs": ["ev_observability_13"],
+  "rationale": "docs/OBSERVABILITY.md §13: if the system cannot explain why a change was accepted, the acceptance mechanism is incomplete.",
+  "acceptance_hint": "Given an accepted task, the decision record links to its validation and review results.",
+  "supersedes": null
+}

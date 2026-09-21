@@ -3,7 +3,7 @@
 //
 // The canonical lifecycle is the one drawn in docs/LIFECYCLE.md §12. The
 // shorter list in ENGINEERING_STANDARDS.md §12 is explicitly illustrative;
-// where the two differ, docs/adr/0003-canonical-task-state-machine.md records
+// where the two differ, docs/adr/0004-canonical-task-state-machine.md records
 // the resolution.
 //
 // This package is pure: it knows nothing about SQLite, events or the CLI, so
@@ -174,7 +174,7 @@ const (
 // "awaiting_principal": the first answers "what is stuck", the second answers
 // "what is mine to unstick", and collapsing them would lose one of those
 // answers. The mapping lives here so that every consumer of ProjectState
-// agrees; see docs/adr/0003-canonical-task-state-machine.md.
+// agrees; see docs/adr/0004-canonical-task-state-machine.md.
 //
 // StateProposed, StateAccepted and StateDone map to no bucket: an untriaged
 // task is not yet work, and accepted/done tasks are reported through

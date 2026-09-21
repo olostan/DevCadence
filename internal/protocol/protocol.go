@@ -173,7 +173,7 @@ func (r ArtifactRef) Validate() error {
 // It exists as a named type so that every durable record serialises time the
 // same way. Microsecond truncation makes a durable record round-trip through
 // JSON and SQLite byte-identically, which the ProjectState rebuild guarantee
-// depends on (docs/adr/0004-deterministic-project-state-identity.md).
+// depends on (docs/adr/0005-deterministic-project-state-identity.md).
 type Timestamp time.Time
 
 // NewTimestamp normalises t for durable storage.
@@ -249,7 +249,7 @@ func Marshal(r Record) ([]byte, error) {
 //
 // Unknown fields are an error rather than a silent loss (DCI-092). Callers
 // that must preserve a record written by a newer build keep the original
-// bytes; see docs/adr/0002-durable-record-compatibility.md.
+// bytes; see docs/adr/0003-durable-record-compatibility.md.
 func Unmarshal[T Record](data []byte, out T) error {
 	dec := json.NewDecoder(bytes.NewReader(data))
 	dec.DisallowUnknownFields()

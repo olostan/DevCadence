@@ -5,7 +5,7 @@
 // SQLite is the source of truth for DevCadience control-plane records; Git
 // remains the source of truth for code (docs/ARCHITECTURE.md §10). The driver
 // is pure Go so that a single static binary runs on macOS and Linux without a
-// C toolchain; see docs/adr/0001-control-plane-persistence.md.
+// C toolchain; see docs/adr/0002-control-plane-persistence.md.
 package storage
 
 import (

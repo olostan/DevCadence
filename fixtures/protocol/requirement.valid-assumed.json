@@ -1,0 +1,16 @@
+{
+  "schema_version": "1.0",
+  "requirement_id": "req_000000000000000000000002",
+  "project_id": "example",
+  "kind": "non_functional",
+  "statement": "The explanation SHOULD be readable without leaving the terminal.",
+  "strength": "SHOULD",
+  "status": "assumed",
+  "source": {
+    "type": "principal_inference",
+    "ref": null
+  },
+  "needs_human_confirmation": true,
+  "evidence_refs": [],
+  "rationale": "Inferred from the CLI-first posture; the human has not confirmed it."
+}

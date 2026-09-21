@@ -1,4 +1,4 @@
-# ADR-0004: ProjectState is a pure function of the event prefix
+# ADR-0005: ProjectState is a pure function of the event prefix
 
 - **Status:** Accepted
 - **Date:** 2026-09-21

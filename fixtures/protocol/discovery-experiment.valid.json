@@ -1,0 +1,20 @@
+{
+  "schema_version": "1.0",
+  "experiment_id": "exp_000000000000000000000001",
+  "project_id": "example",
+  "question": "Does reducing the whole event journal on every write stay acceptable at realistic project sizes?",
+  "hypothesis": "Full replay stays under 50ms for journals up to 10,000 events on the target machine.",
+  "method": "Generate synthetic journals of 100, 1000 and 10000 events; measure Reduce and ProjectState rendering.",
+  "environment": "Apple Silicon, 48 GB, Go 1.25, pure-Go SQLite driver, in-memory database.",
+  "acceptance_thresholds": [
+    "p95 replay under 50ms at 10,000 events"
+  ],
+  "status": "completed",
+  "result_summary": "Replay is linear and well under the threshold at 10,000 events, but exceeds it near 80,000.",
+  "evidence_refs": ["ev_replay_benchmark"],
+  "limitations": [
+    "Measured with in-memory SQLite only; on-disk WAL was not exercised.",
+    "Synthetic events are smaller than real Work Package approvals."
+  ],
+  "requirement_refs": []
+}

@@ -1,0 +1,17 @@
+{
+  "schema_version": "1.0",
+  "problem_model_id": "pm_000000000000000000000002",
+  "project_id": "example",
+  "revision": 1,
+  "problem_statement": "Something should be better.",
+  "desired_outcomes": [],
+  "actors": [],
+  "primary_workflows": [],
+  "scope": {"in_scope": [], "out_of_scope": []},
+  "success_criteria": [],
+  "failure_criteria": [],
+  "constraints": [],
+  "assumptions": [],
+  "unknowns": [],
+  "risk_refs": []
+}

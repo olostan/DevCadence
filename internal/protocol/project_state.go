@@ -16,7 +16,7 @@ import (
 //
 // A ProjectState value is a pure function of the event-journal prefix it was
 // reduced from; see internal/state and
-// docs/adr/0004-deterministic-project-state-identity.md.
+// docs/adr/0005-deterministic-project-state-identity.md.
 type ProjectState struct {
 	SchemaVersion SchemaVersion `json:"schema_version"`
 	ProjectID     string        `json:"project_id"`
@@ -48,6 +48,36 @@ type ProjectState struct {
 
 	RecentSemanticChanges []SemanticChange `json:"recent_semantic_changes,omitempty"`
 	Capabilities          *Capabilities    `json:"capabilities,omitempty"`
+	Discovery             *DiscoveryState  `json:"discovery,omitempty"`
+}
+
+// DiscoveryState is the compact Day-0 projection of docs/PROJECT_STATE.md §17.
+//
+// It carries counts and references, never the discovery records themselves:
+// ProblemModels, ambiguity ledgers and requirements stay separate durable
+// records, and inlining them would defeat the point of a compact state
+// (DCI-010).
+//
+// M1 implements the type and leaves it unset. Deriving it needs the discovery
+// event vocabulary, which belongs to the milestone that builds the discovery
+// workflow.
+type DiscoveryState struct {
+	ProblemModelID       *string `json:"problem_model_id,omitempty"`
+	ProblemModelRevision *int    `json:"problem_model_revision,omitempty"`
+	AmbiguityLedgerID    *string `json:"ambiguity_ledger_id,omitempty"`
+
+	OpenMaterialAmbiguities  int `json:"open_material_ambiguities,omitempty"`
+	AwaitingHumanAmbiguities int `json:"awaiting_human_ambiguities,omitempty"`
+	ConfirmedRequirements    int `json:"confirmed_requirements,omitempty"`
+	ProposedRequirements     int `json:"proposed_requirements,omitempty"`
+	// MaterialAssumptionsUnverified is what stops an architecture pass from
+	// starting on unverified ground (DCI-005).
+	MaterialAssumptionsUnverified int `json:"material_assumptions_unverified,omitempty"`
+	ActiveProductDecisions        int `json:"active_product_decisions,omitempty"`
+
+	SpecificationReadinessVerdict *ReadinessVerdict `json:"specification_readiness_verdict,omitempty"`
+	SpecificationReadinessRef     *string           `json:"specification_readiness_ref,omitempty"`
+	CurrentQuestionRefs           []string          `json:"current_question_refs,omitempty"`
 }
 
 // GitState records the repository facts ProjectState depends on.
@@ -112,7 +142,7 @@ type ComponentState struct {
 
 // TaskBuckets is the principal-facing summary of the task graph. The mapping
 // from task state to bucket is defined in
-// docs/adr/0003-canonical-task-state-machine.md and implemented once, in
+// docs/adr/0004-canonical-task-state-machine.md and implemented once, in
 // internal/state, so the CLI and the MCP layer cannot drift apart.
 type TaskBuckets struct {
 	Ready             []string `json:"ready"`
@@ -351,6 +381,30 @@ func (s *ProjectState) Validate() error {
 		if !d.Authority.Valid() {
 			return enumError(kind, "decisions_required[].authority", string(d.Authority),
 				"policy", "principal", "consultant", "human")
+		}
+	}
+	if s.Discovery != nil {
+		if s.Discovery.ProblemModelRevision != nil && *s.Discovery.ProblemModelRevision < 1 {
+			return errs.New(errs.CategoryInvalidArgument,
+				"%s: discovery.problem_model_revision must be >= 1 when present", kind)
+		}
+		if s.Discovery.SpecificationReadinessVerdict != nil && !s.Discovery.SpecificationReadinessVerdict.Valid() {
+			return enumError(kind, "discovery.specification_readiness_verdict",
+				string(*s.Discovery.SpecificationReadinessVerdict),
+				"not_ready", "ready_for_architecture", "ready_with_explicit_risks")
+		}
+		for name, count := range map[string]int{
+			"open_material_ambiguities":       s.Discovery.OpenMaterialAmbiguities,
+			"awaiting_human_ambiguities":      s.Discovery.AwaitingHumanAmbiguities,
+			"confirmed_requirements":          s.Discovery.ConfirmedRequirements,
+			"proposed_requirements":           s.Discovery.ProposedRequirements,
+			"material_assumptions_unverified": s.Discovery.MaterialAssumptionsUnverified,
+			"active_product_decisions":        s.Discovery.ActiveProductDecisions,
+		} {
+			if count < 0 {
+				return errs.New(errs.CategoryInvalidArgument,
+					"%s: discovery.%s must not be negative", kind, name)
+			}
 		}
 	}
 	for _, c := range s.RecentSemanticChanges {

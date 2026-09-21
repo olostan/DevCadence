@@ -1,0 +1,74 @@
+{
+  "schema_version": "1.0",
+  "problem_model_id": "pm_000000000000000000000001",
+  "project_id": "example",
+  "revision": 3,
+  "problem_statement": "Operators cannot tell why a change was accepted without reading the whole event journal by hand.",
+  "desired_outcomes": [
+    "An operator can answer 'why was this accepted' in under a minute.",
+    "The answer cites the validation and review evidence it rests on."
+  ],
+  "actors": [
+    {
+      "id": "operator",
+      "description": "The single developer running DevCadience on their own machine.",
+      "needs": ["See what is blocked", "Understand an acceptance decision"]
+    },
+    {
+      "id": "principal",
+      "description": "The frontier principal engineer planning work through compact state.",
+      "needs": ["Know which tasks await a decision"]
+    }
+  ],
+  "primary_workflows": [
+    {
+      "id": "wf_audit_acceptance",
+      "description": "Open a completed task and read the decision with its supporting evidence.",
+      "actor_refs": ["operator"]
+    }
+  ],
+  "scope": {
+    "in_scope": ["Reading acceptance decisions and their evidence"],
+    "out_of_scope": ["A web dashboard", "Multi-operator access control"],
+    "future_possible": ["Exporting an audit report"]
+  },
+  "success_criteria": [
+    "Every accepted change links to its validation and review results."
+  ],
+  "failure_criteria": [
+    "An acceptance exists that cannot be explained from durable records."
+  ],
+  "constraints": [
+    {
+      "id": "c_local_only",
+      "category": "operational",
+      "statement": "The answer must be available with no network access.",
+      "source_type": "human",
+      "source_ref": "pd_000000000000000000000001"
+    },
+    {
+      "id": "c_no_dashboard_first",
+      "category": "process",
+      "statement": "Operational UI must not precede a reliable control plane.",
+      "source_type": "policy",
+      "source_ref": "DCI-101"
+    }
+  ],
+  "product_decision_refs": ["pd_000000000000000000000001"],
+  "requirement_refs": ["req_000000000000000000000001"],
+  "assumptions": [
+    {
+      "id": "pa_single_operator",
+      "statement": "One operator uses one control plane at a time.",
+      "status": "accepted_risk",
+      "material": true,
+      "evidence_refs": []
+    }
+  ],
+  "unknowns": [
+    "Whether operators want the explanation as text or as a rendered timeline."
+  ],
+  "risk_refs": ["R-003"],
+  "ambiguity_ledger_id": "al_000000000000000000000001",
+  "human_reflection_revision": 2
+}
