@@ -200,6 +200,11 @@ Add cognitive diversity where it has leverage.
 
 ### Deliverables
 - multiple review dimensions;
+- bounded ReviewCampaign orchestration;
+- FindingDisposition adjudication;
+- rising reopen thresholds and repair-round limits;
+- focused revalidation and ClosureDecision freeze semantics;
+- reviewer finding budgets and compact review-state handoff;
 - disagreement reports;
 - risk-based review policy;
 - consultant abstraction;
@@ -211,6 +216,14 @@ Add cognitive diversity where it has leverage.
 
 ### Verification
 - seeded defect suite;
+- parallel reviewers inspect the same immutable candidate;
+- duplicate findings are deduplicated before repair;
+- one consolidated Repair Work Package is produced per round;
+- focused revalidation does not restart broad review;
+- closure review reports only threshold-crossing issues;
+- frozen campaign rejects opinion-only reopening;
+- materially new evidence can reopen a frozen campaign;
+- repair-round limit escalates rather than loops forever;
 - disagreement routing;
 - blind consultant request;
 - consultant unavailable behavior;
@@ -337,4 +350,10 @@ Every milestone completion must include:
 - explicit deferred debt;
 - demo/repro steps;
 - verification report;
+- bounded review/repair campaign for substantial changes;
+- no open closure-threshold findings;
+- explicit residual-risk disposition;
+- ClosureDecision/freeze once convergence machinery is implemented;
 - next milestone assumptions validated.
+
+Milestone completion does not require that no reviewer can imagine another improvement. See docs/REVIEW_AND_CONVERGENCE.md.
