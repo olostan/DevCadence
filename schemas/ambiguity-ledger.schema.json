@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/olostan/DevCadience/schemas/ambiguity-ledger.schema.json",
+  "title": "DevCadience AmbiguityLedger",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "ambiguity_ledger_id", "project_id", "revision", "entries"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "ambiguity_ledger_id": {"type": "string"},
+    "project_id": {"type": "string"},
+    "revision": {"type": "integer", "minimum": 1},
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "question", "origin", "category", "resolution_authority", "architectural_impact", "cost_of_wrong_assumption", "status", "why_it_matters"],
+        "properties": {
+          "id": {"type": "string"},
+          "question": {"type": "string"},
+          "origin": {"type": "string"},
+          "category": {"type": "string"},
+          "resolution_authority": {"enum": ["human", "repository_tool", "external_research", "experiment", "consultant", "principal"]},
+          "architectural_impact": {"enum": ["low", "medium", "high", "critical"]},
+          "security_privacy_impact": {"enum": ["none", "low", "medium", "high", "critical"]},
+          "irreversibility": {"enum": ["low", "medium", "high"]},
+          "cost_of_wrong_assumption": {"enum": ["low", "medium", "high", "critical"]},
+          "why_it_matters": {"type": "string"},
+          "possible_interpretations": {"type": "array", "items": {"type": "string"}},
+          "status": {"enum": ["open", "investigating", "awaiting_human", "researching", "experimenting", "consulting", "resolved", "explicitly_deferred", "reopened"]},
+          "resolution": {"type": ["string", "null"]},
+          "safe_deferral_boundary": {"type": ["string", "null"]},
+          "evidence_refs": {"type": "array", "items": {"type": "string"}},
+          "product_decision_ref": {"type": ["string", "null"]},
+          "requirement_refs": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    }
+  }
+}
