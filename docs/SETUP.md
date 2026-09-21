@@ -2,22 +2,20 @@
 
 ## Status
 
-The control-plane core (M1) is implemented. Sections below that describe local
-model runtimes still describe an intended environment: no model integration
-exists before M3, and nothing in the current build contacts one.
+The control-plane core (M1) is implemented and M2 is being developed separately. Sections below describing cognition runtimes, environment intelligence and principal-host setup define intended M3/M4 behavior; no model integration is required by the current core.
 
 ## 1. Target environment
 
-Primary bootstrap target:
-- macOS on Apple Silicon;
-- 48 GB unified memory recommended for strong local coding models;
-- Git;
-- current supported Go toolchain;
-- SQLite development/runtime support;
-- at least one local LLM runtime: Ollama and/or MLX-LM;
-- Antigravity for the first principal integration.
+Supported bootstrap starts from an ordinary macOS or Linux machine and assumes optional AI software may be absent.
 
-Linux should remain a control-plane compatibility target even though MLX is Apple-specific.
+Reference profiles include:
+- Apple Silicon with 48 GB unified memory for strong local-model use;
+- modest 32 GB-class Linux systems where only small local models may be practical;
+- machines with no local LLM at all, using policy-authorized remote cognition.
+
+Core prerequisites remain basic engineering tooling such as Git and the supported Go toolchain.
+
+Ollama, MLX-LM, Antigravity, Cursor, VS Code, consultant CLIs and provider credentials are optional capabilities discovered/configured by guided setup rather than unconditional prerequisites.
 
 ## 2. Clone
 
@@ -38,7 +36,7 @@ Exact minimum Go version will be defined when the module is created.
 
 Optional quality tools can be installed later through project scripts rather than requiring global setup.
 
-## 4. Local model option A: Ollama
+## 4. Optional local model option A: Ollama
 
 Install through the supported Ollama distribution/package for your platform. On Homebrew-based macOS environments:
 
@@ -52,7 +50,7 @@ Model selection is configuration. DevCadience should not hard-code one model nam
 
 The bootstrap profile should target a strong coding model that fits with sufficient context headroom on the machine.
 
-## 5. Local model option B: MLX-LM
+## 5. Optional local model option B: MLX-LM
 
 MLX-LM requires Apple Silicon and Python.
 
@@ -99,6 +97,46 @@ The build needs no C toolchain: the SQLite driver is pure Go
 Binaries:
 - `devcadience` — CLI/daemon (implemented in M1);
 - `devcadience-mcp` — stdio semantic MCP adapter (M4, not yet present).
+
+## 7A. Guided bootstrap (M3)
+
+The intended normal onboarding path is not manual runtime installation.
+
+Conceptual commands:
+
+```bash
+devcadience doctor
+devcadience setup
+devcadience setup --dry-run
+devcadience setup verify
+```
+
+The setup engine starts by discovering the machine and existing software.
+
+It then:
+1. assesses accelerator/runtime candidates;
+2. discovers supported cognition CLIs/providers and authentication readiness;
+3. discovers supported principal hosts;
+4. recommends a deployment profile;
+5. presents a structured remediation/install plan;
+6. requests approval for mutating or privileged actions;
+7. verifies actual inference acceleration/endpoint health;
+8. performs lightweight capability benchmarks where useful.
+
+No local model, principal host or consultant subscription is assumed.
+
+See [ENVIRONMENT_INTELLIGENCE_AND_ONBOARDING.md](ENVIRONMENT_INTELLIGENCE_AND_ONBOARDING.md).
+
+### Terminal experience
+
+Interactive setup should use a restrained text UI suitable for local terminals and SSH:
+- selections and confirmations;
+- color/status marks with plain fallbacks;
+- short progress/spinner feedback for genuinely long operations;
+- accessible/basic prompt mode;
+- `--no-tui` / machine-readable operation for automation.
+
+The intended Go UI stack is Huh v2, using Bubble Tea v2/Lip Gloss v2 underneath when richer dynamic behavior is needed.
 
 ## 8. Local data directories
 
@@ -156,7 +194,20 @@ validation:
 
 Commands are argv arrays by default.
 
-## 11. Antigravity integration
+## 11. Principal host integration
+
+The initial first-class principal hosts are:
+- Antigravity (reference integration);
+- Cursor;
+- Visual Studio Code.
+
+No host is assumed to already be installed.
+
+Guided setup should prefer a compatible host the user already has. If none is installed, it should present the supported choices, help the user install/configure the selected host, and allow setup to be deferred.
+
+See [PRINCIPAL_HOSTS.md](PRINCIPAL_HOSTS.md).
+
+### Antigravity reference integration
 
 The intended bootstrap topology is:
 
@@ -185,16 +236,20 @@ The concrete configuration, strict principal-workspace topology, plugin packagin
 
 A versioned plugin skeleton is already maintained under `integrations/antigravity/devcadience/`. It becomes directly usable once the `devcadience-mcp` binary is implemented and available on PATH.
 
-## 12. External consultants
+## 12. External cognition and consultants
 
-Consultants are optional during bootstrap.
+Consultants are optional.
 
-Adapters should detect existing authenticated tools/configuration rather than asking users to paste credentials into prompts.
+Setup should detect usable existing cognition endpoints/authenticated CLIs before asking the user to create new credentials or subscriptions.
 
-Examples could later include:
+Examples may include:
 - Codex CLI;
 - Claude Code;
+- Gemini/provider tooling;
+- future supported consultant integrations;
 - API-backed providers.
+
+No particular consultant provider is required. Missing consultant capability should be reported as reduced cognitive diversity, not setup failure.
 
 ## 13. Development workflow
 
@@ -215,20 +270,26 @@ Keep a textual explanation around diagrams so the docs remain usable if renderin
 
 ## 15. First end-to-end bootstrap
 
-The first real setup demo should be:
+The first real setup demo should begin from a blank or intentionally stripped environment:
 
-1. start local model runtime;
-2. start DevCadience daemon;
-3. register a small target repository;
-4. start `devcadience-mcp`;
-5. configure Antigravity principal;
-6. ask principal to inspect ProjectState;
-7. issue a targeted investigation;
-8. author a Work Package;
-9. delegate to local implementer;
-10. validate/review;
-11. inspect ChangeReport;
-12. accept or reject.
+1. run environment discovery/doctor;
+2. choose or confirm a deployment profile;
+3. configure any desired local runtime and verify the actual acceleration backend, or explicitly choose no-local-model operation;
+4. discover/configure at least one implementation cognition endpoint;
+5. discover an existing principal host or select/install one of Antigravity, Cursor or VS Code;
+6. start DevCadience daemon;
+7. register a small target repository;
+8. start `devcadience-mcp`;
+9. verify the principal-host semantic connection;
+10. ask principal to inspect ProjectState;
+11. issue a targeted investigation;
+12. author a Work Package;
+13. delegate to an implementation worker;
+14. validate/review;
+15. inspect ChangeReport;
+16. accept or reject.
+
+The same core flow should be demonstrable under strong-local and hybrid/no-local-model configurations.
 
 This demo is a milestone test, not merely onboarding documentation.
 
