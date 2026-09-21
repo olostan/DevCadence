@@ -53,6 +53,11 @@ func commands() []command {
 		{"state", "show or rebuild canonical ProjectState", runState},
 		{"schema", "validate JSON documents against the published schemas", runSchema},
 		{"migrate", "report control-plane schema migrations", runMigrate},
+		{"repo", "register and inspect a Git repository", runRepo},
+		{"worktree", "create, list, cleanup and recover isolated worktrees", runWorktree},
+		{"run", "run one controlled command in a working directory", runRun},
+		{"validate", "execute a validation profile and record its ValidationResult", runValidate},
+		{"candidate", "show deterministic candidate/diff/integration metadata", runCandidate},
 	}
 }
 

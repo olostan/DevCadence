@@ -161,30 +161,86 @@ already durable, typed and reconstructable.
 
 ## M2 — Repository, worktree and process execution
 
+**Status: complete.**
+
 ### Goal
 Safely operate on real repositories.
 
 ### Deliverables
-- repository registration;
-- Git inspection;
-- isolated worktree manager;
-- controlled process runner;
-- artifact capture;
-- validation profiles;
-- candidate commit/diff metadata.
+- repository registration — `internal/repository`;
+- Git inspection — `internal/repository` (HEAD, branch, status, ancestry,
+  merge-base, diff, non-mutating merge/conflict checks);
+- isolated worktree manager — `internal/worktrees`;
+- controlled process runner — `internal/process`;
+- artifact capture — `internal/artifacts`;
+- validation profiles — `internal/validation` (profile loading and
+  execution against the real M1 `protocol.ValidationResult`/
+  `ValidationCompleted`);
+- candidate commit/diff metadata — `internal/repository.Repository.Diff`,
+  `CheckMerge`, `StaleBase`, surfaced through `devcadience candidate show`.
 
 ### Verification
-Use synthetic fixture repositories:
-- parallel worktree isolation;
-- compile/test success/failure;
-- timeout/cancellation;
-- stale base detection;
-- merge conflict;
-- stdout/stderr truncation;
-- path/symlink security tests.
+Synthetic fixture repositories only (`internal/testsupport.NewGitRepo`),
+never the DevCadience repository itself:
+- parallel worktree isolation — `TestParallelWorktreesAreIsolated`,
+  `TestConcurrentCreateSameProject`;
+- compile/test success/failure — `internal/process`, `internal/validation`
+  (`TestRunNonzeroExitIsNotAnError`, `TestRunProfilePassAndFail`);
+- timeout/cancellation — `TestRunTimeout`, `TestRunCancellation`,
+  `TestRunnerReusableAfterTimeout`, `TestRunProfileTimeout`;
+- stale base detection — `TestStaleBase`, `TestIsStale`;
+- merge conflict — `TestCheckMergeConflict`, `TestCheckMergeCleanNonFastForward`
+  (both assert the accepted working tree is untouched);
+- stdout/stderr truncation — `TestRunStdoutTruncation`;
+- path/symlink security — `TestRegisterSymlinkedPathCanonicalises`,
+  `TestRegisterSubdirectoryOfRepositoryRejected`,
+  `TestCreateRejectsPathTraversalIdentifiers`,
+  `TestOpenRejectsPathTraversalLocator` (artifacts);
+- digest-verified validation lineage — `TestExecuteAndRecordWrongCommitRefused`
+  proves a validation citing the wrong commit is refused with the journal
+  and task state left untouched, reusing the M1 transaction/digest
+  machinery rather than adding new checks.
+
+Run with `go test ./... && go test -race ./... && go vet ./...`, or `make verify`.
 
 ### Exit criterion
-DevCadience can safely run deterministic engineering work without an LLM.
+DevCadience can safely run deterministic engineering work on real
+repositories without an LLM.
+
+Met: `internal/validation`'s `TestExecuteAndRecordAttemptScopeDrivesTaskToReviewing`
+and its sibling tests drive a task from a delegated Work Package through a
+candidate commit, a real `ValidationResult` produced by executing a profile
+against a synthetic repository, and a matching `ValidationCompleted` event —
+entirely through `internal/repository`, `internal/worktrees`,
+`internal/process`, `internal/artifacts` and `internal/validation`, with no
+model runtime imported anywhere in the module (`tests.TestNoPackageDependsOnAModelRuntime`
+still passes).
+
+### Architectural decisions taken during M2
+- [adr/0007-repository-and-worktree-safety-model.md](adr/0007-repository-and-worktree-safety-model.md)
+- [adr/0008-controlled-process-execution.md](adr/0008-controlled-process-execution.md)
+- [adr/0009-artifact-storage-and-validation-execution.md](adr/0009-artifact-storage-and-validation-execution.md)
+
+### Debt deliberately carried into later milestones
+- The worktree manifest is a per-project JSON file guarded by an
+  in-process mutex. It is safe for one daemon process and is not
+  cross-process safe; the bootstrap posture (docs/SECURITY.md §17) does not
+  yet require more than one (ADR-0007).
+- `CheckMerge`'s scratch worktree is created outside the worktree manager's
+  own accounting; a crash between its creation and its cleanup can leak an
+  entry in Git's own `worktree list` for the primary repository. It is
+  inspectable (`git worktree list`) and does not touch the accepted branch.
+- Integration-scope validation is executable but *integration orchestration*
+  (deciding which accepted candidates combine, in what order, into what
+  integration commit) remains M6/M9; M2 supplies the deterministic
+  mechanics an orchestrator will call.
+- The process runner does not sandbox `Spec.Dir`; confinement to a worktree
+  is structural (only `internal/worktrees.Manager` hands out worktree
+  paths), not OS-enforced. See ADR-0008.
+- `devcadience validate`/`run`/`candidate show` are inspection and
+  operator/demo commands, not the eventual M3/M4 agent-facing execution
+  surface; a future milestone's agent runtime calls
+  `internal/validation`/`internal/process` directly, not the CLI.
 
 ## M3 — Local agent runtime
 

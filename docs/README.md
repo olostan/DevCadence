@@ -120,6 +120,9 @@ hierarchy below.
 | [0004](adr/0004-canonical-task-state-machine.md) | Canonical task lifecycle, block semantics, ProjectState task buckets |
 | [0005](adr/0005-deterministic-project-state-identity.md) | ProjectState is a pure function of the event prefix |
 | [0006](adr/0006-identifiers-and-time.md) | ULID identifiers and injected clocks |
+| [0007](adr/0007-repository-and-worktree-safety-model.md) | Repository identity, worktree ownership (per-project manifest), non-mutating integration checks |
+| [0008](adr/0008-controlled-process-execution.md) | Controlled process execution: no shell, no implicit environment inheritance, distinguished outcome categories |
+| [0009](adr/0009-artifact-storage-and-validation-execution.md) | Content-addressed artifact store; validation-profile execution produces the real M1 ValidationResult |
 
 ## Normative hierarchy
 
