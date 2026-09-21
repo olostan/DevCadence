@@ -224,3 +224,18 @@ Fine-tuning local models is not a bootstrap dependency. Start with prompting, re
 ### DCI-103 — No uncontrolled recursive self-development
 DevCadience may eventually develop DevCadience, but self-changes follow the same isolation, validation, review and governance requirements as any other project.
 
+### DCI-104 — Capability absence degrades; it does not contaminate unrelated capability
+Missing optional local models, accelerators, consultant subscriptions, cognition endpoints or principal hosts reduce the available operating profile but do not turn otherwise valid deterministic/control-plane capabilities into failure.
+
+### DCI-105 — Setup derives from observed capability, not assumed products
+Bootstrap must discover the machine, software, authentication readiness and supported integrations before recommending configuration. It must not assume a specific GPU, runtime, subscription or principal host exists.
+
+### DCI-106 — Acceleration is verified, not inferred
+GPU presence, driver presence or runtime installation is insufficient evidence that inference is accelerated. A backend may be marked ready only after an empirical runtime probe verifies the intended acceleration path.
+
+### DCI-107 — Principal hosts are replaceable
+No core protocol depends on one principal frontend. The initial first-class host scope is Antigravity, Cursor and Visual Studio Code; Antigravity is the reference integration, not an architectural requirement.
+
+### DCI-108 — Setup mutation requires explicit authority
+Environment discovery is read-only. Package installation, model download, authentication, service changes, device/group permissions and other setup mutations require a visible plan and the appropriate user approval; privileged/high-impact changes are never silently applied.
+
