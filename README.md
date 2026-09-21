@@ -211,13 +211,17 @@ Start here:
 | [AGENTS.md](AGENTS.md) | Mandatory operating instructions for coding agents |
 | [INVARIANTS.md](INVARIANTS.md) | Non-negotiable system and engineering invariants |
 | [ENGINEERING_STANDARDS.md](ENGINEERING_STANDARDS.md) | Coding, protocol, testing, and change-management standards |
+| [docs/README.md](docs/README.md) | Visual documentation map and recommended reading paths |
 | [docs/VISION.md](docs/VISION.md) | Product vision, goals, philosophy, success criteria |
+| [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md) | Functional/non-functional requirements and bootstrap acceptance |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | System architecture and component boundaries |
 | [docs/LIFECYCLE.md](docs/LIFECYCLE.md) | Day-0 through long-term project lifecycle |
 | [docs/PRINCIPAL_ENGINEER.md](docs/PRINCIPAL_ENGINEER.md) | Frontier-model cognition and challenge protocol |
 | [docs/PROTOCOLS.md](docs/PROTOCOLS.md) | Typed semantic contracts and state transitions |
 | [docs/PROJECT_STATE.md](docs/PROJECT_STATE.md) | Canonical Engineering State Model |
 | [docs/LOCAL_AGENTS.md](docs/LOCAL_AGENTS.md) | Scout, implementer, reviewer and validator roles |
+| [docs/MCP_API.md](docs/MCP_API.md) | Semantic principal-facing MCP surface |
+| [docs/MODEL_RUNTIME.md](docs/MODEL_RUNTIME.md) | Ollama/MLX-style local runtime and resource management |
 | [docs/CONSULTANTS.md](docs/CONSULTANTS.md) | Frontier consultant adapters and independent-review rules |
 | [docs/VERIFICATION.md](docs/VERIFICATION.md) | Deterministic and model-assisted verification |
 | [docs/REFACTORING_AND_HEALTH.md](docs/REFACTORING_AND_HEALTH.md) | Code-health model and refactoring epochs |
@@ -228,7 +232,7 @@ Start here:
 | [docs/SETUP.md](docs/SETUP.md) | Proposed local setup and development environment |
 | [docs/adr/0000-template.md](docs/adr/0000-template.md) | Architecture Decision Record template |
 
-Machine-readable schema definitions live under [schemas/](schemas/).
+Machine-readable schema definitions live under [schemas/](schemas/). The initial Antigravity operating skill is under [skills/antigravity-principal/](skills/antigravity-principal/), with local role templates under [prompts/](prompts/) and an illustrative project policy in [config/project.example.yaml](config/project.example.yaml).
 
 ## Proposed implementation shape
 
