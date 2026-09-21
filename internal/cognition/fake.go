@@ -1,0 +1,173 @@
+package cognition
+
+import (
+	"context"
+
+	"github.com/olostan/DevCadience/internal/errs"
+	"github.com/olostan/DevCadience/internal/protocol"
+)
+
+// FakeAdapter is a scripted Adapter.
+//
+// It exists so that endpoint discovery, acceleration evaluation, profile
+// assembly and routing can all be exercised with no runtime installed, no GPU
+// and no network — the offline guarantee of ENGINEERING_STANDARDS.md §19. The
+// real Ollama and MLX adapters are tested the same way, against transports and
+// command probes rather than against software.
+type FakeAdapter struct {
+	AdapterID string
+	// Endpoints is what Discover returns.
+	Endpoints []protocol.CognitionEndpoint
+	// DiscoverErr makes Discover fail, for testing that one broken adapter
+	// leaves its neighbours intact.
+	DiscoverErr error
+	// Results maps endpoint id to the probe result it produces.
+	Results map[string]ProbeResult
+	// ProbeErrs maps endpoint id to a probe failure.
+	ProbeErrs map[string]error
+	// Prompts records every prompt sent, so a test can assert that no
+	// repository content was transmitted.
+	Prompts []string
+}
+
+// ID implements Adapter.
+func (f *FakeAdapter) ID() string {
+	if f.AdapterID == "" {
+		return "fake"
+	}
+	return f.AdapterID
+}
+
+// Discover implements Adapter.
+func (f *FakeAdapter) Discover(_ context.Context, in DiscoveryInput) ([]protocol.CognitionEndpoint, error) {
+	if f.DiscoverErr != nil {
+		return nil, f.DiscoverErr
+	}
+	out := make([]protocol.CognitionEndpoint, 0, len(f.Endpoints))
+	for _, endpoint := range f.Endpoints {
+		endpoint.ObservedAt = in.ObservedAt
+		out = append(out, endpoint)
+	}
+	return out, nil
+}
+
+// Probe implements Adapter.
+func (f *FakeAdapter) Probe(ctx context.Context, endpoint protocol.CognitionEndpoint, req ProbeRequest) (ProbeResult, error) {
+	req = req.Normalise()
+	f.Prompts = append(f.Prompts, req.Prompt)
+	if err := ctx.Err(); err != nil {
+		return ProbeResult{}, errs.Wrap(errs.CategoryProbeTimeout, err, "probe cancelled")
+	}
+	if err, ok := f.ProbeErrs[endpoint.ID]; ok {
+		return ProbeResult{}, err
+	}
+	result, ok := f.Results[endpoint.ID]
+	if !ok {
+		return ProbeResult{
+			Status: protocol.FindingUnsupported,
+			Detail: "the fake adapter has no scripted result for this endpoint",
+		}, nil
+	}
+	return result, nil
+}
+
+// LocalEndpoint builds a local-runtime endpoint for tests.
+//
+// Health starts at unverified, which is where discovery of a live-but-unprobed
+// runtime honestly leaves it, and auth is not_applicable because a local runtime
+// has no account.
+func LocalEndpoint(id, runtime, model string) protocol.CognitionEndpoint {
+	return protocol.CognitionEndpoint{
+		ID:                     id,
+		Kind:                   protocol.EndpointLocalRuntime,
+		Provider:               runtime,
+		Runtime:                runtime,
+		ModelID:                model,
+		Locality:               protocol.LocalityLocal,
+		Health:                 protocol.EndpointHealthUnverified,
+		Auth:                   protocol.AuthNotApplicable,
+		StructuredOutput:       protocol.FeatureUnknown,
+		ToolUse:                protocol.FeatureUnknown,
+		CostClass:              protocol.CostLocalCompute,
+		RequiredSourceExposure: protocol.ExposureLocalOnly,
+	}
+}
+
+// CLIEndpoint builds an authenticated-CLI endpoint for tests.
+//
+// Auth is unknown by default because that is the honest default: no supported
+// CLI publishes a safe, non-mutating way to ask, and DevCadience will not read
+// credential files to find out.
+func CLIEndpoint(id, provider string) protocol.CognitionEndpoint {
+	return protocol.CognitionEndpoint{
+		ID:                     id,
+		Kind:                   protocol.EndpointAuthenticatedCLI,
+		Provider:               provider,
+		Runtime:                provider,
+		Locality:               protocol.LocalityRemoteInferenceLocalTools,
+		Health:                 protocol.EndpointHealthInstalled,
+		Auth:                   protocol.AuthUnknown,
+		StructuredOutput:       protocol.FeatureUnknown,
+		ToolUse:                protocol.FeatureDeclared,
+		CostClass:              protocol.CostSubscriptionIncluded,
+		RequiredSourceExposure: protocol.ExposureToolMediatedWorktree,
+	}
+}
+
+// RemoteEndpoint builds a remote-API endpoint for tests.
+func RemoteEndpoint(id, provider string, cost protocol.CostClass) protocol.CognitionEndpoint {
+	return protocol.CognitionEndpoint{
+		ID:                     id,
+		Kind:                   protocol.EndpointRemoteAPI,
+		Provider:               provider,
+		Locality:               protocol.LocalityRemote,
+		Health:                 protocol.EndpointHealthUnverified,
+		Auth:                   protocol.AuthUnknown,
+		StructuredOutput:       protocol.FeatureUnknown,
+		ToolUse:                protocol.FeatureUnknown,
+		CostClass:              cost,
+		RequiredSourceExposure: protocol.ExposureFocusedSnippets,
+	}
+}
+
+// Ready marks an endpoint probed-ready, as a successful probe would.
+func Ready(endpoint protocol.CognitionEndpoint) protocol.CognitionEndpoint {
+	endpoint.Health = protocol.EndpointHealthReady
+	return endpoint
+}
+
+// WithCapability declares a graded capability with explicit provenance.
+//
+// Tests must state provenance, because a graded capability without it is exactly
+// the unevidenced claim the contract refuses (DCI-012).
+func WithCapability(
+	endpoint protocol.CognitionEndpoint,
+	dimension protocol.CapabilityDimension,
+	grade protocol.CapabilityGrade,
+	provenance protocol.CapabilityProvenance,
+) protocol.CognitionEndpoint {
+	setCapability(&endpoint, protocol.GradedCapability{
+		Dimension: dimension, Grade: grade, Provenance: provenance, Source: "test",
+	})
+	return endpoint
+}
+
+// WithVerifiedAcceleration attaches verified acceleration evidence.
+func WithVerifiedAcceleration(
+	endpoint protocol.CognitionEndpoint,
+	backend protocol.BackendKind,
+	at protocol.Timestamp,
+) protocol.CognitionEndpoint {
+	evidence := EvaluateAcceleration(AccelerationInput{
+		Backend: backend,
+		Signals: []protocol.AccelerationSignal{{
+			Source: "test:runtime", Trust: protocol.TrustAuthoritative,
+			Backend: backend, Offloaded: true, Statement: "runtime reported offload",
+		}},
+		ProbeRan:       true,
+		ProbeSucceeded: true,
+		ObservedAt:     at,
+	})
+	endpoint.Acceleration = &evidence
+	return endpoint
+}

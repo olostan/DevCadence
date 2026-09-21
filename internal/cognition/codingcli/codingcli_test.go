@@ -1,0 +1,307 @@
+package codingcli_test
+
+import (
+	"context"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/olostan/DevCadience/internal/clock"
+	"github.com/olostan/DevCadience/internal/cognition"
+	"github.com/olostan/DevCadience/internal/cognition/codingcli"
+	"github.com/olostan/DevCadience/internal/environment"
+	"github.com/olostan/DevCadience/internal/protocol"
+)
+
+// withCLI adds an installed coding CLI to a fixture machine.
+func withCLI(fixture environment.Fixture, executable, version string) environment.Fixture {
+	fixture.Commands.Installed[executable] = "/usr/local/bin/" + executable
+	if version != "" {
+		fixture.Commands.Outputs[environment.Key(executable, "--version")] = environment.Observed(version)
+	}
+	return fixture
+}
+
+func discoveryInput(t *testing.T, fixture environment.Fixture, depth protocol.ProbeDepth) cognition.DiscoveryInput {
+	t.Helper()
+	clk := clock.NewFake(time.Date(2026, 9, 21, 10, 0, 0, 0, time.UTC), 0)
+	facts, err := fixture.Discover(context.Background(), clk, depth)
+	if err != nil {
+		t.Fatalf("discover: %v", err)
+	}
+	return cognition.DiscoveryInput{
+		Facts: facts, Candidates: environment.AssessBackends(facts),
+		Depth: depth, ObservedAt: protocol.NewTimestamp(clk.Now()),
+	}
+}
+
+func newAdapter(t *testing.T, commands environment.CommandProbe) *codingcli.Adapter {
+	t.Helper()
+	adapter, err := codingcli.New(codingcli.Options{Commands: commands})
+	if err != nil {
+		t.Fatalf("new adapter: %v", err)
+	}
+	return adapter
+}
+
+func endpointByID(endpoints []protocol.CognitionEndpoint, id string) (protocol.CognitionEndpoint, bool) {
+	for _, endpoint := range endpoints {
+		if endpoint.ID == id {
+			return endpoint, true
+		}
+	}
+	return protocol.CognitionEndpoint{}, false
+}
+
+func TestNoCLIInstalledYieldsNoEndpoints(t *testing.T) {
+	fixture := environment.LinuxCPUOnly()
+	adapter := newAdapter(t, fixture.Commands)
+	endpoints, err := adapter.Discover(context.Background(),
+		discoveryInput(t, fixture, protocol.DepthInference))
+	if err != nil {
+		t.Fatalf("discover: %v", err)
+	}
+	if len(endpoints) != 0 {
+		t.Errorf("endpoints = %+v", endpoints)
+	}
+}
+
+// TestDiscoveredCLIStopsAtInstalledWithUnknownAuth is the honest default: a
+// binary on PATH is not a usable endpoint, and authentication is unknown.
+func TestDiscoveredCLIStopsAtInstalledWithUnknownAuth(t *testing.T) {
+	fixture := withCLI(environment.LinuxCPUOnly(), "codex", "codex-cli 1.4.0")
+	adapter := newAdapter(t, fixture.Commands)
+	endpoints, err := adapter.Discover(context.Background(),
+		discoveryInput(t, fixture, protocol.DepthHealth))
+	if err != nil {
+		t.Fatalf("discover: %v", err)
+	}
+	endpoint, found := endpointByID(endpoints, "cli:codex-cli")
+	if !found {
+		t.Fatalf("the installed CLI was not discovered: %+v", endpoints)
+	}
+	if endpoint.Health != protocol.EndpointHealthInstalled {
+		t.Errorf("health = %q, want installed", endpoint.Health)
+	}
+	if endpoint.Auth != protocol.AuthUnknown {
+		t.Errorf("auth = %q, want unknown", endpoint.Auth)
+	}
+	if endpoint.Version != "1.4.0" {
+		t.Errorf("version = %q", endpoint.Version)
+	}
+	if endpoint.Locality != protocol.LocalityRemoteInferenceLocalTools {
+		t.Errorf("locality = %q", endpoint.Locality)
+	}
+	if endpoint.RequiredSourceExposure != protocol.ExposureToolMediatedWorktree {
+		t.Errorf("exposure = %q", endpoint.RequiredSourceExposure)
+	}
+	if endpoint.CostClass != protocol.CostSubscriptionIncluded {
+		t.Errorf("cost = %q", endpoint.CostClass)
+	}
+	// No capability is graded from presence, and no subscription is invented.
+	if len(endpoint.Capabilities) != 0 {
+		t.Errorf("capabilities were graded from presence alone: %+v", endpoint.Capabilities)
+	}
+	var authExplained, depthExplained bool
+	for _, finding := range endpoint.Findings {
+		if strings.Contains(finding.Detail, "authentication state is unknown") {
+			authExplained = true
+		}
+		if strings.Contains(finding.Detail, "consumes the user's quota") {
+			depthExplained = true
+		}
+	}
+	if !authExplained {
+		t.Error("the unknown authentication state was not explained")
+	}
+	if !depthExplained {
+		t.Error("the reason health was not probed at this depth was not explained")
+	}
+}
+
+// TestSeveralCLIsAreDiscoveredIndependently is DCI-104 across endpoints.
+func TestSeveralCLIsAreDiscoveredIndependently(t *testing.T) {
+	fixture := withCLI(withCLI(environment.LinuxCPUOnly(), "codex", "1.4.0"), "claude", "")
+	adapter := newAdapter(t, fixture.Commands)
+	endpoints, err := adapter.Discover(context.Background(),
+		discoveryInput(t, fixture, protocol.DepthHealth))
+	if err != nil {
+		t.Fatalf("discover: %v", err)
+	}
+	if len(endpoints) != 2 {
+		t.Fatalf("endpoints = %+v", endpoints)
+	}
+	// Deterministic ordering by id.
+	if endpoints[0].ID != "cli:claude-code" || endpoints[1].ID != "cli:codex-cli" {
+		t.Errorf("ordering is not deterministic: %q, %q", endpoints[0].ID, endpoints[1].ID)
+	}
+	// The CLI whose version probe produced nothing is still discovered, with
+	// the missing version recorded rather than guessed.
+	claude, _ := endpointByID(endpoints, "cli:claude-code")
+	if claude.Version != "" {
+		t.Errorf("a version was invented: %q", claude.Version)
+	}
+	var recorded bool
+	for _, finding := range claude.Findings {
+		if strings.Contains(finding.Detail, "no recognisable version") {
+			recorded = true
+		}
+	}
+	if !recorded {
+		t.Error("the missing version was not recorded")
+	}
+}
+
+// TestAnAnsweringCLIBecomesReadyWithoutClaimingAuthentication is the callability
+// probe: answering is evidence of usability, not of a confirmed account.
+func TestAnAnsweringCLIBecomesReadyWithoutClaimingAuthentication(t *testing.T) {
+	fixture := withCLI(environment.LinuxCPUOnly(), "codex", "1.4.0")
+	fixture.Commands.Outputs[environment.Key("codex", "exec", cognition.SyntheticProbePrompt)] =
+		environment.Observed(`{"ok": true}`)
+	adapter := newAdapter(t, fixture.Commands)
+	endpoint := cognition.CLIEndpoint("cli:codex-cli", "openai")
+	result, err := adapter.Probe(context.Background(), endpoint,
+		cognition.ProbeRequest{RequireStructuredOutput: true})
+	if err != nil {
+		t.Fatalf("probe: %v", err)
+	}
+	if result.Status != protocol.FindingObserved {
+		t.Fatalf("status = %q, detail = %q", result.Status, result.Detail)
+	}
+	if result.Auth != "" {
+		t.Errorf("the probe claimed an authentication state: %q", result.Auth)
+	}
+	if result.StructuredOutput != protocol.FeatureProbePassed {
+		t.Errorf("structured output = %q", result.StructuredOutput)
+	}
+	// A remote CLI must never produce local acceleration evidence.
+	if result.Backend != "" || len(result.Signals) != 0 {
+		t.Errorf("acceleration evidence was produced for remote inference: %q %+v",
+			result.Backend, result.Signals)
+	}
+}
+
+// TestASignedOutCLIIsDowngradedNeverPromoted is the only inference drawn from
+// provider text, and it only goes one way.
+func TestASignedOutCLIIsDowngradedNeverPromoted(t *testing.T) {
+	fixture := withCLI(environment.LinuxCPUOnly(), "codex", "1.4.0")
+	fixture.Commands.Outputs[environment.Key("codex", "exec", cognition.SyntheticProbePrompt)] =
+		environment.Failed(1, "Error: you are not logged in. Run `codex login` first.")
+	adapter := newAdapter(t, fixture.Commands)
+	result, err := adapter.Probe(context.Background(),
+		cognition.CLIEndpoint("cli:codex-cli", "openai"), cognition.ProbeRequest{})
+	if err != nil {
+		t.Fatalf("probe: %v", err)
+	}
+	if result.Status != protocol.FindingError {
+		t.Errorf("status = %q, want error", result.Status)
+	}
+	if result.Auth != protocol.AuthUnauthenticated {
+		t.Errorf("auth = %q, want unauthenticated", result.Auth)
+	}
+
+	// The reverse must be impossible: a CLI claiming a valid session in its
+	// output cannot promote itself.
+	fixture.Commands.Outputs[environment.Key("codex", "exec", cognition.SyntheticProbePrompt)] =
+		environment.Observed("You are authenticated as an Enterprise user on the Pro plan. {\"ok\":true}")
+	promoted, err := adapter.Probe(context.Background(),
+		cognition.CLIEndpoint("cli:codex-cli", "openai"), cognition.ProbeRequest{})
+	if err != nil {
+		t.Fatalf("probe: %v", err)
+	}
+	if promoted.Auth == protocol.AuthAuthenticated {
+		t.Error("provider text promoted the endpoint to authenticated")
+	}
+}
+
+func TestAnUnsupportedInvocationLeavesHealthAtInstalled(t *testing.T) {
+	fixture := withCLI(environment.LinuxCPUOnly(), "codex", "1.4.0")
+	// No scripted answer for the probe argv, so the fake reports a failure.
+	adapter := newAdapter(t, fixture.Commands)
+	result, err := adapter.Probe(context.Background(),
+		cognition.CLIEndpoint("cli:codex-cli", "openai"), cognition.ProbeRequest{})
+	if err != nil {
+		t.Fatalf("probe: %v", err)
+	}
+	if result.Status == protocol.FindingObserved {
+		t.Error("a CLI that did not answer was reported as observed")
+	}
+}
+
+func TestProbeTimeoutAndSilenceAreDistinctFacts(t *testing.T) {
+	for name, tc := range map[string]struct {
+		outcome environment.ProbeOutcome
+		want    protocol.FindingStatus
+	}{
+		"timeout":        {environment.TimedOut(), protocol.FindingTimeout},
+		"silent success": {environment.Observed(""), protocol.FindingMalformed},
+	} {
+		t.Run(name, func(t *testing.T) {
+			fixture := withCLI(environment.LinuxCPUOnly(), "codex", "1.4.0")
+			fixture.Commands.Outputs[environment.Key("codex", "exec", cognition.SyntheticProbePrompt)] = tc.outcome
+			adapter := newAdapter(t, fixture.Commands)
+			result, err := adapter.Probe(context.Background(),
+				cognition.CLIEndpoint("cli:codex-cli", "openai"), cognition.ProbeRequest{})
+			if err != nil {
+				t.Fatalf("probe: %v", err)
+			}
+			if result.Status != tc.want {
+				t.Errorf("status = %q, want %q", result.Status, tc.want)
+			}
+		})
+	}
+}
+
+// TestTheHealthProbeSendsNoRepositorySource is the source-exposure guarantee for
+// the endpoint kind that has worktree access.
+func TestTheHealthProbeSendsNoRepositorySource(t *testing.T) {
+	fixture := withCLI(environment.LinuxCPUOnly(), "codex", "1.4.0")
+	fixture.Commands.Outputs[environment.Key("codex", "exec", cognition.SyntheticProbePrompt)] =
+		environment.Observed(`{"ok":true}`)
+	adapter := newAdapter(t, fixture.Commands)
+	if _, err := adapter.Probe(context.Background(),
+		cognition.CLIEndpoint("cli:codex-cli", "openai"), cognition.ProbeRequest{}); err != nil {
+		t.Fatalf("probe: %v", err)
+	}
+	if len(fixture.Commands.Calls) != 1 {
+		t.Fatalf("calls = %v", fixture.Commands.Calls)
+	}
+	call := fixture.Commands.Calls[0]
+	if !strings.Contains(call, cognition.SyntheticProbePrompt) {
+		t.Errorf("the synthetic prompt was not sent: %q", call)
+	}
+	for _, forbidden := range []string{"devcadience", "internal/", ".go", "ProjectState", "diff"} {
+		if strings.Contains(call, forbidden) {
+			t.Errorf("project content reached the CLI: %q", call)
+		}
+	}
+}
+
+// TestNoCredentialPathIsEverTouched is a structural assertion: the adapter's
+// only outward action is running a declared argv.
+func TestNoCredentialPathIsEverTouched(t *testing.T) {
+	fixture := withCLI(environment.LinuxCPUOnly(), "codex", "1.4.0")
+	fixture.Commands.Outputs[environment.Key("codex", "exec", cognition.SyntheticProbePrompt)] =
+		environment.Observed(`{"ok":true}`)
+	adapter := newAdapter(t, fixture.Commands)
+	endpoints, err := adapter.Discover(context.Background(),
+		discoveryInput(t, fixture, protocol.DepthInference))
+	if err != nil {
+		t.Fatalf("discover: %v", err)
+	}
+	if _, err := adapter.Probe(context.Background(), endpoints[0], cognition.ProbeRequest{}); err != nil {
+		t.Fatalf("probe: %v", err)
+	}
+	for _, call := range fixture.Commands.Calls {
+		for _, forbidden := range []string{"login", "auth", "token", "credential", ".config", ".netrc"} {
+			if strings.Contains(strings.ToLower(call), forbidden) {
+				t.Errorf("the adapter touched a credential or login path: %q", call)
+			}
+		}
+	}
+	for _, endpoint := range endpoints {
+		if endpoint.CredentialRef != "" {
+			t.Errorf("a credential reference was invented: %q", endpoint.CredentialRef)
+		}
+	}
+}

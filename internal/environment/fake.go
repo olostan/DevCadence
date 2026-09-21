@@ -134,9 +134,22 @@ type FakeCommandProbe struct {
 	// Outputs maps a joined argv ("ollama --version") to the outcome it
 	// produces.
 	Outputs map[string]ProbeOutcome
+	// Prefixes answer any invocation whose joined argv starts with Prefix,
+	// checked in order after Outputs.
+	//
+	// They exist for probes whose argv embeds a large program constant — the
+	// MLX adapter passes a whole Python program as an argument — which a test
+	// cannot restate as an exact key without duplicating the program.
+	Prefixes []PrefixOutcome
 	// Calls records every invocation in order, so a test can assert that an
 	// expensive probe was *not* run at a shallow depth.
 	Calls []string
+}
+
+// PrefixOutcome answers every invocation whose joined argv starts with Prefix.
+type PrefixOutcome struct {
+	Prefix  string
+	Outcome ProbeOutcome
 }
 
 // Key builds the Outputs key for an executable and its arguments.
@@ -163,6 +176,14 @@ func (f *FakeCommandProbe) Run(ctx context.Context, cmd ProbeCommand) ProbeOutco
 		}
 	}
 	outcome, ok := f.Outputs[key]
+	if !ok {
+		for _, candidate := range f.Prefixes {
+			if strings.HasPrefix(key, candidate.Prefix) {
+				outcome, ok = candidate.Outcome, true
+				break
+			}
+		}
+	}
 	if !ok {
 		if _, installed := f.Installed[cmd.Executable]; !installed {
 			return ProbeOutcome{
