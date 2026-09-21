@@ -4,15 +4,17 @@ This file is normative for every human or AI agent modifying this repository. If
 
 ## 1. Mission
 
-DevCadience is an intelligent software-engineering control plane. Its job is to combine deep frontier-model reasoning with high-volume local-model execution through typed protocols, evidence, deterministic verification, independent review, and auditable governance.
+DevCadience is an intelligent software-engineering control plane. Its job is to combine deep frontier-model reasoning with high-volume lower-cost execution cognition through typed protocols, evidence, deterministic verification, independent review, and auditable governance.
+
+Local-first means local project authority, repository execution, canonical state and evidence. It does **not** mean every model inference must run locally.
 
 Do not reduce the project to a generic coding-agent wrapper. Preserve the separation between:
 
 - **Principal cognition:** product reasoning, architecture, alternatives, research, algorithms, pseudocode, detailed work-package design, high-risk decisions.
-- **Local cognition:** repository reconnaissance, implementation, debugging, repeated review, test generation, high-volume verification.
+- **Execution cognition:** repository reconnaissance, implementation, debugging, repeated review and test generation through capability-routed local or policy-authorized remote endpoints.
 - **Deterministic machinery:** Git, builds, tests, linters, static analysis, benchmarks, schema validation, policy checks.
 - **Control plane:** canonical state, orchestration, task graph, risk classification, evidence, event history, routing, learning and promotion.
-- **Consultants:** independent frontier reasoning used deliberately, not automatically trusted.
+- **Consultants:** optional independent reasoning sources used deliberately, never automatically trusted and never tied to one mandatory provider.
 
 ## 2. Mandatory reading order
 
@@ -30,6 +32,12 @@ For work touching agent behavior, additionally read docs/PRINCIPAL_ENGINEER.md a
 For work touching state or schemas, read docs/PROJECT_STATE.md and all affected files under schemas/.
 
 For security or external execution, read docs/SECURITY.md.
+
+For environment discovery, cognition routing, setup, hardware/runtime detection or authentication, read docs/ENVIRONMENT_INTELLIGENCE_AND_ONBOARDING.md and docs/MODEL_RUNTIME.md.
+
+For principal-host integration, read docs/PRINCIPAL_HOSTS.md and the relevant host-specific integration document.
+
+For existing/brownfield project onboarding, read docs/PROJECT_ADOPTION.md. A merely registered repository is not automatically ready for normal DevCadience-managed work.
 
 For changes to review, quality, or learning, read docs/VERIFICATION.md, docs/REVIEW_AND_CONVERGENCE.md, docs/REFACTORING_AND_HEALTH.md, and docs/LEARNING.md.
 
@@ -85,6 +93,22 @@ Agents must:
 - use independent specification review for substantial greenfield/product-semantic work.
 
 Do not turn a fixed questionnaire into a substitute for adaptive discovery.
+
+## 4B. Brownfield project adoption
+
+When DevCadience is introduced to an existing repository, read [docs/PROJECT_ADOPTION.md](docs/PROJECT_ADOPTION.md).
+
+Agents must not assume existing Markdown is canonical, and must not infer that repository registration means the project is ready for managed engineering.
+
+Before normal managed implementation:
+- pin the adoption source commit;
+- inventory code/tests/configuration/history and inherited documentation;
+- preserve provenance between observed, documented, inferred and human-confirmed statements;
+- surface contradictions instead of silently choosing one source;
+- materialize the required canonical documentation set in committed repository state;
+- require Adoption Readiness.
+
+Before READY, bounded investigation and isolated adoption work are allowed; normal autonomous implementation, acceptance and integration are not.
 
 ## 5. The first plausible solution is not enough
 
@@ -277,46 +301,46 @@ Repeated failure should escalate rather than produce infinite retries.
 
 ## 16. Current phase
 
-M0 (normative baseline) and M1 (domain core and canonical state) are complete.
-The control plane has typed protocol records, an append-only engineering event
-journal, a deterministic ProjectState reducer, task and attempt state
-machines, SQLite persistence with explicit migrations, schema validation and a
-CLI. No model runtime exists or is contacted.
+M0 (normative baseline), M1 (domain core and canonical state), and M2
+(repository/worktree/process execution) are complete.
 
-The Day-0 discovery and specification contracts (ProblemModel,
-AmbiguityLedger, ProductDecision, Requirement, DiscoveryExperiment,
-SpecificationReadiness) have typed representations and persistence, the
-discovery events are registered, and `ProjectState.discovery` is reduced from
-them. What does not exist is the discovery *workflow*: nothing asks a
-question, runs an experiment or assesses readiness. That needs a model runtime
-(M3) and the MCP surface (M4).
+The control plane now has typed protocol records, an append-only engineering
+event journal, deterministic ProjectState reduction, task/attempt state
+machines, SQLite persistence, schema validation, real Git/repository
+inspection, isolated worktrees, controlled external processes,
+content-addressed artifacts, validation profiles, candidate metadata and
+non-mutating integration checks. None of that requires a model runtime.
 
-M2 (repository, worktree and process execution) is also complete. DevCadience
-can now register a real Git repository, inspect it deterministically, create
-isolated per-attempt worktrees, run controlled external commands with
-explicit argv/cwd/environment/timeout, capture large evidence in a
-content-addressed artifact store, and execute validation profiles that
-produce the real M1 `ValidationResult`/`ValidationCompleted` pair — all
-without any model runtime. See
-[docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md#m2--repository-worktree-and-process-execution).
+The next milestone is **M3 — Environment intelligence, cognition runtime, and
+guided bootstrap**:
 
-Nine ADRs are accepted and normative; see
-[docs/README.md](docs/README.md#accepted-adrs).
+- **M3A** discovers hardware/software/authentication/cognition endpoints,
+  verifies real local acceleration where configured, and capability-routes
+  roles across deterministic tools, local models and policy-authorized remote
+  cognition.
+- **M3B** provides guided `setup`/`doctor`, remediation planning,
+  credential references, deployment-profile recommendations and a restrained
+  terminal UI suitable for local terminals, SSH and non-interactive use.
 
-The next milestone is M3: a local model runtime adapter, role prompts, and
-the first structured Scout/Implementer/Reviewer harnesses.
+Do not reintroduce the old assumption that M3 means "install one local model."
+A strong local model—and even a local LLM at all—is optional capability.
 
-The overall implementation objective is not “build all of DevCadience.” It is to prove the central hypothesis with the smallest vertical slice:
-- canonical ProjectState;
-- local model adapter;
-- scout investigation;
-- frontier-authored Work Package;
-- isolated implementation;
-- deterministic validation;
-- independent local review;
-- semantic EvidencePacket returned to the principal.
+After M3:
+- **M4A** implements the semantic MCP principal interface and first-class
+  principal-host integrations for Antigravity, Cursor and Visual Studio Code.
+  Antigravity is the reference host, not a core dependency.
+- **M4B** implements Project Adoption and Retrospective Reconstruction for
+  existing repositories. Brownfield projects are not READY until the required
+  canonical documentation baseline is committed and Adoption Readiness passes.
+- **M5** proves the central hypothesis across strong-local, hybrid-thin and
+  no-local-model/cloud-cognition profiles, and across greenfield plus
+  brownfield project entry paths.
 
-Do not prematurely add dashboard complexity, generalized distributed scheduling, fine-tuning, or autonomous policy mutation before the bootstrap experiment works.
+ADRs 0011 and 0012 are accepted and normative for this direction.
+
+The overall implementation objective is still to prove the central hypothesis
+without prematurely adding dashboard complexity, generalized distributed
+scheduling, fine-tuning, or autonomous policy mutation.
 
 ## 17. Definition of done
 
