@@ -169,6 +169,17 @@ No external consultant was involved; M6 is where consultant adapters arrive.
    file edited outside it, and evidence integrity has to hold in both cases
    (docs/SECURITY.md §14). Verification happens inside the store so a caller
    cannot forget it.
+
+   This extends to *existence* checks and to the envelope, not only to
+   whole-document reads. `RecordExists` resolves the record through the same
+   digest-verifying path a reader uses rather than answering from a bare
+   `MAX(record_version)` query: it backs the product-authority guard, and a
+   check that accepts what a read of the same row refuses is the weaker of two
+   signals about the same bytes, so the strict one wins. A journal read
+   likewise validates the reconstructed envelope before returning it, so an
+   event whose `schema_version` was changed outside the application is refused
+   by every read rather than only by the reads that happen to feed the
+   reducer.
 4c. **Schema is enforced at the durable write boundary.** A record is
    committed only after both its typed Go validation and its serialised
    document against the published JSON Schema pass. The two express different
@@ -188,6 +199,13 @@ No external consultant was involved; M6 is where consultant adapters arrive.
    one transaction. A refused transition commits neither.
 7. **Concurrency:** the pool is capped at one connection; WAL and a busy
    timeout are set for on-disk databases.
+7a. **A read-only open cannot write.** Read-only commands are opened with a
+   `mode=ro` DSN and without the `journal_mode`/`synchronous` pragmas, which
+   are themselves writes to the database header, and a missing path is refused
+   before the driver sees it so that the failure reads as "this project does
+   not exist" rather than as a driver fault. Declining to run migrations was
+   not enough: SQLite creates the database file when it opens it, so a typo in
+   `-db` left an empty database behind while reporting the project missing.
 8. **Artifacts:** large logs, diffs and model transcripts are referenced by
    `protocol.ArtifactRef` (locator plus digest) and never stored in a column.
 9. **Location:** the database is `$DEVCADIENCE_HOME/state/control-plane.db`,

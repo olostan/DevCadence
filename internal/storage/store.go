@@ -13,6 +13,7 @@ import (
 	"database/sql"
 	"errors"
 	"net/url"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -87,7 +88,20 @@ func Open(ctx context.Context, cfg Config) (*Store, error) {
 	if cfg.Clock == nil {
 		cfg.Clock = clock.System()
 	}
-	dsn, err := buildDSN(cfg.Path)
+	// A read-only open is refused before the driver sees the path, because
+	// mode=ro reports a missing file as an opaque driver error and a typo in
+	// -db must read as "this project does not exist", not as an internal
+	// fault.
+	if cfg.ReadOnly && cfg.Path != MemoryPath && !strings.HasPrefix(cfg.Path, "file::memory:") {
+		if _, err := os.Stat(cfg.Path); err != nil {
+			if os.IsNotExist(err) {
+				return nil, errs.New(errs.CategoryNotFound,
+					"database %s does not exist; run `devcadience project init` first", cfg.Path)
+			}
+			return nil, errs.Wrap(errs.CategoryInvalidArgument, err, "open database %s", cfg.Path)
+		}
+	}
+	dsn, err := buildDSN(cfg.Path, cfg.ReadOnly)
 	if err != nil {
 		return nil, err
 	}
@@ -146,7 +160,13 @@ func Open(ctx context.Context, cfg Config) (*Store, error) {
 // The path is cleaned and, for on-disk databases, made absolute, so that a
 // relative path cannot resolve differently depending on the process working
 // directory (docs/SECURITY.md §6: canonical paths).
-func buildDSN(path string) (string, error) {
+// readOnly opens the database without any possibility of writing to it: the
+// driver is given mode=ro, so a command that promises not to write cannot
+// create a missing database file, apply pragmas or alter a byte. Refusing
+// migrations was never enough — SQLite creates the file when it opens it, so
+// a typo in -db left an empty database behind before the schema check
+// reported the project missing.
+func buildDSN(path string, readOnly bool) (string, error) {
 	pragmas := url.Values{}
 	// Referential integrity between projections is enforced by the database,
 	// not by hope.
@@ -155,11 +175,19 @@ func buildDSN(path string) (string, error) {
 	pragmas.Add("_pragma", "busy_timeout(5000)")
 
 	if path == MemoryPath || strings.HasPrefix(path, "file::memory:") {
+		// An in-memory database has nothing to protect and cannot pre-exist,
+		// so mode=ro would only make it unopenable.
 		return "file::memory:?" + pragmas.Encode(), nil
 	}
 	absolute, err := filepath.Abs(filepath.Clean(path))
 	if err != nil {
 		return "", errs.Wrap(errs.CategoryInvalidArgument, err, "resolve database path %s", path)
+	}
+	if readOnly {
+		// journal_mode and synchronous are writes to the database header, so
+		// they are deliberately not set here.
+		pragmas.Set("mode", "ro")
+		return "file:" + absolute + "?" + pragmas.Encode(), nil
 	}
 	// WAL keeps a reader from blocking the writer and survives process crashes
 	// without losing committed transactions.

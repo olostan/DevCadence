@@ -182,6 +182,14 @@ func scanEvent(rows *sql.Rows) (events.Event, error) {
 		return events.Event{}, err
 	}
 	e.Payload = decoded
+	// The envelope is validated on the way out as well as on the way in. The
+	// append path refuses an invalid event, so a stored one that fails here
+	// was changed outside the application — and every read must enforce the
+	// compatibility boundary, not only the reads that happen to feed the
+	// reducer (DCI-091; ADR-0003 §4).
+	if err := e.Validate(); err != nil {
+		return events.Event{}, err
+	}
 	return e, nil
 }
 

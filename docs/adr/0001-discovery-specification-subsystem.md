@@ -172,8 +172,12 @@ to agent behaviour, they are:
   human-originating source type is a claim about provenance, not provenance;
   a confirmed requirement pointing at nothing cannot be traced back to the
   human it invokes. Where the ref names a ProductDecision, the control plane
-  additionally verifies that decision exists in the same project, so a
-  requirement cannot claim authority from a decision nobody recorded. For
+  additionally verifies that decision exists in the same project and has not
+  been withdrawn, so a requirement cannot claim authority from a decision
+  nobody recorded or from one the human took back. Both the journal path and
+  the record-persistence path enforce this: a rule enforced on one write path
+  only is a rule a caller can choose to avoid, since a durable record can be
+  stored alongside an unrelated event. For
   `human_statement`, M1 has no durable transcript record, so the rule is that
   *some* retrievable handle is required; tightening it to a specific record
   kind waits for the milestone that introduces one.

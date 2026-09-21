@@ -200,3 +200,101 @@ func seedProjection(t *testing.T, store *storage.Store) {
 		t.Fatalf("seed projection: %v", err)
 	}
 }
+
+// TestRecordExistenceCheckVerifiesTheStoredDigest keeps the two read paths
+// from disagreeing. RecordExists backs the product-authority guard; when it
+// answered from a bare MAX(record_version) query, a row edited outside the
+// application could authorise a confirmed requirement that a plain read of
+// the same row would have refused. The strict signal has to win.
+func TestRecordExistenceCheckVerifiesTheStoredDigest(t *testing.T) {
+	ctx := context.Background()
+	store := openStore(t)
+
+	decision := &protocol.ProductDecision{
+		SchemaVersion: protocol.SchemaVersion1,
+		DecisionID:    "PD-001",
+		ProjectID:     "example",
+		Question:      "Must this work offline?",
+		Answer:        "Yes, fully offline.",
+		Authority:     protocol.ProductDecisionAuthorityHuman,
+		Status:        protocol.ProductDecisionConfirmed,
+		Consequences:  []string{"Everything runs locally."},
+	}
+	if err := store.Write(ctx, func(tx *storage.Tx) error {
+		_, err := tx.PutRecord(ctx, "example", 1, decision)
+		return err
+	}); err != nil {
+		t.Fatalf("store decision: %v", err)
+	}
+
+	// Control: the untampered record exists.
+	if err := store.Read(ctx, func(tx *storage.Tx) error {
+		exists, err := tx.RecordExists(ctx, "example", "ProductDecision", "PD-001")
+		if err != nil {
+			return err
+		}
+		if !exists {
+			t.Fatal("a stored record was reported as absent")
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("existence check before tampering: %v", err)
+	}
+
+	// Edit the document without touching the digest, the way an external
+	// process with database access would.
+	if err := store.Write(ctx, func(tx *storage.Tx) error {
+		return tx.ExecWithoutImmutabilityForTest(ctx,
+			`UPDATE records SET document =
+                replace(document, 'Yes, fully offline.', 'No, the network is fine.')
+             WHERE project_id = 'example' AND record_kind = 'ProductDecision'`)
+	}); err != nil {
+		t.Fatalf("tamper: %v", err)
+	}
+
+	err := store.Read(ctx, func(tx *storage.Tx) error {
+		_, err := tx.RecordExists(ctx, "example", "ProductDecision", "PD-001")
+		return err
+	})
+	if err == nil {
+		t.Fatal("a tampered record satisfied the existence check")
+	}
+	if got := errs.CategoryOf(err); got != errs.CategoryIntegrity {
+		t.Fatalf("category = %s, want integrity (%v)", got, err)
+	}
+}
+
+// TestJournalReadValidatesTheEnvelope extends the compatibility boundary to
+// every read. The append path refuses an invalid envelope, so a stored event
+// carrying an unsupported schema_version was changed outside the application.
+// Before this, only callers that happened to feed the reducer noticed: a bare
+// `events list` handed the caller an event the system does not support.
+func TestJournalReadValidatesTheEnvelope(t *testing.T) {
+	ctx := context.Background()
+	store := openStore(t)
+	seedProjection(t, store)
+
+	if err := store.Read(ctx, func(tx *storage.Tx) error {
+		_, err := tx.ReadEvents(ctx, storage.EventQuery{ProjectID: "example"})
+		return err
+	}); err != nil {
+		t.Fatalf("read before tampering: %v", err)
+	}
+
+	// schema_version is not covered by the payload digest, so changing it
+	// leaves every integrity check that looks only at bytes satisfied.
+	if err := store.Write(ctx, func(tx *storage.Tx) error {
+		return tx.ExecWithoutImmutabilityForTest(ctx,
+			`UPDATE events SET schema_version = '99.0' WHERE seq = 1`)
+	}); err != nil {
+		t.Fatalf("tamper: %v", err)
+	}
+
+	err := store.Read(ctx, func(tx *storage.Tx) error {
+		_, err := tx.ReadEvents(ctx, storage.EventQuery{ProjectID: "example"})
+		return err
+	})
+	if err == nil {
+		t.Fatal("an event with an unsupported schema version was returned to a caller")
+	}
+}

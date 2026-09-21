@@ -41,15 +41,31 @@ func checkProductAuthorityRefs(
 			"requirement %s is confirmed from a product decision but names none", requirement.RequirementID)
 	}
 	ref := *requirement.Source.Ref
-	exists, err := tx.RecordExists(ctx, projectID, "ProductDecision", ref)
+	stored, err := tx.LatestRecord(ctx, projectID, "ProductDecision", ref)
 	if err != nil {
 		return err
 	}
-	if !exists {
+	if stored == nil {
 		return errs.New(errs.CategoryIntegrity,
 			"requirement %s is confirmed from product decision %s, which does not exist in project %s; "+
 				"a requirement cannot claim human authority from a decision nobody recorded",
 			requirement.RequirementID, ref, projectID)
+	}
+	// Existence is not enough: a withdrawn decision is one the human took
+	// back, so authority derived from it no longer holds. The reducer refuses
+	// the equivalent journal event (internal/state/discovery.go), and the two
+	// write paths must agree — a rule enforced on one path only is a rule a
+	// caller can choose to avoid.
+	var decision protocol.ProductDecision
+	if err := protocol.Unmarshal([]byte(stored.Document), &decision); err != nil {
+		return errs.Wrap(errs.CategoryIntegrity, err,
+			"product decision %s in project %s cannot be decoded", ref, projectID)
+	}
+	if decision.Status == protocol.ProductDecisionWithdrawn {
+		return errs.New(errs.CategoryIntegrity,
+			"requirement %s is confirmed from product decision %s, which was withdrawn; "+
+				"a withdrawn decision cannot carry human authority",
+			requirement.RequirementID, ref)
 	}
 	return nil
 }

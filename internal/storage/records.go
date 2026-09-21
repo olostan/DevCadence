@@ -169,7 +169,35 @@ func (t *Tx) LatestRecordVersion(ctx context.Context, projectID, kind, id string
 // It supports the high-value referential checks the control plane performs
 // between product-authority records, without becoming a general referential
 // engine.
+//
+// Existence is decided by reading the latest version through the same
+// digest-verifying path a caller would use, not by a bare MAX(record_version)
+// query. A row whose bytes changed outside the application must not be able to
+// satisfy a reference check that a read of the same row would refuse: an
+// authority check that accepts what the reader rejects is the weaker of the
+// two signals, and the strict one has to win (ADR-0002 §4b).
 func (t *Tx) RecordExists(ctx context.Context, projectID, kind, id string) (bool, error) {
+	stored, err := t.LatestRecord(ctx, projectID, kind, id)
+	if err != nil {
+		return false, err
+	}
+	return stored != nil, nil
+}
+
+// LatestRecord returns the highest-versioned record of the kind and id in the
+// project, or nil when the project has none. The returned record has been
+// digest-verified.
+func (t *Tx) LatestRecord(ctx context.Context, projectID, kind, id string) (*StoredRecord, error) {
 	version, err := t.LatestRecordVersion(ctx, projectID, kind, id)
-	return version > 0, err
+	if err != nil {
+		return nil, err
+	}
+	if version == 0 {
+		return nil, nil
+	}
+	stored, err := t.record(ctx, projectID, kind, id, version)
+	if err != nil {
+		return nil, err
+	}
+	return &stored, nil
 }

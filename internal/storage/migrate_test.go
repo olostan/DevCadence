@@ -3,6 +3,7 @@ package storage_test
 import (
 	"context"
 	"database/sql"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -152,5 +153,37 @@ func TestReadOnlyOpenRefusesAnUnmigratedDatabase(t *testing.T) {
 func TestOpenRequiresAPath(t *testing.T) {
 	if _, err := storage.Open(context.Background(), storage.Config{}); err == nil {
 		t.Fatal("opening with no path succeeded")
+	}
+}
+
+// TestReadOnlyOpenCreatesNothingOnDisk pins the read-only contract at the
+// filesystem, not merely at the migration step. Refusing migrations was never
+// enough: SQLite creates the database file when it opens it, so a typo in -db
+// left an empty database (and its -wal/-shm companions) behind while
+// reporting the project missing. A command that promises not to write must
+// leave the directory exactly as it found it.
+func TestReadOnlyOpenCreatesNothingOnDisk(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "never-created.db")
+
+	_, err := storage.Open(context.Background(),
+		storage.Config{Path: path, Clock: testsupport.NewClock(), ReadOnly: true})
+	if err == nil {
+		t.Fatal("a read-only open succeeded against a database that does not exist")
+	}
+	if got := errs.CategoryOf(err); got != errs.CategoryNotFound {
+		t.Fatalf("category = %s, want not_found (%v)", got, err)
+	}
+
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("read dir: %v", err)
+	}
+	if len(entries) != 0 {
+		names := make([]string, 0, len(entries))
+		for _, entry := range entries {
+			names = append(names, entry.Name())
+		}
+		t.Fatalf("a read-only open created %v", names)
 	}
 }
