@@ -2,6 +2,8 @@
 
 When a DevCadience MCP server is available for the active project:
 
+- When the human is still defining what to build, or product semantics are materially ambiguous, use the Discovery Principal skill before architecture.
+
 - Act as the frontier principal engineer, not the routine implementation worker.
 - Use DevCadience semantic MCP tools as the normal path for repository state, investigation, implementation, validation and review.
 - Do not casually ingest or edit the target source repository directly.
