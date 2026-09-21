@@ -13,16 +13,22 @@ flowchart LR
     M0["M0<br/>Normative baseline"]
     M1["M1<br/>Domain + state core"]
     M2["M2<br/>Repository execution"]
-    M3["M3<br/>Local agent runtime"]
-    M4["M4<br/>Semantic MCP + principal"]
+    M3["M3<br/>Environment intelligence<br/>+ cognition runtime<br/>+ guided bootstrap"]
+    M4A["M4A<br/>Semantic MCP<br/>+ principal hosts"]
+    M4B["M4B<br/>Project adoption<br/>+ retrospective reconstruction"]
     M5["M5<br/>Vertical slice proof"]
     M6["M6<br/>Reviews + consultants"]
     M7["M7<br/>Health/refactoring"]
     M8["M8<br/>Learning/evaluation"]
     M9["M9<br/>Autonomous campaigns"]
 
-    M0 --> M1 --> M2 --> M3 --> M4 --> M5 --> M6 --> M7 --> M8 --> M9
+    M0 --> M1 --> M2 --> M3 --> M4A --> M4B --> M5 --> M6 --> M7 --> M8 --> M9
 ```
+
+M3 is internally split into M3A (environment/cognition capability) and M3B
+(guided bootstrap). M4 is split into M4A (principal-host connectivity) and M4B
+(brownfield project adoption). These are milestone sub-phases, not new
+top-level numbering that shifts M5-M9.
 
 ## M0 — Normative architecture baseline
 
@@ -242,40 +248,129 @@ still passes).
   surface; a future milestone's agent runtime calls
   `internal/validation`/`internal/process` directly, not the CLI.
 
-## M3 — Local agent runtime
+## M3 — Environment intelligence, cognition runtime, and guided bootstrap
 
 ### Goal
-Use at least one local model for structured scouting and implementation.
 
-### Deliverables
-- local runtime adapter (Ollama or MLX-LM);
-- model capability profiles;
-- role prompts;
-- Scout structured output;
-- Implementer harness;
-- clean-context Reviewer harness;
-- structured output recovery.
+Make DevCadience adaptive to the machine and AI tooling it actually finds,
+rather than assuming strong local hardware, Ollama/MLX, one subscription, or a
+preinstalled principal host.
 
-### Verification
-- frozen synthetic tasks;
-- malformed output cases;
-- timeout/OOM behavior;
-- scout evidence provenance;
-- implementation bounded by worktree;
-- reviewer independence.
+Local-first means local control-plane/repository authority. Model inference may
+be local or remote according to capability, privacy, cost and policy.
 
-### Exit criterion
-Local agents can perform a small real repository change from a manually authored Work Package.
+### M3A — Environment intelligence + cognition runtime
 
-## M4 — Semantic MCP and frontier principal integration
+#### Deliverables
+- hardware/environment discovery:
+  - OS/distribution/architecture;
+  - CPU/RAM/storage;
+  - Apple/NVIDIA/AMD/Intel accelerator candidates;
+  - relevant device/runtime/permission facts;
+- local runtime discovery/adapters, initially including practical Ollama and
+  MLX-LM paths where supported;
+- actual acceleration verification through a real inference probe rather than
+  "GPU/runtime present" inference;
+- backend-candidate assessment (Metal/MLX, CUDA, ROCm, Vulkan, CPU fallback as
+  applicable);
+- CognitionEndpoint abstraction across:
+  - local runtimes;
+  - authenticated coding/agent CLIs;
+  - remote APIs;
+- endpoint health/auth/capability discovery;
+- measured capability profiles and lightweight microbenchmarks;
+- capability-based role routing;
+- privacy/source-exposure and cost-class inputs to routing;
+- support for no-local-model operation.
 
-### Goal
-Allow Antigravity/Gemini to operate only through compact semantic operations.
+#### Verification
+- blank machine fixture;
+- runtime absent;
+- runtime installed but CPU-only fallback;
+- supported acceleration verified empirically;
+- unsupported/uncertain ROCm with viable Vulkan candidate;
+- Apple Silicon native/accelerated path;
+- authenticated coding CLI discovered;
+- endpoint unhealthy/auth expired;
+- local-small usable while strong-local unavailable;
+- remote implementation selected only when policy permits;
+- no-local-model profile remains operational for deterministic/local control
+  plane capabilities.
 
-### Deliverables
+#### Exit criterion
+DevCadience can describe the machine and available cognition endpoints from
+observed evidence, verify local acceleration where configured, and route roles
+without assuming a strong local coder exists.
+
+### M3B — Guided bootstrap and onboarding
+
+#### Deliverables
+- `devcadience doctor`;
+- `devcadience setup`;
+- modular setup surfaces for hardware/inference/cognition/principal/auth;
+- dry-run setup/remediation plans;
+- structured SetupAction authority levels;
+- versioned install/remediation recipes;
+- safe optional package/runtime/model installation;
+- credential-reference abstraction;
+- discovery/reuse of existing authenticated provider/CLI sessions;
+- deployment-profile recommendation:
+  - local-heavy;
+  - hybrid-thin;
+  - cloud-cognition;
+  - offline;
+  - custom;
+- compact terminal UX using Huh v2 with Bubble Tea v2/Lip Gloss v2 where
+  richer dynamic rendering is needed;
+- SSH/local-terminal support plus accessible/plain/`--no-tui`/`--json`
+  operation;
+- setup verification/smoke tests.
+
+#### Verification
+- setup from a machine with no optional AI software installed;
+- dry-run shows every planned mutation;
+- privileged/high-impact changes require explicit approval;
+- interrupted setup can be re-run safely;
+- existing usable tools are preferred over unnecessary installation;
+- non-interactive mode emits no TUI control sequences;
+- SSH/TTY/basic terminal behavior;
+- readiness summary correctly reports reduced capability rather than generic
+  failure.
+
+#### Exit criterion
+A user new to local LLM tooling can start from an ordinary supported Mac/Linux
+machine and reach an explicit usable DevCadience deployment profile without
+having to understand accelerator stacks, model runtimes, or provider auth in
+advance.
+
+See [ENVIRONMENT_INTELLIGENCE_AND_ONBOARDING.md](ENVIRONMENT_INTELLIGENCE_AND_ONBOARDING.md),
+[MODEL_RUNTIME.md](MODEL_RUNTIME.md), ADR-0011.
+
+## M4 — Semantic principal integration and project adoption
+
+M4 is deliberately split so principal connectivity can be proven before the
+larger brownfield reconstruction workflow.
+
+### M4A — Semantic MCP + principal-host integration
+
+#### Goal
+Allow a frontier principal to operate through compact semantic operations
+without requiring direct repository browsing.
+
+Antigravity is the reference integration. Cursor and Visual Studio Code are
+the other initial first-class principal hosts. No one host is a core-domain
+dependency.
+
+#### Deliverables
 - stdio MCP adapter with no-argument `devcadience-mcp` launch contract;
-- versioned Antigravity plugin/configuration under `integrations/antigravity/`;
-- strict principal-workspace setup documentation;
+- host-neutral semantic principal contract;
+- PrincipalHost adapter boundary;
+- first-class integration support for:
+  - Antigravity;
+  - Cursor;
+  - Visual Studio Code;
+- host discovery/compatibility/configuration consumed from M3;
+- principal instructions/skills/rules;
 - project_state;
 - investigate;
 - create_work_package;
@@ -285,47 +380,155 @@ Allow Antigravity/Gemini to operate only through compact semantic operations.
 - review;
 - request_evidence;
 - accept/reject;
-- principal Skill/Rule package;
-- Discovery Principal skill/package;
-- Day-0 semantic MCP persistence operations (initialize_project, discovery_state, product decisions, requirements and readiness).
+- Discovery Principal semantic operations;
+- Day-0 persistence operations for product decisions, requirements and
+  readiness.
 
-### Verification
-- principal can initialize with ProjectState only;
-- repository is not required in principal workspace;
+Implementation may land host adapters sequentially, but M4A is not complete
+until the semantic contract is demonstrated on the reference host and at least
+one additional first-class host, proving host portability.
+
+#### Verification
+- principal initializes from compact ProjectState;
+- repository is not required in strict principal workspace mode;
 - targeted source evidence retrieval works;
 - unauthorized raw operations are not exposed;
-- stale state/work package rejected.
+- stale state/work package rejected;
+- Antigravity integration smoke test;
+- Cursor or VS Code portability proof through the same semantic contract;
+- blank-host setup can guide/configure a selected supported host.
 
-### Exit criterion
-Principal can plan one task without directly browsing the repository.
+#### Exit criterion
+A principal can plan and drive one task through the semantic interface without
+directly browsing the repository, and the core contract is demonstrably not
+Antigravity-specific.
+
+See [PRINCIPAL_HOSTS.md](PRINCIPAL_HOSTS.md),
+[ANTIGRAVITY_INTEGRATION.md](ANTIGRAVITY_INTEGRATION.md), and
+[MCP_API.md](MCP_API.md).
+
+### M4B — Project Adoption and Retrospective Reconstruction
+
+#### Goal
+Allow an existing repository with absent, stale, incomplete or arbitrary
+documentation to become a trustworthy DevCadience-managed project.
+
+Repository registration alone is not readiness.
+
+#### Deliverables
+- project-adoption state/workflow;
+- adoption source-commit pinning;
+- deterministic repository/document inventory;
+- broad existing-document harvest/classification;
+- source/test/schema/configuration contract discovery;
+- targeted Git-history archaeology;
+- ambiguity/contradiction ledger for brownfield evidence;
+- reconstruction provenance distinguishing:
+  - observed;
+  - documented;
+  - inferred;
+  - human-confirmed;
+  - reconstructed-confirmed;
+  - unknown;
+  - contradicted;
+  - accepted-risk;
+- mandatory canonical documentation baseline under
+  `docs/devcadience/` by default (or an explicitly configured committed
+  canonical root), including:
+  - VISION.md;
+  - REQUIREMENTS.md;
+  - ARCHITECTURE.md;
+  - INVARIANTS.md;
+  - SECURITY.md;
+  - TEST_STRATEGY.md;
+  - OPERATIONS.md;
+  - adr/README.md and applicable ADRs;
+- isolated adoption-baseline worktree/branch;
+- AdoptionDecision and Adoption Readiness Gate;
+- guard preventing normal managed implementation/acceptance/integration before
+  READY.
+
+Existing good native documentation should be preserved/referenced rather than
+rewritten merely for formatting consistency.
+
+#### Verification
+Synthetic brownfield repositories including:
+- no docs;
+- README only;
+- high-quality native docs;
+- stale docs contradicting code/tests;
+- tests revealing undocumented invariants;
+- recoverable historical rationale;
+- unrecoverable rationale;
+- human-authority product ambiguity;
+- required canonical artifact missing;
+- explicit NOT_APPLICABLE required artifact;
+- canonical docs generated but not committed;
+- source commit changes during reconstruction;
+- attempt to delegate normal implementation before READY;
+- successful READY transition after blockers close.
+
+#### Exit criterion
+DevCadience can take an imperfect existing repository, reconstruct an
+evidence-backed engineering contract, commit the mandatory canonical baseline,
+and refuse normal managed work until that baseline passes Adoption Readiness.
+
+See [PROJECT_ADOPTION.md](PROJECT_ADOPTION.md) and ADR-0012.
 
 ## M5 — Central hypothesis vertical slice
 
 ### Goal
-Test the idea that deep frontier design + compact evidence + local execution preserves quality while reducing frontier repository context.
+Test whether deep frontier design + compact evidence + lower-cost execution
+cognition preserves quality while reducing frontier repository context across
+different hardware/inference profiles and both greenfield and brownfield
+projects.
 
 ### Experiment
-Choose several real medium-complexity tasks in a target project.
 
-Compare:
+Use several real medium-complexity tasks and compare:
 
-**Baseline:** frontier coding agent directly handles repository.
+**Baseline:** frontier coding agent directly handles the repository.
 
-**DevCadience:** local scout -> principal design -> detailed Work Package -> local implement -> deterministic validation -> local independent review -> principal compact decision.
+**DevCadience:** deterministic/scout evidence -> principal design -> detailed
+Work Package -> isolated implementation worker -> deterministic validation ->
+independent review -> principal compact decision.
+
+The DevCadience path MUST be exercised under materially different profiles:
+
+1. **strong-local** — e.g. capable Apple Silicon/local coder;
+2. **hybrid-thin** — e.g. 32 GB-class Linux node with deterministic/local-small
+   work and economical remote implementation;
+3. **cloud-cognition/no-local-model** — local control plane and repository
+   authority with remote model cognition.
+
+The experiment must also cover:
+- a greenfield/DevCadience-native project path;
+- a brownfield repository that enters through M4B reconstruction and reaches a
+  committed Adoption Baseline before normal managed work.
 
 ### Measurements
 - accepted correctness;
 - human corrections;
 - frontier input/context usage;
-- local inference;
+- remote paid/quota cognition usage;
+- local inference usage;
+- source/context exposure to remote endpoints;
 - wall time;
 - retry count;
 - blueprint deviations;
 - reviewer defects found;
-- principal raw-source escalation frequency.
+- principal raw-source escalation frequency;
+- onboarding/setup interventions;
+- brownfield reconstruction decisions/unknowns;
+- whether protocol behavior changes across deployment profiles.
 
 ### Exit criterion
-DevCadience shows meaningful frontier context savings without unacceptable quality loss, and at least one task demonstrates useful independent review/escalation.
+DevCadience shows meaningful frontier context savings without unacceptable
+quality loss; at least one task demonstrates useful independent
+review/escalation; the same core engineering protocols operate under
+strong-local, hybrid-thin and no-local-model profiles; and an imperfect
+existing repository can be adopted into the mandatory canonical baseline
+before managed work begins.
 
 If not, stop and revise architecture.
 
