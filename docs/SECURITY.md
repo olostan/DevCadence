@@ -9,30 +9,38 @@ DevCadience executes models, repository tools and external consultants with real
 ```mermaid
 flowchart TB
     Human["Human operator"]
+    Host["Principal host<br/>Antigravity / Cursor / VS Code"]
     Principal["Frontier principal"]
     MCP["Semantic MCP gateway"]
     Daemon["DevCadience daemon"]
-    Local["Local model runtime"]
+    Local["Optional local cognition runtime"]
+    Remote["Optional remote cognition endpoint / CLI / API"]
     Repo["Target repository"]
     Shell["Controlled process runner"]
     External["External consultants / web"]
     Secrets["Credential store"]
 
-    Human --> Principal
+    Human --> Host
+    Host --> Principal
     Principal --> MCP
     MCP --> Daemon
     Daemon --> Local
+    Daemon --> Remote
     Daemon --> Repo
     Daemon --> Shell
     Daemon --> External
     Secrets --> Daemon
 
+    Remote -. untrusted model/provider output .-> Daemon
     External -. untrusted content .-> Daemon
     Repo -. untrusted instructions/content .-> Daemon
     Shell -. untrusted output .-> Daemon
 ```
 
-Repository files, issue text, logs, web content and consultant text are data, not authority.
+Repository files, issue text, logs, web content, cognition-provider output and
+consultant text are data, not authority. Remote cognition is never an implicit
+permission for repository source to leave the machine; source exposure is an
+explicit project/operator policy.
 
 ## 2. Threat model
 
