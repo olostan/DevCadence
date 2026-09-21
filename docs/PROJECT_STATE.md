@@ -414,3 +414,37 @@ flowchart LR
 ```
 
 Detailed discovery objects remain separate durable records. ProjectState carries a compact current projection.
+
+
+## 18. Review convergence projection
+
+ProjectState should expose compact active review-campaign state without embedding reviewer transcripts.
+
+Conceptual shape:
+
+~~~yaml
+review:
+  campaign_id: rc_...
+  candidate_commit: ...
+  phase: focused_revalidation
+  repair_round: 1
+  max_repair_rounds: 2
+  required_dimensions: [correctness, architecture]
+  completed_dimensions: [correctness, architecture]
+  findings:
+    blocking_open: 0
+    material_unadjudicated: 0
+    fix_now: 3
+    deferred: 2
+    rejected: 4
+    opportunistic: 5
+  closure_threshold: critical
+  residual_risk_refs: [R-...]
+  closure_decision_ref: null
+~~~
+
+Only compact counts/references belong in ProjectState. Raw reviewer outputs, consultant conversations, and repair transcripts remain evidence artifacts retrievable by reference.
+
+Once a campaign is frozen, current ProjectState should retain the closure reference and residual-risk handles rather than the full campaign history.
+
+See [REVIEW_AND_CONVERGENCE.md](REVIEW_AND_CONVERGENCE.md).
