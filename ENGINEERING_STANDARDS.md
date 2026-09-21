@@ -22,7 +22,11 @@ internal/
   workpackages/
   evidence/
   agents/
-  models/
+  cognition/
+  environment/
+  onboarding/
+  principalhosts/
+  adoption/
   consultants/
   repository/
   worktrees/
@@ -40,7 +44,11 @@ docs/
 Separate packages by durable responsibility, not by hypothetical deployment unit.
 
 The boundaries above are the target shape, not a checklist to create up front.
-As of M1 the implemented layout is:
+Package names for future M3/M4 subsystems are directional and should still be
+challenged against actual implementation boundaries when those milestones
+start.
+
+As of M2 the implemented layout is:
 
 ~~~text
 cmd/devcadience/            CLI adapter (no domain logic)
@@ -62,9 +70,10 @@ internal/
   validation/               validation-profile loading and execution (M2)
 ~~~
 
-Packages for future milestones (`agents`, `models`, `consultants`, `health`,
-`learning`, `policy`) are created when the milestone that needs them arrives.
-An empty package is not a boundary.
+Packages for future milestones (`agents`, `cognition`, `environment`,
+`onboarding`, `principalhosts`, `adoption`, `consultants`, `health`,
+`learning`, `policy`) are created only when the milestone that needs a real
+responsibility boundary arrives. An empty package is not a boundary.
 
 ## 2. Primary implementation language
 
@@ -440,7 +449,7 @@ Small synthetic Git repos that exercise:
 A tiny target repository where the full scout -> Work Package -> implement -> validate -> review path can be replayed.
 
 ### Evaluation suites
-Frozen trajectories used to compare prompts, local models, reviewers and routing policies.
+Frozen trajectories used to compare prompts, cognition endpoints, reviewers and routing policies.
 
 ## 19. Test doubles
 
@@ -460,27 +469,41 @@ The hard control-plane logic must be testable offline.
 Bound concurrency explicitly.
 
 The scheduler considers:
-- unified-memory pressure;
-- model load/unload cost;
+- unified-memory/VRAM/RAM pressure for local inference;
+- local model load/unload cost;
 - worktree exclusivity;
 - CPU/GPU contention;
 - test-suite resource conflicts;
-- provider quota.
+- remote-provider quota/rate limits;
+- source-exposure policy;
+- monetary cost class.
 
 Correctness beats throughput.
 
-## 21. Local model resource management
+## 21. Cognition endpoint resource management
 
-Model runtime adapters should expose:
+Local runtime adapters should expose, where supported:
 - loaded model;
+- verified acceleration/backend;
 - estimated/observed memory;
 - context configuration;
 - active sessions;
-- unload/load operations if supported.
+- unload/load operations.
 
-A 48 GB Apple Silicon target should preserve OS/tooling headroom rather than fill all unified memory with weights.
+Remote/API/CLI cognition adapters should expose, where supported:
+- endpoint/model identity;
+- readiness/auth state;
+- rate-limit/quota information;
+- context/tool capability;
+- cancellation/session state;
+- usage/cost metadata.
 
-Model scheduling policy is configuration, not hard-coded assumptions about one machine.
+A 48 GB Apple Silicon machine is a reference strong-local profile, not a
+bootstrap prerequisite. Local resource policy should preserve OS/IDE/build
+headroom instead of filling all available memory with weights.
+
+Cognition scheduling is capability/policy configuration, not a hard-coded
+assumption about one machine, runtime, provider or inference locality.
 
 ## 22. Security
 
