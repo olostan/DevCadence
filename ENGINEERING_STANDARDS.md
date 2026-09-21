@@ -55,12 +55,16 @@ internal/
   observability/            structured logging and correlation
   clock/ ids/ errs/         time, identifiers, error taxonomy
   testsupport/              deterministic harness and scenarios
+  repository/               Git repository registration and inspection (M2)
+  worktrees/                isolated Git worktree manager (M2)
+  process/                  controlled external-process runner (M2)
+  artifacts/                content-addressed artifact store (M2)
+  validation/               validation-profile loading and execution (M2)
 ~~~
 
-Packages for future milestones (`agents`, `models`, `consultants`,
-`repository`, `worktrees`, `validation`, `health`, `learning`, `policy`) are
-created when the milestone that needs them arrives. An empty package is not a
-boundary.
+Packages for future milestones (`agents`, `models`, `consultants`, `health`,
+`learning`, `policy`) are created when the milestone that needs them arrives.
+An empty package is not a boundary.
 
 ## 2. Primary implementation language
 

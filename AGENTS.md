@@ -291,11 +291,20 @@ them. What does not exist is the discovery *workflow*: nothing asks a
 question, runs an experiment or assesses readiness. That needs a model runtime
 (M3) and the MCP surface (M4).
 
-Six ADRs are accepted and normative; see
+M2 (repository, worktree and process execution) is also complete. DevCadience
+can now register a real Git repository, inspect it deterministically, create
+isolated per-attempt worktrees, run controlled external commands with
+explicit argv/cwd/environment/timeout, capture large evidence in a
+content-addressed artifact store, and execute validation profiles that
+produce the real M1 `ValidationResult`/`ValidationCompleted` pair — all
+without any model runtime. See
+[docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md#m2--repository-worktree-and-process-execution).
+
+Nine ADRs are accepted and normative; see
 [docs/README.md](docs/README.md#accepted-adrs).
 
-The next milestone is M2: repository registration, Git inspection, isolated
-worktrees, the controlled process runner and artifact capture.
+The next milestone is M3: a local model runtime adapter, role prompts, and
+the first structured Scout/Implementer/Reviewer harnesses.
 
 The overall implementation objective is not “build all of DevCadience.” It is to prove the central hypothesis with the smallest vertical slice:
 - canonical ProjectState;

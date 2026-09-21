@@ -254,7 +254,7 @@ Start here:
 | [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) | Milestones and bootstrap plan |
 | [docs/SETUP.md](docs/SETUP.md) | Proposed local setup and development environment |
 | [docs/adr/0000-template.md](docs/adr/0000-template.md) | Architecture Decision Record template |
-| [docs/adr/](docs/adr/) | Accepted ADRs (0001–0006 were decided during M1) |
+| [docs/adr/](docs/adr/) | Accepted ADRs (0001–0006 during M1, 0007–0009 during M2) |
 
 Machine-readable schema definitions live under [schemas/](schemas/). Frontier behavior sources include [skills/antigravity-discovery/](skills/antigravity-discovery/) for Day-0 specification work and [skills/antigravity-principal/](skills/antigravity-principal/) for architecture/delivery. The installable Antigravity adapter skeleton lives under [integrations/antigravity/devcadience/](integrations/antigravity/devcadience/). Local role templates are under [prompts/](prompts/) and an illustrative project policy is in [config/project.example.yaml](config/project.example.yaml).
 
@@ -339,11 +339,45 @@ make verify        # go vet ./... && go test ./... && schema validation
 make race          # the suite under the race detector
 ```
 
+## Operating on a real repository (M2)
+
+```bash
+# Inspect a repository (registration + deterministic Git facts; no mutation).
+bin/devcadience repo inspect -project demo -path /absolute/path/to/repo
+
+# Create an isolated worktree for one attempt, from an explicit base commit.
+bin/devcadience worktree create -project demo -repo /absolute/path/to/repo \
+  -task DC-001 -attempt att-1 -base "$(git -C /absolute/path/to/repo rev-parse HEAD)"
+
+bin/devcadience worktree list -project demo
+
+# Run one controlled command (no shell) against a working directory.
+bin/devcadience run -dir /absolute/path/to/repo/../worktrees/demo/DC-001/att-1 -- go build ./...
+
+# Execute a validation profile and persist a real ValidationResult +
+# ValidationCompleted, with matching digests, in one control-plane transaction.
+bin/devcadience validate -project demo -profile-file config/project.example.yaml \
+  -profile fast -dir /absolute/path/to/repo -commit <head-sha> -scope baseline
+
+# Deterministic candidate/diff/integration metadata, without touching main.
+bin/devcadience candidate show -project demo -repo /absolute/path/to/repo \
+  -base <base-sha> -head <head-sha>
+
+# Clean up (refuses a dirty worktree unless -force).
+bin/devcadience worktree cleanup -project demo -repo /absolute/path/to/repo -id DC-001/att-1
+```
+
+Every one of these is a thin adapter over `internal/repository`,
+`internal/worktrees`, `internal/process`, `internal/validation` and
+`internal/artifacts`; none of them contact a model runtime.
+
 ## Status
 
-DevCadience has completed **M0 (normative baseline)** and **M1 (domain core
-and canonical state)**: typed protocol records — including the Day-0 discovery
-and specification contracts — an append-only engineering event journal, a
+DevCadience has completed **M0 (normative baseline)**, **M1 (domain core and
+canonical state)** and **M2 (repository, worktree and process execution)**.
+
+M1 delivered typed protocol records — including the Day-0 discovery and
+specification contracts — an append-only engineering event journal, a
 deterministic ProjectState reducer, the task and attempt state machines,
 SQLite persistence with explicit migrations, JSON Schema validation tooling
 and a CLI.
@@ -353,8 +387,18 @@ current product intent is reconstructable from durable records. The discovery
 *workflow* that produces them — asking the questions, running the experiments,
 assessing readiness — is not part of M1.
 
-Everything above the control-plane core — repository and worktree execution,
-local model runtimes, the semantic MCP surface, consultants, health and
-learning — remains unimplemented and belongs to
-[M2 onward](docs/IMPLEMENTATION_PLAN.md).
+M2 delivered repository registration and deterministic Git inspection
+(`internal/repository`), an isolated per-attempt worktree manager
+(`internal/worktrees`), a controlled external-process runner with no shell
+and no implicit environment inheritance (`internal/process`), a
+content-addressed artifact store (`internal/artifacts`), and validation-
+profile execution that produces the real M1 `ValidationResult`/
+`ValidationCompleted` pair (`internal/validation`). DevCadience can now drive
+a real synthetic repository through a full attempt/candidate/validation cycle
+with no model runtime involved. See
+[docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md#m2--repository-worktree-and-process-execution).
+
+Everything above that — local model runtimes, the semantic MCP surface,
+consultants, health and learning — remains unimplemented and belongs to
+[M3 onward](docs/IMPLEMENTATION_PLAN.md).
 
