@@ -105,6 +105,16 @@ flowchart LR
 
 See [docs/LIFECYCLE.md](docs/LIFECYCLE.md).
 
+## Discovery before architecture
+
+DevCadience does not assume a human arrives with a complete specification. A dedicated **Discovery Principal** collaborates with the human, local evidence, current external research, experiments, and independent consultants to turn a fuzzy idea into a versioned ProblemModel and evidence-backed requirements.
+
+The Discovery Principal maintains an **Ambiguity Ledger**, asks only the highest-impact questions that require human authority, reflects its current interpretation back to the human, and runs an independent specification red-team before architecture begins.
+
+Architecture is gated by **Specification Readiness**: remaining unknowns must either be resolved or explicitly safe to defer.
+
+See [docs/DISCOVERY_AND_SPECIFICATION.md](docs/DISCOVERY_AND_SPECIFICATION.md).
+
 ## The most important artifact: Engineering Work Package
 
 A local coding model should receive more than a task title. For non-trivial work, the frontier principal produces a detailed Engineering Work Package containing:
@@ -213,6 +223,7 @@ Start here:
 | [ENGINEERING_STANDARDS.md](ENGINEERING_STANDARDS.md) | Coding, protocol, testing, and change-management standards |
 | [docs/README.md](docs/README.md) | Visual documentation map and recommended reading paths |
 | [docs/VISION.md](docs/VISION.md) | Product vision, goals, philosophy, success criteria |
+| [docs/DISCOVERY_AND_SPECIFICATION.md](docs/DISCOVERY_AND_SPECIFICATION.md) | Day-0 human collaboration, ambiguity resolution, requirements provenance, spec red-team and readiness |
 | [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md) | Functional/non-functional requirements and bootstrap acceptance |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | System architecture and component boundaries |
 | [docs/LIFECYCLE.md](docs/LIFECYCLE.md) | Day-0 through long-term project lifecycle |
@@ -233,7 +244,7 @@ Start here:
 | [docs/SETUP.md](docs/SETUP.md) | Proposed local setup and development environment |
 | [docs/adr/0000-template.md](docs/adr/0000-template.md) | Architecture Decision Record template |
 
-Machine-readable schema definitions live under [schemas/](schemas/). The reusable principal behavior source is under [skills/antigravity-principal/](skills/antigravity-principal/), while the installable Antigravity adapter skeleton lives under [integrations/antigravity/devcadience/](integrations/antigravity/devcadience/). Local role templates are under [prompts/](prompts/) and an illustrative project policy is in [config/project.example.yaml](config/project.example.yaml).
+Machine-readable schema definitions live under [schemas/](schemas/). Frontier behavior sources include [skills/antigravity-discovery/](skills/antigravity-discovery/) for Day-0 specification work and [skills/antigravity-principal/](skills/antigravity-principal/) for architecture/delivery. The installable Antigravity adapter skeleton lives under [integrations/antigravity/devcadience/](integrations/antigravity/devcadience/). Local role templates are under [prompts/](prompts/) and an illustrative project policy is in [config/project.example.yaml](config/project.example.yaml).
 
 ## Proposed implementation shape
 
