@@ -14,6 +14,7 @@ flowchart TB
     State["PROJECT STATE<br/>canonical memory"]
     Local["LOCAL AGENTS<br/>abundant cognition"]
     MCP["MCP API<br/>principal interface"]
+    AG["ANTIGRAVITY INTEGRATION<br/>concrete frontend setup"]
     Runtime["MODEL RUNTIME<br/>local compute"]
     Verify["VERIFICATION<br/>evidence + review"]
     Consult["CONSULTANTS<br/>cognitive diversity"]
@@ -32,6 +33,8 @@ flowchart TB
     Life --> Protocol
     Protocol --> State
     Protocol --> MCP
+    MCP --> AG
+    AG --> Principal
     MCP --> Local
     Local --> Runtime
     Local --> Verify
@@ -60,8 +63,9 @@ flowchart TB
 1. [PRINCIPAL_ENGINEER.md](PRINCIPAL_ENGINEER.md)
 2. [LIFECYCLE.md](LIFECYCLE.md)
 3. [PROTOCOLS.md](PROTOCOLS.md)
-4. [CONSULTANTS.md](CONSULTANTS.md)
-5. [../skills/antigravity-principal/SKILL.md](../skills/antigravity-principal/SKILL.md)
+4. [ANTIGRAVITY_INTEGRATION.md](ANTIGRAVITY_INTEGRATION.md)
+5. [CONSULTANTS.md](CONSULTANTS.md)
+6. [../integrations/antigravity/devcadience/skills/devcadience-principal/SKILL.md](../integrations/antigravity/devcadience/skills/devcadience-principal/SKILL.md)
 
 ### Working on local execution
 1. [LOCAL_AGENTS.md](LOCAL_AGENTS.md)
