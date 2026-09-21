@@ -90,6 +90,41 @@ Rejects candidate with reason and optional revision direction.
 ### `record_decision`
 Persists a DecisionRecord and links ADR/invariant updates.
 
+## 2A. Discovery tool set
+
+For Day-0 and product-semantic discovery, the semantic MCP surface should support:
+
+### `initialize_project`
+Creates a project before source implementation necessarily exists.
+
+### `discovery_state`
+Returns the current ProblemModel reference/summary, Ambiguity Ledger summary, requirements status, ProductDecisions, active experiments and latest SpecificationReadiness.
+
+### `record_problem_model`
+Persists a new immutable/versioned ProblemModel revision.
+
+### `record_ambiguities`
+Adds/updates ambiguity entries while preserving resolution history.
+
+### `record_product_decision`
+Persists a human-authoritative product decision and its consequences.
+
+### `record_requirements`
+Persists versioned requirements with provenance and epistemic status.
+
+### `record_discovery_experiment`
+Creates/updates a bounded discovery experiment and evidence references.
+
+### `review_specification`
+Schedules independent specification review dimensions through available local/consultant reviewers.
+
+### `record_specification_readiness`
+Persists the evidence-based readiness gate result.
+
+These operations are semantic persistence/orchestration tools. Antigravity remains responsible for the human conversation and synthesis.
+
+See [DISCOVERY_AND_SPECIFICATION.md](DISCOVERY_AND_SPECIFICATION.md).
+
 ## 3. Extended tools
 
 Later milestones may add:
