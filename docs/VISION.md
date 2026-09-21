@@ -290,3 +290,37 @@ DevCadience does not assume:
 
 The system exists precisely because every participant can be wrong.
 
+
+
+## 16. Discovery as frontier work
+
+DevCadience treats product disambiguation as one of the highest-leverage uses of frontier intelligence.
+
+The frontier principal should not simply transform the first human description into architecture. It collaborates with the human through an explicit Discovery & Specification loop:
+
+```mermaid
+flowchart LR
+    Human["Human intent"]
+    Principal["Discovery Principal"]
+    Ledger["Ambiguity Ledger"]
+    Research["Research / experiments"]
+    Critics["Independent consultants"]
+    Spec["Grounded Specification"]
+    Gate["Specification Readiness"]
+    Arch["Architecture"]
+
+    Human <--> Principal
+    Principal <--> Ledger
+    Principal <--> Research
+    Principal <--> Critics
+    Ledger --> Spec
+    Research --> Spec
+    Critics --> Spec
+    Spec --> Gate --> Arch
+```
+
+The principal must distinguish what only the human can decide from what can be established through tools, current sources, experiments or independent analysis.
+
+Long discovery is acceptable when the cost of implementing the wrong interpretation is high. The output is compressed, durable intelligence: ProblemModel, ProductDecisions, requirements with provenance, resolved ambiguity and an explicit readiness report.
+
+See [DISCOVERY_AND_SPECIFICATION.md](DISCOVERY_AND_SPECIFICATION.md).
