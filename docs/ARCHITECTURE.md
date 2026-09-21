@@ -253,6 +253,22 @@ Stores ProblemModel revisions, Ambiguity Ledger entries, ProductDecisions, requi
 
 It provides compact discovery state to frontier sessions and keeps raw conversation from becoming the sole product-memory mechanism.
 
+### 6.1B Project adoption service
+Owns brownfield retrospective reconstruction and the transition from a merely registered repository to a DevCadience-managed project.
+
+It coordinates:
+- repository/document inventory;
+- code/test/schema/history evidence;
+- ambiguity and contradiction tracking;
+- candidate canonical project documentation;
+- isolated adoption-baseline materialization;
+- Adoption Readiness;
+- the accepted source/baseline commit boundary.
+
+Registration alone does not imply readiness. Before adoption READY, normal managed implementation/acceptance/integration is gated.
+
+The required canonical baseline and workflow are defined in [PROJECT_ADOPTION.md](PROJECT_ADOPTION.md).
+
 ### 6.2 Engineering State Model
 A compact semantic representation of the current project. See [PROJECT_STATE.md](PROJECT_STATE.md).
 
