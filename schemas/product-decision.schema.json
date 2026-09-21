@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/olostan/DevCadience/schemas/product-decision.schema.json",
+  "title": "DevCadience ProductDecision",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "decision_id", "project_id", "question", "answer", "authority", "status", "consequences"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "decision_id": {"type": "string"},
+    "project_id": {"type": "string"},
+    "question": {"type": "string"},
+    "answer": {"type": "string"},
+    "authority": {"const": "human"},
+    "authority_actor": {"type": ["string", "null"]},
+    "status": {"enum": ["confirmed", "superseded", "withdrawn"]},
+    "source_ref": {"type": ["string", "null"]},
+    "consequences": {"type": "array", "items": {"type": "string"}},
+    "supersedes": {"type": ["string", "null"]},
+    "recorded_at": {"type": ["string", "null"], "format": "date-time"}
+  }
+}
