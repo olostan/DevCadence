@@ -6,7 +6,7 @@ This document defines the initial functional and non-functional requirements for
 
 ## 1. Product goals
 
-DevCadience MUST enable a frontier principal to guide software development using compact, evidence-backed project context while local agents perform repository-heavy implementation and verification.
+DevCadience MUST enable a frontier principal to guide software development using compact, evidence-backed project context while bounded execution workers perform repository-heavy implementation and verification. Worker cognition may be local or remote according to capability, privacy, cost and policy; repository authority, deterministic execution, evidence and canonical state remain under the local control plane.
 
 The system MUST cover both greenfield and evolving projects.
 
@@ -31,7 +31,7 @@ The system MUST record durable engineering state transitions sufficient to audit
 The system MUST expose semantic operations through MCP and/or equivalent API without requiring the principal to use generic filesystem/shell primitives.
 
 ### FR-005 — Repository investigation
-A local Scout MUST be able to answer targeted InvestigationRequests and return structured EvidencePackets with provenance.
+A Scout MUST be able to answer targeted InvestigationRequests and return structured EvidencePackets with provenance. The Scout may use deterministic repository tooling, local cognition, or a policy-authorized remote cognition endpoint; full raw repository context is not the default transport.
 
 ### FR-006 — Progressive evidence
 The principal MUST be able to request deeper evidence without receiving full raw repository context by default.
@@ -48,8 +48,8 @@ Autonomous implementation MUST execute in an isolated branch/worktree once workt
 ### FR-010 — Attempt lineage
 Every implementation run MUST create a distinct Attempt with model/profile, base revision, worktree, status and resulting commit/artifacts.
 
-### FR-011 — Local model runtimes
-The system MUST support at least one local runtime in the bootstrap release and MUST keep the adapter boundary compatible with multiple runtimes.
+### FR-011 — Cognition runtimes and endpoints
+The system MUST keep model/cognition adapters independent from core roles and MUST support capability-based routing across replaceable cognition endpoints. The bootstrap SHOULD support local inference, but a strong or even installed local LLM MUST NOT be required for otherwise valid control-plane operation.
 
 ### FR-012 — Deterministic validation
 The system MUST execute configured validation commands and capture immutable/traceable results.
@@ -72,8 +72,8 @@ Candidate acceptance MUST reference Work Package, deterministic validation, requ
 ### FR-018 — Integration
 The system MUST support integration validation after combining accepted changes.
 
-### FR-019 — Consultant abstraction
-The system SHOULD support replaceable frontier consultant adapters using normalized ConsultationRequest/Result records.
+### FR-019 — Optional consultant abstraction
+The system SHOULD support replaceable frontier consultant adapters using normalized ConsultationRequest/Result records. No individual consultant provider or paid subscription is required; absence of consultants reduces cognitive diversity rather than invalidating unrelated capabilities.
 
 ### FR-020 — Change impact classification
 The system MUST classify work as local, systemic or architectural, with risk able to promote process depth.
@@ -96,11 +96,11 @@ The system MUST capture sufficient structured trajectory data to evaluate agent/
 ### FR-026 — Lesson candidates
 The system MUST support LessonCandidate creation and governed promotion rather than direct self-modification.
 
-### FR-027 — Provider/model profiles
-The system MUST represent model/runtime capability profiles independently from role definitions.
+### FR-027 — Cognition capability profiles
+The system MUST represent cognition endpoint/model/runtime capability profiles independently from role definitions, including locality, health, structured-output/tool capability, privacy/exposure properties and cost class where applicable.
 
-### FR-028 — Resource management
-The local runtime layer SHOULD expose loaded-model and memory/resource state sufficient for safe scheduling.
+### FR-028 — Resource and endpoint management
+Local runtimes SHOULD expose loaded-model and memory/resource state sufficient for safe scheduling. Remote/authenticated cognition endpoints SHOULD expose enough health, availability and usage/cost metadata for policy-aware routing where the integration permits it.
 
 ### FR-029 — Auditability
 The system MUST answer why a candidate was accepted/rejected and which evidence supported the decision.
@@ -131,6 +131,39 @@ A frozen/adjudicated campaign MUST NOT reopen solely because another reviewer/mo
 
 ### FR-038 — Review context bounds
 Reviewer output volume, repair rounds, and handoff context MUST be policy-bounded. Implementers SHOULD receive consolidated repair guidance rather than full reviewer transcripts.
+
+### FR-039 — Environment discovery
+The system MUST be able to discover a blank machine's relevant OS, CPU, memory, storage, accelerator candidates and installed supported engineering/AI software without assuming vendor tools are already present.
+
+### FR-040 — Capability assessment
+The system MUST distinguish observed hardware/software facts from assessed capabilities and recommendations. Missing optional capability MUST be representable explicitly rather than collapsed into generic setup failure.
+
+### FR-041 — Guided bootstrap
+The system MUST support a guided bootstrap flow that can begin with no local LLM runtime, no principal host and no provider credentials; it SHOULD explain the recommended operating profile and the smallest changes needed to become more capable.
+
+### FR-042 — Verified inference acceleration
+A local inference backend MUST NOT be marked acceleration-ready solely because compatible hardware, drivers or runtime software exist. Setup MUST support an empirical inference probe that verifies the intended accelerator path.
+
+### FR-043 — Cognition endpoint discovery
+The system SHOULD detect supported installed/authenticated local runtimes, coding/agent CLIs and remote provider integrations and normalize them into capability-bearing cognition endpoints.
+
+### FR-044 — Principal-host portability
+The semantic principal interface MUST be host-independent. Principal-host-specific installation/configuration belongs behind replaceable host adapters/recipes.
+
+### FR-045 — Initial principal-host scope
+The initial first-class principal hosts are Antigravity, Cursor and Visual Studio Code. Antigravity is the reference integration; none of the three is a core-domain requirement. Additional hosts are future work.
+
+### FR-046 — Blank-host onboarding
+If no supported principal host is installed, setup MUST be able to present the supported host choices, guide installation/configuration of the user's selection, and allow the user to defer principal-host setup.
+
+### FR-047 — Credential references
+Configuration MUST reference credentials/authenticated integrations without persisting routine raw provider secrets in project configuration. Setup SHOULD reuse existing authenticated provider/CLI sessions when safe and supported.
+
+### FR-048 — Setup planning and approval
+Setup/remediation MUST expose planned mutating actions before execution. Privileged or high-impact actions require explicit user approval; hardware discovery and assessment remain read-only.
+
+### FR-049 — Guided terminal UX
+Interactive setup/doctor flows SHOULD provide a compact, colored terminal experience with selections, confirmations and status/progress feedback when useful, while preserving accessible, plain and machine-readable modes for SSH, scripts and CI.
 
 ## 2A. Discovery and specification requirements
 
@@ -212,8 +245,8 @@ External consultant/source access MUST be governed per project.
 ### NFR-001 — Correctness over latency
 Quality, reproducibility and bounded authority have priority over wall-clock latency.
 
-### NFR-002 — Local-first operation
-The control plane, repository, local agents and primary state store MUST be able to operate locally without a mandatory DevCadience cloud service.
+### NFR-002 — Local-first authority
+The control plane, repository/worktrees, deterministic execution substrate, evidence store and primary state store MUST be able to operate locally without a mandatory DevCadience cloud service. Model inference MAY be local or remote according to explicit project/operator policy.
 
 ### NFR-003 — Provider independence
 No core domain contract may require one LLM provider.
@@ -245,14 +278,23 @@ Core orchestration MUST be testable without live LLMs through deterministic fake
 ### NFR-012 — Single-machine bootstrap
 The initial system MUST run usefully on one developer machine.
 
-### NFR-013 — 48 GB Apple Silicon target
-The bootstrap local-model experience SHOULD work on a 48 GB unified-memory Apple Silicon machine while preserving OS/tool headroom.
+### NFR-013 — Heterogeneous hardware bootstrap
+A 48 GB unified-memory Apple Silicon machine remains a reference strong-local profile, but bootstrap MUST also support materially weaker machines, including 32 GB-class Linux hosts where strong local coding models are impractical. Hardware capability MUST influence routing rather than determine system validity.
 
 ### NFR-014 — Graceful model failure
 Model/runtime unavailability MUST produce explicit state, not silent task loss.
 
 ### NFR-015 — Data minimization
 External providers SHOULD receive the minimum source/context required by the authorized operation.
+
+### NFR-016 — Graceful capability degradation
+Unavailable optional models, accelerators, principal hosts, consultants or subscriptions MUST leave unrelated capabilities usable and explicitly report the reduced operating profile.
+
+### NFR-017 — Blank-machine onboarding
+The supported installation journey SHOULD start from an ordinary macOS or Linux machine with none of the optional AI runtimes/hosts configured.
+
+### NFR-018 — Interactive/non-interactive parity
+Terminal UI enhancements MUST NOT become the only way to configure or diagnose the system. Core setup/doctor operations must remain testable and automatable without an interactive terminal.
 
 ## 6. Quality attributes and architecture response
 
@@ -272,15 +314,17 @@ flowchart LR
 The architecture is not validated merely because the daemon starts.
 
 The bootstrap experiment MUST demonstrate:
-1. principal receives compact state;
-2. local scout explores a non-trivial repository;
+1. principal receives compact state through a supported principal host;
+2. a Scout explores a non-trivial repository through compact evidence retrieval;
 3. principal creates a detailed Work Package;
-4. local implementer executes in isolation;
+4. an implementation worker executes in isolation;
 5. deterministic validation runs;
 6. clean-context reviewer evaluates;
 7. contradiction/escalation can be represented;
 8. principal can accept/reject from compact evidence;
-9. token/context comparison can be measured against a direct cloud coding baseline.
+9. token/context comparison can be measured against a direct cloud coding baseline;
+10. the same core protocols remain usable under strong-local, hybrid-thin and no-local-model/cloud-cognition configurations;
+11. a blank-machine setup can discover capabilities and reach an explicit readiness profile without assuming Ollama, MLX, Antigravity or paid consultant subscriptions already exist.
 
 ## 8. Requirement evolution
 
