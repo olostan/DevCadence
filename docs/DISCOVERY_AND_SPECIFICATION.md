@@ -4,6 +4,8 @@
 
 This document defines DevCadience's Day-0 **Discovery & Specification subsystem**: the process that turns a fuzzy human idea into an evidence-backed, sufficiently unambiguous specification before architecture begins.
 
+This is primarily the prospective/greenfield product-discovery path. Existing repositories use the separate [Project Adoption and Retrospective Reconstruction](PROJECT_ADOPTION.md) workflow. Brownfield adoption reuses the same authority/provenance principles—ambiguity ledgers, human product authority, evidence-backed requirements and explicit readiness—but begins from repository reality and must materialize the mandatory canonical project documentation baseline before normal managed work.
+
 The goal is not to force every detail to be known. The goal is to prevent the engineering organization from silently resolving product ambiguity through accidental technical choices.
 
 ## 1. Core principle
@@ -646,3 +648,5 @@ Discovery is successful when a new principal session can read compact durable ar
 - why the remaining unknowns are safe to defer.
 
 Only then should architecture become the primary activity.
+
+For an existing repository, specification readiness alone is not sufficient to begin normal managed engineering work. Brownfield projects must additionally satisfy the Adoption Readiness Gate in [PROJECT_ADOPTION.md](PROJECT_ADOPTION.md), including a committed canonical documentation baseline.
