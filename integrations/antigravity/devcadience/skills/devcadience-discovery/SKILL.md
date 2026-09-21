@@ -78,3 +78,14 @@ Architecture begins only when remaining unknowns are architecture-safe to defer.
 Readiness is evidence coverage, not a numeric confidence score.
 
 Follow the full protocol in docs/DISCOVERY_AND_SPECIFICATION.md.
+
+
+## Review convergence
+
+Do not turn specification red-team into an unbounded consultant conversation.
+
+Run independent specification review dimensions against one candidate revision, synthesize material findings, revise once from the consolidated set, then use focused revalidation plus Specification Readiness.
+
+Optional/new equivalent opinions do not automatically reopen resolved discovery. Reopening requires a material gap, new evidence, or changed human intent.
+
+Use the general rules in docs/REVIEW_AND_CONVERGENCE.md.
