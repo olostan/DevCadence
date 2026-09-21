@@ -75,6 +75,9 @@ Examples:
 - EvidencePacket
 - ValidationResult
 - ReviewResult
+- ReviewCampaign
+- FindingDisposition
+- ClosureDecision
 - EscalationRequest
 - DecisionRecord
 - LessonCandidate
@@ -445,3 +448,25 @@ Protocol versioning must define:
 
 Stored historical trajectories cannot become unreadable after routine releases.
 
+
+
+## 27. Review convergence discipline
+
+Substantial review uses a bounded ReviewCampaign.
+
+Standards:
+- broad reviewers inspect one immutable candidate before repair where practical;
+- reviewer findings are normalized evidence, not direct implementation commands;
+- the principal/adjudicator deduplicates findings and records FindingDisposition;
+- all FIX_NOW findings for a round are consolidated into one Repair Work Package;
+- focused revalidation checks accepted repairs and regressions rather than restarting broad review;
+- the reopen threshold must not decrease as the campaign converges without explicit policy exception;
+- closure review reports only threshold-crossing issues;
+- a frozen campaign reopens only on materially new evidence or changed requirements;
+- reviewer finding count and repair rounds are policy-bounded;
+- hitting the repair-round bound with unresolved blockers escalates rather than continuing autonomously;
+- reviewer/consultant transcripts are stored by reference and are not copied into every subsequent model context.
+
+A zero-finding closure review is valid. Reviewers MUST NOT manufacture findings to demonstrate activity.
+
+See docs/REVIEW_AND_CONVERGENCE.md.
