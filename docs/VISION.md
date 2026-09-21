@@ -13,7 +13,7 @@ The system should be capable of supporting the entire life of a software project
 - assumptions are verified against current external knowledge and the repository;
 - architecture, invariants, contracts and milestones become durable artifacts;
 - frontier principals produce detailed Engineering Work Packages;
-- local agents implement, test, debug and review repeatedly;
+- bounded execution workers implement, test, debug and review repeatedly using local or policy-authorized remote cognition;
 - deterministic tools establish facts;
 - disagreements trigger additional cognition;
 - architectural decisions are preserved;
@@ -26,7 +26,7 @@ The system should be capable of supporting the entire life of a software project
 Three capabilities have converged:
 
 1. Frontier models can perform high-quality software design, research and multi-step reasoning, but repeated large-context coding trajectories are quota- or cost-intensive.
-2. Strong local coding models can run on modern personal hardware and perform useful repository-level implementation, debugging and review with negligible marginal token cost.
+2. Strong local coding models can run on some modern personal hardware, while smaller local models and economical remote cognition make the same control plane useful on substantially weaker machines.
 3. MCP, coding-agent harnesses, Git worktrees, structured outputs and provider CLIs make heterogeneous orchestration practical without owning every execution environment.
 
 The opportunity is to build the missing coordination layer.
@@ -35,7 +35,7 @@ The opportunity is to build the missing coordination layer.
 flowchart LR
     Frontier["Scarce frontier cognition<br/>deep design + current grounding"]
     Artifact["Compressed intelligence<br/>ADRs · invariants · pseudocode · Work Packages"]
-    Local["Abundant local cognition<br/>inspect · implement · review · retry"]
+    Local["High-volume cognition<br/>local or economical remote execution"]
     Evidence["Deterministic + independent evidence"]
     Frontier --> Artifact --> Local --> Evidence --> Frontier
 ```
@@ -46,18 +46,19 @@ DevCadience does not assume that frontier tokens are always paid per token. They
 
 The scarce resource is **frontier context and frontier invocation budget**.
 
-The abundant resources are:
-- local model tokens;
+The abundant/controllable resources are:
+- local model tokens when hardware permits;
+- economical remote cognition when policy permits;
 - wall-clock time;
 - deterministic compute;
 - repeated tests;
-- multiple independent local reviews.
+- multiple independent reviews.
 
 Therefore:
 - do not minimize valuable frontier thinking;
 - minimize unnecessary frontier ingestion of source/log repetition;
 - compress expensive cognition into durable small artifacts;
-- spend local compute freely to reduce uncertainty before escalation.
+- spend low-cost local or remote cognition freely when policy permits to reduce uncertainty before escalation.
 
 ## 4. Compressed intelligence
 
@@ -102,9 +103,9 @@ It is expected to:
 
 The principal is intentionally allowed to spend significant time thinking before implementation begins.
 
-## 7. Local organization
+## 7. Execution organization
 
-Local agents are not one generic worker.
+Execution workers are not one generic worker. They may be backed by local models, economical remote cognition endpoints, or deterministic tooling according to capability and policy.
 
 Roles include:
 - Repository Scout;
@@ -131,7 +132,7 @@ A consultant may be:
 - a specialized local model;
 - a static analysis or formal tool.
 
-Consultant policy determines when independent reasoning is worth the quota.
+Consultant policy determines when independent reasoning is worth the quota. No individual consultant subscription is required; the system should use compatible endpoints the operator actually has.
 
 Consultants are not “higher truth.” Their value is independent analysis and disagreement.
 
@@ -243,7 +244,7 @@ It stores trajectories and derives candidates such as:
 Candidates are evaluated and promoted under governance.
 
 Over time the system builds empirical knowledge such as:
-- which local model is best for Go implementation;
+- which available cognition endpoint is best for Go implementation under a given cost/privacy profile;
 - which reviewer catches API compatibility regressions;
 - which task shapes correlate with local failure;
 - when independent N-version implementation is worth the cost;
@@ -254,7 +255,7 @@ Over time the system builds empirical knowledge such as:
 ### Bootstrap success
 - principal consumes compact state/evidence rather than whole repository;
 - principal produces a detailed, grounded Work Package;
-- local model successfully implements several real tasks;
+- at least one configured implementation cognition path successfully implements several real tasks;
 - deterministic verification is trustworthy;
 - independent local review catches at least some seeded or natural defects;
 - contradictions can escalate cleanly;
@@ -273,9 +274,25 @@ A mature DevCadience instance can manage a medium/large project for long periods
 - keeping architecture coherent;
 - preserving decisions;
 - using frontier quota primarily for reasoning;
-- using local compute heavily for implementation/verification;
+- using low-cost cognition and deterministic compute heavily for implementation/verification;
 - surfacing only high-value decisions to humans;
 - learning from its own engineering history.
+
+## 14A. Adaptive deployment vision
+
+DevCadience should feel helpful before the user understands local-LLM tooling.
+
+A blank machine is a supported starting state. The system should discover hardware, installed AI tools, usable authentication and principal hosts; verify actual inference acceleration; recommend a deployment profile; and guide the operator through the smallest useful configuration.
+
+The same control-plane protocols should support:
+- strong-local workstations;
+- hybrid thin nodes using small local cognition plus remote implementation/review;
+- no-local-model systems with local repository authority and remote cognition;
+- offline deterministic operation with model-dependent roles unavailable.
+
+Antigravity, Cursor and Visual Studio Code are the initial first-class principal hosts. Antigravity is the reference integration, not an architectural dependency.
+
+See [ENVIRONMENT_INTELLIGENCE_AND_ONBOARDING.md](ENVIRONMENT_INTELLIGENCE_AND_ONBOARDING.md) and [PRINCIPAL_HOSTS.md](PRINCIPAL_HOSTS.md).
 
 ## 15. What we deliberately do not promise
 
