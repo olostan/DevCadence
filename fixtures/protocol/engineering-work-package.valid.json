@@ -1,0 +1,77 @@
+{
+  "schema_version": "1.0",
+  "work_package_id": "wp_000000000000000000000012",
+  "task_id": "tsk_00000000000000000000000C",
+  "version": 1,
+  "project_id": "example",
+  "project_state_revision": "ps_000000042",
+  "base_commit": "91acd8273f1",
+  "change_class": "systemic",
+  "objective": "Make event-journal reads support bounded time-range queries.",
+  "rationale": "The daily operator summary scans the whole journal, which grows without bound.",
+  "architectural_intent": "Keep the journal append-only and add a range predicate rather than a second index structure.",
+  "assumptions": [
+    {
+      "id": "A1",
+      "statement": "The journal exposes a monotonic sequence usable as a range key.",
+      "status": "verified",
+      "material": true,
+      "evidence_refs": ["ev_journal_schema"]
+    },
+    {
+      "id": "A2",
+      "statement": "No caller depends on the current unbounded read returning every event.",
+      "status": "unverified",
+      "material": true
+    }
+  ],
+  "decision_refs": ["dec_000000000000000000000001"],
+  "invariant_refs": ["DCI-053", "DCI-093"],
+  "evidence_refs": ["ep_000000000000000000000003"],
+  "scope": {
+    "in_scope": ["internal/storage event queries"],
+    "out_of_scope": ["Changing the event envelope", "Adding a second storage engine"],
+    "expected_components": ["control_plane"],
+    "prohibited_components": ["local_runtime"]
+  },
+  "implementation_strategy": "Extend EventQuery with an inclusive upper bound and translate it to a SQL predicate. Leave existing callers unchanged by treating zero as unbounded.",
+  "interfaces": [
+    "type EventQuery struct { ProjectID string; AfterSeq, UpToSeq int64 }"
+  ],
+  "pseudocode": [
+    "if q.UpToSeq > 0 { clauses = append(clauses, \"seq <= ?\"); args = append(args, q.UpToSeq) }"
+  ],
+  "repository_anchors": ["internal/storage/journal.go"],
+  "edge_cases": ["UpToSeq below AfterSeq must return an empty result, not an error."],
+  "failure_modes": ["A caller that forgets the bound silently reads the whole journal."],
+  "guidance": [
+    {
+      "id": "G1",
+      "strength": "MUST",
+      "statement": "The journal remains append-only; no read path may mutate events.",
+      "source_refs": ["DCI-053"]
+    },
+    {
+      "id": "G2",
+      "strength": "SHOULD",
+      "statement": "Zero means unbounded so that existing callers are unaffected."
+    },
+    {
+      "id": "G3",
+      "strength": "LOCAL_DISCRETION",
+      "statement": "Choose the clause construction style that matches the surrounding code."
+    }
+  ],
+  "acceptance_criteria": [
+    "A bounded read returns exactly the events within the range.",
+    "An unbounded read behaves as before."
+  ],
+  "validation_requirements": ["go test ./...", "go vet ./..."],
+  "escalation_conditions": [
+    "Assumption A2 turns out to be false.",
+    "The change would require altering the event envelope."
+  ],
+  "observability_requirements": ["Range reads log the bound as a correlation field."],
+  "migration": null,
+  "rollback": "Revert the query change; no durable data is affected."
+}

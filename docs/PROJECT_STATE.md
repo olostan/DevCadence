@@ -219,6 +219,80 @@ An Engineering Work Package references an explicit ProjectState revision and bas
 
 That allows detection of stale plans.
 
+### 7.1 Implemented identity (M1)
+
+Settled by [adr/0005-deterministic-project-state-identity.md](adr/0005-deterministic-project-state-identity.md).
+
+ProjectState is a **pure function of the event-journal prefix** it summarises:
+
+- `state_revision` is derived from the high-water mark: `ps_%09d` of the
+  journal sequence of the highest applied event. The revision and the
+  watermark therefore cannot disagree, and the consistency check in §15
+  ("state revision not matching journal high-water mark") holds structurally.
+- `event_high_watermark` is that same sequence as a decimal string.
+- `generated_at` is the `occurred_at` of the highest applied event, not a
+  wall-clock read. The same history always renders the same bytes, which is
+  what makes the §16 rebuild comparable rather than merely similar.
+- Staleness is a numeric comparison: a Work Package planned at `ps_000000004`
+  is older than current `ps_000000013`.
+- Historical revisions are **reconstructed on demand** by reducing the journal
+  prefix (`devcadience state show -project P -at N`) rather than stored. Only
+  the current revision is materialised.
+
+The accepted commit advances when integration validation passes, not when a
+change is accepted: an accepted candidate still has to survive the integration
+worktree (ARCHITECTURE.md §11).
+
+### 7.2 Task buckets
+
+`tasks.{ready,running,blocked,awaiting_principal}` are derived from task state
+by one mapping, defined in
+[adr/0004-canonical-task-state-machine.md](adr/0004-canonical-task-state-machine.md):
+
+| Task state | Buckets |
+| --- | --- |
+| `proposed` | — (untriaged) |
+| `scouting`, `running`, `validating`, `reviewing`, `integrating`, `integration_validating` | `running` |
+| `designing` | `awaiting_principal` |
+| `ready` | `ready` |
+| `accepted` | — (transient) |
+| `done` | — (reported through milestone progress and recent semantic changes) |
+| `blocked`, authority `principal` | `blocked` **and** `awaiting_principal` |
+| `blocked`, other authority | `blocked` |
+
+A task blocked on a principal decision appears in two buckets on purpose:
+`blocked` answers "what is stuck" and `awaiting_principal` answers "what is
+mine to unstick". Buckets list task **aliases** (`DC-012`), not opaque
+identifiers.
+
+### 7.3 Capabilities
+
+`capabilities` is a typed object with `local_models` and `consultants`, not a
+free-form map (ENGINEERING_STANDARDS.md §4). M1 leaves it empty; no model
+runtime exists until M3.
+
+### 7.3a Evidence lineage is checked, not carried
+
+ProjectState stays compact, so it carries no validation or review contents.
+The reducer keeps a private index of recorded evidence — for each validation
+and review id, only the task, attempt and candidate it belongs to — so that an
+acceptance can be checked against the evidence it cites without any of that
+reaching the principal's view. The full documents live in the record store
+behind their ids (DCI-011: compression must not destroy provenance).
+
+An acceptance is refused when it cites evidence that was never recorded,
+evidence belonging to another task or attempt, or integration evidence
+presented as evidence about an attempt's candidate. docs/OBSERVABILITY.md §13
+is the reason: an acceptance the system cannot explain means the acceptance
+mechanism is incomplete, and one citing ids that name nothing reads as
+justified while explaining nothing.
+
+### 7.4 Bounded current state
+
+`recent_semantic_changes` is capped (currently at ten, newest first) so that
+current state stays compact as history grows (§12). The complete history
+remains in the event journal.
+
 ## 8. Semantic recent changes
 
 Git diffs are too low-level for frontier incremental memory.
@@ -356,6 +430,13 @@ flowchart TD
 
 Bootstrap may implement only a subset, but the persistence architecture should preserve this direction.
 
+As of M1 this is implemented and tested: the materialised projection can be
+destroyed entirely and rebuilt from the journal alone, producing a
+byte-identical ProjectState. `devcadience state rebuild -project P` performs
+the recovery; `TestProjectionCanBeDestroyedAndRebuilt` proves it. Git facts
+and normative documents are not yet reducer inputs — M1 is
+repository-independent — so the accepted commit currently comes from recorded
+events rather than from inspecting a repository.
 
 ## 17. Discovery projection
 
@@ -415,6 +496,42 @@ flowchart LR
 
 Detailed discovery objects remain separate durable records. ProjectState carries a compact current projection.
 
+### 17.1 Implemented derivation
+
+`discovery` is reduced from the discovery events of ENGINEERING_STANDARDS.md
+§11, so FR-D-012 — a new principal session reconstructing current product
+intent from durable artifacts rather than a transcript — holds without the
+discovery workflow existing yet. Recording these events is M1; performing
+discovery is not.
+
+The derivation rules, each of which is a decision rather than a mechanical
+mapping:
+
+- **Material** means an open ambiguity whose `architectural_impact` is medium
+  or higher. §3 of [DISCOVERY_AND_SPECIFICATION.md](DISCOVERY_AND_SPECIFICATION.md)
+  defines materiality as the potential to alter architecture, and that is the
+  field grading it; a low-impact question is by definition unlikely to alter
+  architecture.
+- **Awaiting human** means an open ambiguity whose `resolution_authority` is
+  `human`. An open question only the human can settle is waiting on them, so
+  no separate status event is needed. `current_question_refs` lists exactly
+  those, in the order they were opened.
+- **Requirement counts** are by current epistemic status (DCI-015). Re-recording
+  a requirement replaces its status, so a promotion from proposed to confirmed
+  keeps one identity while the journal retains both statements.
+- **Active product decisions** are the `confirmed` ones; superseding a decision
+  marks the previous one superseded in the same event.
+- **A readiness verdict is withheld after the ProblemModel is revised.** The
+  verdict describes the revision it judged; a later revision changed the thing
+  assessed, so inheriting it would let architecture proceed on an assessment
+  nobody made (DCI-016). The reference is kept so the assessment stays
+  retrievable.
+- Experiment and review events are recorded but not projected: the schema's
+  `discovery` object carries no counts for them. The conceptual example above
+  shows more than the contract requires.
+
+The projection is omitted entirely until a discovery fact is recorded, so a
+project that never ran discovery carries no block of zeroes.
 
 ## 18. Review convergence projection
 
@@ -448,3 +565,27 @@ Only compact counts/references belong in ProjectState. Raw reviewer outputs, con
 Once a campaign is frozen, current ProjectState should retain the closure reference and residual-risk handles rather than the full campaign history.
 
 See [REVIEW_AND_CONVERGENCE.md](REVIEW_AND_CONVERGENCE.md).
+
+### 18.1 Shape in M1, behaviour in M6
+
+`review` is published in `schemas/project-state.schema.json` and has a typed
+counterpart, `protocol.ReviewConvergenceState`. Both exist in M1 so that the
+two representations accept the same documents: strict decoding rejects unknown
+fields (DCI-092), so a schema property with no Go field would mean the reducer
+refuses a document the schema calls valid.
+
+What M1 does **not** provide is any behaviour behind it. No event reduces into
+`review`, the control plane never populates it, and no campaign, finding
+disposition or closure decision is created — that is M6 (ADR-0010). A
+`ProjectState` rendered by this build therefore omits the block entirely.
+
+M6 fills it in by adding the events and the reduction; the shape it fills is
+already fixed here, which is the point. Only counts and references belong in
+it: reviewer transcripts, consultant conversations and repair histories stay
+evidence artifacts retrievable by reference, exactly as §1 requires for every
+other part of this state.
+
+The three campaign record schemas — `review-campaign`, `finding-disposition`
+and `closure-decision` — have no Go twin at all, and so cannot diverge from
+one. They are listed in `tests/schema_fixtures_test.go` as awaiting their M6
+implementation; an unlisted schema without a Go type still fails that test.

@@ -1,0 +1,10 @@
+{
+  "schema_version": "1.0",
+  "requirement_id": "req_000000000000000000000003",
+  "project_id": "example",
+  "kind": "functional",
+  "statement": "It would be nice if this worked.",
+  "strength": "WOULD_BE_NICE",
+  "status": "proposed",
+  "source": {"type": "principal_inference"}
+}

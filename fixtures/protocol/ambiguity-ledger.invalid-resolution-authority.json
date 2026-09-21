@@ -1,0 +1,19 @@
+{
+  "schema_version": "1.0",
+  "ambiguity_ledger_id": "al_000000000000000000000002",
+  "project_id": "example",
+  "revision": 1,
+  "entries": [
+    {
+      "id": "AQ-001",
+      "question": "What should happen here?",
+      "origin": "unclear",
+      "category": "general",
+      "resolution_authority": "vibes",
+      "architectural_impact": "low",
+      "cost_of_wrong_assumption": "low",
+      "why_it_matters": "It matters.",
+      "status": "open"
+    }
+  ]
+}

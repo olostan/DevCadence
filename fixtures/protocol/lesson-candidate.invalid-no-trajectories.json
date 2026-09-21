@@ -1,0 +1,11 @@
+{
+  "schema_version": "1.0",
+  "lesson_candidate_id": "lc_000000000000000000000003",
+  "scope": "global",
+  "type": "review_rule",
+  "observation": "A reviewer missed something once.",
+  "trajectory_refs": [],
+  "proposed_change": "Always do more review.",
+  "evaluation_plan": "None.",
+  "status": "proposed"
+}

@@ -4,12 +4,36 @@
   "title": "DevCadience ValidationResult",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "validation_id", "project_id", "attempt_id", "commit", "status", "checks"],
+  "required": ["schema_version", "validation_id", "project_id", "subject", "commit", "status", "checks"],
   "properties": {
     "schema_version": {"const": "1.0"},
     "validation_id": {"type": "string"},
     "project_id": {"type": "string"},
-    "attempt_id": {"type": "string"},
+    "subject": {
+      "description": "What this run validated. Each scope requires a different set of identifiers, which optional top-level fields could not express.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "properties": {
+        "kind": {"enum": ["attempt", "integration", "baseline"]},
+        "task_id": {"type": "string"},
+        "attempt_id": {"type": "string"}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"kind": {"const": "attempt"}}, "required": ["kind"]},
+          "then": {"required": ["task_id", "attempt_id"]}
+        },
+        {
+          "if": {"properties": {"kind": {"const": "integration"}}, "required": ["kind"]},
+          "then": {"required": ["task_id"], "not": {"required": ["attempt_id"]}}
+        },
+        {
+          "if": {"properties": {"kind": {"const": "baseline"}}, "required": ["kind"]},
+          "then": {"not": {"anyOf": [{"required": ["task_id"]}, {"required": ["attempt_id"]}]}}
+        }
+      ]
+    },
     "commit": {"type": "string"},
     "status": {"enum": ["pass", "fail", "error", "cancelled"]},
     "checks": {

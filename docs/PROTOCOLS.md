@@ -297,6 +297,28 @@ Retry does not overwrite the prior attempt.
 
 ValidationResult is produced by deterministic machinery where possible.
 
+**Subject.** A ValidationResult states what it validated through an explicit
+`subject` object rather than through optional top-level identifiers:
+
+| `subject.kind` | required | forbidden |
+| --- | --- | --- |
+| `attempt` | `task_id`, `attempt_id` | — |
+| `integration` | `task_id` | `attempt_id` |
+| `baseline` | — | `task_id`, `attempt_id` |
+
+`commit` is required for every scope: a run always validates some tree, and
+evidence that does not name what it is about cannot be read as covering
+anything in particular.
+
+The three scopes match `ValidationCompleted.scope` exactly, and the two share
+one enumeration (`protocol.ValidationScope`). A subject object rather than
+optional fields is what lets "required here, forbidden there" be stated at
+all: with bare optional fields, an integration result carrying an attempt id
+and an attempt result missing one are both merely absent-field cases, and
+neither the type nor the schema could reject them. The subject carries no
+integration identifier because `ValidationCompleted` has none either, and a
+field the event cannot corroborate could not be cross-checked.
+
 Each check includes:
 - check name/type;
 - exact command/tool;
@@ -313,7 +335,23 @@ A model may summarize the result, but the raw check is retained.
 
 ## 11. ReviewResult
 
-ReviewResult is model-assisted evidence.
+ReviewResult is model-assisted evidence **about an implementation candidate**,
+judged against the Engineering Work Package that governed the attempt. It
+therefore requires both `attempt_id` and `work_package_id`, and that linkage is
+mechanically proven rather than assumed:
+
+```
+ReviewCompleted.work_package_id == ReviewResult.work_package_id == Attempt.work_package_id
+```
+
+The first equality is checked in the control-plane transaction (the event and
+the record it summarises must agree); the second in the reducer (the record
+must be about the blueprint the attempt actually executed). No work-package
+*version* is carried on the event: the attempt already pins the exact version,
+and `ReviewResult` records only the id, so a version on the event could be
+checked against nothing.
+
+Specification reviews are a different record entirely; see §11a.
 
 Fields:
 - review dimension;
@@ -336,6 +374,28 @@ Possible dimensions:
 - concurrency;
 - API compatibility;
 - complexity/maintainability.
+
+## 11a. SpecificationReviewResult
+
+SpecificationReviewResult is independent evidence **about a specification**,
+produced during discovery — before an Engineering Work Package or an Attempt
+exists. It is deliberately not a ReviewResult: the two judge different
+artifacts at different times, and an implementation review record cannot
+represent a specification review without empty attempt and work-package
+fields that would make the two interchangeable again.
+
+It pins `problem_model_id` and `problem_model_revision`, because a verdict
+about revision 7 says nothing about revision 8.
+
+Its dimensions are the discovery vectors from `prompts/specification-reviewer.md`
+— `completeness`, `ambiguity`, `contradiction`, `architecture_contamination`,
+`security_privacy`, `failure_modes`, `operations`, `ux_mental_model` — not the
+implementation vectors of §11.
+
+Each finding carries a resolution authority and a recommended question, so a
+gap is routed to whoever can settle it (DCI-008), plus `blocks_readiness`. A
+`pass` verdict over a finding that blocks readiness is refused: the Design
+Readiness Gate must be passed by evidence, not by a summary.
 
 ## 12. DisagreementReport
 
@@ -459,6 +519,17 @@ Initial policy:
 
 Unknown fields must not be silently discarded when round-tripping durable records.
 
+The implemented policy, settled by
+[adr/0003-durable-record-compatibility.md](adr/0003-durable-record-compatibility.md),
+is **strict readers**: because every schema declares
+`additionalProperties: false`, an unrecognised field is refused rather than
+preserved or dropped, so loss cannot occur. Records are stored as the
+canonical bytes that were written, with a digest, so a record this build
+cannot interpret stays inspectable and verifiable. For an *optional* field, an
+absent key, an explicit `null` and the type's zero value are the same
+statement, and writers emit the shortest form. See
+[../schemas/README.md](../schemas/README.md) for the full policy.
+
 ## 19. Protocol anti-patterns
 
 Avoid:
@@ -479,7 +550,7 @@ Review convergence is represented by three durable objects.
 A bounded campaign around one immutable candidate lineage. It records candidate commit, Work Package/attempt identity, required review dimensions, thresholds, repair round, finding/disposition references, residual risks, and closure state.
 
 ### FindingDisposition
-The principal's adjudication of one reviewer finding. Every material finding is classified as blocking, material non-blocking, or opportunistic, then receives exactly one disposition: FIX_NOW, REJECT, DEFER, HUMAN_DECISION, or DUPLICATE.
+The principal's adjudication of one reviewer finding. Every adjudicated finding carries a `materiality` classification of `blocking`, `material_non_blocking`, or `opportunistic`, then receives exactly one disposition: FIX_NOW, REJECT, DEFER, HUMAN_DECISION, or DUPLICATE.
 
 A FIX_NOW disposition must answer why the issue belongs in the current milestone/campaign.
 

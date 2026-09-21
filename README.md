@@ -254,6 +254,7 @@ Start here:
 | [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) | Milestones and bootstrap plan |
 | [docs/SETUP.md](docs/SETUP.md) | Proposed local setup and development environment |
 | [docs/adr/0000-template.md](docs/adr/0000-template.md) | Architecture Decision Record template |
+| [docs/adr/](docs/adr/) | Accepted ADRs (0001–0006 were decided during M1) |
 
 Machine-readable schema definitions live under [schemas/](schemas/). Frontier behavior sources include [skills/antigravity-discovery/](skills/antigravity-discovery/) for Day-0 specification work and [skills/antigravity-principal/](skills/antigravity-principal/) for architecture/delivery. The installable Antigravity adapter skeleton lives under [integrations/antigravity/devcadience/](integrations/antigravity/devcadience/). Local role templates are under [prompts/](prompts/) and an illustrative project policy is in [config/project.example.yaml](config/project.example.yaml).
 
@@ -280,7 +281,80 @@ The first important experiment is intentionally narrow:
 
 If that hypothesis fails, the architecture must be revised before adding autonomous campaigns or self-improvement.
 
+## Running the control plane
+
+M1 is implemented, so the control plane can be built and driven locally. No
+model runtime is required and none is contacted.
+
+```bash
+go build -o bin/devcadience ./cmd/devcadience
+
+# Initialise a project. The database lives at
+# $DEVCADIENCE_HOME/state/control-plane.db (default ~/.devcadience); pass
+# -db to override it.
+bin/devcadience project init -id demo -name Demo   -milestone-id M1 -milestone-title "Domain core"
+
+bin/devcadience task create -project demo -alias DC-001   -title "Bounded journal reads" -class systemic
+
+bin/devcadience state show   -project demo      # canonical ProjectState
+bin/devcadience events list  -project demo      # the engineering journal
+bin/devcadience task show    -project demo -task DC-001
+bin/devcadience task states                     # the lifecycle
+bin/devcadience event types                     # the event vocabulary
+```
+
+Engineering events are appended as typed payloads, which is how a synthetic
+project is driven through its lifecycle:
+
+```bash
+bin/devcadience event append -project demo -type TaskDesignStarted   -task DC-001 -payload '{"reason":"initial design"}'
+```
+
+An event that references a durable record — a Work Package, a validation or a
+review result — is appended together with that record, in one transaction:
+
+```bash
+bin/devcadience event append -project demo -type ValidationCompleted -task DC-001 \
+  -payload '{"attempt_id":"att_1","validation_id":"val_1","scope":"attempt","status":"pass","commit":"cafebabe1234","record_digest":"sha256:..."}' \
+  -record @validation-result.json
+```
+
+The control plane refuses the event unless that record exists with the digest
+and the identity the payload claims, so the journal cannot assert that
+evidence exists when it does not. `-record` accepts inline JSON or `@file`,
+and the record may equally have been stored by an earlier command.
+
+The materialised state is derived, never authoritative. It can be destroyed
+and rebuilt from the journal alone:
+
+```bash
+bin/devcadience state rebuild -project demo
+bin/devcadience state show -project demo -at 4   # any historical revision
+```
+
+Verification:
+
+```bash
+make verify        # go vet ./... && go test ./... && schema validation
+make race          # the suite under the race detector
+```
+
 ## Status
 
-DevCadience is at **Day 0: protocol and architecture bootstrap**. The documentation in this repository is the initial normative baseline from which implementation should proceed.
+DevCadience has completed **M0 (normative baseline)** and **M1 (domain core
+and canonical state)**: typed protocol records — including the Day-0 discovery
+and specification contracts — an append-only engineering event journal, a
+deterministic ProjectState reducer, the task and attempt state machines,
+SQLite persistence with explicit migrations, JSON Schema validation tooling
+and a CLI.
+
+The discovery *records*, *events* and *state projection* are implemented, so
+current product intent is reconstructable from durable records. The discovery
+*workflow* that produces them — asking the questions, running the experiments,
+assessing readiness — is not part of M1.
+
+Everything above the control-plane core — repository and worktree execution,
+local model runtimes, the semantic MCP surface, consultants, health and
+learning — remains unimplemented and belongs to
+[M2 onward](docs/IMPLEMENTATION_PLAN.md).
 

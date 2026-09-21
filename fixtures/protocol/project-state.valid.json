@@ -1,0 +1,83 @@
+{
+  "schema_version": "1.0",
+  "project_id": "example",
+  "state_revision": "ps_000000042",
+  "generated_at": "2026-09-20T20:00:00.000000Z",
+  "event_high_watermark": "42",
+  "git": {
+    "accepted_commit": "91acd8273f1",
+    "branch": "main",
+    "dirty": false
+  },
+  "product": {
+    "vision_ref": "docs/VISION.md",
+    "current_outcome": "Prove compact frontier context plus local implementation can deliver real changes."
+  },
+  "milestone": {
+    "id": "M1",
+    "title": "Domain core and canonical state",
+    "status": "active",
+    "completed_tasks": 4,
+    "total_tasks": 11
+  },
+  "components": [
+    {
+      "id": "control_plane",
+      "responsibility": "Canonical state, task graph, event journal.",
+      "status": "active",
+      "contract_state": "evolving"
+    },
+    {
+      "id": "local_runtime",
+      "status": "planned",
+      "contract_state": "unknown"
+    }
+  ],
+  "tasks": {
+    "ready": ["DC-012", "DC-013"],
+    "running": ["DC-010"],
+    "blocked": ["DC-011"],
+    "awaiting_principal": ["DC-011", "DC-014"]
+  },
+  "active_invariants": ["DCI-001", "DCI-010", "DCI-020"],
+  "active_decisions": ["dec_000000000000000000000001"],
+  "validation": {
+    "status": "green",
+    "accepted_commit_verified": true,
+    "last_full_validation_id": "val_000000000000000000000007"
+  },
+  "health": {
+    "status": "green",
+    "known_debt": []
+  },
+  "risks": [
+    {
+      "id": "R-003",
+      "severity": "medium",
+      "statement": "Structured output reliability for the selected local runtime has not been measured.",
+      "evidence_refs": ["ev_runtime_probe"]
+    }
+  ],
+  "decisions_required": [
+    {
+      "id": "DR-005",
+      "question": "Use content-addressed filesystem artifacts or SQLite blobs during bootstrap?",
+      "authority": "principal"
+    }
+  ],
+  "recent_semantic_changes": [
+    {
+      "task_id": "DC-009",
+      "commit": "c81af6123ab",
+      "summary": "Task retry now creates immutable Attempt records."
+    }
+  ],
+  "capabilities": {
+    "local_models": [
+      {"profile": "local-strong-coder", "runtime": "mlx", "available": true}
+    ],
+    "consultants": [
+      {"name": "codex", "available": false}
+    ]
+  }
+}

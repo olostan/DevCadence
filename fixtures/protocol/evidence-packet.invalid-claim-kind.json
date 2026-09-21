@@ -1,0 +1,14 @@
+{
+  "schema_version": "1.0",
+  "evidence_packet_id": "ep_000000000000000000000004",
+  "project_id": "example",
+  "base_commit": "91acd8273f1",
+  "question": "Is the journal append-only?",
+  "claims": [
+    {"id": "C1", "kind": "gut_feeling", "statement": "Probably.", "evidence_refs": []}
+  ],
+  "counterevidence": [],
+  "disagreements": [],
+  "uncertainties": [],
+  "raw_evidence_refs": []
+}

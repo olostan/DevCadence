@@ -1,0 +1,45 @@
+{
+  "schema_version": "1.0",
+  "readiness_id": "sr_000000000000000000000001",
+  "project_id": "example",
+  "problem_model_id": "pm_000000000000000000000001",
+  "problem_model_revision": 3,
+  "checks": {
+    "problem_outcome": {
+      "status": "complete",
+      "notes": "Desired outcomes are stated and measurable.",
+      "evidence_refs": ["pm_000000000000000000000001"]
+    },
+    "primary_workflows": {
+      "status": "complete",
+      "notes": "One primary workflow; no others were identified as material.",
+      "evidence_refs": []
+    },
+    "scope_boundaries": {"status": "complete", "notes": null, "evidence_refs": []},
+    "architecture_sensitive_questions": {
+      "status": "accepted_risk",
+      "notes": "AQ-027 (rejected-candidate retention) remains open. Its safe deferral boundary is the first long autonomous campaign.",
+      "evidence_refs": ["al_000000000000000000000001"]
+    },
+    "security_privacy": {"status": "complete", "notes": "Local-only, single operator, no credentials handled.", "evidence_refs": []},
+    "material_external_facts": {"status": "not_applicable", "notes": "No external dependency claims are material here.", "evidence_refs": []},
+    "feasibility_assumptions": {
+      "status": "complete",
+      "notes": "Replay cost measured.",
+      "evidence_refs": ["exp_000000000000000000000001"]
+    },
+    "contradictions": {"status": "complete", "notes": "Two documentation contradictions resolved by ADR.", "evidence_refs": []},
+    "independent_reviews": {"status": "complete", "notes": "One adversarial critique pass recorded in the ADR.", "evidence_refs": []},
+    "human_reflection": {"status": "complete", "notes": "Human reviewed revision 2 of the problem model.", "evidence_refs": []}
+  },
+  "remaining_unknowns": [
+    {
+      "statement": "Whether operators prefer a text explanation or a rendered timeline.",
+      "architecture_safe_to_defer": true,
+      "boundary": "Only affects presentation; the durable records are the same either way."
+    }
+  ],
+  "review_refs": ["rev_000000000000000000000011"],
+  "verdict": "ready_with_explicit_risks",
+  "rationale": "Every gate is complete except the retention question, which is an accepted risk with a stated deferral boundary."
+}

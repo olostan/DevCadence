@@ -1,0 +1,11 @@
+{
+  "schema_version": "1.0",
+  "experiment_id": "exp_000000000000000000000002",
+  "project_id": "example",
+  "question": "Is it fast enough?",
+  "hypothesis": "Probably.",
+  "method": "Try it.",
+  "environment": "A laptop.",
+  "status": "went_fine",
+  "limitations": []
+}

@@ -1,0 +1,41 @@
+{
+  "schema_version": "1.0",
+  "project_id": "greenfield",
+  "state_revision": "ps_000000009",
+  "generated_at": "2026-09-20T11:15:00.000000Z",
+  "event_high_watermark": "9",
+  "git": {
+    "accepted_commit": null
+  },
+  "milestone": {
+    "id": "M0",
+    "title": "Discovery and specification",
+    "completed_tasks": 0,
+    "total_tasks": 0
+  },
+  "tasks": {
+    "ready": [],
+    "running": [],
+    "blocked": [],
+    "awaiting_principal": []
+  },
+  "validation": {
+    "status": "unknown"
+  },
+  "risks": [],
+  "decisions_required": [],
+  "discovery": {
+    "problem_model_id": "pm_000000000000000000000001",
+    "problem_model_revision": 3,
+    "ambiguity_ledger_id": "al_000000000000000000000001",
+    "open_material_ambiguities": 1,
+    "awaiting_human_ambiguities": 1,
+    "confirmed_requirements": 18,
+    "proposed_requirements": 3,
+    "material_assumptions_unverified": 0,
+    "active_product_decisions": 9,
+    "specification_readiness_verdict": "ready_with_explicit_risks",
+    "specification_readiness_ref": "sr_000000000000000000000001",
+    "current_question_refs": ["AQ-027"]
+  }
+}

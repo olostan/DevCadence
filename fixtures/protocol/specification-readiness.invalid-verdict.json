@@ -1,0 +1,20 @@
+{
+  "schema_version": "1.0",
+  "readiness_id": "sr_000000000000000000000002",
+  "project_id": "example",
+  "problem_model_id": "pm_000000000000000000000001",
+  "problem_model_revision": 1,
+  "checks": {
+    "problem_outcome": {"status": "complete"},
+    "primary_workflows": {"status": "complete"},
+    "scope_boundaries": {"status": "complete"},
+    "architecture_sensitive_questions": {"status": "complete"},
+    "security_privacy": {"status": "complete"},
+    "material_external_facts": {"status": "complete"},
+    "feasibility_assumptions": {"status": "complete"},
+    "contradictions": {"status": "complete"},
+    "independent_reviews": {"status": "complete"},
+    "human_reflection": {"status": "complete"}
+  },
+  "verdict": "looks_good"
+}

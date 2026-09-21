@@ -129,7 +129,47 @@
       "then": {
         "required": [
           "why_now"
+        ],
+        "properties": {
+          "why_now": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "else": {
+        "not": {
+          "required": [
+            "why_now"
+          ]
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "disposition": {
+            "const": "fix_now"
+          }
+        },
+        "required": [
+          "disposition"
         ]
+      },
+      "then": {
+        "properties": {
+          "repair_guidance": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "else": {
+        "not": {
+          "required": [
+            "repair_guidance"
+          ]
+        }
       }
     },
     {
@@ -146,7 +186,20 @@
       "then": {
         "required": [
           "duplicate_of"
-        ]
+        ],
+        "properties": {
+          "duplicate_of": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "else": {
+        "not": {
+          "required": [
+            "duplicate_of"
+          ]
+        }
       }
     },
     {
@@ -163,8 +216,47 @@
       "then": {
         "required": [
           "deferred_target",
-          "reconsideration_trigger"
-        ]
+          "reconsideration_trigger",
+          "accepted_risk_ref"
+        ],
+        "properties": {
+          "materiality": {
+            "const": "material_non_blocking"
+          },
+          "deferred_target": {
+            "type": "string",
+            "minLength": 1
+          },
+          "reconsideration_trigger": {
+            "type": "string",
+            "minLength": 1
+          },
+          "accepted_risk_ref": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "else": {
+        "not": {
+          "anyOf": [
+            {
+              "required": [
+                "deferred_target"
+              ]
+            },
+            {
+              "required": [
+                "reconsideration_trigger"
+              ]
+            },
+            {
+              "required": [
+                "accepted_risk_ref"
+              ]
+            }
+          ]
+        }
       }
     }
   ]

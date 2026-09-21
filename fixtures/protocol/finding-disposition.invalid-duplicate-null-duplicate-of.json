@@ -1,0 +1,13 @@
+{
+  "schema_version": "1.0",
+  "disposition_id": "fd_bad_002",
+  "campaign_id": "rc_001",
+  "finding_id": "finding_bad_002",
+  "severity": "medium",
+  "materiality": "material_non_blocking",
+  "disposition": "duplicate",
+  "rationale": "A duplicate disposition must point at the original finding.",
+  "duplicate_of": null,
+  "decided_by": "principal",
+  "recorded_at": "2026-09-21T00:00:00Z"
+}

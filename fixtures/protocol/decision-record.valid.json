@@ -1,0 +1,35 @@
+{
+  "schema_version": "1.0",
+  "decision_id": "dec_000000000000000000000001",
+  "project_id": "example",
+  "question": "Should large command output be stored in SQLite or in a content-addressed artifact store?",
+  "alternatives": [
+    {
+      "id": "sqlite_blob",
+      "summary": "Store stdout and stderr as blobs in the control-plane database.",
+      "benefits": ["One storage system", "Transactional with the event that references it"],
+      "risks": ["Database growth is unbounded", "Backups become expensive"],
+      "invalidators": ["Measured output sizes stay under a few kilobytes"]
+    },
+    {
+      "id": "artifact_store",
+      "summary": "Store output on the filesystem, content-addressed, referenced by digest.",
+      "benefits": ["Bounded database size", "Artifacts are immutable and verifiable"],
+      "risks": ["Two systems can diverge", "Requires a retention policy"],
+      "invalidators": ["Filesystem artifacts turn out to be routinely lost"]
+    }
+  ],
+  "selected": "artifact_store",
+  "criteria": ["bounded resource use", "auditability", "operability"],
+  "rationale": "Command output is large and append-only; keeping it out of the relational store keeps ProjectState queries fast and backups tractable, and a digest preserves verifiability.",
+  "evidence_refs": ["ev_output_sizes"],
+  "dissent": ["One reviewer preferred a single store for transactional simplicity."],
+  "unresolved_uncertainty": ["Retention policy for failed-attempt artifacts is not yet decided."],
+  "consequences": [
+    "Artifact references must carry a digest.",
+    "A retention policy is required before the first long campaign."
+  ],
+  "invariant_changes": [],
+  "supersedes": null,
+  "adr_ref": "docs/adr/0002-control-plane-persistence.md"
+}

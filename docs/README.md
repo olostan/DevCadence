@@ -67,6 +67,7 @@ flowchart TB
 3. [CONSULTANTS.md](CONSULTANTS.md)
 4. [PROTOCOLS.md](PROTOCOLS.md)
 5. [../prompts/specification-reviewer.md](../prompts/specification-reviewer.md)
+6. [adr/0001-discovery-specification-subsystem.md](adr/0001-discovery-specification-subsystem.md)
 
 ### Working on frontier/principal behavior
 1. [PRINCIPAL_ENGINEER.md](PRINCIPAL_ENGINEER.md)
@@ -90,12 +91,35 @@ flowchart TB
 2. [PROJECT_STATE.md](PROJECT_STATE.md)
 3. [MCP_API.md](MCP_API.md)
 4. [../schemas/README.md](../schemas/README.md)
+5. [adr/0003-durable-record-compatibility.md](adr/0003-durable-record-compatibility.md)
+6. [adr/0004-canonical-task-state-machine.md](adr/0004-canonical-task-state-machine.md)
+7. [adr/0005-deterministic-project-state-identity.md](adr/0005-deterministic-project-state-identity.md)
+
+### Working on persistence
+1. [ARCHITECTURE.md](ARCHITECTURE.md) §10
+2. [adr/0002-control-plane-persistence.md](adr/0002-control-plane-persistence.md)
+3. [adr/0006-identifiers-and-time.md](adr/0006-identifiers-and-time.md)
+4. [../ENGINEERING_STANDARDS.md](../ENGINEERING_STANDARDS.md) §10–§12
 
 ### Working on long-term quality
 1. [REFACTORING_AND_HEALTH.md](REFACTORING_AND_HEALTH.md)
 2. [LEARNING.md](LEARNING.md)
 3. [OBSERVABILITY.md](OBSERVABILITY.md)
 4. [../prompts/postmortem.md](../prompts/postmortem.md)
+
+## Accepted ADRs
+
+Accepted ADRs are normative and rank above the engineering standards in the
+hierarchy below.
+
+| ADR | Decision |
+| --- | --- |
+| [0001](adr/0001-discovery-specification-subsystem.md) | First-class discovery and specification subsystem |
+| [0002](adr/0002-control-plane-persistence.md) | SQLite persistence: pure-Go driver, append-only journal, derived projections |
+| [0003](adr/0003-durable-record-compatibility.md) | Strict readers, unknown-field behaviour, preserved original bytes |
+| [0004](adr/0004-canonical-task-state-machine.md) | Canonical task lifecycle, block semantics, ProjectState task buckets |
+| [0005](adr/0005-deterministic-project-state-identity.md) | ProjectState is a pure function of the event prefix |
+| [0006](adr/0006-identifiers-and-time.md) | ULID identifiers and injected clocks |
 
 ## Normative hierarchy
 

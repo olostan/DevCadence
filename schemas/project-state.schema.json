@@ -46,7 +46,10 @@
       ],
       "properties": {
         "accepted_commit": {
-          "type": "string",
+          "type": [
+            "string",
+            "null"
+          ],
           "minLength": 7
         },
         "branch": {
@@ -339,7 +342,51 @@
       }
     },
     "capabilities": {
-      "type": "object"
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "local_models": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "profile",
+              "available"
+            ],
+            "properties": {
+              "profile": {
+                "type": "string"
+              },
+              "runtime": {
+                "type": "string"
+              },
+              "available": {
+                "type": "boolean"
+              }
+            }
+          }
+        },
+        "consultants": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "name",
+              "available"
+            ],
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "available": {
+                "type": "boolean"
+              }
+            }
+          }
+        }
+      }
     },
     "discovery": {
       "type": "object",

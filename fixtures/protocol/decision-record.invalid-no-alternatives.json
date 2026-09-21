@@ -1,0 +1,12 @@
+{
+  "schema_version": "1.0",
+  "decision_id": "dec_000000000000000000000002",
+  "project_id": "example",
+  "question": "Should we do the obvious thing?",
+  "alternatives": [],
+  "selected": "the_obvious_thing",
+  "criteria": ["speed"],
+  "rationale": "It seemed right.",
+  "evidence_refs": [],
+  "consequences": []
+}

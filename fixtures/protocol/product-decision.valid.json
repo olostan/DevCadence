@@ -1,0 +1,17 @@
+{
+  "schema_version": "1.0",
+  "decision_id": "pd_000000000000000000000001",
+  "project_id": "example",
+  "question": "Must DevCadience work with no network access at all, or only without a DevCadience cloud service?",
+  "answer": "It must work with no network access at all during normal operation. External research and consultants are explicitly optional escalations.",
+  "authority": "human",
+  "authority_actor": "project_owner",
+  "status": "confirmed",
+  "source_ref": "AQ-031",
+  "consequences": [
+    "The control plane, its store and all validation must run offline.",
+    "Consultant and research adapters must degrade to an explicit unavailable state rather than blocking work."
+  ],
+  "supersedes": null,
+  "recorded_at": "2026-09-20T11:15:00.000000Z"
+}

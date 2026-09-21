@@ -39,6 +39,29 @@ docs/
 
 Separate packages by durable responsibility, not by hypothetical deployment unit.
 
+The boundaries above are the target shape, not a checklist to create up front.
+As of M1 the implemented layout is:
+
+~~~text
+cmd/devcadience/            CLI adapter (no domain logic)
+internal/
+  protocol/                 durable typed contracts (twin of schemas/)
+  events/                   event envelope, typed payloads, type registry
+  tasks/                    task and attempt state machines (pure)
+  state/                    event reducer and ProjectState materialisation
+  storage/                  SQLite: migrations, journal, records, projections
+  controlplane/             application services and transaction boundaries
+  schema/                   JSON Schema compilation and validation
+  observability/            structured logging and correlation
+  clock/ ids/ errs/         time, identifiers, error taxonomy
+  testsupport/              deterministic harness and scenarios
+~~~
+
+Packages for future milestones (`agents`, `models`, `consultants`,
+`repository`, `worktrees`, `validation`, `health`, `learning`, `policy`) are
+created when the milestone that needs them arrives. An empty package is not a
+boundary.
+
 ## 2. Primary implementation language
 
 Go is the preferred control-plane language because the project needs:
@@ -101,6 +124,13 @@ CI must eventually check:
 
 Do not edit only one side.
 
+This is enforced at runtime, not only in CI: a durable record is committed
+only after both its typed validation and its serialised document against the
+published schema pass, and a record kind with no registered schema cannot be
+persisted. The two checks are not redundant — constraints such as string
+`format` exist only in the schema, so Go validation alone would let a
+malformed timestamp become durable evidence.
+
 ## 6. Error handling
 
 Errors must preserve context while remaining machine-classifiable.
@@ -115,9 +145,20 @@ Use typed/sentinel categories for conditions the control plane needs to route:
 - ErrWorktreeConflict
 - ErrSchemaVersionUnsupported
 
+The implemented taxonomy in `internal/errs` adds the categories the control
+plane routes on today: `ErrInvalidTransition`, `ErrInvalidArgument`,
+`ErrNotFound`, `ErrConflict`, `ErrIntegrity` and `ErrInternal`. Errors match
+by category, so `errors.Is(err, errs.ErrNotFound)` holds regardless of
+message, and an error that did not originate in the taxonomy classifies as
+`internal` rather than silently acquiring a routable category.
+
 Human-readable messages supplement, not replace, machine-readable status.
 
-Do not use panics for expected runtime errors.
+Do not use panics for expected runtime errors. The single deliberate exception
+is a `crypto/rand` failure while generating identifiers: a process that cannot
+generate identifiers cannot produce durable records at all, and continuing
+would risk colliding IDs
+([ADR-0006](docs/adr/0006-identifiers-and-time.md)).
 
 ## 7. Context and cancellation
 
@@ -183,6 +224,19 @@ Suggested separation:
 
 Transactions must preserve state-machine invariants.
 
+Durable records are identified within their project. A semantic identifier
+chosen by a human or a principal — `PD-001`, `FR-018`, `wp_1` — will be chosen
+again by another project, so `project_id` is part of the record key and of
+every lookup. Opaque control-plane ULIDs (event, task, attempt) are globally
+unique by construction and are keyed globally. See
+[docs/adr/0002-control-plane-persistence.md](docs/adr/0002-control-plane-persistence.md).
+
+Persisted evidence is verified on read: every event payload and stored record
+is checked against its digest, and a mismatch is an integrity error rather
+than a successfully decoded value. Database-level immutability triggers stop
+the application from rewriting history; they do not cover a database modified
+outside it, and both have to hold.
+
 ## 11. Event model
 
 Important transitions emit durable events, for example:
@@ -216,9 +270,34 @@ Important transitions emit durable events, for example:
 
 Events are facts about transitions, not a dump of arbitrary model prose.
 
+The list above is illustrative. The implemented vocabulary additionally
+contains `MilestoneStarted`, `ComponentDeclared`, `DecisionRequired`,
+`RiskRecorded`, `RiskResolved`, `HealthReportRecorded`, `TaskScoutingStarted`,
+`TaskDesignStarted`, `AttemptFailed`, `IntegrationStarted` and
+`IntegrationValidationStarted` — each added because a documented ProjectState
+field or lifecycle transition had no event to derive it from; see
+[docs/adr/0004-canonical-task-state-machine.md](docs/adr/0004-canonical-task-state-machine.md).
+`devcadience event types` prints the current vocabulary.
+
+Every event listed above, the discovery ones included, is implemented and
+registered, and `tests/doc_drift_test.go` fails if this list ever names one
+that is not. Discovery events derive `ProjectState.discovery`; recording one
+does not perform discovery, which is a later milestone. `AmbiguityResolved`
+carries an outcome distinguishing an answered question from an explicitly
+deferred one, because a deferral is valid only behind a safe boundary
+(docs/DISCOVERY_AND_SPECIFICATION.md §5).
+
+Every event payload is a registered Go type. An unregistered event type cannot
+be appended, and a stored event this build does not recognize is reported
+rather than skipped
+([ADR-0003](docs/adr/0003-durable-record-compatibility.md)).
+
 ## 12. State machines
 
-Task states must be explicit and validated. An illustrative lifecycle:
+Task states must be explicit and validated.
+
+The canonical lifecycle is the one drawn in [docs/LIFECYCLE.md](docs/LIFECYCLE.md) §12
+and settled by [docs/adr/0004-canonical-task-state-machine.md](docs/adr/0004-canonical-task-state-machine.md):
 
 ~~~text
 PROPOSED
@@ -230,13 +309,23 @@ PROPOSED
  -> REVIEWING
  -> ACCEPTED
  -> INTEGRATING
+ -> INTEGRATION_VALIDATING
  -> DONE
 
 Any active state may move to BLOCKED.
+BLOCKED resumes only through DESIGNING, so unblocking is an explicit design act.
+VALIDATING returns to RUNNING for a failed candidate; REVIEWING returns to RUNNING
+for a requested repair. Both start a new Attempt.
 Retry creates a new Attempt under the same task rather than erasing history.
 ~~~
 
-Illegal transitions return errors and do not partially mutate state.
+The complete edge table, the block semantics and the ProjectState task-bucket
+mapping are in ADR-0004. `devcadience task states` prints the implemented
+machine.
+
+Illegal transitions return errors and do not partially mutate state. In the
+control plane this is enforced by the enclosing SQLite transaction: a refused
+transition commits neither the event nor the projection update.
 
 ## 13. Agent adapters
 

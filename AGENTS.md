@@ -277,9 +277,27 @@ Repeated failure should escalate rather than produce infinite retries.
 
 ## 16. Current phase
 
-The repository begins in **Day 0 / architecture bootstrap**.
+M0 (normative baseline) and M1 (domain core and canonical state) are complete.
+The control plane has typed protocol records, an append-only engineering event
+journal, a deterministic ProjectState reducer, task and attempt state
+machines, SQLite persistence with explicit migrations, schema validation and a
+CLI. No model runtime exists or is contacted.
 
-The first implementation objective is not “build all of DevCadience.” It is to prove the central hypothesis with the smallest vertical slice:
+The Day-0 discovery and specification contracts (ProblemModel,
+AmbiguityLedger, ProductDecision, Requirement, DiscoveryExperiment,
+SpecificationReadiness) have typed representations and persistence, the
+discovery events are registered, and `ProjectState.discovery` is reduced from
+them. What does not exist is the discovery *workflow*: nothing asks a
+question, runs an experiment or assesses readiness. That needs a model runtime
+(M3) and the MCP surface (M4).
+
+Six ADRs are accepted and normative; see
+[docs/README.md](docs/README.md#accepted-adrs).
+
+The next milestone is M2: repository registration, Git inspection, isolated
+worktrees, the controlled process runner and artifact capture.
+
+The overall implementation objective is not “build all of DevCadience.” It is to prove the central hypothesis with the smallest vertical slice:
 - canonical ProjectState;
 - local model adapter;
 - scout investigation;
