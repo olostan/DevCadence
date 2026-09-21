@@ -1,0 +1,30 @@
+# OS / editors
+.DS_Store
+.idea/
+.vscode/
+
+# Go
+bin/
+coverage.out
+
+# Python / MLX helper environments
+.venv/
+.venv-*/
+__pycache__/
+*.pyc
+
+# Runtime / local state
+.devcadience/
+artifacts/
+worktrees/
+*.db
+*.db-shm
+*.db-wal
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
