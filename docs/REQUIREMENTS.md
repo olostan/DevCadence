@@ -108,6 +108,44 @@ The system MUST answer why a candidate was accepted/rejected and which evidence 
 ### FR-030 — Human escalation
 Policies MUST be able to require human approval for selected risk classes and destructive actions.
 
+## 2A. Discovery and specification requirements
+
+### FR-D-001 — ProblemModel
+The system MUST represent a versioned ProblemModel containing outcomes, actors, workflows, scope, constraints, assumptions, unknowns and risks.
+
+### FR-D-002 — Ambiguity Ledger
+The system MUST represent unresolved product/specification ambiguity explicitly rather than relying on chat history.
+
+### FR-D-003 — Resolution authority
+Each material ambiguity MUST be classifiable by the authority best suited to resolve it: human, repository/tool, external research, experiment, consultant or principal synthesis.
+
+### FR-D-004 — Human product authority
+Human-authoritative product decisions MUST be persistable as ProductDecisions and MUST NOT be silently overridden by engineering agents.
+
+### FR-D-005 — Requirement provenance
+Requirements MUST record source/provenance and epistemic state such as confirmed, evidence-backed, proposed, assumed, deferred or rejected.
+
+### FR-D-006 — Adaptive questioning
+The Discovery Principal SHOULD prioritize high-impact questions dynamically and SHOULD NOT require a fixed questionnaire for all projects.
+
+### FR-D-007 — Human reflection
+The system SHOULD support periodic reflection of confirmed, proposed and open interpretations so the human can correct semantic drift.
+
+### FR-D-008 — External grounding
+Material current technical facts SHOULD be resolved through authoritative sources rather than human guesswork.
+
+### FR-D-009 — Discovery experiments
+Material empirical feasibility assumptions SHOULD be resolvable through bounded DiscoveryExperiments with explicit limitations.
+
+### FR-D-010 — Independent specification review
+Substantial specifications MUST support independent review dimensions including completeness, ambiguity, contradiction, security/privacy, failure modes and architecture contamination.
+
+### FR-D-011 — Specification Readiness Gate
+Architecture MUST NOT begin for substantial greenfield/product-semantic work until remaining material ambiguity is resolved, explicitly accepted as risk, or safely deferred behind a documented boundary.
+
+### FR-D-012 — Compact discovery memory
+A new principal session MUST be able to reconstruct current product intent from durable discovery artifacts without requiring the full original conversation transcript.
+
 ## 3. Principal cognition requirements
 
 ### FR-P-001 — Explicit assumptions

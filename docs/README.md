@@ -6,6 +6,7 @@ The documentation is intentionally split by durable concern so humans and agents
 flowchart TB
     Vision["VISION<br/>why this exists"]
     Req["REQUIREMENTS<br/>what it must do"]
+    Discovery["DISCOVERY & SPECIFICATION<br/>idea → grounded spec"]
     Inv["INVARIANTS<br/>what must never drift"]
     Arch["ARCHITECTURE<br/>durable boundaries"]
     Life["LIFECYCLE<br/>idea → design → delivery → health"]
@@ -25,7 +26,8 @@ flowchart TB
     Plan["IMPLEMENTATION PLAN"]
     Setup["SETUP"]
 
-    Vision --> Req
+    Vision --> Discovery
+    Discovery --> Req
     Req --> Inv
     Inv --> Arch
     Arch --> Life
@@ -58,6 +60,13 @@ flowchart TB
 5. [ARCHITECTURE.md](ARCHITECTURE.md)
 6. [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)
 7. [../AGENTS.md](../AGENTS.md)
+
+### Working on Day-0 discovery/specification
+1. [DISCOVERY_AND_SPECIFICATION.md](DISCOVERY_AND_SPECIFICATION.md)
+2. [../skills/antigravity-discovery/SKILL.md](../skills/antigravity-discovery/SKILL.md)
+3. [CONSULTANTS.md](CONSULTANTS.md)
+4. [PROTOCOLS.md](PROTOCOLS.md)
+5. [../prompts/specification-reviewer.md](../prompts/specification-reviewer.md)
 
 ### Working on frontier/principal behavior
 1. [PRINCIPAL_ENGINEER.md](PRINCIPAL_ENGINEER.md)

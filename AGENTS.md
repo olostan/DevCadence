@@ -71,6 +71,21 @@ For non-trivial decisions the principal must:
 
 The principal must assume it can be confidently wrong.
 
+## 4A. Product discovery and specification
+
+When work begins from a fuzzy idea or changes user-visible/product semantics, read [docs/DISCOVERY_AND_SPECIFICATION.md](docs/DISCOVERY_AND_SPECIFICATION.md) and apply its protocol before architecture.
+
+Agents must:
+- preserve human authority for goals, preferences and acceptable tradeoffs;
+- expose ambiguity rather than silently invent requirements;
+- resolve factual uncertainties with tools/research/experiments when appropriate;
+- record ProductDecisions and requirement provenance;
+- use the Ambiguity Ledger for material unknowns;
+- require Specification Readiness before substantial architecture;
+- use independent specification review for substantial greenfield/product-semantic work.
+
+Do not turn a fixed questionnaire into a substitute for adaptive discovery.
+
 ## 5. The first plausible solution is not enough
 
 For systemic or architectural changes, do not accept the first coherent design. At minimum:

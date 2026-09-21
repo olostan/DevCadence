@@ -421,3 +421,66 @@ the recovery; `TestProjectionCanBeDestroyedAndRebuilt` proves it. Git facts
 and normative documents are not yet reducer inputs — M1 is
 repository-independent — so the accepted commit currently comes from recorded
 events rather than from inspecting a repository.
+
+## 17. Discovery projection
+
+ProjectState should include a compact discovery projection when a project is in Day-0 or when product-semantic discovery is active.
+
+It should not inline every requirement or ambiguity. It should expose enough state for a new principal session to know where discovery stands.
+
+Conceptual shape:
+
+```yaml
+discovery:
+  problem_model:
+    id: pm_...
+    revision: 7
+  ambiguity:
+    ledger_id: al_...
+    open_material: 2
+    awaiting_human: 1
+    researching: 1
+  requirements:
+    confirmed: 18
+    evidence_backed: 4
+    proposed: 3
+    assumed_material: 0
+  product_decisions:
+    active: 9
+  experiments:
+    running: 1
+    completed: 3
+  specification_readiness:
+    verdict: not_ready
+    latest_ref: sr_...
+  current_questions:
+    - AQ-027
+    - AQ-031
+```
+
+```mermaid
+flowchart LR
+    PM["ProblemModel"]
+    AL["Ambiguity Ledger"]
+    PD["ProductDecisions"]
+    R["Requirements"]
+    E["Discovery Experiments"]
+    SR["Specification Readiness"]
+    Reduce["Discovery state projection"]
+    PS["ProjectState"]
+
+    PM --> Reduce
+    AL --> Reduce
+    PD --> Reduce
+    R --> Reduce
+    E --> Reduce
+    SR --> Reduce
+    Reduce --> PS
+```
+
+Detailed discovery objects remain separate durable records. ProjectState carries a compact current projection.
+
+The `discovery` field is present in `schemas/project-state.schema.json` and is
+reduced from discovery events. M1 implements the control-plane core only: the
+Go `ProjectState` type carries the field, and the reducer leaves it unset
+until the discovery subsystem exists.

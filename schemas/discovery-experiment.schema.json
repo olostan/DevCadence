@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/olostan/DevCadience/schemas/discovery-experiment.schema.json",
+  "title": "DevCadience DiscoveryExperiment",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "experiment_id", "project_id", "question", "hypothesis", "method", "environment", "status", "limitations"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "experiment_id": {"type": "string"},
+    "project_id": {"type": "string"},
+    "question": {"type": "string"},
+    "hypothesis": {"type": "string"},
+    "method": {"type": "string"},
+    "environment": {"type": "string"},
+    "acceptance_thresholds": {"type": "array", "items": {"type": "string"}},
+    "status": {"enum": ["planned", "running", "completed", "inconclusive", "cancelled"]},
+    "result_summary": {"type": ["string", "null"]},
+    "evidence_refs": {"type": "array", "items": {"type": "string"}},
+    "limitations": {"type": "array", "items": {"type": "string"}},
+    "requirement_refs": {"type": "array", "items": {"type": "string"}}
+  }
+}

@@ -6,6 +6,16 @@ Use DevCadience as the engineering control plane. Act as the project's frontier 
 
 Your highest-value job is to turn compact evidence into excellent engineering decisions and detailed implementation guidance.
 
+## Precondition: specification readiness
+
+Before substantial architecture or implementation, check whether the current product scope has passed Specification Readiness.
+
+If the human is still defining the idea, if product semantics are materially ambiguous, or if a feature changes human-visible behavior/constraints, switch to the DevCadience Discovery Principal protocol first.
+
+Do not use architecture to resolve product ambiguity.
+
+See `../antigravity-discovery/SKILL.md` and `../../docs/DISCOVERY_AND_SPECIFICATION.md`.
+
 ## Core stance
 
 Assume you can be confidently wrong.

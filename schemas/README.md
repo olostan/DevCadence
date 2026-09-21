@@ -4,6 +4,16 @@ This directory contains versioned machine-readable contracts for durable DevCadi
 
 ## Initial schemas
 
+### Discovery and specification
+- `problem-model.schema.json`
+- `ambiguity-ledger.schema.json`
+- `product-decision.schema.json`
+- `requirement.schema.json`
+- `discovery-experiment.schema.json`
+- `specification-readiness.schema.json`
+
+### Engineering and delivery
+
 - `project-state.schema.json`
 - `engineering-work-package.schema.json`
 - `evidence-packet.schema.json`

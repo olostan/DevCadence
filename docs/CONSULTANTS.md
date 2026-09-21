@@ -62,6 +62,28 @@ Consultant examines a material disagreement among local reviewers or between evi
 ### External-grounding verification
 Consultant with suitable web/source capability checks current technical claims, but source evidence should still be preserved.
 
+## 3A. Discovery consultant roles
+
+Consultants are valuable before architecture because they can identify questions the primary principal failed to ask.
+
+Useful Day-0 roles include:
+- **Product Critic** — missing users, workflows, outcomes and value assumptions;
+- **Architecture-Precursor Critic** — ambiguities whose answers materially change system structure;
+- **Security/Privacy Critic** — data use, retention, identity, authority and abuse ambiguity;
+- **Failure-Mode Critic** — undefined behavior under failure;
+- **Operations/Scale Critic** — hidden workload, deployment and maintenance assumptions;
+- **UX/Mental-Model Critic** — expectations a user may reasonably have but the specification does not define;
+- **Simplicity Critic** — requirements likely to create unnecessary complexity;
+- **Domain Researcher** — current ecosystem facts and standards.
+
+A strong discovery prompt is often:
+
+> Given this idea, verified facts and known constraints, what are the most consequential questions that must be answered before architecture, and who should resolve each one?
+
+The principal should deduplicate and prioritize the resulting questions rather than forwarding them wholesale to the human.
+
+See [DISCOVERY_AND_SPECIFICATION.md](DISCOVERY_AND_SPECIFICATION.md).
+
 ## 4. Anti-anchoring sequence
 
 ```mermaid

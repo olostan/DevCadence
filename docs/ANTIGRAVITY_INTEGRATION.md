@@ -274,6 +274,22 @@ Its core objective is:
 
 > maximize the quality and durability of frontier reasoning while minimizing low-value frontier context ingestion.
 
+## 8A. Discovery Principal skill
+
+The plugin also packages `devcadience-discovery`, used before architecture for greenfield ideas and product-semantic changes.
+
+It instructs Antigravity to:
+- avoid immediate architecture;
+- maintain ProblemModel and Ambiguity Ledger;
+- ask small batches of high-impact human questions;
+- resolve non-human questions through repository evidence, current research, experiments and consultants;
+- periodically reflect CONFIRMED / PROPOSED / OPEN understanding;
+- record ProductDecisions and requirement provenance;
+- run independent specification red-team reviews;
+- pass Specification Readiness before entering architecture.
+
+Antigravity should select the discovery skill when the human is defining what to build, and the principal-engineer skill when the specification is ready for architecture/delivery. Both may be active during product-semantic change analysis.
+
 ## 9. Rule behavior
 
 The plugin rule is an always-applicable principal boundary in plugin deployments.
@@ -403,11 +419,19 @@ sequenceDiagram
     participant C as Consultants
 
     H->>P: idea / desired outcome
-    P->>P: problem framing + external research
+    P->>P: activate Discovery Principal skill
+    P->>D: initialize_project
+    P->>P: problem framing + ambiguity discovery
+    P->>D: record ProblemModel / Ambiguity Ledger
+    P->>P: ask highest-impact human questions
+    P->>P: external research / experiments as needed
     P->>D: record discovery state
     P->>C: independent analyses
     C-->>P: alternatives / critiques
-    P->>P: synthesize architecture
+    P->>P: synthesize Specification Candidate
+    P->>D: review_specification
+    P->>D: record SpecificationReadiness
+    P->>P: only then enter architecture
     P->>D: DecisionRecords + baseline specs/invariants
     P->>D: milestone plan
     P->>D: first Work Packages

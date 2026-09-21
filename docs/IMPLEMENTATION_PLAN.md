@@ -62,7 +62,11 @@ Implement model-independent control-plane primitives.
 
 ### Deliverables
 - Go module and CLI skeleton — `cmd/devcadience`;
-- protocol/domain types — `internal/protocol`;
+- protocol/domain types, including discovery/specification records —
+  `internal/protocol`;
+- ProblemModel/AmbiguityLedger/ProductDecision/Requirement/DiscoveryExperiment/
+  SpecificationReadiness persistence foundations — the immutable record store
+  in `internal/storage` plus their typed representations;
 - SQLite migration framework — `internal/storage`;
 - engineering event journal — `internal/events`, `internal/storage`;
 - ProjectState reducer/materialized view — `internal/state`;
@@ -183,7 +187,9 @@ Allow Antigravity/Gemini to operate only through compact semantic operations.
 - review;
 - request_evidence;
 - accept/reject;
-- principal Skill/Rule package.
+- principal Skill/Rule package;
+- Discovery Principal skill/package;
+- Day-0 semantic MCP persistence operations (initialize_project, discovery_state, product decisions, requirements and readiness).
 
 ### Verification
 - principal can initialize with ProjectState only;
@@ -237,7 +243,9 @@ Add cognitive diversity where it has leverage.
 - consultant abstraction;
 - at least one external consultant adapter;
 - anti-anchoring independent-consultation mode;
-- Design Readiness Gate.
+- Design Readiness Gate;
+- independent specification-review dimensions and consultant-assisted ambiguity discovery;
+- Specification Readiness evaluation using local/consultant review evidence.
 
 ### Verification
 - seeded defect suite;

@@ -218,7 +218,15 @@ Transactions must preserve state-machine invariants.
 
 Important transitions emit durable events, for example:
 - ProjectInitialized
+- ProblemModelRevised
+- AmbiguityOpened
+- AmbiguityResolved
+- ProductDecisionRecorded
 - RequirementRecorded
+- DiscoveryExperimentStarted
+- DiscoveryExperimentCompleted
+- SpecificationReviewCompleted
+- SpecificationReadinessRecorded
 - DesignCandidateCreated
 - DecisionRecorded
 - TaskCreated

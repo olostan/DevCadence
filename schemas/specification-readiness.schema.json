@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/olostan/DevCadience/schemas/specification-readiness.schema.json",
+  "title": "DevCadience SpecificationReadiness",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "readiness_id", "project_id", "problem_model_id", "problem_model_revision", "checks", "verdict"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "readiness_id": {"type": "string"},
+    "project_id": {"type": "string"},
+    "problem_model_id": {"type": "string"},
+    "problem_model_revision": {"type": "integer", "minimum": 1},
+    "checks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["problem_outcome", "primary_workflows", "scope_boundaries", "architecture_sensitive_questions", "security_privacy", "material_external_facts", "feasibility_assumptions", "contradictions", "independent_reviews", "human_reflection"],
+      "properties": {
+        "problem_outcome": {"$ref": "#/$defs/check"},
+        "primary_workflows": {"$ref": "#/$defs/check"},
+        "scope_boundaries": {"$ref": "#/$defs/check"},
+        "architecture_sensitive_questions": {"$ref": "#/$defs/check"},
+        "security_privacy": {"$ref": "#/$defs/check"},
+        "material_external_facts": {"$ref": "#/$defs/check"},
+        "feasibility_assumptions": {"$ref": "#/$defs/check"},
+        "contradictions": {"$ref": "#/$defs/check"},
+        "independent_reviews": {"$ref": "#/$defs/check"},
+        "human_reflection": {"$ref": "#/$defs/check"}
+      }
+    },
+    "remaining_unknowns": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["statement", "architecture_safe_to_defer"],
+        "properties": {
+          "statement": {"type": "string"},
+          "architecture_safe_to_defer": {"type": "boolean"},
+          "boundary": {"type": ["string", "null"]}
+        }
+      }
+    },
+    "review_refs": {"type": "array", "items": {"type": "string"}},
+    "verdict": {"enum": ["not_ready", "ready_for_architecture", "ready_with_explicit_risks"]},
+    "rationale": {"type": ["string", "null"]}
+  },
+  "$defs": {
+    "check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status"],
+      "properties": {
+        "status": {"enum": ["complete", "incomplete", "not_applicable", "accepted_risk"]},
+        "notes": {"type": ["string", "null"]},
+        "evidence_refs": {"type": "array", "items": {"type": "string"}}
+      }
+    }
+  }
+}

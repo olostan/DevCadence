@@ -106,6 +106,15 @@ The event journal should make this reconstructable.
 - test duration;
 - artifact storage.
 
+### Discovery/specification
+- open material ambiguities;
+- ambiguities awaiting human vs research vs experiment;
+- human questions asked per discovery round;
+- requirement counts by epistemic status;
+- specification red-team findings;
+- readiness gate failures/reasons;
+- architecture reopens caused by missed product ambiguity.
+
 ### Lifecycle
 - time spent discovery/design/implementation/verification;
 - refactoring epoch frequency;
