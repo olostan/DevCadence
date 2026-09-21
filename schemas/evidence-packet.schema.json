@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/olostan/DevCadience/schemas/evidence-packet.schema.json",
+  "title": "DevCadience EvidencePacket",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "evidence_packet_id", "project_id", "base_commit", "question", "claims", "counterevidence", "disagreements", "uncertainties", "raw_evidence_refs"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "evidence_packet_id": {"type": "string"},
+    "project_id": {"type": "string"},
+    "base_commit": {"type": "string"},
+    "question": {"type": "string"},
+    "conclusion": {"type": ["string", "null"]},
+    "claims": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "kind", "statement", "evidence_refs"],
+        "properties": {
+          "id": {"type": "string"},
+          "kind": {"enum": ["deterministic_fact", "repository_observation", "external_fact", "interpretation", "assumption", "recommendation"]},
+          "statement": {"type": "string"},
+          "evidence_refs": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    },
+    "counterevidence": {"type": "array", "items": {"type": "string"}},
+    "disagreements": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["statement", "positions"],
+        "properties": {
+          "statement": {"type": "string"},
+          "positions": {"type": "array", "minItems": 2, "items": {"type": "string"}}
+        }
+      }
+    },
+    "uncertainties": {"type": "array", "items": {"type": "string"}},
+    "recommendations": {"type": "array", "items": {"type": "string"}},
+    "raw_evidence_refs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "type", "locator"],
+        "properties": {
+          "id": {"type": "string"},
+          "type": {"enum": ["source", "symbol", "git", "command", "test", "external_source", "consultation", "artifact"]},
+          "locator": {"type": "string"},
+          "digest": {"type": ["string", "null"]},
+          "excerpt": {"type": ["string", "null"]}
+        }
+      }
+    }
+  }
+}
