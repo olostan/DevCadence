@@ -411,6 +411,17 @@ Initial policy:
 
 Unknown fields must not be silently discarded when round-tripping durable records.
 
+The implemented policy, settled by
+[adr/0002-durable-record-compatibility.md](adr/0002-durable-record-compatibility.md),
+is **strict readers**: because every schema declares
+`additionalProperties: false`, an unrecognised field is refused rather than
+preserved or dropped, so loss cannot occur. Records are stored as the
+canonical bytes that were written, with a digest, so a record this build
+cannot interpret stays inspectable and verifiable. For an *optional* field, an
+absent key, an explicit `null` and the type's zero value are the same
+statement, and writers emit the shortest form. See
+[../schemas/README.md](../schemas/README.md) for the full policy.
+
 ## 19. Protocol anti-patterns
 
 Avoid:

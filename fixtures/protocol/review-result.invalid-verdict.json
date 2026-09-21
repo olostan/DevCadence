@@ -1,0 +1,12 @@
+{
+  "schema_version": "1.0",
+  "review_id": "rev_000000000000000000000012",
+  "project_id": "example",
+  "attempt_id": "att_000000000000000000000005",
+  "work_package_id": "wp_000000000000000000000012",
+  "dimension": "correctness",
+  "verdict": "looks_good_to_me",
+  "findings": [],
+  "must_compliance": [],
+  "principal_escalation_recommended": false
+}

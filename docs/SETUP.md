@@ -2,7 +2,9 @@
 
 ## Status
 
-DevCadience is currently at architecture/bootstrap stage. These instructions describe the intended development environment before code exists. Pin exact versions in `go.mod`, lock files and CI once implementation begins.
+The control-plane core (M1) is implemented. Sections below that describe local
+model runtimes still describe an intended environment: no model integration
+exists before M3, and nothing in the current build contacts one.
 
 ## 1. Target environment
 
@@ -80,18 +82,23 @@ Leave memory for:
 
 The initial scheduler should prefer sequential strong-model use to unsafe memory saturation.
 
-## 7. Proposed Go bootstrap
+## 7. Go bootstrap
 
-Once M1 begins:
+The module is `github.com/olostan/DevCadience`. Its `go` directive is 1.25.0,
+which the SQLite driver requires; a newer toolchain is fetched automatically
+by recent Go releases.
 
 ```bash
-go mod init github.com/olostan/DevCadience
-go test ./...
+make verify        # go vet ./... && go test ./... && schema validation
+make build         # bin/devcadience
 ```
 
-Expected binaries:
-- `devcadience` — CLI/daemon;
-- `devcadience-mcp` — stdio semantic MCP adapter.
+The build needs no C toolchain: the SQLite driver is pure Go
+([ADR-0001](adr/0001-control-plane-persistence.md)).
+
+Binaries:
+- `devcadience` — CLI/daemon (implemented in M1);
+- `devcadience-mcp` — stdio semantic MCP adapter (M4, not yet present).
 
 ## 8. Local data directories
 
@@ -111,7 +118,13 @@ Proposed layout:
 
 Per-project configuration references repository paths and policies.
 
-Exact XDG/macOS conventions should be settled by ADR before implementation.
+Settled by [ADR-0001](adr/0001-control-plane-persistence.md) §9: the
+control-plane database is `$DEVCADIENCE_HOME/state/control-plane.db`, with
+`DEVCADIENCE_HOME` defaulting to `~/.devcadience`. The path must be absolute.
+`devcadience -db <path>` overrides it, which is what the test suite and
+throwaway experiments use. A full XDG layout was not adopted: the macOS-first
+target and the single `DEVCADIENCE_HOME` indirection cover the need with one
+variable.
 
 ## 9. Target repository registration
 

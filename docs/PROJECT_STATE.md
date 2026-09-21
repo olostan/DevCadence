@@ -219,6 +219,64 @@ An Engineering Work Package references an explicit ProjectState revision and bas
 
 That allows detection of stale plans.
 
+### 7.1 Implemented identity (M1)
+
+Settled by [adr/0004-deterministic-project-state-identity.md](adr/0004-deterministic-project-state-identity.md).
+
+ProjectState is a **pure function of the event-journal prefix** it summarises:
+
+- `state_revision` is derived from the high-water mark: `ps_%09d` of the
+  journal sequence of the highest applied event. The revision and the
+  watermark therefore cannot disagree, and the consistency check in §15
+  ("state revision not matching journal high-water mark") holds structurally.
+- `event_high_watermark` is that same sequence as a decimal string.
+- `generated_at` is the `occurred_at` of the highest applied event, not a
+  wall-clock read. The same history always renders the same bytes, which is
+  what makes the §16 rebuild comparable rather than merely similar.
+- Staleness is a numeric comparison: a Work Package planned at `ps_000000004`
+  is older than current `ps_000000013`.
+- Historical revisions are **reconstructed on demand** by reducing the journal
+  prefix (`devcadience state show -project P -at N`) rather than stored. Only
+  the current revision is materialised.
+
+The accepted commit advances when integration validation passes, not when a
+change is accepted: an accepted candidate still has to survive the integration
+worktree (ARCHITECTURE.md §11).
+
+### 7.2 Task buckets
+
+`tasks.{ready,running,blocked,awaiting_principal}` are derived from task state
+by one mapping, defined in
+[adr/0003-canonical-task-state-machine.md](adr/0003-canonical-task-state-machine.md):
+
+| Task state | Buckets |
+| --- | --- |
+| `proposed` | — (untriaged) |
+| `scouting`, `running`, `validating`, `reviewing`, `integrating`, `integration_validating` | `running` |
+| `designing` | `awaiting_principal` |
+| `ready` | `ready` |
+| `accepted` | — (transient) |
+| `done` | — (reported through milestone progress and recent semantic changes) |
+| `blocked`, authority `principal` | `blocked` **and** `awaiting_principal` |
+| `blocked`, other authority | `blocked` |
+
+A task blocked on a principal decision appears in two buckets on purpose:
+`blocked` answers "what is stuck" and `awaiting_principal` answers "what is
+mine to unstick". Buckets list task **aliases** (`DC-012`), not opaque
+identifiers.
+
+### 7.3 Capabilities
+
+`capabilities` is a typed object with `local_models` and `consultants`, not a
+free-form map (ENGINEERING_STANDARDS.md §4). M1 leaves it empty; no model
+runtime exists until M3.
+
+### 7.4 Bounded current state
+
+`recent_semantic_changes` is capped (currently at ten, newest first) so that
+current state stays compact as history grows (§12). The complete history
+remains in the event journal.
+
 ## 8. Semantic recent changes
 
 Git diffs are too low-level for frontier incremental memory.
@@ -355,3 +413,11 @@ flowchart TD
 ```
 
 Bootstrap may implement only a subset, but the persistence architecture should preserve this direction.
+
+As of M1 this is implemented and tested: the materialised projection can be
+destroyed entirely and rebuilt from the journal alone, producing a
+byte-identical ProjectState. `devcadience state rebuild -project P` performs
+the recovery; `TestProjectionCanBeDestroyedAndRebuilt` proves it. Git facts
+and normative documents are not yet reducer inputs — M1 is
+repository-independent — so the accepted commit currently comes from recorded
+events rather than from inspecting a repository.

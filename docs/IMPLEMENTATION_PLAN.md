@@ -55,28 +55,63 @@ A fresh capable engineer/model can explain the system and M1 boundaries without 
 
 ## M1 — Domain core and canonical state
 
+**Status: complete.**
+
 ### Goal
 Implement model-independent control-plane primitives.
 
 ### Deliverables
-- Go module and CLI skeleton;
-- protocol/domain types;
-- SQLite migration framework;
-- engineering event journal;
-- ProjectState reducer/materialized view;
-- task/attempt state machine;
-- fixture/test framework;
-- schema validation tooling.
+- Go module and CLI skeleton — `cmd/devcadience`;
+- protocol/domain types — `internal/protocol`;
+- SQLite migration framework — `internal/storage`;
+- engineering event journal — `internal/events`, `internal/storage`;
+- ProjectState reducer/materialized view — `internal/state`;
+- task/attempt state machine — `internal/tasks`;
+- fixture/test framework — `internal/testsupport`, `fixtures/`, `tests/`;
+- schema validation tooling — `internal/schema`, `devcadience schema validate`.
 
 ### Verification
-- unit tests for legal/illegal transitions;
-- event replay reconstructs same ProjectState;
-- crash/transaction tests for append + projection;
-- schema round-trip tests;
-- no LLM required to run test suite.
+- unit tests for legal/illegal transitions — `internal/tasks`, including a
+  walk of the full state cross product;
+- event replay reconstructs same ProjectState — `internal/state`,
+  `internal/controlplane`;
+- crash/transaction tests for append + projection — injected failure inside a
+  transaction, and a refused transition leaving the journal untouched;
+- schema round-trip tests — `tests/schema_fixtures_test.go` over
+  `fixtures/protocol/`;
+- no LLM required to run test suite — nothing in the tree imports a model
+  runtime.
+
+Run with `go test ./... && go vet ./...`, or `make verify`.
 
 ### Exit criterion
 A synthetic project can be driven through task states deterministically.
+
+Met: `TestSyntheticProjectReachesDoneDeterministically` drives a project from
+`PROPOSED` to `DONE` twice and compares canonical ProjectState byte for byte,
+and `TestCLIDrivesASyntheticProjectToDone` does the same through the CLI.
+
+### Architectural decisions taken during M1
+- [adr/0001-control-plane-persistence.md](adr/0001-control-plane-persistence.md)
+- [adr/0002-durable-record-compatibility.md](adr/0002-durable-record-compatibility.md)
+- [adr/0003-canonical-task-state-machine.md](adr/0003-canonical-task-state-machine.md)
+- [adr/0004-deterministic-project-state-identity.md](adr/0004-deterministic-project-state-identity.md)
+- [adr/0005-identifiers-and-time.md](adr/0005-identifiers-and-time.md)
+
+### Debt deliberately carried into later milestones
+- Appending an event replays the project journal to rebuild the projection
+  (O(n) per write). The fix — a snapshot plus tail replay — is additive and
+  changes no durable contract (ADR-0001, R-M1-01).
+- The SQLite pool is capped at one connection, serialising reads with writes.
+- `integrating` and `integration_validating` exist and are reachable but have
+  no repository behaviour until M2.
+- Git facts are not reducer inputs: `git.accepted_commit` comes from recorded
+  events, and `dirty` and `branch` are unset (ADR-0004, R-M1-05).
+- `capabilities` is typed but always empty until M3.
+- `LessonCandidateCreated`, `LessonPromoted`, `RefactoringEpochStarted` and
+  `ArchitectureReconciled` are recorded and derive nothing (M7/M8).
+- No artifact store: `ArtifactRef` describes where artifacts will live, and
+  nothing writes them yet (M2).
 
 ## M2 — Repository, worktree and process execution
 
@@ -322,6 +357,24 @@ fixtures/
 9. deterministic test fixtures.
 
 Do not start model integration before these basics are trustworthy.
+
+This ordering was followed. The one deviation: a small immutable record store
+was added alongside the event journal, because `WorkPackageApproved` would
+otherwise reference a blueprint nothing had stored. Events carry the compact
+facts ProjectState needs and reference full protocol documents by id and
+digest.
+
+### M2 assumptions validated by M1
+
+- Attempt lineage (state revision, Work Package version, base commit, worker
+  profile, worktree, candidate commit, artifacts) is representable and
+  persisted before any repository machinery exists, so M2 does not have to
+  retrofit it.
+- Task state, attempts and blocks are derived from events, so M2 can add
+  repository behaviour without inventing a second source of truth.
+- `ArtifactRef` (locator plus digest) is the agreed boundary for logs, diffs
+  and transcripts, so the artifact store can be built without touching the
+  relational schema.
 
 ## Definition of milestone done
 

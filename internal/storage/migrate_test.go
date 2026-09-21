@@ -1,0 +1,156 @@
+package storage_test
+
+import (
+	"context"
+	"database/sql"
+	"path/filepath"
+	"testing"
+
+	"github.com/olostan/DevCadience/internal/errs"
+	"github.com/olostan/DevCadience/internal/storage"
+	"github.com/olostan/DevCadience/internal/testsupport"
+)
+
+func TestMigrationsAreOrderedAndUniquelyVersioned(t *testing.T) {
+	migrations, err := storage.LoadMigrations()
+	if err != nil {
+		t.Fatalf("load migrations: %v", err)
+	}
+	if len(migrations) == 0 {
+		t.Fatal("no migrations are embedded")
+	}
+	seen := make(map[int]bool, len(migrations))
+	previous := 0
+	for _, m := range migrations {
+		if m.Version <= previous {
+			t.Fatalf("migrations are not in ascending order: %d after %d", m.Version, previous)
+		}
+		if seen[m.Version] {
+			t.Fatalf("version %d appears twice", m.Version)
+		}
+		if m.Checksum == "" || m.SQL == "" {
+			t.Fatalf("migration %04d is incomplete", m.Version)
+		}
+		seen[m.Version] = true
+		previous = m.Version
+	}
+}
+
+func TestMigrationFromAnEmptyDatabase(t *testing.T) {
+	ctx := context.Background()
+	store, err := storage.Open(ctx, storage.Config{Path: storage.MemoryPath, Clock: testsupport.NewClock()})
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	available, err := storage.LoadMigrations()
+	if err != nil {
+		t.Fatalf("load migrations: %v", err)
+	}
+	applied, err := store.AppliedMigrations(ctx)
+	if err != nil {
+		t.Fatalf("applied: %v", err)
+	}
+	if len(applied) != len(available) {
+		t.Fatalf("applied %d migrations, want %d", len(applied), len(available))
+	}
+	version, err := store.SchemaVersion(ctx)
+	if err != nil {
+		t.Fatalf("schema version: %v", err)
+	}
+	if version != available[len(available)-1].Version {
+		t.Fatalf("schema version = %d, want %d", version, available[len(available)-1].Version)
+	}
+}
+
+// TestReopeningAMigratedDatabaseIsIdempotent is what makes `devcadience`
+// safe to run repeatedly: opening must not re-apply or mutate the schema.
+func TestReopeningAMigratedDatabaseIsIdempotent(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "control-plane.db")
+
+	first, err := storage.Open(ctx, storage.Config{Path: path, Clock: testsupport.NewClock()})
+	if err != nil {
+		t.Fatalf("first open: %v", err)
+	}
+	firstApplied, err := first.AppliedMigrations(ctx)
+	if err != nil {
+		t.Fatalf("applied: %v", err)
+	}
+	if err := first.Close(); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+
+	second, err := storage.Open(ctx, storage.Config{Path: path, Clock: testsupport.NewClock()})
+	if err != nil {
+		t.Fatalf("second open: %v", err)
+	}
+	defer func() { _ = second.Close() }()
+	secondApplied, err := second.AppliedMigrations(ctx)
+	if err != nil {
+		t.Fatalf("applied: %v", err)
+	}
+	if len(firstApplied) != len(secondApplied) {
+		t.Fatalf("reopening changed the migration count: %d then %d", len(firstApplied), len(secondApplied))
+	}
+	for i := range firstApplied {
+		if firstApplied[i] != secondApplied[i] {
+			t.Fatalf("reopening changed migration %d: %+v then %+v", i, firstApplied[i], secondApplied[i])
+		}
+	}
+}
+
+// TestAnEditedMigrationIsRefused protects against two databases reporting the
+// same schema version while holding different schemas.
+func TestAnEditedMigrationIsRefused(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "control-plane.db")
+	store, err := storage.Open(ctx, storage.Config{Path: path, Clock: testsupport.NewClock()})
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+
+	// Simulate an edited migration by corrupting the recorded checksum.
+	db, err := sql.Open("sqlite", "file:"+path)
+	if err != nil {
+		t.Fatalf("open raw: %v", err)
+	}
+	if _, err := db.ExecContext(ctx,
+		`UPDATE schema_migrations SET checksum = 'sha256:tampered' WHERE version = 1`); err != nil {
+		t.Fatalf("tamper: %v", err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatalf("close raw: %v", err)
+	}
+
+	_, err = storage.Open(ctx, storage.Config{Path: path, Clock: testsupport.NewClock()})
+	if err == nil {
+		t.Fatal("opening a database whose applied migration was edited succeeded")
+	}
+	if got := errs.CategoryOf(err); got != errs.CategoryIntegrity {
+		t.Fatalf("category = %s, want integrity (%v)", got, err)
+	}
+}
+
+func TestReadOnlyOpenRefusesAnUnmigratedDatabase(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "never-initialised.db")
+	_, err := storage.Open(ctx, storage.Config{Path: path, Clock: testsupport.NewClock(), ReadOnly: true})
+	if err == nil {
+		t.Fatal("a read-only open of an unmigrated database succeeded")
+	}
+	// A typo in -db must report a missing project, not an empty one.
+	if got := errs.CategoryOf(err); got != errs.CategoryNotFound {
+		t.Fatalf("category = %s, want not_found (%v)", got, err)
+	}
+}
+
+func TestOpenRequiresAPath(t *testing.T) {
+	if _, err := storage.Open(context.Background(), storage.Config{}); err == nil {
+		t.Fatal("opening with no path succeeded")
+	}
+}

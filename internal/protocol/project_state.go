@@ -1,0 +1,396 @@
+package protocol
+
+import (
+	"encoding/json"
+
+	"github.com/olostan/DevCadience/internal/errs"
+)
+
+// ProjectState is the canonical compact snapshot described in
+// docs/PROJECT_STATE.md and schemas/project-state.schema.json.
+//
+// It is the principal's normal view of the project (DCI-010). It is not a
+// repository index and not a transcript: every field is either a durable
+// control-plane fact or a summary that carries evidence references back to
+// retrievable provenance (DCI-011).
+//
+// A ProjectState value is a pure function of the event-journal prefix it was
+// reduced from; see internal/state and
+// docs/adr/0004-deterministic-project-state-identity.md.
+type ProjectState struct {
+	SchemaVersion SchemaVersion `json:"schema_version"`
+	ProjectID     string        `json:"project_id"`
+	// StateRevision is derived from the event high-watermark so that the same
+	// journal prefix always yields the same revision identity.
+	StateRevision string `json:"state_revision"`
+	// GeneratedAt is the occurred_at of the highest applied event, not a
+	// wall-clock read, so rebuilding state reproduces it exactly.
+	GeneratedAt Timestamp `json:"generated_at"`
+	// EventHighWatermark is the decimal journal sequence of the highest
+	// applied event. It is nullable only for forward compatibility with
+	// states produced outside the journal; this build always sets it.
+	EventHighWatermark *string `json:"event_high_watermark"`
+
+	Git        GitState         `json:"git"`
+	Product    *ProductState    `json:"product,omitempty"`
+	Milestone  MilestoneState   `json:"milestone"`
+	Components []ComponentState `json:"components,omitempty"`
+	Tasks      TaskBuckets      `json:"tasks"`
+
+	ActiveInvariants []string `json:"active_invariants,omitempty"`
+	ActiveDecisions  []string `json:"active_decisions,omitempty"`
+
+	Validation ValidationState `json:"validation"`
+	Health     *HealthState    `json:"health,omitempty"`
+
+	Risks             []Risk             `json:"risks"`
+	DecisionsRequired []DecisionRequired `json:"decisions_required"`
+
+	RecentSemanticChanges []SemanticChange `json:"recent_semantic_changes,omitempty"`
+	Capabilities          *Capabilities    `json:"capabilities,omitempty"`
+}
+
+// GitState records the repository facts ProjectState depends on.
+//
+// AcceptedCommit is nullable: a project registered before any change has been
+// accepted, and every M1 project (which is repository-independent), has no
+// accepted commit yet. Representing that as an explicit null keeps the
+// absence visible rather than encoding it as an empty string sentinel.
+type GitState struct {
+	AcceptedCommit *string `json:"accepted_commit"`
+	Branch         *string `json:"branch,omitempty"`
+	Dirty          bool    `json:"dirty,omitempty"`
+}
+
+// ProductState carries the current product intent by reference.
+type ProductState struct {
+	VisionRef      *string `json:"vision_ref,omitempty"`
+	CurrentOutcome *string `json:"current_outcome,omitempty"`
+}
+
+// MilestoneState is the active milestone and its derived progress.
+//
+// CompletedTasks and TotalTasks are counted from the task projection rather
+// than stored, so they cannot drift from the task states they summarise.
+type MilestoneState struct {
+	ID             string `json:"id"`
+	Title          string `json:"title"`
+	Status         string `json:"status,omitempty"`
+	CompletedTasks int    `json:"completed_tasks"`
+	TotalTasks     int    `json:"total_tasks"`
+}
+
+// ContractState describes how settled a component's public contract is.
+type ContractState string
+
+const (
+	ContractStable     ContractState = "stable"
+	ContractEvolving   ContractState = "evolving"
+	ContractDeprecated ContractState = "deprecated"
+	ContractUnknown    ContractState = "unknown"
+)
+
+// Valid reports whether the contract state is defined by the schema.
+func (c ContractState) Valid() bool {
+	switch c {
+	case ContractStable, ContractEvolving, ContractDeprecated, ContractUnknown:
+		return true
+	}
+	return false
+}
+
+// ComponentState answers the questions docs/PROJECT_STATE.md §9 asks of a
+// component. It deliberately omits file listings: those belong to evidence
+// packets and repository indexes.
+type ComponentState struct {
+	ID             string        `json:"id"`
+	Responsibility *string       `json:"responsibility,omitempty"`
+	Status         string        `json:"status"`
+	ContractState  ContractState `json:"contract_state,omitempty"`
+	EvidenceRefs   []string      `json:"evidence_refs,omitempty"`
+}
+
+// TaskBuckets is the principal-facing summary of the task graph. The mapping
+// from task state to bucket is defined in
+// docs/adr/0003-canonical-task-state-machine.md and implemented once, in
+// internal/state, so the CLI and the MCP layer cannot drift apart.
+type TaskBuckets struct {
+	Ready             []string `json:"ready"`
+	Running           []string `json:"running"`
+	Blocked           []string `json:"blocked"`
+	AwaitingPrincipal []string `json:"awaiting_principal"`
+}
+
+// ValidationStatus summarises the deterministic health of the accepted commit.
+type ValidationStatus string
+
+const (
+	ValidationGreen   ValidationStatus = "green"
+	ValidationYellow  ValidationStatus = "yellow"
+	ValidationRed     ValidationStatus = "red"
+	ValidationUnknown ValidationStatus = "unknown"
+)
+
+// Valid reports whether the status is defined by the schema.
+func (s ValidationStatus) Valid() bool {
+	switch s {
+	case ValidationGreen, ValidationYellow, ValidationRed, ValidationUnknown:
+		return true
+	}
+	return false
+}
+
+// ValidationState summarises deterministic verification.
+//
+// AcceptedCommitVerified distinguishes "the baseline passed" from "the
+// baseline passed on the commit we currently call accepted"; without it a
+// stale green result could be read as current (DCI-012).
+type ValidationState struct {
+	Status                 ValidationStatus `json:"status"`
+	AcceptedCommitVerified bool             `json:"accepted_commit_verified,omitempty"`
+	LastFullValidationID   *string          `json:"last_full_validation_id,omitempty"`
+}
+
+// HealthStatus summarises structural health (docs/REFACTORING_AND_HEALTH.md).
+type HealthStatus string
+
+const (
+	HealthGreen       HealthStatus = "green"
+	HealthWatch       HealthStatus = "watch"
+	HealthRefactorDue HealthStatus = "refactor_due"
+	HealthUnknown     HealthStatus = "unknown"
+)
+
+// Valid reports whether the status is defined by the schema.
+func (s HealthStatus) Valid() bool {
+	switch s {
+	case HealthGreen, HealthWatch, HealthRefactorDue, HealthUnknown:
+		return true
+	}
+	return false
+}
+
+// HealthState summarises code and architecture health.
+type HealthState struct {
+	Status       HealthStatus `json:"status,omitempty"`
+	LastReportID *string      `json:"last_report_id,omitempty"`
+	KnownDebt    []string     `json:"known_debt,omitempty"`
+}
+
+// Severity grades risks and review findings.
+type Severity string
+
+const (
+	SeverityInfo     Severity = "info"
+	SeverityLow      Severity = "low"
+	SeverityMedium   Severity = "medium"
+	SeverityHigh     Severity = "high"
+	SeverityCritical Severity = "critical"
+)
+
+// ValidRisk reports whether the severity may grade a risk. The risk schema
+// excludes "info": an informational risk is not a risk.
+func (s Severity) ValidRisk() bool {
+	switch s {
+	case SeverityLow, SeverityMedium, SeverityHigh, SeverityCritical:
+		return true
+	}
+	return false
+}
+
+// ValidFinding reports whether the severity may grade a review finding.
+func (s Severity) ValidFinding() bool {
+	return s == SeverityInfo || s.ValidRisk()
+}
+
+// Risk is an open, unresolved threat to the project (docs/PROJECT_STATE.md §10).
+type Risk struct {
+	ID           string   `json:"id"`
+	Severity     Severity `json:"severity"`
+	Statement    string   `json:"statement"`
+	EvidenceRefs []string `json:"evidence_refs,omitempty"`
+}
+
+// DecisionAuthority names who may resolve an open question.
+type DecisionAuthority string
+
+const (
+	AuthorityPolicy     DecisionAuthority = "policy"
+	AuthorityPrincipal  DecisionAuthority = "principal"
+	AuthorityConsultant DecisionAuthority = "consultant"
+	AuthorityHuman      DecisionAuthority = "human"
+)
+
+// Valid reports whether the authority is defined by the schema.
+func (a DecisionAuthority) Valid() bool {
+	switch a {
+	case AuthorityPolicy, AuthorityPrincipal, AuthorityConsultant, AuthorityHuman:
+		return true
+	}
+	return false
+}
+
+// DecisionRequired is an open question that blocks some work but should not
+// block unrelated work (docs/PROJECT_STATE.md §11).
+type DecisionRequired struct {
+	ID           string            `json:"id"`
+	Question     string            `json:"question"`
+	Authority    DecisionAuthority `json:"authority"`
+	EvidenceRefs []string          `json:"evidence_refs,omitempty"`
+}
+
+// SemanticChange is the compact delta the principal uses to update its mental
+// model instead of reading a diff (docs/PROJECT_STATE.md §8).
+type SemanticChange struct {
+	TaskID  string  `json:"task_id"`
+	Commit  *string `json:"commit,omitempty"`
+	Summary string  `json:"summary"`
+}
+
+// Capabilities describes the cognition currently available to the project.
+//
+// It is an explicit type rather than a free-form object because durable
+// records may not use untyped maps (ENGINEERING_STANDARDS.md §4). In M1 it is
+// always empty: no model runtime exists yet.
+type Capabilities struct {
+	LocalModels []ModelCapability      `json:"local_models,omitempty"`
+	Consultants []ConsultantCapability `json:"consultants,omitempty"`
+}
+
+// ModelCapability reports a configured local model profile. Concrete
+// capability measurement belongs to M3 (ENGINEERING_STANDARDS.md §14); this
+// type only reserves the contract.
+type ModelCapability struct {
+	Profile   string `json:"profile"`
+	Runtime   string `json:"runtime,omitempty"`
+	Available bool   `json:"available"`
+}
+
+// ConsultantCapability reports a configured frontier consultant adapter.
+type ConsultantCapability struct {
+	Name      string `json:"name"`
+	Available bool   `json:"available"`
+}
+
+// RecordKind implements Record.
+func (s *ProjectState) RecordKind() string { return "ProjectState" }
+
+// RecordID implements Record.
+func (s *ProjectState) RecordID() string { return s.StateRevision }
+
+// SchemaVer implements Record.
+func (s *ProjectState) SchemaVer() SchemaVersion { return s.SchemaVersion }
+
+// Validate enforces the schema's required fields and enumerations plus the
+// semantic constraints JSON Schema cannot express.
+func (s *ProjectState) Validate() error {
+	const kind = "ProjectState"
+	if err := s.SchemaVersion.Validate(kind); err != nil {
+		return err
+	}
+	if err := requireNonEmpty(kind, "project_id", s.ProjectID); err != nil {
+		return err
+	}
+	if err := requireNonEmpty(kind, "state_revision", s.StateRevision); err != nil {
+		return err
+	}
+	if s.Git.AcceptedCommit != nil && len(*s.Git.AcceptedCommit) < 7 {
+		return errs.New(errs.CategoryInvalidArgument,
+			"%s: git.accepted_commit must be at least 7 characters when present", kind)
+	}
+	if err := requireNonEmpty(kind, "milestone.id", s.Milestone.ID); err != nil {
+		return err
+	}
+	if err := requireNonEmpty(kind, "milestone.title", s.Milestone.Title); err != nil {
+		return err
+	}
+	if s.Milestone.CompletedTasks < 0 || s.Milestone.TotalTasks < 0 {
+		return errs.New(errs.CategoryInvalidArgument, "%s: milestone task counts must not be negative", kind)
+	}
+	if s.Milestone.CompletedTasks > s.Milestone.TotalTasks {
+		return errs.New(errs.CategoryIntegrity,
+			"%s: milestone reports %d completed of %d total tasks",
+			kind, s.Milestone.CompletedTasks, s.Milestone.TotalTasks)
+	}
+	for _, c := range s.Components {
+		if err := requireNonEmpty(kind, "components[].id", c.ID); err != nil {
+			return err
+		}
+		if err := requireNonEmpty(kind, "components[].status", c.Status); err != nil {
+			return err
+		}
+		if c.ContractState != "" && !c.ContractState.Valid() {
+			return enumError(kind, "components[].contract_state", string(c.ContractState),
+				"stable", "evolving", "deprecated", "unknown")
+		}
+	}
+	if !s.Validation.Status.Valid() {
+		return enumError(kind, "validation.status", string(s.Validation.Status), "green", "yellow", "red", "unknown")
+	}
+	if s.Health != nil && s.Health.Status != "" && !s.Health.Status.Valid() {
+		return enumError(kind, "health.status", string(s.Health.Status), "green", "watch", "refactor_due", "unknown")
+	}
+	for _, r := range s.Risks {
+		if err := requireNonEmpty(kind, "risks[].id", r.ID); err != nil {
+			return err
+		}
+		if !r.Severity.ValidRisk() {
+			return enumError(kind, "risks[].severity", string(r.Severity), "low", "medium", "high", "critical")
+		}
+		if err := requireNonEmpty(kind, "risks[].statement", r.Statement); err != nil {
+			return err
+		}
+	}
+	for _, d := range s.DecisionsRequired {
+		if err := requireNonEmpty(kind, "decisions_required[].id", d.ID); err != nil {
+			return err
+		}
+		if err := requireNonEmpty(kind, "decisions_required[].question", d.Question); err != nil {
+			return err
+		}
+		if !d.Authority.Valid() {
+			return enumError(kind, "decisions_required[].authority", string(d.Authority),
+				"policy", "principal", "consultant", "human")
+		}
+	}
+	for _, c := range s.RecentSemanticChanges {
+		if err := requireNonEmpty(kind, "recent_semantic_changes[].task_id", c.TaskID); err != nil {
+			return err
+		}
+		if err := requireNonEmpty(kind, "recent_semantic_changes[].summary", c.Summary); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// MarshalJSON guarantees that the arrays the schema marks required are
+// emitted as `[]` rather than `null`.
+//
+// A nil Go slice and an empty JSON array mean the same thing here ("no open
+// risks"), but `null` violates the schema. Normalising on the write path
+// keeps every producer of a ProjectState — reducer, CLI, fixtures — from
+// having to remember this.
+func (s ProjectState) MarshalJSON() ([]byte, error) {
+	type alias ProjectState // avoids recursing into this method
+	out := alias(s)
+	out.Tasks.Ready = orEmpty(out.Tasks.Ready)
+	out.Tasks.Running = orEmpty(out.Tasks.Running)
+	out.Tasks.Blocked = orEmpty(out.Tasks.Blocked)
+	out.Tasks.AwaitingPrincipal = orEmpty(out.Tasks.AwaitingPrincipal)
+	if out.Risks == nil {
+		out.Risks = []Risk{}
+	}
+	if out.DecisionsRequired == nil {
+		out.DecisionsRequired = []DecisionRequired{}
+	}
+	return json.Marshal(out)
+}
+
+// orEmpty replaces a nil slice with an empty one.
+func orEmpty[T any](s []T) []T {
+	if s == nil {
+		return []T{}
+	}
+	return s
+}

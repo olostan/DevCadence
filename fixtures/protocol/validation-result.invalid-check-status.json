@@ -1,0 +1,17 @@
+{
+  "schema_version": "1.0",
+  "validation_id": "val_000000000000000000000008",
+  "project_id": "example",
+  "attempt_id": "att_000000000000000000000005",
+  "commit": "cafebabe1234567",
+  "status": "pass",
+  "checks": [
+    {
+      "id": "chk_test",
+      "kind": "test",
+      "status": "mostly_passed",
+      "started_at": "2026-09-20T19:58:09.000000Z",
+      "finished_at": "2026-09-20T19:59:44.000000Z"
+    }
+  ]
+}

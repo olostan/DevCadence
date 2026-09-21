@@ -1,0 +1,18 @@
+{
+  "schema_version": "1.0",
+  "lesson_candidate_id": "lc_000000000000000000000002",
+  "scope": "project",
+  "type": "review_rule",
+  "observation": "Two attempts in a row produced candidates that passed tests but violated a MUST about append-only storage; neither reviewer checked guidance compliance explicitly.",
+  "trajectory_refs": ["traj_000000000000000000000009", "traj_00000000000000000000000A"],
+  "proposed_change": "Require the correctness reviewer to report a compliance status for every MUST guidance item, including not_applicable.",
+  "expected_benefit": "MUST violations surface in review rather than after integration.",
+  "possible_counterexamples": [
+    "Work Packages with many MUST items may produce noisy compliance lists."
+  ],
+  "conflict_refs": [],
+  "evaluation_plan": "Replay the two trajectories with the amended reviewer prompt and check that both violations are reported.",
+  "promotion_authority": "principal",
+  "rollback_plan": "Revert the reviewer prompt to the previous version.",
+  "status": "proposed"
+}

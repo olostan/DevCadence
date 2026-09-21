@@ -1,0 +1,13 @@
+{
+  "schema_version": "1.0",
+  "project_id": "example",
+  "state_revision": "ps_000000001",
+  "generated_at": "2026-09-20T09:00:00.000000Z",
+  "event_high_watermark": "1",
+  "git": {"accepted_commit": null},
+  "milestone": {"id": "M1", "title": "Domain core"},
+  "tasks": {"ready": [], "running": [], "blocked": [], "awaiting_principal": []},
+  "validation": {"status": "probably_fine"},
+  "risks": [],
+  "decisions_required": []
+}

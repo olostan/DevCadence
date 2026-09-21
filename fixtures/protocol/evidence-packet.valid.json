@@ -1,0 +1,68 @@
+{
+  "schema_version": "1.0",
+  "evidence_packet_id": "ep_000000000000000000000003",
+  "project_id": "example",
+  "base_commit": "91acd8273f1",
+  "question": "Can the event storage abstraction support bounded time-range queries without changing its public interface?",
+  "conclusion": "Yes, by adding an optional upper bound to the existing query struct.",
+  "claims": [
+    {
+      "id": "C1",
+      "kind": "repository_observation",
+      "statement": "EventQuery already carries an AfterSeq lower bound.",
+      "evidence_refs": ["ev_journal_schema"]
+    },
+    {
+      "id": "C2",
+      "kind": "deterministic_fact",
+      "statement": "go build ./... succeeds at the base commit.",
+      "evidence_refs": ["ev_build"]
+    },
+    {
+      "id": "C3",
+      "kind": "interpretation",
+      "statement": "Adding an inclusive upper bound is additive for current callers.",
+      "evidence_refs": []
+    },
+    {
+      "id": "C4",
+      "kind": "assumption",
+      "statement": "No external integration constructs EventQuery by positional literal.",
+      "evidence_refs": []
+    }
+  ],
+  "counterevidence": [
+    "One test constructs EventQuery with a struct literal and would need a field name."
+  ],
+  "disagreements": [
+    {
+      "statement": "Whether the bound belongs on the query or on a separate reader.",
+      "positions": [
+        "On the query: the predicate is a filter like the others.",
+        "On a reader: range reads have different failure modes."
+      ]
+    }
+  ],
+  "uncertainties": [
+    "Whether future callers will need an exclusive upper bound."
+  ],
+  "recommendations": [
+    "Add UpToSeq to EventQuery and treat zero as unbounded."
+  ],
+  "raw_evidence_refs": [
+    {
+      "id": "ev_journal_schema",
+      "type": "source",
+      "locator": "git:91acd8273f1:internal/storage/journal.go#L90-L120",
+      "digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+      "excerpt": "type EventQuery struct {"
+    },
+    {
+      "id": "ev_build",
+      "type": "command",
+      "locator": "artifact://commands/build-91acd82.txt",
+      "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+      "excerpt": null
+    }
+  ]
+}

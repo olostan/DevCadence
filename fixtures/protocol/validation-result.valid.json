@@ -1,0 +1,39 @@
+{
+  "schema_version": "1.0",
+  "validation_id": "val_000000000000000000000007",
+  "project_id": "example",
+  "attempt_id": "att_000000000000000000000005",
+  "commit": "cafebabe1234567",
+  "status": "fail",
+  "checks": [
+    {
+      "id": "chk_build",
+      "kind": "build",
+      "command": ["go", "build", "./..."],
+      "tool_version": "go1.25.0",
+      "working_directory": "/worktrees/example/DC-012",
+      "status": "pass",
+      "exit_code": 0,
+      "started_at": "2026-09-20T19:58:01.000000Z",
+      "finished_at": "2026-09-20T19:58:09.000000Z",
+      "summary": "build succeeded",
+      "stdout_artifact": "artifact://commands/build-att005-stdout.txt",
+      "stderr_artifact": null,
+      "output_truncated": false
+    },
+    {
+      "id": "chk_test",
+      "kind": "test",
+      "command": ["go", "test", "./..."],
+      "tool_version": "go1.25.0",
+      "status": "fail",
+      "exit_code": 1,
+      "started_at": "2026-09-20T19:58:09.000000Z",
+      "finished_at": "2026-09-20T19:59:44.000000Z",
+      "summary": "1 of 214 tests failed",
+      "stdout_artifact": "artifact://commands/test-att005-stdout.txt",
+      "stderr_artifact": "artifact://commands/test-att005-stderr.txt",
+      "output_truncated": true
+    }
+  ]
+}

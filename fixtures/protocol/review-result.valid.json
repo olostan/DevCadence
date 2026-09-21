@@ -1,0 +1,32 @@
+{
+  "schema_version": "1.0",
+  "review_id": "rev_000000000000000000000011",
+  "project_id": "example",
+  "attempt_id": "att_000000000000000000000005",
+  "work_package_id": "wp_000000000000000000000012",
+  "dimension": "correctness",
+  "reviewer_profile": "independent_reviewer",
+  "model_identity": "local-reviewer-profile-a",
+  "verdict": "concern",
+  "findings": [
+    {
+      "severity": "medium",
+      "statement": "A bound below the lower bound returns an error rather than an empty result.",
+      "evidence_refs": ["ev_range_test"],
+      "repair_requested": true
+    },
+    {
+      "severity": "info",
+      "statement": "The new predicate follows the existing clause construction style.",
+      "repair_requested": false
+    }
+  ],
+  "must_compliance": [
+    {"guidance_id": "G1", "status": "satisfied", "note": "No read path mutates events."},
+    {"guidance_id": "G2", "status": "satisfied", "note": null},
+    {"guidance_id": "G3", "status": "not_applicable", "note": "Local discretion."}
+  ],
+  "deviations": [],
+  "uncertainties": ["Whether any external integration constructs the query positionally."],
+  "principal_escalation_recommended": false
+}

@@ -1,0 +1,21 @@
+{
+  "schema_version": "1.0",
+  "work_package_id": "wp_000000000000000000000014",
+  "task_id": "tsk_00000000000000000000000C",
+  "version": 1,
+  "project_id": "example",
+  "project_state_revision": "ps_000000042",
+  "base_commit": "91acd8273f1",
+  "change_class": "local",
+  "objective": "Rename a helper.",
+  "rationale": "Clarity.",
+  "architectural_intent": "No architectural impact.",
+  "assumptions": [],
+  "scope": {"in_scope": ["one file"], "out_of_scope": ["anything else"]},
+  "guidance": [
+    {"id": "G1", "strength": "MUST", "statement": "Rename the helper."}
+  ],
+  "acceptance_criteria": ["The helper is renamed."],
+  "validation_requirements": ["go build ./..."],
+  "escalation_conditions": []
+}
