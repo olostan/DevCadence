@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/olostan/DevCadience/schemas/requirement.schema.json",
+  "title": "DevCadience Requirement",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "requirement_id", "project_id", "kind", "statement", "strength", "status", "source"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "requirement_id": {"type": "string"},
+    "project_id": {"type": "string"},
+    "kind": {"enum": ["functional", "non_functional", "constraint", "non_goal"]},
+    "statement": {"type": "string"},
+    "strength": {"enum": ["MUST", "SHOULD", "MAY"]},
+    "status": {"enum": ["confirmed", "evidence_backed", "proposed", "assumed", "deferred", "rejected", "superseded"]},
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "properties": {
+        "type": {"enum": ["product_decision", "human_statement", "external_fact", "repository_fact", "experiment", "principal_inference", "policy"]},
+        "ref": {"type": ["string", "null"]}
+      }
+    },
+    "needs_human_confirmation": {"type": "boolean", "default": false},
+    "evidence_refs": {"type": "array", "items": {"type": "string"}},
+    "rationale": {"type": ["string", "null"]},
+    "acceptance_hint": {"type": ["string", "null"]},
+    "supersedes": {"type": ["string", "null"]}
+  }
+}
