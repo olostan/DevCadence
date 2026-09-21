@@ -128,6 +128,13 @@ See [DISCOVERY_AND_SPECIFICATION.md](DISCOVERY_AND_SPECIFICATION.md).
 ## 3. Extended tools
 
 Later milestones may add:
+- `start_review_campaign`;
+- `review_campaign_state`;
+- `adjudicate_findings`;
+- `create_repair_work_package`;
+- `focused_revalidate`;
+- `close_review_campaign`;
+- `reopen_review_campaign`;
 - `consult`;
 - `classify_change`;
 - `plan_refactoring_epoch`;
@@ -258,3 +265,16 @@ The MCP server is thin:
 - stream/return result.
 
 No important routing or acceptance policy belongs only in the MCP adapter.
+
+
+### Review-campaign API rule
+
+Review tools must preserve campaign convergence semantics.
+
+The API must not expose "run another unrestricted review" as the default post-repair operation. Broad review, focused revalidation, closure review, and reopen are distinct semantic actions with different thresholds.
+
+A reopen request for an adjudicated/frozen campaign must carry materially new evidence or a changed requirement/policy basis. Equivalent new opinion is rejected by policy.
+
+Implementers receive consolidated Repair Work Packages rather than raw reviewer transcripts by default.
+
+See [REVIEW_AND_CONVERGENCE.md](REVIEW_AND_CONVERGENCE.md).
