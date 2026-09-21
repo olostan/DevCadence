@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/olostan/DevCadience/schemas/validation-result.schema.json",
+  "title": "DevCadience ValidationResult",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "validation_id", "project_id", "attempt_id", "commit", "status", "checks"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "validation_id": {"type": "string"},
+    "project_id": {"type": "string"},
+    "attempt_id": {"type": "string"},
+    "commit": {"type": "string"},
+    "status": {"enum": ["pass", "fail", "error", "cancelled"]},
+    "checks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "kind", "status", "started_at", "finished_at"],
+        "properties": {
+          "id": {"type": "string"},
+          "kind": {"type": "string"},
+          "command": {"type": "array", "items": {"type": "string"}},
+          "tool_version": {"type": ["string", "null"]},
+          "working_directory": {"type": ["string", "null"]},
+          "status": {"enum": ["pass", "fail", "error", "cancelled", "skipped"]},
+          "exit_code": {"type": ["integer", "null"]},
+          "started_at": {"type": "string", "format": "date-time"},
+          "finished_at": {"type": "string", "format": "date-time"},
+          "summary": {"type": ["string", "null"]},
+          "stdout_artifact": {"type": ["string", "null"]},
+          "stderr_artifact": {"type": ["string", "null"]},
+          "output_truncated": {"type": "boolean", "default": false}
+        }
+      }
+    }
+  }
+}
