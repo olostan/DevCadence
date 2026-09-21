@@ -46,6 +46,19 @@ validation:
         timeout: 30m
 
 policy:
+  discovery:
+    ask_human_batch_size: 4
+    require_specification_readiness_for_architecture: true
+    require_human_reflection_for_greenfield: true
+    substantial_project_reviews:
+      - completeness
+      - ambiguity
+      - contradiction
+      - security_privacy
+      - failure_modes
+      - architecture_contamination
+    safe_deferral_requires_boundary: true
+
   retry:
     max_implementation_attempts: 3
 
