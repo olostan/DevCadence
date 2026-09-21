@@ -136,6 +136,13 @@
             "minLength": 1
           }
         }
+      },
+      "else": {
+        "not": {
+          "required": [
+            "why_now"
+          ]
+        }
       }
     },
     {
@@ -158,6 +165,13 @@
             "type": "string",
             "minLength": 1
           }
+        }
+      },
+      "else": {
+        "not": {
+          "required": [
+            "duplicate_of"
+          ]
         }
       }
     },
@@ -186,6 +200,22 @@
             "type": "string",
             "minLength": 1
           }
+        }
+      },
+      "else": {
+        "not": {
+          "anyOf": [
+            {
+              "required": [
+                "deferred_target"
+              ]
+            },
+            {
+              "required": [
+                "reconsideration_trigger"
+              ]
+            }
+          ]
         }
       }
     }

@@ -576,5 +576,6 @@ deliverable (ADR-0010).
 Because strict decoding rejects unknown fields (DCI-092), M6 must add the
 typed projection and publish the schema field in the same change that first
 writes it, not after. The same applies to `schemas/review-campaign.schema.json`,
-`finding-disposition` and `closure-decision`, which are listed in
+`schemas/finding-disposition.schema.json` and
+`schemas/closure-decision.schema.json`, which are listed in
 `tests/schema_fixtures_test.go` as awaiting implementation.
