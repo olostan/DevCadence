@@ -566,16 +566,26 @@ Once a campaign is frozen, current ProjectState should retain the closure refere
 
 See [REVIEW_AND_CONVERGENCE.md](REVIEW_AND_CONVERGENCE.md).
 
-### 18.1 Not yet implemented
+### 18.1 Shape in M1, behaviour in M6
 
-`review` is not yet part of the durable `ProjectState` contract: the Go
-`ProjectState` type has no counterpart field, no event reduces into it, and
-`schemas/project-state.schema.json` does not publish it yet. It is an M6
-deliverable (ADR-0010).
+`review` is published in `schemas/project-state.schema.json` and has a typed
+counterpart, `protocol.ReviewConvergenceState`. Both exist in M1 so that the
+two representations accept the same documents: strict decoding rejects unknown
+fields (DCI-092), so a schema property with no Go field would mean the reducer
+refuses a document the schema calls valid.
 
-Because strict decoding rejects unknown fields (DCI-092), M6 must add the
-typed projection and publish the schema field in the same change that first
-writes it, not after. The same applies to `schemas/review-campaign.schema.json`,
-`schemas/finding-disposition.schema.json` and
-`schemas/closure-decision.schema.json`, which are listed in
-`tests/schema_fixtures_test.go` as awaiting implementation.
+What M1 does **not** provide is any behaviour behind it. No event reduces into
+`review`, the control plane never populates it, and no campaign, finding
+disposition or closure decision is created — that is M6 (ADR-0010). A
+`ProjectState` rendered by this build therefore omits the block entirely.
+
+M6 fills it in by adding the events and the reduction; the shape it fills is
+already fixed here, which is the point. Only counts and references belong in
+it: reviewer transcripts, consultant conversations and repair histories stay
+evidence artifacts retrievable by reference, exactly as §1 requires for every
+other part of this state.
+
+The three campaign record schemas — `review-campaign`, `finding-disposition`
+and `closure-decision` — have no Go twin at all, and so cannot diverge from
+one. They are listed in `tests/schema_fixtures_test.go` as awaiting their M6
+implementation; an unlisted schema without a Go type still fails that test.

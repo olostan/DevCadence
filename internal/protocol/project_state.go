@@ -49,6 +49,9 @@ type ProjectState struct {
 	RecentSemanticChanges []SemanticChange `json:"recent_semantic_changes,omitempty"`
 	Capabilities          *Capabilities    `json:"capabilities,omitempty"`
 	Discovery             *DiscoveryState  `json:"discovery,omitempty"`
+	// Review is the bounded review campaign projection (ADR-0010). Shape
+	// only in M1; nothing reduces into it until M6.
+	Review *ReviewConvergenceState `json:"review,omitempty"`
 }
 
 // DiscoveryState is the compact Day-0 projection of docs/PROJECT_STATE.md §17.
@@ -407,6 +410,11 @@ func (s *ProjectState) Validate() error {
 			}
 		}
 	}
+	if s.Review != nil {
+		if err := s.Review.Validate(); err != nil {
+			return err
+		}
+	}
 	for _, c := range s.RecentSemanticChanges {
 		if err := requireNonEmpty(kind, "recent_semantic_changes[].task_id", c.TaskID); err != nil {
 			return err
@@ -447,4 +455,82 @@ func orEmpty[T any](s []T) []T {
 		return []T{}
 	}
 	return s
+}
+
+// ReviewPhase is where a bounded review campaign currently stands
+// (ADR-0010, DCI-047).
+type ReviewPhase string
+
+const (
+	ReviewPhaseBroadReview         ReviewPhase = "broad_review"
+	ReviewPhaseAdjudication        ReviewPhase = "adjudication"
+	ReviewPhaseRepair              ReviewPhase = "repair"
+	ReviewPhaseFocusedRevalidation ReviewPhase = "focused_revalidation"
+	ReviewPhaseClosureReview       ReviewPhase = "closure_review"
+	ReviewPhaseFrozen              ReviewPhase = "frozen"
+	ReviewPhaseReopened            ReviewPhase = "reopened"
+	ReviewPhaseEscalated           ReviewPhase = "escalated"
+)
+
+// Valid reports whether the phase is defined by the schema.
+func (p ReviewPhase) Valid() bool {
+	switch p {
+	case ReviewPhaseBroadReview, ReviewPhaseAdjudication, ReviewPhaseRepair,
+		ReviewPhaseFocusedRevalidation, ReviewPhaseClosureReview,
+		ReviewPhaseFrozen, ReviewPhaseReopened, ReviewPhaseEscalated:
+		return true
+	}
+	return false
+}
+
+// ReviewConvergenceState is the compact projection of the active review
+// campaign (docs/REVIEW_AND_CONVERGENCE.md, ADR-0010).
+//
+// M1 defines the shape only. No event reduces into it and the control plane
+// never populates it: campaigns, finding dispositions and closure decisions
+// are M6. The type exists here because `project-state.schema.json` publishes
+// the field, and a schema property with no counterpart on its Go twin would
+// mean strict decoding refuses a document the schema calls valid (DCI-092).
+//
+// Only counts and references belong here. Reviewer transcripts, consultant
+// conversations and repair histories stay evidence artifacts retrievable by
+// reference — the compact-state rule of docs/PROJECT_STATE.md §1 applies to a
+// campaign exactly as it does to a task.
+type ReviewConvergenceState struct {
+	CampaignID      *string      `json:"campaign_id,omitempty"`
+	CandidateCommit *string      `json:"candidate_commit,omitempty"`
+	Phase           *ReviewPhase `json:"phase,omitempty"`
+
+	RepairRound     int `json:"repair_round,omitempty"`
+	MaxRepairRounds int `json:"max_repair_rounds,omitempty"`
+
+	RequiredDimensions  []string `json:"required_dimensions,omitempty"`
+	CompletedDimensions []string `json:"completed_dimensions,omitempty"`
+
+	BlockingFindingsOpen          int `json:"blocking_findings_open,omitempty"`
+	MaterialFindingsUnadjudicated int `json:"material_findings_unadjudicated,omitempty"`
+	FixNowFindings                int `json:"fix_now_findings,omitempty"`
+	DeferredFindings              int `json:"deferred_findings,omitempty"`
+	RejectedFindings              int `json:"rejected_findings,omitempty"`
+	OpportunisticFindings         int `json:"opportunistic_findings,omitempty"`
+
+	ClosureThreshold   *string  `json:"closure_threshold,omitempty"`
+	ResidualRiskRefs   []string `json:"residual_risk_refs,omitempty"`
+	ClosureDecisionRef *string  `json:"closure_decision_ref,omitempty"`
+}
+
+// Validate checks the enumerations the schema constrains. It is called from
+// ProjectState.Validate so that a hand-authored state carrying a review block
+// cannot name a phase the campaign model does not define.
+func (r *ReviewConvergenceState) Validate() error {
+	const kind = "ProjectState"
+	if r.Phase != nil && !(*r.Phase).Valid() {
+		return enumError(kind, "review.phase", string(*r.Phase),
+			"broad_review", "adjudication", "repair", "focused_revalidation",
+			"closure_review", "frozen", "reopened", "escalated")
+	}
+	if r.ClosureThreshold != nil && *r.ClosureThreshold != "high" && *r.ClosureThreshold != "critical" {
+		return enumError(kind, "review.closure_threshold", *r.ClosureThreshold, "high", "critical")
+	}
+	return nil
 }

@@ -72,7 +72,11 @@ Implement model-independent control-plane primitives.
 - ProjectState reducer/materialized view — `internal/state`;
 - task/attempt state machine — `internal/tasks`;
 - fixture/test framework — `internal/testsupport`, `fixtures/`, `tests/`;
-- schema validation tooling — `internal/schema`, `devcadience schema validate`.
+- schema validation tooling — `internal/schema`, `devcadience schema validate`;
+- the `ProjectState.review` projection *shape* — `protocol.ReviewConvergenceState`,
+  paired with the schema property so the two representations accept the same
+  documents. Nothing reduces into it; bounded ReviewCampaign orchestration,
+  finding adjudication and closure remain M6 (ADR-0010).
 
 ### Verification
 - unit tests for legal/illegal transitions — `internal/tasks`, including a
@@ -278,7 +282,9 @@ Add cognitive diversity where it has leverage.
 - multiple review dimensions;
 - bounded ReviewCampaign orchestration;
 - FindingDisposition adjudication;
-- rising reopen thresholds and repair-round limits;
+- rising reopen thresholds and repair-round limits, including enforcement of
+  the per-task retry bound M1 records but does not yet apply
+  (`TaskDelegated.max_attempts`; see ADR-0004 §3a);
 - focused revalidation and ClosureDecision freeze semantics;
 - reviewer finding budgets and compact review-state handoff;
 - disagreement reports;

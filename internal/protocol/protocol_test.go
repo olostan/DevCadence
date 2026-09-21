@@ -251,3 +251,32 @@ func TestValidationPassRequiresSomethingToHavePassed(t *testing.T) {
 		t.Fatalf("a run with a passing check was refused: %v", err)
 	}
 }
+
+// TestReviewProjectionRoundTrips pins the twin agreement for the review
+// campaign projection: the schema publishes it, so the Go type must accept a
+// document carrying it, and must still refuse a phase the campaign model does
+// not define (ADR-0010). Nothing populates the block in M1 — this guards the
+// shape, not any behaviour.
+func TestReviewProjectionRoundTrips(t *testing.T) {
+	doc := []byte(`{"schema_version":"1.0","project_id":"x","state_revision":"ps_1",` +
+		`"generated_at":"2026-01-02T03:04:05.000000Z","event_high_watermark":null,` +
+		`"git":{"accepted_commit":null},"milestone":{"id":"M1","title":"t"},` +
+		`"tasks":{},"validation":{"status":"green"},"risks":[],"decisions_required":[],` +
+		`"review":{"campaign_id":"rc_1","phase":"focused_revalidation","repair_round":1}}`)
+	var ps protocol.ProjectState
+	if err := protocol.Unmarshal(doc, &ps); err != nil {
+		t.Fatalf("a document carrying a review block was refused: %v", err)
+	}
+	if ps.Review == nil || ps.Review.CampaignID == nil || *ps.Review.CampaignID != "rc_1" {
+		t.Fatalf("review block did not decode: %+v", ps.Review)
+	}
+	bad := []byte(`{"schema_version":"1.0","project_id":"x","state_revision":"ps_1",` +
+		`"generated_at":"2026-01-02T03:04:05.000000Z","event_high_watermark":null,` +
+		`"git":{"accepted_commit":null},"milestone":{"id":"M1","title":"t"},` +
+		`"tasks":{},"validation":{"status":"green"},"risks":[],"decisions_required":[],` +
+		`"review":{"phase":"bikeshedding"}}`)
+	var invalid protocol.ProjectState
+	if err := protocol.Unmarshal(bad, &invalid); err == nil {
+		t.Fatal("an unknown review phase was accepted")
+	}
+}

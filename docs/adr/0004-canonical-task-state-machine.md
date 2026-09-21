@@ -181,7 +181,13 @@ rather than stored as a decision that merely looks justified. Specifically:
   many are required — correctness alone for a local change, correctness plus
   architecture for a systemic one, further vectors for security-sensitive or
   architectural work — is an M6 policy decision keyed on change class and
-  risk. The domain floor is one; policy raises it;
+  risk, expressed as a ReviewCampaign's required dimensions and closure
+  threshold (ADR-0010). The domain floor is one; policy raises it.
+
+  The floor is about evidence *existing*, not about findings. DCI-046 makes
+  "zero closure-threshold findings" a valid result, and such a review is a
+  ReviewResult with a passing verdict and an empty findings list — which
+  satisfies this rule. Requiring a review is not requiring criticism;
 - a **rejection** carries the same attempt and candidate requirements minus
   the evidence citations;
 - an **escalation** that cites an attempt must cite one of the task's own.
@@ -204,6 +210,19 @@ trigger, a statement, a decision authority, optional evidence references, the
 attempt that surfaced it, and the state the task blocked from. A blocked task
 without a reason, or a non-blocked task carrying one, is an integrity error.
 `EscalationRaised` is the only event that blocks a task.
+
+**3a. Retry bounds are recorded in M1 and enforced in M6.** `TaskDelegated`
+carries `max_attempts` and every attempt carries an `Ordinal`, so the journal
+holds both the bound and the count. The reducer does not yet refuse an attempt
+that exceeds the bound, because the projected task does not carry the limit and
+because what *should* happen at the bound — escalation rather than another
+attempt (DCI-045, DCI-049) — is the campaign behaviour ADR-0010 assigns to M6.
+
+This is a gap, not a decision that bounds do not matter: until M6 closes it,
+nothing in the domain stops a caller appending attempt *n+1* past a recorded
+limit of *n*. Closing it needs the limit carried into the task projection and
+a rule that converts exceeding it into an escalation, which is one change and
+belongs with the milestone that owns the escalation behaviour.
 
 **4. Attempts are separate from task state.** `AttemptBlocked` terminates an
 attempt without blocking the task, because docs/LIFECYCLE.md §13 has the
