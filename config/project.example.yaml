@@ -8,30 +8,59 @@ project:
   repository: /absolute/path/to/repository
   accepted_branch: main
 
+deployment:
+  # Suggested by guided setup after environment discovery; operator may override.
+  # local-heavy | hybrid-thin | cloud-cognition | offline | custom
+  profile: hybrid-thin
+
 principal:
-  frontend: antigravity
+  # Initial first-class hosts: antigravity | cursor | vscode.
+  # Host setup may be deferred.
+  host: antigravity
   information_firewall: true
   allow_raw_source_escalation: true
 
-local_models:
-  profiles:
-    strong_coder:
-      runtime: mlx
-      model: "<configured-locally>"
-      preferred_context_tokens: 65536
-      max_concurrency: 1
-
-    independent_reviewer:
+cognition:
+  endpoints:
+    local_small:
+      kind: local_runtime
       runtime: ollama
-      model: "<configured-locally>"
+      model: "<configured-after-capability-probe>"
+      acceleration_required: false
+      preferred_context_tokens: 16384
+      max_concurrency: 1
+      cost_class: local_compute
+
+    local_strong:
+      kind: local_runtime
+      runtime: mlx
+      model: "<optional-strong-local-model>"
+      acceleration_required: true
       preferred_context_tokens: 65536
       max_concurrency: 1
+      cost_class: local_compute
 
-roles:
-  scout: strong_coder
-  implementer: strong_coder
-  correctness_reviewer: independent_reviewer
-  architecture_reviewer: independent_reviewer
+    remote_economy:
+      kind: authenticated_cli
+      provider: "<discovered-supported-endpoint>"
+      credential_ref: "<credential-reference>"
+      cost_class: subscription_or_economy
+      source_exposure: focused_or_tool_mediated
+
+  routing:
+    scout:
+      prefer: [local_small, remote_economy]
+    implementer:
+      prefer: [local_strong, remote_economy]
+    correctness_reviewer:
+      prefer: [local_strong, remote_economy]
+    architecture_reviewer:
+      prefer: [remote_economy]
+
+setup:
+  allow_privileged_auto_apply: false
+  require_plan_before_mutation: true
+  verify_acceleration_with_inference_probe: true
 
 validation:
   profiles:
@@ -98,9 +127,10 @@ policy:
     after_milestone: true
 
 consultants:
-  allow:
-    - codex
-    - claude
+  # Optional. Guided setup discovers which supported endpoints are actually available.
+  required: false
+  allow_discovered: true
+  preferred: []
   send_raw_source: false
 
 security:
