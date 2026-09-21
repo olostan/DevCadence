@@ -568,16 +568,13 @@ See [REVIEW_AND_CONVERGENCE.md](REVIEW_AND_CONVERGENCE.md).
 
 ### 18.1 Not yet implemented
 
-`review` is published in `schemas/project-state.schema.json` but has no
-counterpart on the Go `ProjectState` type, and no event reduces into it. It is
-an M6 deliverable (ADR-0010), published ahead of its implementation the way
-the discovery contracts were before M1.
+`review` is not yet part of the durable `ProjectState` contract: the Go
+`ProjectState` type has no counterpart field, no event reduces into it, and
+`schemas/project-state.schema.json` does not publish it yet. It is an M6
+deliverable (ADR-0010).
 
-The consequence is worth stating plainly, because strict decoding makes it
-sharp: `protocol.Unmarshal` refuses a ProjectState document carrying a
-`review` block, since unknown fields are an error rather than a silent loss
-(DCI-092). Nothing emits one today, so nothing is broken; M6 must add the
-typed projection in the same change that first writes the field, not after.
-The same applies to `schemas/review-campaign.schema.json`,
+Because strict decoding rejects unknown fields (DCI-092), M6 must add the
+typed projection and publish the schema field in the same change that first
+writes it, not after. The same applies to `schemas/review-campaign.schema.json`,
 `finding-disposition` and `closure-decision`, which are listed in
 `tests/schema_fixtures_test.go` as awaiting implementation.
