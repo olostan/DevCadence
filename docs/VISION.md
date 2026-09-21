@@ -294,6 +294,22 @@ Antigravity, Cursor and Visual Studio Code are the initial first-class principal
 
 See [ENVIRONMENT_INTELLIGENCE_AND_ONBOARDING.md](ENVIRONMENT_INTELLIGENCE_AND_ONBOARDING.md) and [PRINCIPAL_HOSTS.md](PRINCIPAL_HOSTS.md).
 
+## 14B. Brownfield adoption vision
+
+DevCadience should be adoptable by an existing project even when that repository was never designed for DevCadience and has little or poor documentation.
+
+The system should:
+- inventory the repository and all available documentation;
+- reconstruct current behavior/contracts from source, tests, schemas, configuration and history;
+- expose contradictions and unknowns instead of smoothing them over;
+- ask humans only for decisions that actually require human/product authority;
+- materialize a mandatory canonical project documentation baseline in Git;
+- refuse normal managed implementation until the Adoption Readiness Gate passes.
+
+The point is not to force old projects into a cosmetic template. The point is to create a predictable, version-controlled engineering contract from which future principal/worker sessions can operate safely.
+
+See [PROJECT_ADOPTION.md](PROJECT_ADOPTION.md).
+
 ## 15. What we deliberately do not promise
 
 DevCadience does not assume:
