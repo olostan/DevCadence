@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/olostan/DevCadience/schemas/closure-decision.schema.json",
+  "title": "DevCadience ClosureDecision",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "closure_decision_id", "campaign_id", "candidate_commit", "deterministic_validation", "required_reviews_complete", "open_blocking_findings", "unadjudicated_material_findings", "open_repair_regressions", "residual_risk_bounded", "outcome", "decided_by"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "closure_decision_id": {"type": "string", "minLength": 1},
+    "campaign_id": {"type": "string", "minLength": 1},
+    "candidate_commit": {"type": "string", "minLength": 1},
+    "deterministic_validation": {"enum": ["pass", "fail", "incomplete"]},
+    "required_reviews_complete": {"type": "boolean"},
+    "open_blocking_findings": {"type": "integer", "minimum": 0},
+    "unadjudicated_material_findings": {"type": "integer", "minimum": 0},
+    "unresolved_material_disagreements": {"type": "integer", "minimum": 0},
+    "open_repair_regressions": {"type": "integer", "minimum": 0},
+    "contract_changes_reviewed": {"type": "boolean"},
+    "residual_risk_bounded": {"type": "boolean"},
+    "residual_risk_refs": {"type": "array", "items": {"type": "string"}},
+    "closure_threshold": {"enum": ["high", "critical"]},
+    "outcome": {"enum": ["frozen", "repair_required", "escalated"]},
+    "rationale": {"type": ["string", "null"]},
+    "decided_by": {"enum": ["principal", "human"]}
+  }
+}
