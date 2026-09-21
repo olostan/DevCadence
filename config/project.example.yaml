@@ -1,0 +1,83 @@
+# Illustrative DevCadience project configuration.
+# This file is a design example until the configuration loader is implemented.
+
+schema_version: "0.1"
+
+project:
+  id: example
+  repository: /absolute/path/to/repository
+  accepted_branch: main
+
+principal:
+  frontend: antigravity
+  information_firewall: true
+  allow_raw_source_escalation: true
+
+local_models:
+  profiles:
+    strong_coder:
+      runtime: mlx
+      model: "<configured-locally>"
+      preferred_context_tokens: 65536
+      max_concurrency: 1
+
+    independent_reviewer:
+      runtime: ollama
+      model: "<configured-locally>"
+      preferred_context_tokens: 65536
+      max_concurrency: 1
+
+roles:
+  scout: strong_coder
+  implementer: strong_coder
+  correctness_reviewer: independent_reviewer
+  architecture_reviewer: independent_reviewer
+
+validation:
+  profiles:
+    fast:
+      - argv: ["go", "test", "./internal/..."]
+        timeout: 10m
+      - argv: ["go", "vet", "./..."]
+        timeout: 10m
+
+    full:
+      - argv: ["go", "test", "./..."]
+        timeout: 30m
+
+policy:
+  retry:
+    max_implementation_attempts: 3
+
+  change_paths:
+    local:
+      principal_design_required: false
+      correctness_review_required: true
+
+    systemic:
+      principal_design_required: true
+      alternatives_required: true
+      correctness_review_required: true
+      architecture_review_required: true
+
+    architectural:
+      principal_design_required: true
+      alternatives_required: true
+      adversarial_critique_required: true
+      adr_required: true
+      architecture_review_required: true
+      principal_acceptance_required: true
+
+  refactoring:
+    after_systemic_tasks: 20
+    after_milestone: true
+
+consultants:
+  allow:
+    - codex
+    - claude
+  send_raw_source: false
+
+security:
+  worker_network: deny_by_default
+  destructive_operations_require_human: true
