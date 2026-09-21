@@ -366,15 +366,30 @@ func MergeEnv(base []string, overrides map[string]string) []string {
 		}
 		return e
 	}
-	out := make([]string, 0, len(base)+len(overrides))
-	seen := make(map[string]bool, len(overrides))
+	// Base entries: a duplicate key keeps its first position (for
+	// deterministic ordering) but the last occurrence's value, matching the
+	// documented last-wins rule. Without this, a duplicated base key (e.g.
+	// two PATH= entries) would survive into the resolved environment twice,
+	// letting resolveExecutable's PATH lookup (which takes the first match)
+	// and the child process's actual environment (where a later duplicate
+	// wins) disagree about which value is in effect.
+	baseIndex := make(map[string]int, len(base))
+	var baseOut []string
 	for _, e := range base {
 		k := keyOf(e)
 		if _, overridden := overrides[k]; overridden {
 			continue
 		}
-		out = append(out, e)
+		if idx, ok := baseIndex[k]; ok {
+			baseOut[idx] = e
+			continue
+		}
+		baseIndex[k] = len(baseOut)
+		baseOut = append(baseOut, e)
 	}
+	out := make([]string, 0, len(baseOut)+len(overrides))
+	out = append(out, baseOut...)
+	seen := make(map[string]bool, len(overrides))
 	// Deterministic order for overrides regardless of map iteration.
 	keys := make([]string, 0, len(overrides))
 	for k := range overrides {

@@ -150,6 +150,98 @@ func TestCommitExistsAndAncestry(t *testing.T) {
 	}
 }
 
+// TestRevisionArgumentInjectionRejected proves a revision value shaped like
+// a Git option (starting with "-") is refused rather than passed straight
+// through to `git`, where it could be interpreted as an option instead of a
+// revision (docs/SECURITY.md §6).
+func TestRevisionArgumentInjectionRejected(t *testing.T) {
+	fixture := testsupport.NewGitRepo(t)
+	repo, err := repository.Register(context.Background(), "proj-a", fixture.Path, repository.Options{})
+	if err != nil {
+		t.Fatalf("register: %v", err)
+	}
+	head := fixture.Head()
+	malicious := "--output=/tmp/pwned"
+
+	if _, err := repo.CommitExists(context.Background(), malicious); errs.CategoryOf(err) != errs.CategoryInvalidArgument {
+		t.Fatalf("CommitExists category = %v", errs.CategoryOf(err))
+	}
+	if _, err := repo.IsAncestor(context.Background(), malicious, head); errs.CategoryOf(err) != errs.CategoryInvalidArgument {
+		t.Fatalf("IsAncestor(ancestor) category = %v", errs.CategoryOf(err))
+	}
+	if _, err := repo.IsAncestor(context.Background(), head, malicious); errs.CategoryOf(err) != errs.CategoryInvalidArgument {
+		t.Fatalf("IsAncestor(descendant) category = %v", errs.CategoryOf(err))
+	}
+	if _, err := repo.MergeBase(context.Background(), malicious, head); errs.CategoryOf(err) != errs.CategoryInvalidArgument {
+		t.Fatalf("MergeBase(a) category = %v", errs.CategoryOf(err))
+	}
+	if _, err := repo.Diff(context.Background(), malicious, head); errs.CategoryOf(err) != errs.CategoryInvalidArgument {
+		t.Fatalf("Diff(base) category = %v", errs.CategoryOf(err))
+	}
+	if _, err := repo.ResolveCommit(context.Background(), malicious); errs.CategoryOf(err) != errs.CategoryInvalidArgument {
+		t.Fatalf("ResolveCommit category = %v", errs.CategoryOf(err))
+	}
+}
+
+// TestResolveCommitCanonicalisesMovingRef proves ResolveCommit turns a
+// moving ref such as a branch name into the full canonical SHA it currently
+// names, rather than a caller being able to store the ref text itself as a
+// durable base commit (docs/IMPLEMENTATION_PLAN.md M2 §18).
+func TestResolveCommitCanonicalisesMovingRef(t *testing.T) {
+	fixture := testsupport.NewGitRepo(t)
+	repo, err := repository.Register(context.Background(), "proj-a", fixture.Path, repository.Options{})
+	if err != nil {
+		t.Fatalf("register: %v", err)
+	}
+	head := fixture.Head()
+
+	resolved, err := repo.ResolveCommit(context.Background(), "main")
+	if err != nil {
+		t.Fatalf("resolve main: %v", err)
+	}
+	if resolved != head {
+		t.Fatalf("resolved = %s, want %s", resolved, head)
+	}
+	if resolved == "main" {
+		t.Fatal("ResolveCommit must not return the ref text itself")
+	}
+
+	if _, err := repo.ResolveCommit(context.Background(), "no-such-ref"); errs.CategoryOf(err) != errs.CategoryInvalidArgument {
+		t.Fatalf("category for unresolvable ref = %v", errs.CategoryOf(err))
+	}
+}
+
+// TestInspectStatusHandlesPathsWithSpaces proves porcelain v2's NUL-
+// delimited (`-z`) form is used to parse status output, so a path
+// containing spaces is reported whole rather than truncated to its last
+// whitespace-separated word.
+func TestInspectStatusHandlesPathsWithSpaces(t *testing.T) {
+	fixture := testsupport.NewGitRepo(t)
+	repo, err := repository.Register(context.Background(), "proj-a", fixture.Path, repository.Options{})
+	if err != nil {
+		t.Fatalf("register: %v", err)
+	}
+	fixture.WriteFile("dir with spaces/file name.txt", "original")
+	fixture.Commit("add a spaced path")
+	fixture.WriteFile("dir with spaces/file name.txt", "modified")
+	facts, err := repo.Inspect(context.Background())
+	if err != nil {
+		t.Fatalf("inspect: %v", err)
+	}
+	if !facts.Dirty {
+		t.Fatal("expected dirty tree")
+	}
+	found := false
+	for _, s := range facts.Status {
+		if s.Path == "dir with spaces/file name.txt" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected the full spaced path in status entries, got %+v", facts.Status)
+	}
+}
+
 func TestDiffStat(t *testing.T) {
 	fixture := testsupport.NewGitRepo(t)
 	base := fixture.Head()

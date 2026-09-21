@@ -70,18 +70,32 @@ func (c *CheckSpec) UnmarshalYAML(value *yaml.Node) error {
 // config/project.example.yaml's `validation.profiles` block:
 //
 //	validation:
-//	  fast:
-//	    - argv: ["go", "test", "./internal/..."]
-//	      timeout: 10m
-//	  full:
-//	    - argv: ["go", "test", "./..."]
-//	      timeout: 30m
+//	  profiles:
+//	    fast:
+//	      - argv: ["go", "test", "./internal/..."]
+//	        timeout: 10m
+//	    full:
+//	      - argv: ["go", "test", "./..."]
+//	        timeout: 30m
 //
-// The top-level `validation:` key is optional; a document that is already
-// just the profile map (`{"fast": [...], "full": [...]}`) is also accepted,
-// so a profile file can stand alone or live under a project's full
-// configuration.
+// Two other shapes are also accepted, so a profile file can stand alone or
+// live under a project's full configuration in whichever of these forms it
+// was written:
+//
+//   - `validation:` directly holding the profile map, with no nested
+//     `profiles:` key (`{"validation": {"fast": [...]}}`);
+//   - no top-level `validation:` key at all — the document is already just
+//     the profile map (`{"fast": [...], "full": [...]}`).
 func LoadProfiles(data []byte) (map[string]Profile, error) {
+	var nested struct {
+		Validation struct {
+			Profiles map[string][]CheckSpec `yaml:"profiles"`
+		} `yaml:"validation"`
+	}
+	if err := yaml.Unmarshal(data, &nested); err == nil && nested.Validation.Profiles != nil {
+		return buildProfiles(nested.Validation.Profiles)
+	}
+
 	var doc struct {
 		Validation map[string][]CheckSpec `yaml:"validation"`
 	}
@@ -96,6 +110,10 @@ func LoadProfiles(data []byte) (map[string]Profile, error) {
 		}
 		raw = direct
 	}
+	return buildProfiles(raw)
+}
+
+func buildProfiles(raw map[string][]CheckSpec) (map[string]Profile, error) {
 	out := make(map[string]Profile, len(raw))
 	for name, checks := range raw {
 		profile := Profile{Name: name, Checks: checks}

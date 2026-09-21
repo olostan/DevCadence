@@ -33,17 +33,17 @@ func TestExecuteAndRecordBaseline(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new store: %v", err)
 	}
-	dir := t.TempDir()
+	fixture := testsupport.NewGitRepo(t)
 
 	res, err := validation.ExecuteAndRecord(context.Background(), h.Service, validation.ExecuteInput{
 		ProjectID: "example",
 		Subject:   protocol.ValidationSubject{Kind: protocol.ScopeBaseline},
-		Commit:    "cafebabe0000000000000000000000000000000",
+		Commit:    fixture.Head(),
 		Profile: validation.Profile{
 			Name:   "baseline",
 			Checks: []validation.CheckSpec{{ID: "ok", Argv: []string{"true"}, Timeout: 5000000000}},
 		},
-		Run: validation.RunOptions{Dir: dir, Artifacts: store},
+		Run: validation.RunOptions{Dir: fixture.Path, Artifacts: store},
 		IDs: h.IDs,
 	})
 	if err != nil {
@@ -122,14 +122,14 @@ func driveTaskToValidating(t *testing.T, h *testsupport.Harness, candidate strin
 
 func TestExecuteAndRecordAttemptScopeDrivesTaskToReviewing(t *testing.T) {
 	h := testsupport.NewHarness(t)
-	const candidate = "cafebabe0000000000000000000000000000000"
+	fixture := testsupport.NewGitRepo(t)
+	candidate := fixture.Head()
 	taskID, attemptID := driveTaskToValidating(t, h, candidate)
 
 	store, err := artifacts.NewStore(filepath.Join(t.TempDir(), "artifacts"), ids.NewSequential())
 	if err != nil {
 		t.Fatalf("new store: %v", err)
 	}
-	dir := t.TempDir()
 
 	res, err := validation.ExecuteAndRecord(context.Background(), h.Service, validation.ExecuteInput{
 		ProjectID: "example",
@@ -139,7 +139,7 @@ func TestExecuteAndRecordAttemptScopeDrivesTaskToReviewing(t *testing.T) {
 			Name:   "attempt",
 			Checks: []validation.CheckSpec{{ID: "ok", Argv: []string{"true"}, Timeout: 5000000000}},
 		},
-		Run: validation.RunOptions{Dir: dir, Artifacts: store},
+		Run: validation.RunOptions{Dir: fixture.Path, Artifacts: store},
 		IDs: h.IDs,
 	})
 	if err != nil {
@@ -159,14 +159,14 @@ func TestExecuteAndRecordAttemptScopeDrivesTaskToReviewing(t *testing.T) {
 
 func TestExecuteAndRecordAttemptScopeFailureReturnsToRunning(t *testing.T) {
 	h := testsupport.NewHarness(t)
-	const candidate = "deadbeef0000000000000000000000000000000"
+	fixture := testsupport.NewGitRepo(t)
+	candidate := fixture.Head()
 	taskID, attemptID := driveTaskToValidating(t, h, candidate)
 
 	store, err := artifacts.NewStore(filepath.Join(t.TempDir(), "artifacts"), ids.NewSequential())
 	if err != nil {
 		t.Fatalf("new store: %v", err)
 	}
-	dir := t.TempDir()
 
 	if _, err := validation.ExecuteAndRecord(context.Background(), h.Service, validation.ExecuteInput{
 		ProjectID: "example",
@@ -176,7 +176,7 @@ func TestExecuteAndRecordAttemptScopeFailureReturnsToRunning(t *testing.T) {
 			Name:   "attempt",
 			Checks: []validation.CheckSpec{{ID: "fails", Argv: []string{"false"}, Timeout: 5000000000}},
 		},
-		Run: validation.RunOptions{Dir: dir, Artifacts: store},
+		Run: validation.RunOptions{Dir: fixture.Path, Artifacts: store},
 		IDs: h.IDs,
 	}); err != nil {
 		t.Fatalf("execute and record: %v", err)
@@ -196,8 +196,17 @@ func TestExecuteAndRecordAttemptScopeFailureReturnsToRunning(t *testing.T) {
 // the task, and nothing partial is left behind.
 func TestExecuteAndRecordWrongCommitRefused(t *testing.T) {
 	h := testsupport.NewHarness(t)
-	const candidate = "cafebabe0000000000000000000000000000000"
+	fixture := testsupport.NewGitRepo(t)
+	candidate := fixture.Head()
 	taskID, attemptID := driveTaskToValidating(t, h, candidate)
+
+	// Advance the fixture's real HEAD past the recorded candidate, so the
+	// claimed commit below is a genuine, verifiable HEAD (passing the new
+	// dir-matches-claim check in ExecuteAndRecord) that nonetheless disagrees
+	// with the attempt's actual recorded candidate (tripping the existing
+	// candidate cross-check further downstream).
+	fixture.WriteFile("advance.txt", "advance past the candidate\n")
+	wrongButReal := fixture.Commit("advance past the candidate")
 
 	store, err := artifacts.NewStore(filepath.Join(t.TempDir(), "artifacts"), ids.NewSequential())
 	if err != nil {
@@ -211,12 +220,12 @@ func TestExecuteAndRecordWrongCommitRefused(t *testing.T) {
 	_, err = validation.ExecuteAndRecord(context.Background(), h.Service, validation.ExecuteInput{
 		ProjectID: "example",
 		Subject:   protocol.ValidationSubject{Kind: protocol.ScopeAttempt, TaskID: taskID, AttemptID: attemptID},
-		Commit:    "0000000000000000000000000000000000000000", // not the recorded candidate
+		Commit:    wrongButReal, // not the recorded candidate
 		Profile: validation.Profile{
 			Name:   "attempt",
 			Checks: []validation.CheckSpec{{ID: "ok", Argv: []string{"true"}, Timeout: 5000000000}},
 		},
-		Run: validation.RunOptions{Dir: t.TempDir(), Artifacts: store},
+		Run: validation.RunOptions{Dir: fixture.Path, Artifacts: store},
 		IDs: h.IDs,
 	})
 	if err == nil {
@@ -238,5 +247,64 @@ func TestExecuteAndRecordWrongCommitRefused(t *testing.T) {
 	}
 	if detail.Task.State != tasks.StateValidating {
 		t.Fatalf("task state = %s after refused validation, want validating unchanged", detail.Task.State)
+	}
+}
+
+// TestExecuteAndRecordCommitNotDirHeadRefused proves ExecuteAndRecord binds
+// execution to the actual repository state: a caller-claimed Commit that
+// does not match Run.Dir's real Git HEAD must be refused before anything is
+// run or persisted, rather than trusting the claim at face value.
+func TestExecuteAndRecordCommitNotDirHeadRefused(t *testing.T) {
+	h := testsupport.NewHarness(t)
+	initHarnessProject(t, h)
+	fixture := testsupport.NewGitRepo(t)
+	store, err := artifacts.NewStore(filepath.Join(t.TempDir(), "artifacts"), ids.NewSequential())
+	if err != nil {
+		t.Fatalf("new store: %v", err)
+	}
+
+	_, err = validation.ExecuteAndRecord(context.Background(), h.Service, validation.ExecuteInput{
+		ProjectID: "example",
+		Subject:   protocol.ValidationSubject{Kind: protocol.ScopeBaseline},
+		Commit:    "0000000000000000000000000000000000000000", // not fixture's real HEAD
+		Profile: validation.Profile{
+			Name:   "baseline",
+			Checks: []validation.CheckSpec{{ID: "ok", Argv: []string{"true"}, Timeout: 5000000000}},
+		},
+		Run: validation.RunOptions{Dir: fixture.Path, Artifacts: store},
+		IDs: h.IDs,
+	})
+	if err == nil {
+		t.Fatal("expected a claimed commit that is not the dir's real HEAD to be refused")
+	}
+	if errs.CategoryOf(err) != errs.CategoryIntegrity {
+		t.Fatalf("category = %v", errs.CategoryOf(err))
+	}
+}
+
+// TestExecuteAndRecordDirNotAGitRepoRefused proves a validation run against a
+// directory that is not a Git repository at all is refused rather than
+// silently accepted as satisfying an arbitrary claimed commit.
+func TestExecuteAndRecordDirNotAGitRepoRefused(t *testing.T) {
+	h := testsupport.NewHarness(t)
+	initHarnessProject(t, h)
+	store, err := artifacts.NewStore(filepath.Join(t.TempDir(), "artifacts"), ids.NewSequential())
+	if err != nil {
+		t.Fatalf("new store: %v", err)
+	}
+
+	_, err = validation.ExecuteAndRecord(context.Background(), h.Service, validation.ExecuteInput{
+		ProjectID: "example",
+		Subject:   protocol.ValidationSubject{Kind: protocol.ScopeBaseline},
+		Commit:    "cafebabe0000000000000000000000000000000",
+		Profile: validation.Profile{
+			Name:   "baseline",
+			Checks: []validation.CheckSpec{{ID: "ok", Argv: []string{"true"}, Timeout: 5000000000}},
+		},
+		Run: validation.RunOptions{Dir: t.TempDir(), Artifacts: store},
+		IDs: h.IDs,
+	})
+	if err == nil {
+		t.Fatal("expected validation against a non-git dir to be refused")
 	}
 }

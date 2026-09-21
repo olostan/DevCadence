@@ -4,10 +4,21 @@ import (
 	"context"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/olostan/DevCadience/internal/errs"
 	"github.com/olostan/DevCadience/internal/process"
 )
+
+// cleanupGitTimeout bounds the best-effort `git worktree remove` issued
+// during CheckMerge's cleanup. It intentionally runs on an independent
+// context (context.Background(), not the caller's ctx) rather than the
+// context CheckMerge was called with: if the caller's context is already
+// cancelled or timed out by the time cleanup runs, running the removal
+// under that same context would skip it, leaving os.RemoveAll to delete the
+// scratch directory while Git's own worktree bookkeeping (`git worktree
+// list`) still references the now-gone path as a leaked entry.
+const cleanupGitTimeout = 30 * time.Second
 
 // MergeCheck is the deterministic result of testing whether head can be
 // combined with base without changing the accepted repository
@@ -35,8 +46,11 @@ type MergeCheck struct {
 // never registered with the worktree manager and never visible through
 // worktree listing, because it represents no attempt.
 func (r *Repository) CheckMerge(ctx context.Context, base, head string) (MergeCheck, error) {
-	if base == "" || head == "" {
-		return MergeCheck{}, errs.New(errs.CategoryInvalidArgument, "repository: base and head commits are required")
+	if err := validateRevision("base", base); err != nil {
+		return MergeCheck{}, err
+	}
+	if err := validateRevision("head", head); err != nil {
+		return MergeCheck{}, err
 	}
 	ff, err := r.IsAncestor(ctx, base, head)
 	if err != nil {
@@ -56,7 +70,9 @@ func (r *Repository) CheckMerge(ctx context.Context, base, head string) (MergeCh
 		return MergeCheck{}, errs.Wrap(errs.CategoryInternal, err, "repository: create merge-check worktree")
 	}
 	defer func() {
-		_, _ = r.git(ctx, "worktree", "remove", "--force", tmpDir)
+		cleanupCtx, cancel := context.WithTimeout(context.Background(), cleanupGitTimeout)
+		defer cancel()
+		_, _ = r.git(cleanupCtx, "worktree", "remove", "--force", tmpDir)
 	}()
 
 	runInTmp := func(args ...string) (process.Result, error) {
@@ -80,6 +96,19 @@ func (r *Repository) CheckMerge(ctx context.Context, base, head string) (MergeCh
 	statusRes, err := runInTmp("diff", "--name-only", "--diff-filter=U")
 	if err != nil {
 		return MergeCheck{}, err
+	}
+	if !statusRes.Success() {
+		// The merge itself already reported failure (mergeRes above): a
+		// failing conflict-listing command on top of that is not evidence
+		// of "no conflicts" and must not be reported as
+		// MergeCheck{Clean: false, ConflictingPaths: nil}, which would look
+		// identical to "the merge conflicted with these paths" while really
+		// meaning "we don't know what happened". Surface it as an error
+		// instead of silently misclassifying an unrelated failure as a
+		// conflict.
+		_, _ = runInTmp("merge", "--abort")
+		return MergeCheck{}, errs.New(errs.CategoryInternal,
+			"repository: list merge conflicts: %s", strings.TrimSpace(string(statusRes.Stderr)))
 	}
 	var conflicts []string
 	for _, line := range strings.Split(strings.TrimSpace(string(statusRes.Stdout)), "\n") {

@@ -137,8 +137,16 @@ func (s *Store) Put(ctx context.Context, in PutInput) (PutResult, error) {
 				truncated = true
 				// Keep draining the source into the hash-less void so a
 				// caller streaming from a live process is not blocked on a
-				// full pipe; only the file and digest stop growing.
-				_, _ = io.Copy(io.Discard, reader)
+				// full pipe; only the file and digest stop growing. This is
+				// a bounded, cancellation-aware drain rather than
+				// io.Copy(io.Discard, reader): an unbounded or still-live
+				// reader (e.g. a process whose caller never closes its
+				// pipe) must not be able to hang Put past ctx's deadline
+				// just because the byte cap was already reached.
+				if err := drainUntilCancelled(ctx, reader, buf); err != nil {
+					_ = tmp.Close()
+					return PutResult{}, errs.Wrap(errs.CategoryInternal, err, "artifacts: drain truncated source")
+				}
 				break
 			}
 			if _, werr := writer.Write(chunk); werr != nil {
@@ -198,6 +206,28 @@ func (s *Store) Put(ctx context.Context, in PutInput) (PutResult, error) {
 	return PutResult{Ref: ref, Truncated: truncated}, nil
 }
 
+// drainUntilCancelled reads and discards r until EOF, an error, or ctx is
+// cancelled, whichever comes first. It exists so that once Put's byte cap is
+// reached it can still let a live/unbounded source unblock (by consuming
+// what it writes) without giving that source the power to hang Put forever:
+// ctx.Err() is checked between reads, so a caller's deadline or cancellation
+// still bounds the call.
+func drainUntilCancelled(ctx context.Context, r io.Reader, buf []byte) error {
+	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		n, err := r.Read(buf)
+		_ = n
+		if err != nil {
+			if err == io.EOF {
+				return nil
+			}
+			return err
+		}
+	}
+}
+
 // PutBytes is a convenience wrapper for already-buffered content.
 func (s *Store) PutBytes(ctx context.Context, projectID, kind, mediaType string, data []byte, maxBytes int64) (PutResult, error) {
 	return s.Put(ctx, PutInput{
@@ -209,9 +239,12 @@ func (s *Store) PutBytes(ctx context.Context, projectID, kind, mediaType string,
 	})
 }
 
-// Open returns the artifact's bytes, verified against its recorded digest.
+// Open returns the artifact's bytes. It does not verify them against
+// ref.Digest — it only resolves the locator and opens the underlying file;
+// call Verify separately when the caller needs a digest check before or
+// after reading.
 //
-// The locator is never taken from outside this package's own output: Get
+// The locator is never taken from outside this package's own output: Open
 // resolves strictly through ref.Locator, which Put generated, so a caller
 // cannot pass an arbitrary path and reach outside the store root.
 func (s *Store) Open(ref protocol.ArtifactRef) (io.ReadCloser, error) {

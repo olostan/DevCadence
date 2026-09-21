@@ -8,10 +8,23 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/olostan/DevCadience/internal/errs"
 	"github.com/olostan/DevCadience/internal/ids"
 )
+
+// infiniteReader never returns EOF or blocks, simulating an unbounded live
+// source (e.g. a process whose stdout pipe is never closed) for
+// TestPutTruncatedDrainRespectsCancellation.
+type infiniteReader struct{}
+
+func (infiniteReader) Read(p []byte) (int, error) {
+	for i := range p {
+		p[i] = 'x'
+	}
+	return len(p), nil
+}
 
 func newStore(t *testing.T) *Store {
 	t.Helper()
@@ -59,6 +72,34 @@ func TestPutTruncation(t *testing.T) {
 	}
 	if res.Ref.SizeBytes != 100 {
 		t.Fatalf("size = %d", res.Ref.SizeBytes)
+	}
+}
+
+// TestPutTruncatedDrainRespectsCancellation proves that once Put's MaxBytes
+// cap is reached, draining the remainder of an unbounded/live reader still
+// honors ctx cancellation instead of hanging forever
+// (io.Copy(io.Discard, reader) had no such bound).
+func TestPutTruncatedDrainRespectsCancellation(t *testing.T) {
+	s := newStore(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	done := make(chan struct{})
+	var putErr error
+	go func() {
+		defer close(done)
+		_, putErr = s.Put(ctx, PutInput{
+			ProjectID: "proj-a", Kind: "stdout", Reader: infiniteReader{}, MaxBytes: 10,
+		})
+	}()
+
+	select {
+	case <-done:
+		if putErr == nil {
+			t.Fatal("expected Put to return an error once its context was cancelled mid-drain")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Put did not return after context cancellation; the post-truncation drain is not cancellation-aware")
 	}
 }
 

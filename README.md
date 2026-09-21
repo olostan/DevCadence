@@ -346,13 +346,17 @@ make race          # the suite under the race detector
 bin/devcadience repo inspect -project demo -path /absolute/path/to/repo
 
 # Create an isolated worktree for one attempt, from an explicit base commit.
+# This prints "created worktree DC-001/att-1 at <path> (branch ...)" — under
+# $DEVCADIENCE_HOME/worktrees/demo/DC-001/att-1 by default, or under -root if
+# one was given; use the path it actually prints, not a guessed one.
 bin/devcadience worktree create -project demo -repo /absolute/path/to/repo \
   -task DC-001 -attempt att-1 -base "$(git -C /absolute/path/to/repo rev-parse HEAD)"
 
 bin/devcadience worktree list -project demo
 
-# Run one controlled command (no shell) against a working directory.
-bin/devcadience run -dir /absolute/path/to/repo/../worktrees/demo/DC-001/att-1 -- go build ./...
+# Run one controlled command (no shell) against a working directory (the
+# path worktree create printed above).
+bin/devcadience run -dir "$DEVCADIENCE_HOME/worktrees/demo/DC-001/att-1" -- go build ./...
 
 # Execute a validation profile and persist a real ValidationResult +
 # ValidationCompleted, with matching digests, in one control-plane transaction.

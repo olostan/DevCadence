@@ -242,6 +242,33 @@ func TestMergeEnv(t *testing.T) {
 	}
 }
 
+// TestMergeEnvDeduplicatesDuplicateBaseKeys proves the documented last-wins
+// rule ("later duplicate keys in either slice win over earlier ones")
+// actually holds for duplicate keys within base itself, not only between
+// base and overrides. Without deduplication, a duplicated base entry (e.g.
+// two PATH= values) would survive into the merged slice twice, letting
+// resolveExecutable's PATH lookup (which takes the first match) disagree
+// with whichever value the OS treats as authoritative for the child
+// process's actual environment.
+func TestMergeEnvDeduplicatesDuplicateBaseKeys(t *testing.T) {
+	base := []string{"PATH=/first", "HOME=/home/x", "PATH=/second"}
+	merged := MergeEnv(base, nil)
+	count := 0
+	var last string
+	for _, e := range merged {
+		if strings.HasPrefix(e, "PATH=") {
+			count++
+			last = e
+		}
+	}
+	if count != 1 {
+		t.Fatalf("merged has %d PATH entries, want 1: %v", count, merged)
+	}
+	if last != "PATH=/second" {
+		t.Fatalf("PATH entry = %q, want the later duplicate's value PATH=/second", last)
+	}
+}
+
 // exeLookup is a tiny helper only for the absolute-path test above; it does
 // not exercise resolveExecutable's PATH-in-env behaviour, only where `echo`
 // actually lives on this machine so the test can pass an absolute path.

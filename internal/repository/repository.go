@@ -214,7 +214,7 @@ func (r *Repository) Inspect(ctx context.Context) (Facts, error) {
 	detached := err != nil
 	branch := strings.TrimSpace(branchOut)
 
-	statusOut, err := r.git(ctx, "status", "--porcelain=v2")
+	statusOut, err := r.git(ctx, "status", "--porcelain=v2", "-z")
 	if err != nil {
 		return Facts{}, errs.Wrap(errs.CategoryInternal, err, "repository: status")
 	}
@@ -228,41 +228,83 @@ func (r *Repository) Inspect(ctx context.Context) (Facts, error) {
 	}, nil
 }
 
+// parsePorcelainV2 parses the NUL-delimited output of
+// `git status --porcelain=v2 -z`. The `-z` form is required rather than the
+// newline-delimited default: porcelain v2 quotes paths containing spaces or
+// other special characters in the default format, and unquoting that
+// reliably would mean reimplementing Git's C-style quoting rules, whereas
+// `-z` reports every path as a literal, unquoted, NUL-terminated field, so a
+// path can be recovered exactly by splitting on NUL instead of guessing at
+// whitespace (docs/IMPLEMENTATION_PLAN.md M2 §10: read stable
+// machine-oriented output).
+//
+// Each record is one NUL-delimited token, except a rename/copy record (type
+// "2"), which is followed by one extra NUL-delimited token holding the
+// original path; that second token is consumed and discarded here since
+// StatusEntry does not currently track rename origins.
 func parsePorcelainV2(out string) []StatusEntry {
+	tokens := strings.Split(out, "\x00")
 	var entries []StatusEntry
-	for _, line := range strings.Split(out, "\n") {
-		if line == "" {
+	for i := 0; i < len(tokens); i++ {
+		tok := tokens[i]
+		if tok == "" {
 			continue
 		}
-		fields := strings.Fields(line)
-		if len(fields) < 2 {
-			continue
-		}
-		switch fields[0] {
-		case "1", "2": // ordinary / renamed-or-copied change entries
+		switch {
+		case strings.HasPrefix(tok, "1 "): // ordinary change entry
+			fields := strings.SplitN(tok, " ", 9)
 			if len(fields) < 9 {
 				continue
 			}
-			path := fields[len(fields)-1]
-			entries = append(entries, StatusEntry{Code: fields[1], Path: path})
-		case "u": // unmerged
+			entries = append(entries, StatusEntry{Code: fields[1], Path: fields[8]})
+		case strings.HasPrefix(tok, "2 "): // renamed-or-copied change entry
+			fields := strings.SplitN(tok, " ", 10)
+			if len(fields) < 10 {
+				continue
+			}
+			entries = append(entries, StatusEntry{Code: fields[1], Path: fields[9]})
+			// Consume the accompanying origPath token, if present.
+			if i+1 < len(tokens) {
+				i++
+			}
+		case strings.HasPrefix(tok, "u "): // unmerged
+			fields := strings.SplitN(tok, " ", 11)
 			if len(fields) < 11 {
 				continue
 			}
-			entries = append(entries, StatusEntry{Code: "UU", Path: fields[len(fields)-1]})
-		case "?": // untracked
-			entries = append(entries, StatusEntry{Code: "??", Path: strings.Join(fields[1:], " ")})
-		case "!": // ignored
+			entries = append(entries, StatusEntry{Code: "UU", Path: fields[10]})
+		case strings.HasPrefix(tok, "? "): // untracked
+			entries = append(entries, StatusEntry{Code: "??", Path: strings.TrimPrefix(tok, "? ")})
+		case strings.HasPrefix(tok, "! "): // ignored
 			// Ignored files do not make a tree dirty.
 		}
 	}
 	return entries
 }
 
+// validateRevision rejects a revision argument that Git would interpret as
+// an option rather than a revision (e.g. "--output=/tmp/x" or "-x"), so a
+// caller-influenced commit/branch/tag value can never be smuggled into a
+// Git invocation as an argument-injection vector (docs/SECURITY.md §6).
+// Every method on this type that passes a revision straight to `git`
+// validates it this way rather than relying on a `--` end-of-options
+// marker, which does not uniformly separate revisions from options across
+// the Git subcommands this package uses.
+func validateRevision(name, value string) error {
+	if value == "" {
+		return errs.New(errs.CategoryInvalidArgument, "repository: %s is required", name)
+	}
+	if strings.HasPrefix(value, "-") {
+		return errs.New(errs.CategoryInvalidArgument,
+			"repository: %s %q must not start with '-'", name, value)
+	}
+	return nil
+}
+
 // CommitExists reports whether sha names a reachable commit object.
 func (r *Repository) CommitExists(ctx context.Context, sha string) (bool, error) {
-	if sha == "" {
-		return false, errs.New(errs.CategoryInvalidArgument, "repository: commit is required")
+	if err := validateRevision("commit", sha); err != nil {
+		return false, err
 	}
 	res, err := r.runner.Run(ctx, process.Spec{
 		Executable: "git",
@@ -277,9 +319,38 @@ func (r *Repository) CommitExists(ctx context.Context, sha string) (bool, error)
 	return res.Success(), nil
 }
 
+// ResolveCommit resolves rev (a SHA, branch, tag, or other revision
+// expression) to the full canonical commit SHA it currently names, erroring
+// if rev does not name a commit. Callers that must store a revision
+// durably (e.g. a worktree's recorded base commit) resolve it through this
+// method rather than storing the caller-supplied revision text verbatim:
+// a moving ref such as "main" or "HEAD" stored as-is would silently stop
+// meaning what it meant at resolution time, and would compare incorrectly
+// against an actual SHA later (docs/IMPLEMENTATION_PLAN.md M2 §18).
+func (r *Repository) ResolveCommit(ctx context.Context, rev string) (string, error) {
+	if err := validateRevision("revision", rev); err != nil {
+		return "", err
+	}
+	out, err := r.git(ctx, "rev-parse", "--verify", "--quiet", rev+"^{commit}")
+	if err != nil {
+		return "", errs.Wrap(errs.CategoryInvalidArgument, err, "repository: resolve revision %q", rev)
+	}
+	sha := strings.TrimSpace(out)
+	if sha == "" {
+		return "", errs.New(errs.CategoryInvalidArgument, "repository: revision %q does not name a commit", rev)
+	}
+	return sha, nil
+}
+
 // IsAncestor reports whether ancestor is an ancestor of (or equal to)
 // descendant.
 func (r *Repository) IsAncestor(ctx context.Context, ancestor, descendant string) (bool, error) {
+	if err := validateRevision("ancestor", ancestor); err != nil {
+		return false, err
+	}
+	if err := validateRevision("descendant", descendant); err != nil {
+		return false, err
+	}
 	res, err := r.runner.Run(ctx, process.Spec{
 		Executable: "git",
 		Args:       []string{"-C", r.Path, "merge-base", "--is-ancestor", ancestor, descendant},
@@ -295,6 +366,12 @@ func (r *Repository) IsAncestor(ctx context.Context, ancestor, descendant string
 
 // MergeBase returns the merge base of a and b.
 func (r *Repository) MergeBase(ctx context.Context, a, b string) (string, error) {
+	if err := validateRevision("a", a); err != nil {
+		return "", err
+	}
+	if err := validateRevision("b", b); err != nil {
+		return "", err
+	}
 	out, err := r.git(ctx, "merge-base", a, b)
 	if err != nil {
 		return "", err
@@ -313,7 +390,13 @@ type DiffStat struct {
 // Binary files report additions/deletions of 0 with the path still listed
 // (`git diff --numstat` reports "-" for binaries).
 func (r *Repository) Diff(ctx context.Context, base, head string) (DiffStat, error) {
-	out, err := r.git(ctx, "diff", "--numstat", base, head)
+	if err := validateRevision("base", base); err != nil {
+		return DiffStat{}, err
+	}
+	if err := validateRevision("head", head); err != nil {
+		return DiffStat{}, err
+	}
+	out, err := r.git(ctx, "diff", "--numstat", base, head, "--")
 	if err != nil {
 		return DiffStat{}, err
 	}

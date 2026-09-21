@@ -135,14 +135,18 @@ func (m *Manager) Create(ctx context.Context, repo *repository.Repository, spec 
 	if repo == nil {
 		return nil, errs.New(errs.CategoryInvalidArgument, "worktrees: repository is required")
 	}
-	exists, err := repo.CommitExists(ctx, spec.BaseCommit)
+	// Resolve to the canonical commit SHA rather than trusting
+	// spec.BaseCommit's literal text: a moving ref such as "main" or "HEAD"
+	// stored verbatim as BaseCommit would silently stop meaning the commit
+	// it named at creation time, and IsStale/StaleBase would then compare a
+	// non-SHA ref against a real SHA and misreport staleness
+	// (docs/IMPLEMENTATION_PLAN.md M2 §18).
+	baseCommit, err := repo.ResolveCommit(ctx, spec.BaseCommit)
 	if err != nil {
-		return nil, err
-	}
-	if !exists {
 		return nil, errs.New(errs.CategoryInvalidArgument,
 			"worktrees: base commit %q does not exist in the repository", spec.BaseCommit)
 	}
+	spec.BaseCommit = baseCommit
 
 	lock := m.lockFor(spec.ProjectID)
 	lock.Lock()
@@ -197,6 +201,26 @@ func (m *Manager) Create(ctx context.Context, repo *repository.Repository, spec 
 	}
 	manifest.put(wt)
 	if err := m.save(spec.ProjectID, manifest); err != nil {
+		// Git has already registered the worktree and branch at this point;
+		// leaving them registered with no manifest entry would create a
+		// live, unregistered Git worktree the manager's normal Cleanup path
+		// can never find (it only looks up worktrees the manifest already
+		// knows about). Roll the Git-side registration back on an
+		// independent context — not ctx, which may itself be why the save
+		// failed (e.g. cancellation) — mirroring the pattern
+		// repository.CheckMerge's cleanup uses for the same reason. This is
+		// best-effort: if it too fails, the directory and branch are left
+		// for LeakedGitWorktrees to surface rather than silently retried.
+		rollbackCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		_, _ = m.runner.Run(rollbackCtx, process.Spec{
+			Executable: "git", Args: []string{"-C", repo.Path, "worktree", "remove", "--force", path},
+			Dir: repo.Path, Env: process.BaseEnv(), Timeout: 30 * time.Second,
+		})
+		_, _ = m.runner.Run(rollbackCtx, process.Spec{
+			Executable: "git", Args: []string{"-C", repo.Path, "branch", "-D", branch},
+			Dir: repo.Path, Env: process.BaseEnv(), Timeout: 30 * time.Second,
+		})
 		return nil, err
 	}
 	return wt, nil
@@ -213,6 +237,9 @@ type CleanupOptions struct {
 // Cleanup removes a worktree's directory and Git registration and marks it
 // removed in the manifest.
 func (m *Manager) Cleanup(ctx context.Context, repo *repository.Repository, projectID, id string, opts CleanupOptions) error {
+	if err := validateProjectID(projectID); err != nil {
+		return err
+	}
 	lock := m.lockFor(projectID)
 	lock.Lock()
 	defer lock.Unlock()
@@ -287,6 +314,9 @@ func (m *Manager) Cleanup(ctx context.Context, repo *repository.Repository, proj
 // to default every recovery scenario to `git worktree prune` or a forced
 // delete.
 func (m *Manager) Recover(ctx context.Context, repo *repository.Repository, projectID, id string, confirmGone bool) error {
+	if err := validateProjectID(projectID); err != nil {
+		return err
+	}
 	lock := m.lockFor(projectID)
 	lock.Lock()
 	defer lock.Unlock()
@@ -299,12 +329,50 @@ func (m *Manager) Recover(ctx context.Context, repo *repository.Repository, proj
 	if !ok {
 		return errs.New(errs.CategoryNotFound, "worktrees: %s not found in project %s", id, projectID)
 	}
-	_, statErr := os.Stat(wt.Path)
-	dirExists := statErr == nil
+	// Only a confirmed absence (os.IsNotExist) counts as "gone". A different
+	// stat failure (permission denied, an I/O error, …) tells us nothing
+	// about whether the directory is actually there, so it must not be
+	// silently folded into "gone" — that would let confirmGone force-close
+	// a worktree whose directory may genuinely still exist. A path that
+	// exists but is not a directory (e.g. something else now occupies it)
+	// is rejected outright rather than treated as either state.
+	info, statErr := os.Stat(wt.Path)
+	var dirExists bool
+	switch {
+	case statErr == nil:
+		if !info.IsDir() {
+			return errs.New(errs.CategoryIntegrity,
+				"worktrees: %s's path %s exists but is not a directory", id, wt.Path)
+		}
+		dirExists = true
+	case os.IsNotExist(statErr):
+		dirExists = false
+	default:
+		return errs.Wrap(errs.CategoryInternal, statErr, "worktrees: stat %s", wt.Path)
+	}
 
 	if dirExists && !confirmGone {
-		// The directory is actually there; recover it back to a normal,
-		// inspectable active worktree rather than guessing further.
+		// The directory is there, but its mere presence is not proof it is
+		// still *this* worktree: the original could have been deleted and
+		// something else (a plain directory, or a worktree belonging to a
+		// different repository or attempt) could now occupy the path. Adopt
+		// it back to active only after Git's own worktree list confirms the
+		// path is registered to the expected branch and its HEAD still
+		// descends from the recorded base commit.
+		if repo == nil {
+			return errs.New(errs.CategoryInvalidArgument,
+				"worktrees: %s cannot be recovered to active without a repository to verify its Git registration against", id)
+		}
+		verified, err := verifyGitWorktreeRegistration(ctx, m.runner, repo, wt)
+		if err != nil {
+			return err
+		}
+		if !verified {
+			return errs.New(errs.CategoryIntegrity,
+				"worktrees: path %s exists but does not match %s's expected Git worktree registration "+
+					"(branch %s, base %s descending to current HEAD); it may belong to a different "+
+					"repository or attempt and will not be adopted as active", wt.Path, id, wt.Branch, wt.BaseCommit)
+		}
 		wt.Status = StatusActive
 		wt.UpdatedAt = nowRFC3339()
 		manifest.put(wt)
@@ -332,6 +400,9 @@ func (m *Manager) Recover(ctx context.Context, repo *repository.Repository, proj
 
 // Get returns one tracked worktree.
 func (m *Manager) Get(projectID, id string) (*Worktree, error) {
+	if err := validateProjectID(projectID); err != nil {
+		return nil, err
+	}
 	lock := m.lockFor(projectID)
 	lock.Lock()
 	defer lock.Unlock()
@@ -349,6 +420,9 @@ func (m *Manager) Get(projectID, id string) (*Worktree, error) {
 
 // List returns every tracked worktree for a project, oldest first.
 func (m *Manager) List(projectID string) ([]*Worktree, error) {
+	if err := validateProjectID(projectID); err != nil {
+		return nil, err
+	}
 	lock := m.lockFor(projectID)
 	lock.Lock()
 	defer lock.Unlock()
@@ -381,35 +455,104 @@ func (m *Manager) LeakedGitWorktrees(ctx context.Context, repo *repository.Repos
 			trackedPaths[wt.Path] = true
 		}
 	}
-	res, err := m.runner.Run(ctx, process.Spec{
-		Executable: "git", Args: []string{"-C", repo.Path, "worktree", "list", "--porcelain"},
-		Dir: repo.Path, Env: process.BaseEnv(), Timeout: 30 * time.Second,
+	entries, err := listGitWorktrees(ctx, m.runner, repo.Path)
+	if err != nil {
+		return nil, err
+	}
+	var leaked []string
+	for _, e := range entries {
+		if e.path == repo.Path {
+			continue
+		}
+		if !strings.HasPrefix(e.path, m.root) {
+			// A linked worktree Git knows about but that lives outside this
+			// manager's root is not this manager's concern.
+			continue
+		}
+		if !trackedPaths[e.path] {
+			leaked = append(leaked, e.path)
+		}
+	}
+	return leaked, nil
+}
+
+// gitWorktreeEntry is one block of `git worktree list --porcelain` output.
+type gitWorktreeEntry struct {
+	path   string
+	head   string
+	branch string // short name (refs/heads/ stripped); empty when detached.
+}
+
+// listGitWorktrees asks Git itself what worktrees it knows about for
+// repoPath, parsing `git worktree list --porcelain`'s blank-line-separated
+// records. This is the single parser both LeakedGitWorktrees and Recover's
+// registration check build on, so path/branch/HEAD extraction stays
+// consistent between them.
+func listGitWorktrees(ctx context.Context, runner *process.Runner, repoPath string) ([]gitWorktreeEntry, error) {
+	res, err := runner.Run(ctx, process.Spec{
+		Executable: "git", Args: []string{"-C", repoPath, "worktree", "list", "--porcelain"},
+		Dir: repoPath, Env: process.BaseEnv(), Timeout: 30 * time.Second,
 	})
 	if err != nil {
 		return nil, err
 	}
 	if !res.Success() {
-		return nil, errs.New(errs.CategoryInternal, "worktrees: git worktree list failed: %s", string(res.Stderr))
+		return nil, errs.New(errs.CategoryInternal, "worktrees: git worktree list failed: %s", strings.TrimSpace(string(res.Stderr)))
 	}
-	var leaked []string
+	var entries []gitWorktreeEntry
+	var cur gitWorktreeEntry
+	flush := func() {
+		if cur.path != "" {
+			entries = append(entries, cur)
+		}
+		cur = gitWorktreeEntry{}
+	}
 	for _, line := range strings.Split(string(res.Stdout), "\n") {
-		if !strings.HasPrefix(line, "worktree ") {
-			continue
-		}
-		path := strings.TrimPrefix(line, "worktree ")
-		if path == repo.Path {
-			continue
-		}
-		if !strings.HasPrefix(path, m.root) {
-			// A linked worktree Git knows about but that lives outside this
-			// manager's root is not this manager's concern.
-			continue
-		}
-		if !trackedPaths[path] {
-			leaked = append(leaked, path)
+		switch {
+		case line == "":
+			flush()
+		case strings.HasPrefix(line, "worktree "):
+			cur.path = strings.TrimPrefix(line, "worktree ")
+		case strings.HasPrefix(line, "HEAD "):
+			cur.head = strings.TrimPrefix(line, "HEAD ")
+		case strings.HasPrefix(line, "branch "):
+			cur.branch = strings.TrimPrefix(strings.TrimPrefix(line, "branch "), "refs/heads/")
 		}
 	}
-	return leaked, nil
+	flush()
+	return entries, nil
+}
+
+// verifyGitWorktreeRegistration reports whether Git's own worktree list
+// confirms wt.Path is still registered as the worktree Recover believes it
+// to be: the same path, checked out on wt.Branch, with wt.BaseCommit still
+// an ancestor of (or equal to) that worktree's current HEAD. Any of those
+// disagreeing means the path is not trustworthy as wt's workspace — it may
+// have been deleted and replaced by something else entirely.
+func verifyGitWorktreeRegistration(ctx context.Context, runner *process.Runner, repo *repository.Repository, wt *Worktree) (bool, error) {
+	entries, err := listGitWorktrees(ctx, runner, repo.Path)
+	if err != nil {
+		return false, err
+	}
+	wantPath := filepath.Clean(wt.Path)
+	var match *gitWorktreeEntry
+	for i := range entries {
+		if filepath.Clean(entries[i].path) == wantPath {
+			match = &entries[i]
+			break
+		}
+	}
+	if match == nil || match.branch != wt.Branch || match.head == "" {
+		return false, nil
+	}
+	if wt.BaseCommit == "" {
+		return true, nil
+	}
+	descends, err := repo.IsAncestor(ctx, wt.BaseCommit, match.head)
+	if err != nil {
+		return false, err
+	}
+	return descends, nil
 }
 
 func isDirty(ctx context.Context, runner *process.Runner, path string) (bool, error) {
@@ -427,8 +570,8 @@ func isDirty(ctx context.Context, runner *process.Runner, path string) (bool, er
 }
 
 func validateSpec(spec Spec) error {
-	if spec.ProjectID == "" {
-		return errs.New(errs.CategoryInvalidArgument, "worktrees: project id is required")
+	if err := validateProjectID(spec.ProjectID); err != nil {
+		return err
 	}
 	for name, v := range map[string]string{"task_id": spec.TaskID, "attempt_id": spec.AttemptID} {
 		if v == "" {
@@ -441,6 +584,23 @@ func validateSpec(spec Spec) error {
 	}
 	if spec.BaseCommit == "" {
 		return errs.New(errs.CategoryInvalidArgument, "worktrees: base commit is required")
+	}
+	return nil
+}
+
+// validateProjectID applies the same path-safe identifier check idComponent
+// already gives task/attempt ids to a project id. Every exported method that
+// takes a projectID interpolates it into a manifest or worktree filesystem
+// path (manifestPath, Create's worktree path); without this check a value
+// like "../outside" would escape the manager's root the same way an
+// unvalidated task or attempt id would (docs/SECURITY.md §6).
+func validateProjectID(projectID string) error {
+	if projectID == "" {
+		return errs.New(errs.CategoryInvalidArgument, "worktrees: project id is required")
+	}
+	if !idComponent.MatchString(projectID) {
+		return errs.New(errs.CategoryInvalidArgument,
+			"worktrees: project id %q contains characters that are not safe as a path component", projectID)
 	}
 	return nil
 }
