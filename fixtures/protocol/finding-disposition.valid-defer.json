@@ -9,6 +9,7 @@
   "rationale": "The change is real but outside this milestone's closure bar.",
   "deferred_target": "M7",
   "reconsideration_trigger": "Revisit when review convergence orchestration ships.",
+  "accepted_risk_ref": "risk_001",
   "decided_by": "human",
   "recorded_at": "2026-09-21T00:00:00Z"
 }

@@ -216,7 +216,8 @@
       "then": {
         "required": [
           "deferred_target",
-          "reconsideration_trigger"
+          "reconsideration_trigger",
+          "accepted_risk_ref"
         ],
         "properties": {
           "materiality": {
