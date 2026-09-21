@@ -510,3 +510,24 @@ The integration layer MUST:
 - update this guide and plugin together when upstream syntax changes.
 
 The current baseline was written against Antigravity documentation available in September 2026.
+
+
+## Review convergence behavior
+
+The Antigravity principal must not emulate an endless multi-model group chat.
+
+For implementation review, it should:
+- start one bounded ReviewCampaign;
+- ask independent reviewers/consultants against the same immutable candidate where possible;
+- receive normalized findings;
+- adjudicate/deduplicate them once;
+- issue one consolidated Repair Work Package per round;
+- request focused revalidation after repair;
+- use a higher-threshold closure review;
+- freeze when the closure gate passes.
+
+For discovery/specification review, the same principle applies to one Specification Candidate revision.
+
+The control-plane API should carry compact campaign state and finding/disposition references. Raw reviewer transcripts are retrieved only when needed.
+
+See [REVIEW_AND_CONVERGENCE.md](REVIEW_AND_CONVERGENCE.md).

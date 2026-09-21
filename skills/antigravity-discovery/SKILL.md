@@ -160,6 +160,23 @@ It should state what/why/constraints, not prematurely prescribe architecture.
 
 Before architecture, run independent specification reviews.
 
+## Discovery review convergence
+
+Specification review is also bounded.
+
+For a substantial Specification Candidate:
+- run independent review dimensions against the same candidate revision in parallel where possible;
+- gather findings before revising the specification;
+- deduplicate and classify findings by materiality;
+- revise once from the consolidated material set;
+- after revision, re-check only the accepted gaps/regressions plus the Specification Readiness Gate;
+- do not recursively send every consultant response to every other consultant;
+- do not reopen a resolved/adjudicated specification concern without new evidence or changed human intent.
+
+A reviewer may identify optional improvements without blocking Specification Readiness. The goal is bounded material ambiguity, not a specification that no model can criticize.
+
+See docs/REVIEW_AND_CONVERGENCE.md for the general convergence rules.
+
 ## Specification red-team
 
 At minimum for substantial projects, review from several explicit dimensions:

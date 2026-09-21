@@ -4,39 +4,161 @@
   "title": "DevCadience ReviewCampaign",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "campaign_id", "project_id", "task_id", "attempt_id", "candidate_commit", "work_package_id", "work_package_version", "phase", "broad_reporting_threshold", "closure_reopen_threshold", "max_repair_rounds", "repair_round", "required_dimensions", "finding_refs", "status"],
+  "required": [
+    "schema_version",
+    "campaign_id",
+    "project_id",
+    "task_id",
+    "attempt_id",
+    "candidate_commit",
+    "work_package_id",
+    "work_package_version",
+    "phase",
+    "broad_reporting_threshold",
+    "closure_reopen_threshold",
+    "max_repair_rounds",
+    "repair_round",
+    "required_dimensions",
+    "finding_refs",
+    "status",
+    "created_at"
+  ],
   "properties": {
-    "schema_version": {"const": "1.0"},
-    "campaign_id": {"type": "string", "minLength": 1},
-    "project_id": {"type": "string", "minLength": 1},
-    "task_id": {"type": "string", "minLength": 1},
-    "attempt_id": {"type": "string", "minLength": 1},
-    "candidate_commit": {"type": "string", "minLength": 1},
-    "work_package_id": {"type": "string", "minLength": 1},
-    "work_package_version": {"type": "integer", "minimum": 1},
-    "phase": {"enum": ["broad_review", "adjudication", "repair", "focused_revalidation", "closure_review", "frozen", "reopened", "escalated"]},
-    "broad_reporting_threshold": {"enum": ["low", "medium", "high", "critical"]},
-    "closure_reopen_threshold": {"enum": ["high", "critical"]},
-    "max_repair_rounds": {"type": "integer", "minimum": 0},
-    "repair_round": {"type": "integer", "minimum": 0},
+    "schema_version": {
+      "const": "1.0"
+    },
+    "campaign_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "project_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "task_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "attempt_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "candidate_commit": {
+      "type": "string",
+      "minLength": 1
+    },
+    "work_package_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "work_package_version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "phase": {
+      "enum": [
+        "broad_review",
+        "adjudication",
+        "repair",
+        "focused_revalidation",
+        "closure_review",
+        "frozen",
+        "reopened",
+        "escalated"
+      ]
+    },
+    "broad_reporting_threshold": {
+      "enum": [
+        "low",
+        "medium",
+        "high",
+        "critical"
+      ]
+    },
+    "closure_reopen_threshold": {
+      "enum": [
+        "high",
+        "critical"
+      ]
+    },
+    "max_repair_rounds": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "repair_round": {
+      "type": "integer",
+      "minimum": 0
+    },
     "required_dimensions": {
       "type": "array",
       "minItems": 1,
       "uniqueItems": true,
-      "items": {"type": "string", "minLength": 1}
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
     },
     "completed_dimensions": {
       "type": "array",
       "uniqueItems": true,
-      "items": {"type": "string", "minLength": 1}
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
     },
-    "review_refs": {"type": "array", "items": {"type": "string"}},
-    "finding_refs": {"type": "array", "items": {"type": "string"}},
-    "disposition_refs": {"type": "array", "items": {"type": "string"}},
-    "repair_work_package_ref": {"type": ["string", "null"]},
-    "repair_candidate_commit": {"type": ["string", "null"]},
-    "closure_decision_ref": {"type": ["string", "null"]},
-    "residual_risk_refs": {"type": "array", "items": {"type": "string"}},
-    "status": {"enum": ["active", "frozen", "escalated", "superseded"]}
+    "review_refs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "finding_refs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "disposition_refs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "repair_work_package_ref": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "repair_candidate_commit": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "closure_decision_ref": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "residual_risk_refs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "status": {
+      "enum": [
+        "active",
+        "frozen",
+        "escalated",
+        "superseded"
+      ]
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    }
   }
 }
