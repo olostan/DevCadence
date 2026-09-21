@@ -85,6 +85,39 @@ flowchart TB
     Learning -. promoted lessons .-> Policy
 ```
 
+## 2A. Product-definition boundary
+
+Before the architecture/delivery principal acts, DevCadience may be in Discovery mode.
+
+```mermaid
+flowchart LR
+    Human["Human / Product Authority"]
+    Discovery["Discovery Principal"]
+    Problem["ProblemModel"]
+    Ambiguity["Ambiguity Ledger"]
+    Research["Research / Experiments"]
+    Critics["Independent Spec Critics"]
+    Ready["Specification Readiness"]
+    Principal["Architecture / Delivery Principal"]
+
+    Human <--> Discovery
+    Discovery <--> Problem
+    Discovery <--> Ambiguity
+    Discovery <--> Research
+    Discovery <--> Critics
+    Problem --> Ready
+    Ambiguity --> Ready
+    Research --> Ready
+    Critics --> Ready
+    Ready -->|"ready"| Principal
+```
+
+Discovery and architecture are different cognitive modes even if the same frontier model instance performs both.
+
+The Discovery Principal owns interpretation and disambiguation; the Architecture Principal owns solution design after product semantics are sufficiently grounded.
+
+The control plane persists both modes through the same project/event/evidence infrastructure.
+
 ## 3. Control-plane boundaries
 
 The initial implementation is a **modular monolith**, not a fleet of network services.
@@ -214,6 +247,11 @@ The sequence intentionally places a second frontier reasoning pass after scoutin
 
 ### 6.1 Project registry
 Tracks projects, repositories, configuration, capabilities, policies, baselines and active milestones.
+
+### 6.1A Discovery and specification service
+Stores ProblemModel revisions, Ambiguity Ledger entries, ProductDecisions, requirements with provenance, DiscoveryExperiments, specification-review results and SpecificationReadiness.
+
+It provides compact discovery state to frontier sessions and keeps raw conversation from becoming the sole product-memory mechanism.
 
 ### 6.2 Engineering State Model
 A compact semantic representation of the current project. See [PROJECT_STATE.md](PROJECT_STATE.md).
