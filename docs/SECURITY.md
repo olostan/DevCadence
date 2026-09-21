@@ -110,13 +110,18 @@ Validate:
 ## 7. Credentials
 
 Credentials should be:
-- stored in OS credential manager or protected environment;
+- stored in OS credential manager/Secret Service, a provider's supported authenticated session, or protected environment;
+- represented in DevCadience configuration by opaque CredentialRef-style references rather than routine raw API keys;
 - injected only into provider processes/clients that need them;
 - redacted from logs;
 - excluded from trajectory prompts;
 - never committed.
 
-A consultant request should reference an authenticated adapter, not carry an API key.
+Guided setup should discover existing authenticated CLIs/sessions before asking users to create additional credentials.
+
+Authentication flows SHOULD use provider-supported login/device/browser mechanisms when available. DevCadience must not scrape unrelated host/provider credential files.
+
+A consultant or cognition request should reference an authenticated adapter, not carry an API key.
 
 ## 8. Network policy
 
@@ -177,6 +182,24 @@ Security controls:
 - isolate package install from model prompt authority;
 - scan dependencies as project policy requires.
 
+### 12A. Guided setup/remediation
+
+Environment discovery is read-only.
+
+Setup/remediation actions are classified by authority and impact. The operator must see the plan before mutations occur.
+
+Explicit approval is required for actions such as:
+- package installation;
+- model downloads;
+- service creation/restart;
+- group/device-permission changes;
+- principal-host plugin/configuration writes;
+- launching provider authentication.
+
+High-impact actions such as kernel/graphics-driver replacement, broad credential-store mutation, or changes requiring reboot should normally remain manual/guided rather than silently automated.
+
+A model-generated recommendation never authorizes an installer action by itself.
+
 ## 13. Learning poisoning
 
 A malicious or anomalous trajectory must not directly create durable policy.
@@ -229,6 +252,9 @@ Mandatory security review for changes involving:
 - network access;
 - MCP trust;
 - provider auth;
+- setup/install/remediation actions;
+- principal-host configuration;
+- hardware acceleration/driver configuration;
 - sandboxing;
 - credential storage;
 - learning promotion;
@@ -238,12 +264,20 @@ Mandatory security review for changes involving:
 ## 17. Bootstrap posture
 
 The first version should prefer:
-- local-only daemon;
+- local-only control-plane daemon;
+- local repository/worktree authority;
 - stdio MCP;
 - single-user;
-- no remote worker;
 - no browser-exposed write API;
 - no automatic production deployment;
 - explicit local repository allowlist.
 
-Broader topology should be added only with a new threat model.
+Model inference may be local or remote according to explicit policy. A remote cognition endpoint must not become an implicit network escape path.
+
+The blank-machine onboarding flow may configure local runtimes or supported remote endpoints, but must preserve:
+- explicit source-exposure policy;
+- credential separation;
+- planned/approved mutations;
+- no silent cloud fallback.
+
+Remote execution workers, distributed repository authority, and broader network topology require a new threat model.
