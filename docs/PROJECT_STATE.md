@@ -532,3 +532,52 @@ mapping:
 
 The projection is omitted entirely until a discovery fact is recorded, so a
 project that never ran discovery carries no block of zeroes.
+
+## 18. Review convergence projection
+
+ProjectState should expose compact active review-campaign state without embedding reviewer transcripts.
+
+Conceptual shape:
+
+~~~yaml
+review:
+  campaign_id: rc_...
+  candidate_commit: ...
+  phase: focused_revalidation
+  repair_round: 1
+  max_repair_rounds: 2
+  required_dimensions: [correctness, architecture]
+  completed_dimensions: [correctness, architecture]
+  findings:
+    blocking_open: 0
+    material_unadjudicated: 0
+    fix_now: 3
+    deferred: 2
+    rejected: 4
+    opportunistic: 5
+  closure_threshold: critical
+  residual_risk_refs: [R-...]
+  closure_decision_ref: null
+~~~
+
+Only compact counts/references belong in ProjectState. Raw reviewer outputs, consultant conversations, and repair transcripts remain evidence artifacts retrievable by reference.
+
+Once a campaign is frozen, current ProjectState should retain the closure reference and residual-risk handles rather than the full campaign history.
+
+See [REVIEW_AND_CONVERGENCE.md](REVIEW_AND_CONVERGENCE.md).
+
+### 18.1 Not yet implemented
+
+`review` is published in `schemas/project-state.schema.json` but has no
+counterpart on the Go `ProjectState` type, and no event reduces into it. It is
+an M6 deliverable (ADR-0010), published ahead of its implementation the way
+the discovery contracts were before M1.
+
+The consequence is worth stating plainly, because strict decoding makes it
+sharp: `protocol.Unmarshal` refuses a ProjectState document carrying a
+`review` block, since unknown fields are an error rather than a silent loss
+(DCI-092). Nothing emits one today, so nothing is broken; M6 must add the
+typed projection in the same change that first writes the field, not after.
+The same applies to `schemas/review-campaign.schema.json`,
+`finding-disposition` and `closure-decision`, which are listed in
+`tests/schema_fixtures_test.go` as awaiting implementation.

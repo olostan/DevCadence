@@ -137,6 +137,27 @@ If an implementer reports that an assumption is false:
 - reconsider the blueprint;
 - issue a new Work Package version rather than telling the worker to “make it work.”
 
+## Review convergence
+
+Do not create open-ended review/repair dialogue.
+
+For substantial candidates:
+1. arrange broad independent reviews against the same immutable candidate when possible;
+2. gather findings before asking for repair;
+3. deduplicate/adjudicate findings rather than forwarding raw comments to the implementer;
+4. classify each material finding as FIX_NOW / REJECT / DEFER / HUMAN_DECISION / DUPLICATE;
+5. require every FIX_NOW after broad review to answer "why now?";
+6. create one consolidated Repair Work Package per repair round;
+7. after repair, request focused revalidation of the fixes/regressions rather than another unrestricted broad review;
+8. raise the threshold required to reopen code as the campaign converges;
+9. freeze when the Closure Gate passes.
+
+A new model opinion is not new evidence. Do not reopen adjudicated/frozen work merely because another consultant prefers a different valid design.
+
+Zero closure-threshold findings is a valid result.
+
+Read ../../docs/REVIEW_AND_CONVERGENCE.md.
+
 ## Completion
 
 Do not demand raw source/diff automatically.
@@ -166,4 +187,5 @@ Read and follow:
 - ../../docs/PRINCIPAL_ENGINEER.md
 - ../../docs/PROTOCOLS.md
 - ../../docs/LIFECYCLE.md
+- ../../docs/REVIEW_AND_CONVERGENCE.md
 - ../../docs/SECURITY.md

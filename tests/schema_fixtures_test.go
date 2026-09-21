@@ -49,10 +49,36 @@ func TestEveryRecordKindHasASchema(t *testing.T) {
 		mapped[name] = true
 	}
 	for _, name := range set.Names() {
-		if !mapped[name] {
-			t.Errorf("schema %s has no Go record kind mapped to it", name)
+		if mapped[name] {
+			continue
+		}
+		if _, deliberate := awaitingImplementation[name]; deliberate {
+			continue
+		}
+		t.Errorf("schema %s has no Go record kind mapped to it; add the protocol type, "+
+			"or list it in awaitingImplementation with the milestone that will implement it", name)
+	}
+	// An entry that has since been implemented should be removed, or the
+	// allowlist would quietly stop guarding the type it names.
+	for name := range awaitingImplementation {
+		if mapped[name] {
+			t.Errorf("schema %s now has a Go record kind; remove it from awaitingImplementation", name)
 		}
 	}
+}
+
+// awaitingImplementation names schemas published ahead of the milestone that
+// implements them.
+//
+// The project publishes a contract before building against it on purpose, so
+// "no Go type yet" is a legitimate state — but only a deliberate one. Listing
+// each schema with the milestone that owns it keeps the pairing test useful:
+// a schema added without a type still fails unless someone says, here, which
+// milestone will pick it up.
+var awaitingImplementation = map[schema.Name]string{
+	"review-campaign":     "M6 — bounded review convergence (ADR-0010)",
+	"finding-disposition": "M6 — bounded review convergence (ADR-0010)",
+	"closure-decision":    "M6 — bounded review convergence (ADR-0010)",
 }
 
 // TestValidFixturesValidate is the positive half of the corpus contract.

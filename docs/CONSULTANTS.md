@@ -250,3 +250,18 @@ Track whether consultants actually improve outcomes:
 - disagreement usefulness.
 
 A provider that agrees frequently but rarely adds useful evidence may not be a useful consultant for that role.
+
+
+## Review-campaign convergence
+
+When consultants are used as reviewers, prefer parallel independent consultations against the same immutable candidate.
+
+Do not create recursive debate by repeatedly forwarding each consultant's response to every other consultant.
+
+The principal normalizes and adjudicates consultant findings with local reviewer findings. Once a finding has a recorded disposition, another consultant expressing the same position does not reopen it without new evidence.
+
+A tie-break consultation should be targeted at a specific unresolved material disagreement and should receive a neutral problem statement.
+
+Consultant output below the current campaign reopen threshold may be preserved as deferred/opportunistic insight without mutating the candidate.
+
+See [REVIEW_AND_CONVERGENCE.md](REVIEW_AND_CONVERGENCE.md).

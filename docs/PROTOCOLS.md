@@ -540,3 +540,41 @@ Avoid:
 - using numeric confidence as the sole routing criterion;
 - mutating Work Packages in place after attempts have started;
 - losing links from summaries back to raw evidence.
+
+
+## ReviewCampaign and convergence protocols
+
+Review convergence is represented by three durable objects.
+
+### ReviewCampaign
+A bounded campaign around one immutable candidate lineage. It records candidate commit, Work Package/attempt identity, required review dimensions, thresholds, repair round, finding/disposition references, residual risks, and closure state.
+
+### FindingDisposition
+The principal's adjudication of one reviewer finding. Every material finding is classified as blocking, material non-blocking, or opportunistic, then receives exactly one disposition: FIX_NOW, REJECT, DEFER, HUMAN_DECISION, or DUPLICATE.
+
+A FIX_NOW disposition must answer why the issue belongs in the current milestone/campaign.
+
+### ClosureDecision
+The evidence-backed termination decision. Closure checks deterministic validation, required reviews, blocking findings, unadjudicated material findings, repair regressions, contract review, and bounded residual risk.
+
+A FROZEN outcome terminates the active ReviewCampaign. Below-threshold later observations become new work; reopening requires materially new evidence under the Reopen Rule.
+
+~~~mermaid
+flowchart LR
+    C["Candidate"]
+    R["Parallel broad reviews"]
+    A["Principal adjudication"]
+    D["FindingDisposition"]
+    W["Repair Work Package"]
+    F["Focused revalidation"]
+    CD["ClosureDecision"]
+    Z["Frozen"]
+
+    C --> R --> A --> D
+    D -->|"FIX_NOW"| W --> F --> CD
+    D -->|"no current repair"| CD
+    CD -->|"frozen"| Z
+    CD -->|"repair required"| W
+~~~
+
+See [REVIEW_AND_CONVERGENCE.md](REVIEW_AND_CONVERGENCE.md) and schemas/review-campaign.schema.json, finding-disposition.schema.json, closure-decision.schema.json.

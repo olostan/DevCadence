@@ -116,6 +116,18 @@ Independent disagreement is a risk signal. It must not be hidden by majority pro
 ### DCI-045 — Repeated failed attempts trigger escalation
 Retries are bounded by policy. Infinite autonomous repair loops are forbidden.
 
+### DCI-046 — Review seeks bounded residual risk, not zero criticism
+A candidate is not required to reach a state where no intelligent reviewer can suggest another improvement. Closure depends on material risk and evidence, not exhaustion of possible opinions.
+
+### DCI-047 — Broad reviews converge before repair
+Where practical, independent broad reviewers inspect the same immutable candidate and their findings are adjudicated together before implementation changes begin. Serial unrestricted review/repair ping-pong is forbidden by default.
+
+### DCI-048 — Reopening requires threshold-crossing evidence
+After adjudication or freeze, another equivalent opinion is not sufficient to reopen work. Reopening requires materially new evidence, changed requirements, deterministic failure, or a newly discovered applicable correctness/security/integrity/durable-contract issue.
+
+### DCI-049 — Review and repair campaigns are bounded
+Repair rounds, reviewer output volume, and closure criteria are policy-bounded. Once the closure gate passes, below-threshold findings become explicit future work rather than extending the active campaign.
+
 ## F. Architecture and governance invariants
 
 ### DCI-050 — Architecture changes are deliberate

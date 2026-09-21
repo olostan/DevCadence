@@ -349,3 +349,34 @@ Critical fields must not be recoverable only by brittle prose parsing.
 - worker silently broadening task scope;
 - worker rewriting architecture to make tests pass;
 - using the strongest local model for trivial log compression when smaller/deterministic processing is sufficient.
+
+
+## Review campaign behavior
+
+Local reviewers participate in a bounded ReviewCampaign.
+
+### Broad reviewers
+- inspect the immutable campaign candidate;
+- stay within assigned dimension except critical cross-cutting defects;
+- return at most the configured number of most consequential findings;
+- provide evidence;
+- may return zero findings;
+- do not directly request implementation changes.
+
+### Repair implementer
+Receives one consolidated Repair Work Package containing adjudicated FIX_NOW findings. It does not receive every reviewer transcript by default.
+
+### Focused revalidator
+After repair, checks:
+- accepted finding repairs;
+- deterministic regressions;
+- invariant/contract regressions caused by repair.
+
+It does not restart a general search for lower-severity improvements.
+
+### Closure reviewer
+Uses prompts/closure-reviewer.md. It reports only threshold-crossing issues and treats a zero-finding outcome as valid.
+
+Local reviewers do not reopen adjudicated findings without materially new evidence.
+
+See [REVIEW_AND_CONVERGENCE.md](REVIEW_AND_CONVERGENCE.md).

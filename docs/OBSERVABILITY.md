@@ -115,6 +115,18 @@ The event journal should make this reconstructable.
 - readiness gate failures/reasons;
 - architecture reopens caused by missed product ambiguity.
 
+### Review convergence
+- active/frozen ReviewCampaigns;
+- material findings per round;
+- FIX_NOW / REJECT / DEFER / DUPLICATE dispositions;
+- duplicate/opportunistic finding rate;
+- repair rounds per campaign;
+- repair regressions;
+- closure-gate failures/reasons;
+- frozen campaigns reopened by new evidence;
+- review context/tokens per material finding;
+- marginal material finding yield by round.
+
 ### Lifecycle
 - time spent discovery/design/implementation/verification;
 - refactoring epoch frequency;

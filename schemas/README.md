@@ -12,6 +12,11 @@ This directory contains versioned machine-readable contracts for durable DevCadi
 - `discovery-experiment.schema.json`
 - `specification-readiness.schema.json`
 
+### Review convergence
+- `review-campaign.schema.json`
+- `finding-disposition.schema.json`
+- `closure-decision.schema.json`
+
 ### Engineering and delivery
 
 - `project-state.schema.json`

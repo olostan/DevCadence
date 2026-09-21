@@ -108,6 +108,30 @@ The system MUST answer why a candidate was accepted/rejected and which evidence 
 ### FR-030 — Human escalation
 Policies MUST be able to require human approval for selected risk classes and destructive actions.
 
+### FR-031 — Bounded review campaigns
+Substantial candidate review MUST be representable as a bounded ReviewCampaign with an immutable candidate, explicit review dimensions, repair-round limit, reporting/reopen thresholds, finding dispositions, and closure outcome.
+
+### FR-032 — Finding adjudication
+Material reviewer findings MUST be adjudicated before implementation repair as FIX_NOW, REJECT, DEFER, HUMAN_DECISION, or DUPLICATE. Raw reviewer output MUST NOT itself define implementation scope.
+
+### FR-033 — Consolidated repair
+The system MUST support consolidating current FIX_NOW findings into at most one Repair Work Package per repair round.
+
+### FR-034 — Focused revalidation
+After repair, the default review operation MUST verify accepted repairs and regressions rather than restart unrestricted broad review.
+
+### FR-035 — Rising reopen threshold
+Review policy MUST support a non-decreasing threshold for reopening code as a ReviewCampaign converges.
+
+### FR-036 — Closure and freeze
+The system MUST support an evidence-backed ClosureDecision that freezes a candidate when deterministic validation passes, required reviews are complete, blocking findings are closed, material findings are adjudicated, and residual risk is bounded.
+
+### FR-037 — Evidence-based reopening
+A frozen/adjudicated campaign MUST NOT reopen solely because another reviewer/model expresses an equivalent opinion. Reopening requires materially new evidence, changed requirements, or a newly applicable material correctness/security/integrity/contract concern.
+
+### FR-038 — Review context bounds
+Reviewer output volume, repair rounds, and handoff context MUST be policy-bounded. Implementers SHOULD receive consolidated repair guidance rather than full reviewer transcripts.
+
 ## 2A. Discovery and specification requirements
 
 ### FR-D-001 — ProblemModel

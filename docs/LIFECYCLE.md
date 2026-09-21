@@ -447,3 +447,31 @@ flowchart TD
 A fixed questionnaire is not the lifecycle. The principal asks a small number of high-impact questions, updates durable state, and repeats.
 
 When requirements change after architecture has begun, only the affected discovery scope must be reopened unless the change invalidates foundational product assumptions.
+
+
+## Review campaign convergence
+
+Delivery review is a bounded campaign rather than an indefinite conversation.
+
+~~~mermaid
+flowchart LR
+    Candidate["Candidate commit"]
+    Broad["Parallel broad review"]
+    Adjudicate["Principal adjudication"]
+    Repair["Consolidated repair"]
+    Focused["Focused revalidation"]
+    Closure["Closure review"]
+    Frozen["Frozen candidate"]
+
+    Candidate --> Broad --> Adjudicate
+    Adjudicate -->|"FIX_NOW findings"| Repair --> Focused --> Closure
+    Adjudicate -->|"no current repair"| Closure
+    Closure -->|"gate passes"| Frozen
+    Closure -->|"threshold issue"| Repair
+~~~
+
+Broad reviewers normally inspect one immutable candidate before code changes. After repair, the lifecycle does not automatically return to unrestricted broad review.
+
+The threshold to reopen code rises as the campaign converges. Once frozen, later below-threshold observations create future tasks/debt rather than extending the closed task.
+
+See [REVIEW_AND_CONVERGENCE.md](REVIEW_AND_CONVERGENCE.md).

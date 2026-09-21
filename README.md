@@ -193,6 +193,16 @@ Local inference is treated as abundant. DevCadience may intentionally use:
 
 The scheduler optimizes primarily for correctness and durable quality, not lowest latency.
 
+## Bounded review convergence
+
+Independent review is intentionally abundant, but serial review/repair loops are not allowed to consume context indefinitely.
+
+DevCadience groups review into a bounded **ReviewCampaign**: multiple independent reviewers inspect the same immutable candidate, the principal adjudicates findings once, current repairs are consolidated into one Repair Work Package, revalidation is focused, and a higher-threshold Closure Review freezes the candidate when residual risk is bounded.
+
+A frozen decision is reopened only by materially new evidence or changed requirements—not because another model prefers a different valid design.
+
+See [docs/REVIEW_AND_CONVERGENCE.md](docs/REVIEW_AND_CONVERGENCE.md).
+
 ## Planned refactoring
 
 Long-running LLM implementation can accumulate the same local optimizations and global smells seen in human development, amplified by autonomous repetition. Refactoring is therefore a planned lifecycle phase rather than optional cleanup.
@@ -236,6 +246,7 @@ Start here:
 | [docs/MODEL_RUNTIME.md](docs/MODEL_RUNTIME.md) | Ollama/MLX-style local runtime and resource management |
 | [docs/CONSULTANTS.md](docs/CONSULTANTS.md) | Frontier consultant adapters and independent-review rules |
 | [docs/VERIFICATION.md](docs/VERIFICATION.md) | Deterministic and model-assisted verification |
+| [docs/REVIEW_AND_CONVERGENCE.md](docs/REVIEW_AND_CONVERGENCE.md) | Bounded review campaigns, finding adjudication, rising reopen thresholds and closure/freeze |
 | [docs/REFACTORING_AND_HEALTH.md](docs/REFACTORING_AND_HEALTH.md) | Code-health model and refactoring epochs |
 | [docs/LEARNING.md](docs/LEARNING.md) | Trajectories, lesson candidates, evaluation and promotion |
 | [docs/SECURITY.md](docs/SECURITY.md) | Trust boundaries, permissions, credentials and sandboxing |

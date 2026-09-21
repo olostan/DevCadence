@@ -278,7 +278,9 @@ Provides controlled repository reads, isolated mutations, commits, diffs and int
 Executes deterministic commands and normalizes their evidence.
 
 ### 6.10 Review coordinator
-Schedules clean-context review vectors and records disagreements.
+Runs bounded ReviewCampaigns. It schedules clean-context review vectors against an immutable candidate, normalizes findings, applies reporting/reopen thresholds, coordinates focused revalidation, and records campaign/closure state.
+
+The principal—not individual reviewers—adjudicates findings and creates the consolidated Repair Work Package. The coordinator must not default to serial unrestricted re-review after every repair.
 
 ### 6.11 Consultant service
 Normalizes frontier consultant requests and results.
@@ -298,6 +300,29 @@ Decides:
 - consultant eligibility;
 - destructive-operation approval;
 - integration gates.
+
+## 6A. Review convergence boundary
+
+~~~mermaid
+flowchart LR
+    Candidate["Immutable candidate"]
+    Reviews["Parallel review vectors"]
+    Principal["Principal adjudication"]
+    Disposition["FindingDisposition"]
+    Repair["Repair Work Package"]
+    Revalidate["Focused revalidation"]
+    Closure["ClosureDecision"]
+    Frozen["Frozen candidate"]
+
+    Candidate --> Reviews --> Principal --> Disposition
+    Disposition -->|"FIX_NOW"| Repair --> Revalidate --> Closure
+    Disposition -->|"no current repair"| Closure
+    Closure -->|"frozen"| Frozen
+~~~
+
+The control plane owns campaign state, thresholds, bounded rounds, and freeze/reopen policy. Reviewer models only produce evidence.
+
+See [REVIEW_AND_CONVERGENCE.md](REVIEW_AND_CONVERGENCE.md).
 
 ## 7. Protocol object relationships
 
