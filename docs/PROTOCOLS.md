@@ -66,6 +66,54 @@ ProjectState is not a source-code dump.
 
 See [PROJECT_STATE.md](PROJECT_STATE.md).
 
+## 3A. Discovery protocol objects
+
+Discovery adds a product-definition layer before implementation protocols:
+
+```mermaid
+flowchart LR
+    Idea["Human idea"]
+    PM["ProblemModel"]
+    AL["AmbiguityLedger"]
+    PD["ProductDecision"]
+    Req["Requirement"]
+    Exp["DiscoveryExperiment"]
+    SR["SpecificationReadiness"]
+    DR["DecisionRecord / Architecture"]
+
+    Idea --> PM
+    PM <--> AL
+    AL --> PD
+    AL --> Exp
+    PD --> Req
+    Exp --> Req
+    Req --> PM
+    PM --> SR
+    AL --> SR
+    Req --> SR
+    SR -->|"ready"| DR
+```
+
+### ProblemModel
+Canonical compact statement of product intent, actors, workflows, scope, success/failure criteria, constraints, assumptions, unknowns and risks.
+
+### AmbiguityLedger
+Active queue of unresolved meanings, their impact, resolution authority, status and provenance.
+
+### ProductDecision
+Human-authoritative product choice. Engineering models may explain consequences but cannot silently override it.
+
+### Requirement
+A functional/non-functional/constraint/non-goal statement with strength, provenance and epistemic status.
+
+### DiscoveryExperiment
+A bounded empirical investigation used to resolve feasibility/performance facts.
+
+### SpecificationReadiness
+Evidence-based gate indicating whether remaining ambiguity is safe for architecture.
+
+See [DISCOVERY_AND_SPECIFICATION.md](DISCOVERY_AND_SPECIFICATION.md) and the corresponding schemas.
+
 ## 4. InvestigationRequest
 
 An InvestigationRequest asks local repository cognition to establish facts.
