@@ -295,3 +295,35 @@ func uninformative(value any) bool {
 	}
 	return false
 }
+
+// TestRenderedDiscoveryProjectionSatisfiesTheSchema closes the loop between
+// the reducer and the published contract: the discovery block the reducer
+// produces must validate against project-state.schema.json, not merely
+// compile.
+func TestRenderedDiscoveryProjectionSatisfiesTheSchema(t *testing.T) {
+	set, err := schema.Default()
+	if err != nil {
+		t.Fatalf("compile embedded schemas: %v", err)
+	}
+	document := read(t, filepath.Join(fixtureDir, "project-state.valid-discovery.json"))
+	if err := set.ValidateBytes(schema.NameProjectState, document); err != nil {
+		t.Fatalf("discovery fixture does not satisfy the schema: %v", err)
+	}
+	var projectState protocol.ProjectState
+	if err := protocol.Unmarshal(document, &projectState); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if projectState.Discovery == nil {
+		t.Fatal("the discovery projection was dropped on decode")
+	}
+	if projectState.Discovery.SpecificationReadinessVerdict == nil {
+		t.Fatal("the readiness verdict was dropped on decode")
+	}
+	reEncoded, err := protocol.Marshal(&projectState)
+	if err != nil {
+		t.Fatalf("re-encode: %v", err)
+	}
+	if err := set.ValidateBytes(schema.NameProjectState, reEncoded); err != nil {
+		t.Fatalf("re-encoded discovery projection does not satisfy the schema: %v", err)
+	}
+}

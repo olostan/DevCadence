@@ -480,7 +480,39 @@ flowchart LR
 
 Detailed discovery objects remain separate durable records. ProjectState carries a compact current projection.
 
-The `discovery` field is present in `schemas/project-state.schema.json` and is
-reduced from discovery events. M1 implements the control-plane core only: the
-Go `ProjectState` type carries the field, and the reducer leaves it unset
-until the discovery subsystem exists.
+### 17.1 Implemented derivation
+
+`discovery` is reduced from the discovery events of ENGINEERING_STANDARDS.md
+§11, so FR-D-012 — a new principal session reconstructing current product
+intent from durable artifacts rather than a transcript — holds without the
+discovery workflow existing yet. Recording these events is M1; performing
+discovery is not.
+
+The derivation rules, each of which is a decision rather than a mechanical
+mapping:
+
+- **Material** means an open ambiguity whose `architectural_impact` is medium
+  or higher. §3 of [DISCOVERY_AND_SPECIFICATION.md](DISCOVERY_AND_SPECIFICATION.md)
+  defines materiality as the potential to alter architecture, and that is the
+  field grading it; a low-impact question is by definition unlikely to alter
+  architecture.
+- **Awaiting human** means an open ambiguity whose `resolution_authority` is
+  `human`. An open question only the human can settle is waiting on them, so
+  no separate status event is needed. `current_question_refs` lists exactly
+  those, in the order they were opened.
+- **Requirement counts** are by current epistemic status (DCI-015). Re-recording
+  a requirement replaces its status, so a promotion from proposed to confirmed
+  keeps one identity while the journal retains both statements.
+- **Active product decisions** are the `confirmed` ones; superseding a decision
+  marks the previous one superseded in the same event.
+- **A readiness verdict is withheld after the ProblemModel is revised.** The
+  verdict describes the revision it judged; a later revision changed the thing
+  assessed, so inheriting it would let architecture proceed on an assessment
+  nobody made (DCI-016). The reference is kept so the assessment stays
+  retrievable.
+- Experiment and review events are recorded but not projected: the schema's
+  `discovery` object carries no counts for them. The conceptual example above
+  shows more than the contract requires.
+
+The projection is omitted entirely until a discovery fact is recorded, so a
+project that never ran discovery carries no block of zeroes.

@@ -75,12 +75,27 @@ func (p *MilestoneStarted) Validate() error {
 	return nil
 }
 
-// RequirementRecorded captures a requirement entering the project baseline.
-// M1 records it; deriving requirement coverage is later work.
+// RequirementRecorded captures a requirement entering or changing in the
+// project baseline.
+//
+// Status and SourceType are durable because DCI-015 requires a requirement to
+// stay distinguishable as confirmed, evidence-backed, proposed, assumed,
+// deferred, rejected or superseded, and DCI-008 forbids model inference from
+// being serialised as human-confirmed intent. ProjectState counts requirements
+// by status, so both must be derivable from the journal alone.
+//
+// Repeated events for the same requirement id replace the previous record, so
+// a requirement that is promoted from proposed to confirmed keeps one
+// identity while history retains both statements.
 type RequirementRecorded struct {
-	RequirementID string `json:"requirement_id"`
-	Statement     string `json:"statement"`
-	SourceRef     string `json:"source_ref,omitempty"`
+	RequirementID string                       `json:"requirement_id"`
+	Statement     string                       `json:"statement"`
+	Kind          protocol.RequirementKind     `json:"kind,omitempty"`
+	Strength      protocol.RequirementStrength `json:"strength,omitempty"`
+	Status        protocol.RequirementStatus   `json:"status"`
+	SourceType    protocol.SourceType          `json:"source_type"`
+	SourceRef     string                       `json:"source_ref,omitempty"`
+	RecordDigest  string                       `json:"record_digest,omitempty"`
 }
 
 // Type implements Payload.
@@ -90,6 +105,34 @@ func (p *RequirementRecorded) Type() Type { return TypeRequirementRecorded }
 func (p *RequirementRecorded) Validate() error {
 	if p.RequirementID == "" || p.Statement == "" {
 		return errs.New(errs.CategoryInvalidArgument, "RequirementRecorded: requirement_id and statement are required")
+	}
+	if !p.Status.Valid() {
+		return errs.New(errs.CategoryInvalidArgument,
+			"RequirementRecorded: status %q is not a known requirement status", string(p.Status))
+	}
+	if !p.SourceType.ValidRequirementSource() {
+		return errs.New(errs.CategoryInvalidArgument,
+			"RequirementRecorded: source_type %q is not a known requirement source", string(p.SourceType))
+	}
+	if p.Kind != "" && !p.Kind.Valid() {
+		return errs.New(errs.CategoryInvalidArgument,
+			"RequirementRecorded: kind %q is not a known requirement kind", string(p.Kind))
+	}
+	if p.Strength != "" && !p.Strength.Valid() {
+		return errs.New(errs.CategoryInvalidArgument,
+			"RequirementRecorded: strength %q is not MUST, SHOULD or MAY", string(p.Strength))
+	}
+	// The same guard the Requirement record carries: a confirmed requirement
+	// must trace to a human, so the principal cannot confirm its own
+	// inference by way of an event (DCI-008, DCI-015).
+	if p.Status == protocol.RequirementConfirmed {
+		switch p.SourceType {
+		case protocol.SourceProductDecision, protocol.SourceHumanStatement:
+		default:
+			return errs.New(errs.CategoryInvalidArgument,
+				"RequirementRecorded: a confirmed requirement must come from a product decision "+
+					"or a human statement, not %q", string(p.SourceType))
+		}
 	}
 	return nil
 }

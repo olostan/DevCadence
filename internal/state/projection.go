@@ -78,6 +78,10 @@ type Projection struct {
 	// aliases guards against two tasks claiming the same human-readable
 	// handle, which would make CLI and principal references ambiguous.
 	aliases map[string]string
+
+	// discovery is the Day-0 projection. It stays nil in ProjectState until
+	// a discovery fact has been recorded.
+	discovery *discoveryState
 }
 
 // RecentSemanticChangeLimit bounds how many semantic deltas ProjectState
@@ -95,6 +99,7 @@ func New() *Projection {
 		attempts:          map[string]*tasks.Attempt{},
 		attemptsByTask:    map[string][]string{},
 		aliases:           map[string]string{},
+		discovery:         newDiscoveryState(),
 		Validation:        protocol.ValidationState{Status: protocol.ValidationUnknown},
 		Health:            protocol.HealthState{Status: protocol.HealthUnknown},
 	}
@@ -262,6 +267,7 @@ func (p *Projection) ProjectState() (*protocol.ProjectState, error) {
 	for _, id := range p.decisionRequiredIDs {
 		state.DecisionsRequired = append(state.DecisionsRequired, p.decisionsRequired[id])
 	}
+	state.Discovery = p.discovery.render()
 	if p.Health.Status != "" && p.Health.Status != protocol.HealthUnknown {
 		health := p.Health
 		health.KnownDebt = append([]string(nil), p.Health.KnownDebt...)

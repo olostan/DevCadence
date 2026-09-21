@@ -323,8 +323,10 @@ deterministic ProjectState reducer, the task and attempt state machines,
 SQLite persistence with explicit migrations, JSON Schema validation tooling
 and a CLI.
 
-The discovery *records* are typed and persisted; the discovery *workflow*
-that produces them is not part of M1.
+The discovery *records*, *events* and *state projection* are implemented, so
+current product intent is reconstructable from durable records. The discovery
+*workflow* that produces them — asking the questions, running the experiments,
+assessing readiness — is not part of M1.
 
 Everything above the control-plane core — repository and worktree execution,
 local model runtimes, the semantic MCP surface, consultants, health and

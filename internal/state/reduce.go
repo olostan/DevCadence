@@ -57,8 +57,7 @@ func (p *Projection) applyPayload(e *events.Event) error {
 		p.Milestone = protocol.MilestoneState{ID: payload.MilestoneID, Title: payload.Title, Status: payload.Status}
 		return nil
 	case *events.RequirementRecorded:
-		// Recorded for history. Requirement coverage is not a ProjectState
-		// field, so nothing is derived here.
+		p.discovery.applyRequirementRecorded(payload)
 		return nil
 	case *events.ComponentDeclared:
 		return p.applyComponentDeclared(payload)
@@ -118,6 +117,24 @@ func (p *Projection) applyPayload(e *events.Event) error {
 		return p.transitionTask(e, payload.TaskID, tasks.StateIntegrating, nil)
 	case *events.IntegrationValidationStarted:
 		return p.transitionTask(e, payload.TaskID, tasks.StateIntegrationValidating, nil)
+
+	case *events.ProblemModelRevised:
+		return p.discovery.applyProblemModelRevised(payload)
+	case *events.AmbiguityOpened:
+		return p.discovery.applyAmbiguityOpened(payload)
+	case *events.AmbiguityResolved:
+		return p.discovery.applyAmbiguityResolved(payload)
+	case *events.ProductDecisionRecorded:
+		return p.discovery.applyProductDecisionRecorded(payload)
+	case *events.SpecificationReadinessRecorded:
+		return p.discovery.applyReadinessRecorded(payload)
+	case *events.DiscoveryExperimentStarted, *events.DiscoveryExperimentCompleted,
+		*events.SpecificationReviewCompleted:
+		// Recorded as durable facts. The discovery projection in
+		// schemas/project-state.schema.json carries no experiment or review
+		// counts, so nothing is derived from them; the records remain
+		// retrievable by id.
+		return nil
 
 	case *events.LessonCandidateCreated, *events.LessonPromoted,
 		*events.RefactoringEpochStarted, *events.ArchitectureReconciled:

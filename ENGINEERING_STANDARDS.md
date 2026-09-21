@@ -256,6 +256,14 @@ field or lifecycle transition had no event to derive it from; see
 [docs/adr/0004-canonical-task-state-machine.md](docs/adr/0004-canonical-task-state-machine.md).
 `devcadience event types` prints the current vocabulary.
 
+Every event listed above, the discovery ones included, is implemented and
+registered, and `tests/doc_drift_test.go` fails if this list ever names one
+that is not. Discovery events derive `ProjectState.discovery`; recording one
+does not perform discovery, which is a later milestone. `AmbiguityResolved`
+carries an outcome distinguishing an answered question from an explicitly
+deferred one, because a deferral is valid only behind a safe boundary
+(docs/DISCOVERY_AND_SPECIFICATION.md §5).
+
 Every event payload is a registered Go type. An unregistered event type cannot
 be appended, and a stored event this build does not recognize is reported
 rather than skipped

@@ -266,8 +266,11 @@ CLI. No model runtime exists or is contacted.
 
 The Day-0 discovery and specification contracts (ProblemModel,
 AmbiguityLedger, ProductDecision, Requirement, DiscoveryExperiment,
-SpecificationReadiness) have typed representations and persistence; the
-discovery workflow that produces them does not exist yet.
+SpecificationReadiness) have typed representations and persistence, the
+discovery events are registered, and `ProjectState.discovery` is reduced from
+them. What does not exist is the discovery *workflow*: nothing asks a
+question, runs an experiment or assesses readiness. That needs a model runtime
+(M3) and the MCP surface (M4).
 
 Six ADRs are accepted and normative; see
 [docs/README.md](docs/README.md#accepted-adrs).

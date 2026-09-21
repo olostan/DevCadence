@@ -114,12 +114,18 @@ guards are enforced on the write path, not left to prose:
 - a readiness verdict must agree with its own checks, and an unknown that is
   not safe to defer past architecture forbids any verdict but `not_ready`.
 
-`ProjectState.discovery` carries the compact projection of
-docs/PROJECT_STATE.md §17. M1 implements the field and leaves it unset:
-deriving it needs the discovery event vocabulary, which belongs to the
-milestone that builds the discovery workflow. Producing these records — the
-questioning loop, human reflection and the readiness assessment itself — is
-likewise not M1 work.
+The eight discovery events named in ENGINEERING_STANDARDS.md §11 are
+implemented and registered, and `ProjectState.discovery` is reduced from them,
+so FR-D-012 holds: a new principal session can reconstruct current product
+intent from durable records rather than a conversation transcript. The
+derivation rules are in docs/PROJECT_STATE.md §17.1.
+
+Recording these facts is M1; *performing* discovery is not. The adaptive
+questioning loop (FR-D-006), human reflection (FR-D-007), external grounding
+(FR-D-008), running experiments (FR-D-009) and independent specification
+review (FR-D-010) all need a model runtime and the MCP surface, so they belong
+to M3 and M4. M1 guarantees that when those arrive, the state they produce is
+already durable, typed and reconstructable.
 
 ### Architectural decisions taken during M1
 - [adr/0002-control-plane-persistence.md](adr/0002-control-plane-persistence.md)
@@ -142,9 +148,12 @@ likewise not M1 work.
   `ArchitectureReconciled` are recorded and derive nothing (M7/M8).
 - No artifact store: `ArtifactRef` describes where artifacts will live, and
   nothing writes them yet (M2).
-- The discovery workflow is absent: the records and their persistence exist,
-  but no event derives `ProjectState.discovery`, and nothing produces a
-  ProblemModel or a readiness assessment.
+- The discovery workflow is absent: the records, events and projection exist,
+  but nothing *performs* discovery — no questioning loop, no human reflection
+  round, no experiment execution, no specification review. Those need a model
+  runtime (M3) and the MCP surface (M4).
+- Experiment and review events are recorded but not projected, because the
+  `discovery` object in the schema carries no counts for them.
 
 ## M2 — Repository, worktree and process execution
 
