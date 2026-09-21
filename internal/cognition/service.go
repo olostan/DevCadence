@@ -657,7 +657,14 @@ func Assess(profile protocol.MachineCapabilityProfile) (protocol.CognitionAssess
 	acceleratedLocal := 0
 	localEndpoints := 0
 	for _, endpoint := range profile.Endpoints {
-		if endpoint.Locality == protocol.LocalityLocal {
+		// Only a local endpoint that actually exists counts towards the
+		// acceleration limitation. An endpoint reported at not_installed is
+		// there to explain *why* a runtime is unavailable; complaining that it
+		// has no verified acceleration would be noise about software that is not
+		// there.
+		if endpoint.Locality == protocol.LocalityLocal &&
+			endpoint.Health != protocol.EndpointHealthNotInstalled &&
+			endpoint.Health != protocol.EndpointHealthUnsupported {
 			localEndpoints++
 			if endpoint.AccelerationVerified() {
 				acceleratedLocal++

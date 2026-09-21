@@ -573,6 +573,34 @@ func TestHostileProbeOutputIsTreatedAsData(t *testing.T) {
 	}
 }
 
+// TestVersionExtractionHandlesGluedPrefixes covers the shape that broke the
+// first implementation: `go version go1.24.7` has no word boundary before the
+// version, so a boundary-anchored pattern silently reported "24.7".
+func TestVersionExtractionHandlesGluedPrefixes(t *testing.T) {
+	for output, want := range map[string]string{
+		"go version go1.24.7 linux/amd64":  "1.24.7",
+		"git version 2.51.0":               "2.51.0",
+		"ollama version is 0.12.3":         "0.12.3",
+		"Docker version 29.3.1, build abc": "29.3.1",
+		"Python 3.11.15":                   "3.11.15",
+		"1.104.2\nabc123\nx64":             "1.104.2",
+		"NVIDIA-SMI version  : 570.86.15":  "570.86.15",
+		"no version here at all":           "",
+		"v2":                               "",
+		"codex-cli 1.4.0 (build 7)":        "1.4.0",
+	} {
+		t.Run(output, func(t *testing.T) {
+			fixture := environment.LinuxCPUOnly()
+			fixture.Commands.Outputs[environment.Key("git", "--version")] = environment.Observed(output)
+			facts := discover(t, fixture, protocol.DepthHealth)
+			git, _ := softwareFor(facts, "git")
+			if git.Version != want {
+				t.Errorf("version = %q, want %q", git.Version, want)
+			}
+		})
+	}
+}
+
 func TestVersionCompatibilityNeverGuesses(t *testing.T) {
 	fixture := environment.LinuxCPUOnly()
 	fixture.Commands.Outputs[environment.Key("git", "--version")] = environment.Observed("git version 2.20.1")

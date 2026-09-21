@@ -262,16 +262,26 @@ func (d *Discoverer) locateSoftware(ctx context.Context, c *collector, descripto
 
 // versionPattern matches a dotted version anywhere in a tool's output.
 //
-// The bound on digit runs is deliberate: version text is untrusted input
+// The leading `(?:^|[^0-9.])` is load-bearing rather than decorative. A word
+// boundary would not do: Go reports itself as "go version go1.24.7", where there
+// is no word boundary between "go" and "1", so a `\b`-anchored pattern skips the
+// real version and matches "24.7" from the middle of it — a wrong version that
+// looks entirely plausible. Requiring the preceding character to be neither a
+// digit nor a dot makes the match start at the beginning of the number.
+//
+// The bound on digit runs is deliberate too: version text is untrusted input
 // (DCI-083), and an unbounded numeric pattern applied to hostile output is a
 // backtracking hazard as well as a way to smuggle a long string into a durable
 // record.
-var versionPattern = regexp.MustCompile(`\b(\d{1,5})\.(\d{1,5})(?:\.(\d{1,5}))?\b`)
+var versionPattern = regexp.MustCompile(`(?:^|[^0-9.])(\d{1,5}(?:\.\d{1,5}){1,2})`)
 
 // extractVersion pulls the first dotted version out of probe output.
 func extractVersion(output string) string {
-	match := versionPattern.FindString(output)
-	return sanitize(match, 64)
+	match := versionPattern.FindStringSubmatch(output)
+	if match == nil {
+		return ""
+	}
+	return sanitize(match[1], 64)
 }
 
 // compareVersion judges an observed version against a floor.
