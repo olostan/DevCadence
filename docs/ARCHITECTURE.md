@@ -1,0 +1,513 @@
+# DevCadience Architecture
+
+## Scope and authority
+
+This document defines the target architecture and durable component boundaries for DevCadience. It is normative for system structure but intentionally leaves replaceable model/provider choices to configuration and adapters.
+
+## 1. Architectural thesis
+
+DevCadience separates **high-value cognition** from **high-volume cognition**.
+
+- Frontier principals spend context on product intent, architecture, alternatives, algorithms, current external grounding, consultant synthesis, and detailed Engineering Work Packages.
+- Local agents spend abundant inference on repository exploration, implementation, debugging, repeated review, and verification.
+- Deterministic tools establish facts wherever possible.
+- The control plane keeps canonical project state, lineage, policy, task state, learning, and evidence outside any model conversation.
+
+The principal should not be starved of reasoning. It should be starved of irrelevant repository noise.
+
+## 2. System context
+
+```mermaid
+flowchart TB
+    Human["Human / Project Owner"]
+
+    subgraph Frontier["Frontier cognition"]
+        Principal["Principal Engineer<br/>Gemini / Antigravity"]
+        ConsultantA["Consultant<br/>OpenAI / Codex"]
+        ConsultantB["Consultant<br/>Claude"]
+    end
+
+    subgraph DevCadience["DevCadience Control Plane"]
+        MCP["Semantic MCP Gateway"]
+        Orchestrator["Orchestrator / Scheduler"]
+        State["Engineering State Model"]
+        Policy["Policy & Risk Engine"]
+        Evidence["Evidence Store"]
+        Learning["Trajectory & Learning Engine"]
+    end
+
+    subgraph Local["Local engineering organization"]
+        Scout["Repository Scout"]
+        Implementer["Implementer"]
+        Reviewers["Independent Reviewers"]
+        Failure["Failure Analyst"]
+    end
+
+    subgraph Deterministic["Deterministic execution"]
+        Git["Git / Worktrees"]
+        Build["Build / Compiler"]
+        Tests["Tests / Fuzz / Bench"]
+        Static["Lint / Static / Security"]
+    end
+
+    Human --> Principal
+    Principal <--> MCP
+    Principal -. selective consultation .-> ConsultantA
+    Principal -. selective consultation .-> ConsultantB
+
+    MCP --> Orchestrator
+    Orchestrator <--> State
+    Orchestrator <--> Policy
+    Orchestrator <--> Evidence
+    Orchestrator --> Scout
+    Orchestrator --> Implementer
+    Orchestrator --> Reviewers
+    Orchestrator --> Failure
+
+    Scout --> Git
+    Implementer --> Git
+    Reviewers --> Git
+    Git --> Build
+    Git --> Tests
+    Git --> Static
+
+    Build --> Evidence
+    Tests --> Evidence
+    Static --> Evidence
+    Scout --> Evidence
+    Implementer --> Evidence
+    Reviewers --> Evidence
+
+    Evidence --> State
+    State --> MCP
+    Evidence --> Learning
+    Orchestrator --> Learning
+    Learning -. promoted lessons .-> Policy
+```
+
+## 3. Control-plane boundaries
+
+The initial implementation is a **modular monolith**, not a fleet of network services.
+
+```mermaid
+flowchart LR
+    subgraph Process["devcadience daemon"]
+        API["Application Services"]
+        Protocol["Protocol Types"]
+        State["State Reducer"]
+        Scheduler["Scheduler"]
+        Policy["Policy Engine"]
+        Repo["Repository Manager"]
+        Agents["Agent Runtime"]
+        Validators["Validation Engine"]
+        Health["Health Engine"]
+        Learn["Learning Engine"]
+        Storage["SQLite + Artifact Metadata"]
+    end
+
+    MCP["MCP Adapter"] --> API
+    CLI["CLI"] --> API
+    FutureUI["Future Web UI"] --> API
+
+    API --> Protocol
+    API --> State
+    API --> Scheduler
+    API --> Policy
+
+    Scheduler --> Repo
+    Scheduler --> Agents
+    Scheduler --> Validators
+    Scheduler --> Health
+
+    State --> Storage
+    Learn --> Storage
+    Agents --> Storage
+    Validators --> Storage
+    Health --> Storage
+```
+
+MCP, CLI, and future UI are adapters. They must not contain orchestration policy or durable business logic.
+
+## 4. Semantic information firewall
+
+The preferred principal interface is semantic rather than filesystem-shaped.
+
+```mermaid
+flowchart TD
+    Repo["Large repository<br/>source, logs, tests, history"]
+    LocalScout["Local Scout<br/>high-volume reading"]
+    Packet["EvidencePacket<br/>claims + provenance + uncertainty"]
+    State["ProjectState<br/>compact semantic state"]
+    Principal["Frontier Principal"]
+    Deep["Progressive evidence request"]
+    Raw["Focused signatures / snippets / diff / file"]
+
+    Repo --> LocalScout
+    LocalScout --> Packet
+    Packet --> State
+    State --> Principal
+
+    Principal -->|"needs more detail"| Deep
+    Deep --> LocalScout
+    LocalScout --> Raw
+    Raw --> Principal
+```
+
+Normal operation should keep the principal at semantic depth levels 0–2:
+
+1. state/metadata;
+2. structured local conclusions with provenance;
+3. signatures or focused snippets;
+4. relevant diff;
+5. complete selected files;
+6. direct repository exploration.
+
+Escalating evidence depth is permitted. Starting at maximum context is not preferred.
+
+## 5. Frontier-to-local execution path
+
+```mermaid
+sequenceDiagram
+    actor H as Human
+    participant P as Frontier Principal
+    participant C as Control Plane
+    participant S as Local Scout
+    participant W as Local Implementer
+    participant V as Deterministic Validators
+    participant R as Independent Reviewers
+
+    H->>P: Goal / feature / milestone
+    P->>C: get_project_state()
+    C-->>P: compact ProjectState
+
+    P->>C: investigate(targeted questions)
+    C->>S: scout repository
+    S-->>C: EvidencePacket
+    C-->>P: EvidencePacket
+
+    Note over P: alternatives, research,<br/>self-critique, consultants,<br/>algorithm + pseudocode
+
+    P->>C: approve EngineeringWorkPackage
+    C->>W: delegate package in isolated worktree
+    W->>V: build/test/lint
+    V-->>W: deterministic failures
+    W->>W: bounded repair cycles
+    W-->>C: candidate commit + implementation report
+
+    C->>V: full validation
+    V-->>C: ValidationResult
+    C->>R: independent review package
+    R-->>C: ReviewResult(s)
+
+    alt contradiction or material disagreement
+        C-->>P: EscalationRequest + evidence
+        P->>C: revised decision/work package
+    else sufficient evidence
+        C-->>P: compact ChangeReport
+        P->>C: accept / request deeper evidence / reject
+    end
+```
+
+The sequence intentionally places a second frontier reasoning pass after scouting and before implementation.
+
+## 6. Core domain components
+
+### 6.1 Project registry
+Tracks projects, repositories, configuration, capabilities, policies, baselines and active milestones.
+
+### 6.2 Engineering State Model
+A compact semantic representation of the current project. See [PROJECT_STATE.md](PROJECT_STATE.md).
+
+### 6.3 Event journal
+Stores durable engineering transitions. The current state is a materialized view/reduction over these facts plus Git-derived facts where appropriate.
+
+### 6.4 Task graph
+Represents milestones, tasks, dependencies, readiness, attempts, blockers and integration order.
+
+### 6.5 Engineering Work Package service
+Stores versioned frontier-authored implementation blueprints.
+
+### 6.6 Evidence service
+Stores structured claims and references to raw artifacts without forcing raw artifacts into every model context.
+
+### 6.7 Agent runtime
+Executes role-specific workers through replaceable model/harness adapters.
+
+### 6.8 Repository/worktree manager
+Provides controlled repository reads, isolated mutations, commits, diffs and integration staging.
+
+### 6.9 Validation engine
+Executes deterministic commands and normalizes their evidence.
+
+### 6.10 Review coordinator
+Schedules clean-context review vectors and records disagreements.
+
+### 6.11 Consultant service
+Normalizes frontier consultant requests and results.
+
+### 6.12 Health engine
+Computes structural metrics, runs semantic code-health reviews, and schedules Refactoring Epoch candidates.
+
+### 6.13 Learning engine
+Stores trajectories, performs postmortems, proposes lessons and evaluates policy/prompt changes.
+
+### 6.14 Policy engine
+Decides:
+- required design depth;
+- required reviews;
+- retry limits;
+- escalation thresholds;
+- consultant eligibility;
+- destructive-operation approval;
+- integration gates.
+
+## 7. Protocol object relationships
+
+```mermaid
+classDiagram
+    class ProjectState {
+      +string project_id
+      +string state_revision
+      +string git_commit
+      +Milestone active_milestone
+      +Risk[] risks
+    }
+
+    class EngineeringWorkPackage {
+      +string work_package_id
+      +string task_id
+      +string base_commit
+      +Guidance[] guidance
+      +AcceptanceCriterion[] acceptance
+    }
+
+    class EvidencePacket {
+      +string evidence_packet_id
+      +Claim[] claims
+      +Disagreement[] disagreements
+      +Uncertainty[] uncertainties
+    }
+
+    class Attempt {
+      +string attempt_id
+      +string worktree_id
+      +string candidate_commit
+    }
+
+    class ValidationResult {
+      +string validation_id
+      +CheckResult[] checks
+    }
+
+    class ReviewResult {
+      +string review_id
+      +string dimension
+      +string verdict
+    }
+
+    class DecisionRecord {
+      +string decision_id
+      +Alternative[] alternatives
+      +string selected
+    }
+
+    class Trajectory {
+      +string trajectory_id
+      +Event[] events
+    }
+
+    ProjectState "1" --> "*" EngineeringWorkPackage : contextualizes
+    EngineeringWorkPackage "1" --> "*" EvidencePacket : grounded_by
+    EngineeringWorkPackage "1" --> "*" Attempt : executed_as
+    Attempt "1" --> "*" ValidationResult : validated_by
+    Attempt "1" --> "*" ReviewResult : reviewed_by
+    DecisionRecord --> ProjectState : updates
+    Attempt --> Trajectory : recorded_in
+    ReviewResult --> Trajectory : recorded_in
+```
+
+## 8. Agent role architecture
+
+Models are not roles.
+
+```mermaid
+flowchart TB
+    Profiles["Role Profiles"]
+
+    Profiles --> Scout["Scout"]
+    Profiles --> Impl["Implementer"]
+    Profiles --> CR["Correctness Reviewer"]
+    Profiles --> AR["Architecture Reviewer"]
+    Profiles --> SR["Security Reviewer"]
+    Profiles --> TD["Test Designer"]
+    Profiles --> FA["Failure Analyst"]
+    Profiles --> HR["Health Reviewer"]
+
+    subgraph Models["Replaceable model/runtime implementations"]
+      Q["Qwen-class local coder"]
+      D["Devstral-class local coder"]
+      Small["Smaller fast local model"]
+      Future["Future local models"]
+    end
+
+    Scout -. routed to .-> Q
+    Impl -. routed to .-> Q
+    CR -. routed to .-> D
+    AR -. routed to .-> D
+    TD -. routed to .-> Small
+    HR -. routed to .-> Future
+```
+
+Role policy determines authority and expected output. Model capability profiles determine routing.
+
+## 9. Consultant architecture
+
+```mermaid
+flowchart LR
+    Principal["Principal"]
+    ConsultSvc["Consultant Service"]
+    Codex["Codex adapter"]
+    Claude["Claude adapter"]
+    Other["Other frontier adapter"]
+    Result["Normalized ConsultationResult"]
+
+    Principal --> ConsultSvc
+    ConsultSvc --> Codex
+    ConsultSvc --> Claude
+    ConsultSvc --> Other
+    Codex --> Result
+    Claude --> Result
+    Other --> Result
+    Result --> Principal
+```
+
+The control plane should be able to issue independent consultant prompts before revealing the principal's candidate solution when avoiding anchoring is useful.
+
+## 10. Storage architecture
+
+```mermaid
+flowchart TD
+    Events["Append-oriented engineering events"]
+    SQLite["SQLite"]
+    Materialized["Materialized current state"]
+    ArtifactMeta["Artifact metadata"]
+    Artifacts["Artifact store<br/>logs, diffs, transcripts, reports"]
+    Git["Git repository"]
+
+    Events --> SQLite
+    SQLite --> Materialized
+    SQLite --> ArtifactMeta
+    ArtifactMeta --> Artifacts
+    Git --> Materialized
+    Git --> Artifacts
+```
+
+Git remains source of truth for code. SQLite is source of truth for DevCadience control-plane records. Large artifacts should be content-addressed or otherwise immutable where practical.
+
+## 11. Worktree and integration architecture
+
+```mermaid
+flowchart TB
+    Base["Accepted base commit"]
+    T1["Task A worktree"]
+    T2["Task B worktree"]
+    T3["Task C worktree"]
+    I["Integration worktree"]
+    Full["Full validation"]
+    Main["Accepted main"]
+
+    Base --> T1
+    Base --> T2
+    Base --> T3
+
+    T1 -->|"accepted candidate"| I
+    T2 -->|"accepted candidate"| I
+    T3 -->|"accepted candidate"| I
+
+    I --> Full
+    Full -->|"pass + policy"| Main
+    Full -->|"conflict/failure"| I
+```
+
+Parallel tasks cannot mutate one shared working directory.
+
+## 12. Model-runtime resource plane
+
+The local runtime is itself managed infrastructure.
+
+```mermaid
+flowchart LR
+    Scheduler["Scheduler"]
+    Resource["Resource Manager"]
+    Ollama["Ollama"]
+    MLX["MLX-LM"]
+    Harness["Worker Harness"]
+    Mac["Apple Silicon<br/>unified memory"]
+
+    Scheduler --> Resource
+    Resource --> Ollama
+    Resource --> MLX
+    Ollama --> Harness
+    MLX --> Harness
+    Harness --> Mac
+    Resource -. observes memory/load .-> Mac
+```
+
+Resource policy accounts for model weights, context/KV cache, OS/tooling headroom, concurrency, model switching cost and validation workload.
+
+## 13. Deployment topology: bootstrap
+
+The first usable topology should remain simple:
+
+```mermaid
+flowchart LR
+    AG["Antigravity<br/>Principal"]
+    MCP["devcadience-mcp<br/>stdio"]
+    D["devcadience daemon"]
+    DB["SQLite"]
+    Repo["Target Git repo"]
+    Local["Ollama / MLX-LM"]
+    Tools["Build/Test Tools"]
+
+    AG <--> MCP
+    MCP <--> D
+    D <--> DB
+    D <--> Repo
+    D <--> Local
+    D <--> Tools
+```
+
+No remote service is required for the bootstrap.
+
+## 14. Future topology
+
+Future versions may support:
+- multiple local machines;
+- remote workers;
+- remote artifact stores;
+- organization-wide project registry;
+- browser dashboard;
+- centralized evaluation corpus.
+
+Those are not bootstrap requirements and must not contaminate initial core abstractions with distributed-systems complexity that has not yet been justified.
+
+## 15. Architectural quality criteria
+
+A change improves this architecture when it:
+- reduces accidental coupling;
+- makes model/provider replacement easier;
+- increases evidence quality;
+- reduces unnecessary frontier context;
+- increases deterministic verification;
+- makes escalation more explicit;
+- improves replay/auditability;
+- preserves local worker bounded authority;
+- makes project state more compact without losing provenance.
+
+A change is suspicious when it:
+- exposes generic shell/filesystem power to the principal as the primary API;
+- stores essential state only in prompts/transcripts;
+- binds protocols to one current model;
+- lets local agents redefine architecture implicitly;
+- treats consensus as truth;
+- optimizes latency at the expense of design rigor.
