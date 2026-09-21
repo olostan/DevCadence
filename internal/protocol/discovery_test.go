@@ -291,3 +291,44 @@ func TestHumanReflectionCannotReferenceFutureRevision(t *testing.T) {
 		}
 	}
 }
+
+// TestDeferredAmbiguityRequiresABoundary keeps deferral a bounded decision
+// rather than a hope (DCI-016).
+//
+// The AmbiguityResolved *event* already refused an unbounded deferral. The
+// durable record did not, and a record can be stored without its event — so
+// the weaker claim was reachable by choosing the other write path. Both now
+// agree.
+func TestDeferredAmbiguityRequiresABoundary(t *testing.T) {
+	deferred := protocol.AmbiguityEntry{
+		ID: "amb_1", Question: "Does this need to work offline?",
+		Origin: "principal", Category: "scope",
+		ResolutionAuthority:   protocol.ResolveByHuman,
+		ArchitecturalImpact:   protocol.ImpactHigh,
+		CostOfWrongAssumption: protocol.ImpactHigh,
+		WhyItMatters:          "It decides the storage layout.",
+		Status:                protocol.AmbiguityExplicitlyDeferred,
+	}
+	ledger := &protocol.AmbiguityLedger{
+		SchemaVersion: protocol.SchemaVersion1, AmbiguityLedgerID: "al_1",
+		ProjectID: "example", Revision: 1, Entries: []protocol.AmbiguityEntry{deferred},
+	}
+	if err := ledger.Validate(); err == nil {
+		t.Fatal("an ambiguity was deferred with no boundary on how far work may proceed")
+	} else if got := errs.CategoryOf(err); got != errs.CategoryInvalidArgument {
+		t.Fatalf("category = %s, want invalid_argument (%v)", got, err)
+	}
+
+	// An empty boundary is the same unbounded claim spelled differently.
+	empty := ""
+	ledger.Entries[0].SafeDeferralBoundary = &empty
+	if err := ledger.Validate(); err == nil {
+		t.Fatal("an empty deferral boundary was accepted")
+	}
+
+	boundary := "Revisit before any long autonomous campaign."
+	ledger.Entries[0].SafeDeferralBoundary = &boundary
+	if err := ledger.Validate(); err != nil {
+		t.Fatalf("a bounded deferral was rejected: %v", err)
+	}
+}

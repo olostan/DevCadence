@@ -200,6 +200,17 @@ func (l *AmbiguityLedger) Validate() error {
 			return enumError(kind, "entries[].resolution", "(empty)",
 				"a resolution when the entry is resolved")
 		}
+		// Deferring is a bounded decision, not a hope: an entry parked as
+		// explicitly_deferred must say how far work may proceed while it
+		// stays open (DCI-016). The AmbiguityResolved event already refuses
+		// an unbounded deferral, and the record path has to agree — a rule
+		// enforced on one write path only is a rule a caller can avoid, since
+		// a durable record can be stored without its event.
+		if entry.Status == AmbiguityExplicitlyDeferred &&
+			(entry.SafeDeferralBoundary == nil || *entry.SafeDeferralBoundary == "") {
+			return enumError(kind, "entries[].safe_deferral_boundary", "(empty)",
+				"a boundary when the entry is explicitly deferred")
+		}
 	}
 	return nil
 }

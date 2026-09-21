@@ -298,3 +298,40 @@ func TestJournalReadValidatesTheEnvelope(t *testing.T) {
 		t.Fatal("an event with an unsupported schema version was returned to a caller")
 	}
 }
+
+// TestProjectListingVerifiesDigests closes the last unverified projection
+// read. `state show` verified its digest; the listing behind `project list`
+// returned the same materialised state without checking it, so a tampered
+// projection stayed invisible on the one command that surveys every project.
+func TestProjectListingVerifiesDigests(t *testing.T) {
+	ctx := context.Background()
+	store := openStore(t)
+	seedProjection(t, store)
+
+	if err := store.Read(ctx, func(tx *storage.Tx) error {
+		_, err := tx.ProjectSummaries(ctx)
+		return err
+	}); err != nil {
+		t.Fatalf("listing before tampering: %v", err)
+	}
+
+	if err := store.Write(ctx, func(tx *storage.Tx) error {
+		return tx.ExecForTest(ctx,
+			`UPDATE projection_projects SET project_state =
+                replace(project_state, '"milestone"', '"tampered_milestone"')
+             WHERE project_id = 'example'`)
+	}); err != nil {
+		t.Fatalf("tamper: %v", err)
+	}
+
+	err := store.Read(ctx, func(tx *storage.Tx) error {
+		_, err := tx.ProjectSummaries(ctx)
+		return err
+	})
+	if err == nil {
+		t.Fatal("a tampered projection was listed as if it were intact")
+	}
+	if got := errs.CategoryOf(err); got != errs.CategoryIntegrity {
+		t.Fatalf("category = %s, want integrity (%v)", got, err)
+	}
+}

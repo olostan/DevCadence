@@ -114,6 +114,20 @@ type ProjectSummary struct {
 	ProjectStateDigest string
 }
 
+// verify checks a materialised header against its stored digest. Every read of
+// a projection goes through it: a projection is derived state, so a mismatch
+// is repairable from the journal rather than fatal, but it must never be
+// returned as though it were what the reducer wrote (ADR-0002 §4b).
+func (s ProjectSummary) verify() error {
+	if err := protocol.VerifyDigest("project state", s.ProjectID,
+		s.ProjectStateDigest, []byte(s.ProjectStateJSON)); err != nil {
+		return errs.Wrap(errs.CategoryIntegrity, err,
+			"materialised state for project %s is not what was written; "+
+				"rebuild it from the journal with `devcadience state rebuild`", s.ProjectID)
+	}
+	return nil
+}
+
 // ProjectSummaries lists every materialised project, in id order.
 func (t *Tx) ProjectSummaries(ctx context.Context) ([]ProjectSummary, error) {
 	rows, err := t.tx.QueryContext(ctx,
@@ -130,6 +144,9 @@ func (t *Tx) ProjectSummaries(ctx context.Context) ([]ProjectSummary, error) {
 		if err := rows.Scan(&s.ProjectID, &s.Name, &s.HighWatermark, &s.StateRevision,
 			&s.GeneratedAt, &s.ProjectStateJSON, &s.ProjectStateDigest); err != nil {
 			return nil, errs.Wrap(errs.CategoryInternal, err, "scan project projection")
+		}
+		if err := s.verify(); err != nil {
+			return nil, err
 		}
 		out = append(out, s)
 	}
@@ -151,6 +168,9 @@ func (t *Tx) ProjectSummary(ctx context.Context, projectID string) (ProjectSumma
 	if err != nil {
 		return ProjectSummary{}, errs.Wrap(errs.CategoryInternal, err, "read project projection %s", projectID)
 	}
+	if err := s.verify(); err != nil {
+		return ProjectSummary{}, err
+	}
 	return s, nil
 }
 
@@ -166,12 +186,7 @@ func (t *Tx) MaterialisedProjectState(ctx context.Context, projectID string) (*p
 	if err != nil {
 		return nil, err
 	}
-	if err := protocol.VerifyDigest("project state", projectID,
-		summary.ProjectStateDigest, []byte(summary.ProjectStateJSON)); err != nil {
-		return nil, errs.Wrap(errs.CategoryIntegrity, err,
-			"materialised state for project %s is not what was written; "+
-				"rebuild it from the journal with `devcadience state rebuild`", projectID)
-	}
+	// ProjectSummary has already verified the digest.
 	var out protocol.ProjectState
 	if err := protocol.Unmarshal([]byte(summary.ProjectStateJSON), &out); err != nil {
 		return nil, errs.Wrap(errs.CategoryIntegrity, err,

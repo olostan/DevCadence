@@ -182,11 +182,17 @@ func (s *Service) Apply(ctx context.Context, cmd Command) (Result, error) {
 		return Result{}, err
 	}
 
+	// The log reports the correlation that was *stored*, not the one the
+	// caller supplied: the two can differ, because the control plane derives
+	// correlation from the typed payload. Logging the caller's version would
+	// make the operational record disagree with the journal about the same
+	// event (docs/OBSERVABILITY.md §9).
+	stored := result.Event.Correlation
 	correlation := observability.Correlation{
 		ProjectID:     cmd.ProjectID,
-		TaskID:        cmd.Correlation.TaskID,
-		WorkPackageID: cmd.Correlation.WorkPackageID,
-		AttemptID:     cmd.Correlation.AttemptID,
+		TaskID:        stored.TaskID,
+		WorkPackageID: stored.WorkPackageID,
+		AttemptID:     stored.AttemptID,
 	}
 	correlation.With(s.logger).InfoContext(ctx, "event appended",
 		slog.String("event_type", string(result.Event.EventType)),
