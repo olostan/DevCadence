@@ -6,6 +6,12 @@ This document defines the intended principal-facing MCP surface. It is deliberat
 
 Exact MCP transport/configuration is adapter-level and may evolve without changing these semantics.
 
+### Bootstrap executable contract
+
+The `devcadience-mcp` binary MUST start the stdio MCP server when invoked with no arguments. This makes it directly usable from Antigravity's `mcp_config.json` `command` field. Additional subcommands/flags MAY be added later, but the no-argument stdio behavior is a compatibility contract for the Antigravity plugin.
+
+See [ANTIGRAVITY_INTEGRATION.md](ANTIGRAVITY_INTEGRATION.md).
+
 ## 1. API design principle
 
 ```mermaid
