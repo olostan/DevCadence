@@ -6,28 +6,32 @@ The documentation is intentionally split by durable concern so humans and agents
 flowchart TB
     Vision["VISION<br/>why this exists"]
     Req["REQUIREMENTS<br/>what it must do"]
-    Discovery["DISCOVERY & SPECIFICATION<br/>idea → grounded spec"]
+    Discovery["DISCOVERY & SPECIFICATION<br/>greenfield idea → grounded spec"]
+    Adoption["PROJECT ADOPTION<br/>brownfield repo → canonical baseline"]
+    Env["ENVIRONMENT INTELLIGENCE<br/>machine/tools/auth discovery"]
+    Hosts["PRINCIPAL HOSTS<br/>Antigravity · Cursor · VS Code"]
     Inv["INVARIANTS<br/>what must never drift"]
     Arch["ARCHITECTURE<br/>durable boundaries"]
     Life["LIFECYCLE<br/>idea → design → delivery → health"]
     Principal["PRINCIPAL ENGINEER<br/>frontier cognition"]
     Protocol["PROTOCOLS<br/>semantic language"]
     State["PROJECT STATE<br/>canonical memory"]
-    Local["LOCAL AGENTS<br/>abundant cognition"]
+    Agents["LOCAL/EXECUTION AGENTS<br/>bounded cognition"]
     MCP["MCP API<br/>principal interface"]
-    AG["ANTIGRAVITY INTEGRATION<br/>concrete frontend setup"]
-    Runtime["MODEL RUNTIME<br/>local compute"]
+    Runtime["COGNITION RUNTIME<br/>local/remote routing"]
     Verify["VERIFICATION<br/>evidence + review"]
-    Consult["CONSULTANTS<br/>cognitive diversity"]
+    Consult["CONSULTANTS<br/>optional cognitive diversity"]
     Security["SECURITY<br/>authority boundaries"]
     Observe["OBSERVABILITY<br/>auditability"]
     Health["REFACTORING & HEALTH"]
     Learn["LEARNING"]
     Plan["IMPLEMENTATION PLAN"]
-    Setup["SETUP"]
+    Setup["SETUP / DOCTOR"]
 
     Vision --> Discovery
+    Vision --> Adoption
     Discovery --> Req
+    Adoption --> Req
     Req --> Inv
     Inv --> Arch
     Arch --> Life
@@ -35,11 +39,13 @@ flowchart TB
     Life --> Protocol
     Protocol --> State
     Protocol --> MCP
-    MCP --> AG
-    AG --> Principal
-    MCP --> Local
-    Local --> Runtime
-    Local --> Verify
+    Env --> Runtime
+    Env --> Hosts
+    MCP --> Hosts
+    Hosts --> Principal
+    MCP --> Agents
+    Agents --> Runtime
+    Agents --> Verify
     Principal --> Consult
     Arch --> Security
     Verify --> Observe
@@ -69,15 +75,32 @@ flowchart TB
 5. [../prompts/specification-reviewer.md](../prompts/specification-reviewer.md)
 6. [adr/0001-discovery-specification-subsystem.md](adr/0001-discovery-specification-subsystem.md)
 
+### Working on brownfield project adoption
+1. [PROJECT_ADOPTION.md](PROJECT_ADOPTION.md)
+2. [DISCOVERY_AND_SPECIFICATION.md](DISCOVERY_AND_SPECIFICATION.md)
+3. [PROJECT_STATE.md](PROJECT_STATE.md)
+4. [ARCHITECTURE.md](ARCHITECTURE.md)
+5. [REQUIREMENTS.md](REQUIREMENTS.md)
+6. [adr/0012-mandatory-brownfield-adoption-baseline.md](adr/0012-mandatory-brownfield-adoption-baseline.md)
+
+### Working on environment/setup/cognition routing
+1. [ENVIRONMENT_INTELLIGENCE_AND_ONBOARDING.md](ENVIRONMENT_INTELLIGENCE_AND_ONBOARDING.md)
+2. [MODEL_RUNTIME.md](MODEL_RUNTIME.md)
+3. [SETUP.md](SETUP.md)
+4. [SECURITY.md](SECURITY.md)
+5. [adr/0011-adaptive-environment-and-host-independent-cognition.md](adr/0011-adaptive-environment-and-host-independent-cognition.md)
+
 ### Working on frontier/principal behavior
 1. [PRINCIPAL_ENGINEER.md](PRINCIPAL_ENGINEER.md)
 2. [LIFECYCLE.md](LIFECYCLE.md)
 3. [PROTOCOLS.md](PROTOCOLS.md)
-4. [ANTIGRAVITY_INTEGRATION.md](ANTIGRAVITY_INTEGRATION.md)
-5. [CONSULTANTS.md](CONSULTANTS.md)
-6. [../integrations/antigravity/devcadience/skills/devcadience-principal/SKILL.md](../integrations/antigravity/devcadience/skills/devcadience-principal/SKILL.md)
+4. [PRINCIPAL_HOSTS.md](PRINCIPAL_HOSTS.md)
+5. [MCP_API.md](MCP_API.md)
+6. [ANTIGRAVITY_INTEGRATION.md](ANTIGRAVITY_INTEGRATION.md)
+7. [CONSULTANTS.md](CONSULTANTS.md)
+8. [../integrations/antigravity/devcadience/skills/devcadience-principal/SKILL.md](../integrations/antigravity/devcadience/skills/devcadience-principal/SKILL.md)
 
-### Working on local execution
+### Working on execution cognition
 1. [LOCAL_AGENTS.md](LOCAL_AGENTS.md)
 2. [MODEL_RUNTIME.md](MODEL_RUNTIME.md)
 3. [VERIFICATION.md](VERIFICATION.md)
@@ -123,6 +146,9 @@ hierarchy below.
 | [0007](adr/0007-repository-and-worktree-safety-model.md) | Repository identity, worktree ownership (per-project manifest), non-mutating integration checks |
 | [0008](adr/0008-controlled-process-execution.md) | Controlled process execution: no shell, no implicit environment inheritance, distinguished outcome categories |
 | [0009](adr/0009-artifact-storage-and-validation-execution.md) | Content-addressed artifact store; validation-profile execution produces the real M1 ValidationResult |
+| [0010](adr/0010-bounded-review-convergence.md) | Bounded review campaigns, adjudication, rising reopen thresholds and closure/freeze |
+| [0011](adr/0011-adaptive-environment-and-host-independent-cognition.md) | Adaptive environment intelligence, capability-routed cognition, blank-machine onboarding and host independence |
+| [0012](adr/0012-mandatory-brownfield-adoption-baseline.md) | Mandatory version-controlled canonical baseline before brownfield managed work |
 
 ## Normative hierarchy
 
