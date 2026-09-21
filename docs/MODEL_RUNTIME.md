@@ -1,227 +1,467 @@
-# Local Model Runtime and Scheduling
+# Cognition Runtime, Capability Routing, and Scheduling
 
 ## Scope
 
-This document defines how DevCadience manages local model inference as a shared engineering resource. The initial target is Apple Silicon with 48 GB unified memory, but the architecture remains hardware-neutral.
+This document defines how DevCadience discovers, verifies, represents and routes model cognition.
 
-## 1. Runtime architecture
+The original bootstrap target of a 48 GB Apple Silicon machine remains a valuable **strong-local reference profile**, but it is not an architectural prerequisite.
+
+DevCadience must also run usefully on machines where:
+
+- only small local models are practical;
+- no local model runtime is installed;
+- local acceleration is unavailable;
+- implementation/review must use an economical remote cognition endpoint.
+
+> **Local-first means local control-plane authority and repository execution. Inference location is a policy/routing decision.**
+
+See [ENVIRONMENT_INTELLIGENCE_AND_ONBOARDING.md](ENVIRONMENT_INTELLIGENCE_AND_ONBOARDING.md) and ADR-0011.
+
+## 1. Cognition architecture
 
 ```mermaid
 flowchart TB
-    Scheduler["DevCadience Scheduler"]
-    RM["Model Resource Manager"]
-    Role["Role Router"]
-    Ollama["Ollama adapter"]
-    MLX["MLX-LM adapter"]
-    Harness["Agent Harness"]
-    HW["Local hardware"]
-    Metrics["Runtime metrics"]
+    Task["Role + task + risk"]
+    Policy["Routing policy"]
+    Env["Environment / capability profile"]
+    History["Observed evaluation outcomes"]
+    Router["Capability router"]
 
-    Scheduler --> Role
-    Role --> RM
-    RM --> Ollama
-    RM --> MLX
-    Ollama --> Harness
-    MLX --> Harness
-    Harness --> HW
-    HW --> Metrics
-    Metrics --> RM
+    Deterministic["Deterministic tools"]
+    LocalSmall["Small local model"]
+    LocalStrong["Strong local model"]
+    RemoteEconomy["Economical remote cognition"]
+    RemoteStrong["Strong remote coding/review"]
+    Frontier["Frontier cognition"]
+
+    Task --> Router
+    Policy --> Router
+    Env --> Router
+    History --> Router
+
+    Router --> Deterministic
+    Router --> LocalSmall
+    Router --> LocalStrong
+    Router --> RemoteEconomy
+    Router --> RemoteStrong
+    Router --> Frontier
 ```
 
-## 2. Runtime responsibilities
+Roles are not models.
 
-A runtime adapter should expose:
-- model discovery;
-- load/readiness;
-- generation/session invocation;
-- context configuration;
-- structured-output support/capability;
-- cancellation;
-- health;
-- usage statistics where available.
+Models/providers/runtimes are replaceable implementations of role capability.
 
-The control plane should not depend directly on Ollama-specific tags or MLX-LM process syntax.
+## 2. CognitionEndpoint
 
-## 3. Capability profiles
+A CognitionEndpoint represents a usable source of model cognition.
 
-A model profile captures observed capability:
+Possible kinds:
+
+- local runtime;
+- authenticated CLI;
+- remote API;
+- future LAN/remote model worker.
+
+Conceptual shape:
 
 ```yaml
-id: local-strong-coder
-runtime: mlx
-model: qwen-coder-family
-quantization: 4bit
+id: local-small
+kind: local_runtime
+provider: ollama
 
 capabilities:
-  repository_reasoning: strong
-  implementation: strong
+  repository_reasoning: medium
+  implementation: low
   review: medium
   structured_output: measured
   tool_use: measured
 
+execution:
+  locality: local
+  health: ready
+  acceleration:
+    backend: vulkan
+    verified: true
+
 resources:
-  estimated_weight_memory_gb: ...
-  preferred_context_tokens: 65536
+  preferred_context_tokens: 16384
   max_concurrent_sessions: 1
+
+policy:
+  cost_class: local_compute
+  source_exposure: local_only
 
 evaluation:
   suite_revision: ...
   success_rate: ...
 ```
 
-Values should be measured locally where possible.
+Another endpoint might be an authenticated coding CLI or remote API with different locality/cost/privacy characteristics.
 
-## 4. Role routing
+## 3. Runtime/endpoint adapter responsibilities
+
+A local runtime adapter should expose, where available:
+
+- model discovery;
+- load/readiness;
+- generation/session invocation;
+- context configuration;
+- structured-output support;
+- cancellation;
+- health;
+- backend/acceleration information;
+- usage/resource statistics.
+
+A remote/CLI endpoint adapter should expose, where available:
+
+- readiness/auth status;
+- invocation/session behavior;
+- structured-output/tool capability;
+- cancellation;
+- model/capability identity;
+- usage/cost metadata;
+- source/context exposure properties.
+
+The control plane must not depend directly on Ollama tags, MLX process syntax, one provider's API schema, or one coding CLI's session format.
+
+## 4. Capability profiles
+
+Capability is observed/assessed, not inferred solely from model marketing or parameter count.
+
+Useful dimensions include:
+
+- repository reasoning;
+- implementation;
+- review;
+- architecture/system reasoning;
+- structured output reliability;
+- tool use;
+- context behavior;
+- latency/throughput;
+- memory/resource safety;
+- privacy/locality;
+- monetary cost class.
+
+Values should come from measured local probes/evaluation where feasible.
+
+## 5. Role routing
 
 ```mermaid
 flowchart LR
-    Task["Task + role + risk"]
-    Profiles["Capability profiles"]
-    Resources["Current resource state"]
+    Role["Role"]
+    Risk["Risk / required quality"]
+    Privacy["Privacy / source exposure policy"]
+    Budget["Cost policy"]
+    Available["Available verified endpoints"]
     Eval["Historical outcomes"]
-    Policy["Routing policy"]
-    Choice["Selected runtime/model"]
+    Choice["Selected endpoint"]
 
-    Task --> Policy
-    Profiles --> Policy
-    Resources --> Policy
-    Eval --> Policy
-    Policy --> Choice
+    Role --> Choice
+    Risk --> Choice
+    Privacy --> Choice
+    Budget --> Choice
+    Available --> Choice
+    Eval --> Choice
 ```
 
-No permanent “Qwen is the implementer” assumption belongs in the domain model.
+A conceptual preference sequence may look like:
 
-## 5. Unified-memory strategy
-
-On Apple Silicon, weights, KV cache, OS applications, Git/build tools and other model processes share unified memory.
-
-Therefore:
-- preserve OS/tool headroom;
-- do not treat “model fits in RAM” as sufficient;
-- context size is a scheduling resource;
-- large model concurrency may be worse than sequential diversity;
-- unloading/reloading can be acceptable because latency is secondary.
-
-## 6. Quality-over-latency scheduling
-
-The preferred scheduler objective is:
-
-1. correctness;
-2. evidence diversity;
-3. resource safety;
-4. throughput;
-5. latency.
-
-For example, a high-risk task may intentionally do:
-
-```mermaid
-sequenceDiagram
-    participant RM as Resource Manager
-    participant Q as Model A
-    participant D as Model B
-    participant T as Tests
-
-    RM->>Q: implement
-    Q-->>RM: candidate
-    RM->>Q: unload if needed
-    RM->>D: independent architecture review
-    D-->>RM: review
-    RM->>D: unload
-    RM->>Q: repair
-    Q->>T: validate
-    T-->>RM: pass/fail
+```text
+deterministic
+  -> small local cognition
+  -> strong local cognition
+  -> economical remote cognition
+  -> strong remote cognition
+  -> frontier escalation
 ```
 
-Sequential model diversity is often preferable to memory pressure.
+But routing is not required to traverse every tier. It selects the least expensive/most private endpoint that satisfies required capability and policy.
 
-## 7. Context policy
+## 6. Thin-node operation
 
-Advertised model maximum context is not the default target.
+A modest Linux machine is a normal deployment target.
 
-Each role gets an operational context target based on:
-- model quality at length;
-- KV memory;
-- repository task shape;
-- available semantic compression.
+Example:
 
-Repository agents should search/retrieve rather than preloading the entire codebase.
+```yaml
+profile: hybrid-thin
 
-## 8. Prompt caching
+local:
+  deterministic_tools: ready
+  repository_indexing: ready
+  small_model: ready
+  strong_coder: unavailable
 
-Where a runtime supports prompt caching:
-- cache stable role instructions and project normative context;
-- avoid accidental cache reuse across security boundaries;
-- include prompt/skill version in cache identity;
-- measure whether caching changes memory pressure.
+remote:
+  economical_implementation: ready
+  strong_escalation: ready
+```
 
-## 9. Model installation
+Such a node may use deterministic search/AST/Git tooling plus a small local model for:
 
-The daemon may eventually help install/configure runtimes, but automatic package download is a privileged operation.
+- ranking repository evidence;
+- classification;
+- structured extraction;
+- log compression;
+- targeted summarization;
+- basic review triage.
 
-Bootstrap SHOULD:
-- detect existing Ollama and/or MLX-LM;
-- report missing requirements;
-- optionally provide explicit operator-run setup commands;
-- avoid silently pulling multi-GB models without user intent.
+Complex coding/review can route to an allowed remote cognition endpoint while all repository worktrees/tests/evidence remain locally governed.
 
-## 10. Runtime health
+## 7. Zero-local-model operation
 
-Monitor:
-- model readiness;
+No local LLM is a supported capability state.
+
+A valid deployment may consist of:
+
+```text
+local:
+  control plane
+  repository/worktrees
+  process runner
+  validation
+  artifacts
+  semantic retrieval/indexing
+
+remote:
+  implementation cognition
+  review cognition
+  frontier principal
+```
+
+The system should report unavailable local cognition explicitly and continue when policy permits remote cognition.
+
+## 8. Local hardware/resource management
+
+For local runtimes, scheduling must preserve headroom for:
+
+- operating system;
+- IDE/principal host;
+- DevCadience daemon;
+- Git/worktrees;
+- compiler/test processes;
+- KV/context cache;
+- model load/switching.
+
+Advertised maximum context is not the default operating target.
+
+Context is a scheduling resource.
+
+Sequential model diversity may be preferable to concurrent memory pressure.
+
+## 9. Acceleration verification
+
+Runtime presence is not acceleration evidence.
+
+The environment intelligence subsystem should determine candidate backends and run an actual inference probe before marking one ready.
+
+Typical backend candidates:
+
+- Apple Silicon: MLX/Metal, Ollama/Metal;
+- NVIDIA Linux: supported CUDA runtime path;
+- AMD Linux: ROCm where supported and/or Vulkan;
+- Intel/other supported GPUs: Vulkan/runtime-specific paths;
+- CPU fallback.
+
+Exact compatibility evolves and belongs in setup recipes/knowledge.
+
+An endpoint profile should record the verified backend and the software/hardware versions associated with the verification.
+
+## 10. Apple Silicon
+
+Apple Silicon is the initial strong-local reference platform.
+
+MLX-LM and/or Ollama may be used when verified.
+
+Scheduling should account for unified memory shared by:
+
+- weights;
+- KV cache;
+- operating system;
+- principal host;
+- build/test tools;
+- other model processes.
+
+A model merely fitting into unified memory is not sufficient evidence that it is a safe default.
+
+## 11. Linux GPU paths
+
+### NVIDIA
+
+Discovery should distinguish:
+
+- NVIDIA hardware present;
+- usable driver stack;
+- runtime sees compatible acceleration;
+- actual inference offloads.
+
+Do not require/install a full development SDK when the selected runtime does not need it.
+
+### AMD
+
+Do not equate AMD hardware with guaranteed ROCm suitability.
+
+The compatibility engine may prefer/test ROCm for supported hardware and Vulkan for other supported devices/APUs.
+
+Permissions/device-node issues are part of setup diagnostics.
+
+### Vulkan
+
+Vulkan can be a useful portable acceleration candidate on Linux, but availability must be verified through device/runtime probes rather than package presence alone.
+
+## 12. Context policy
+
+Repository-heavy workers should search/retrieve rather than preloading entire codebases.
+
+Operational context targets depend on:
+
+- endpoint quality at length;
+- local KV/memory cost where applicable;
+- monetary input cost for remote providers;
+- task shape;
+- semantic compression quality.
+
+The same context-minimization principle applies to local and remote inference.
+
+## 13. Prompt caching
+
+Where supported:
+
+- cache stable role instructions and normative project context;
+- include prompt/skill revision in identity;
+- avoid cache reuse across security boundaries;
+- measure cost/resource benefit rather than assuming it.
+
+## 14. Endpoint health
+
+Monitor appropriate signals such as:
+
+- runtime/provider readiness;
+- auth expiration;
 - inference failure;
 - OOM/memory pressure;
+- unexpected CPU fallback;
 - context truncation;
 - malformed structured output;
 - tool-loop stalls;
 - generation latency;
-- model load/unload.
+- model load/unload;
+- provider/rate-limit failure.
 
-Repeated runtime failure should change routing availability.
+Repeated endpoint failure should change routing availability.
 
-## 11. Structured output reliability
+## 15. Structured output reliability
 
-Every candidate model used for protocol-producing roles should be evaluated on:
-- valid JSON generation;
-- required field adherence;
+Every endpoint used for protocol-producing roles should be evaluated for:
+
+- valid JSON/schema generation;
+- required fields;
 - unknown field behavior;
-- retry/recovery;
+- recovery after malformed output;
 - long-context schema drift.
 
-A strong coding model with poor protocol reliability may require a wrapper/repair layer or a different role.
+A strong coder with poor protocol reliability may require a repair wrapper or different role.
 
-## 12. Model diversity
+## 16. Model/provider diversity
 
-Different model families may be assigned to independent reviewers when memory/time allows.
+Different model families/providers may be useful for independent reviews/consultation.
 
-Diversity is an experimental variable and should be evaluated against defect-detection outcomes.
+Diversity is an experimental variable, not a correctness guarantee.
 
-## 13. Smaller models
+M6 review convergence still adjudicates evidence; it does not majority-vote model opinions.
 
-Smaller local models are useful for:
+## 17. Smaller local models
+
+Small local models remain valuable even when they are not suitable implementers.
+
+Good candidate workloads:
+
+- repository evidence ranking;
 - log compression;
 - simple classification;
 - task metadata extraction;
 - low-risk test summarization;
-- artifact tagging.
+- artifact tagging;
+- structured extraction.
 
-Do not waste the strongest local model on deterministic or trivial processing.
+Do not waste high-cost cognition on deterministic or trivial processing.
 
-## 14. Security
+## 18. Privacy and source exposure
 
-Local runtime does not automatically imply safe runtime.
+Routing must obey project policy for whether source may leave the machine.
 
-Treat model-generated commands as untrusted requests mediated by the control plane.
+Possible policies may permit:
 
-Local model server network exposure should be loopback/private by default.
+- no external source;
+- semantic evidence only;
+- focused snippets;
+- selected files;
+- authorized worktree access through a tool-mediated coding agent.
 
-## 15. Future distributed workers
+Remote inference must never be a silent fallback when policy disallows it.
 
-The runtime interface may later support remote local-model workers, but bootstrap does not require distributed scheduling.
+## 19. Cost-aware routing
 
-Any remote worker design requires:
+Remote cognition has monetary/quota cost.
+
+Profiles may represent coarse classes such as:
+
+- local_compute;
+- subscription_included;
+- remote_economy;
+- remote_strong;
+- frontier_expensive.
+
+Routing should prefer quality-sufficient lower-cost cognition for high-volume implementation/review and reserve frontier cognition for high-leverage reasoning.
+
+Cost policy does not override correctness/security requirements.
+
+## 20. Installation and onboarding
+
+Runtime/provider installation and auth discovery are handled by the guided bootstrap subsystem.
+
+Bootstrap:
+
+- assumes nothing is preinstalled;
+- discovers existing software first;
+- recommends the smallest useful additions;
+- requires approval for downloads/packages/services/auth flows;
+- verifies actual runtime/backend health;
+- may recommend a deployment profile.
+
+See [ENVIRONMENT_INTELLIGENCE_AND_ONBOARDING.md](ENVIRONMENT_INTELLIGENCE_AND_ONBOARDING.md).
+
+## 21. Future distributed workers
+
+The cognition abstraction may later support remote local-model workers.
+
+That does not mean M3 should introduce distributed scheduling.
+
+A true remote worker design requires:
+
 - mutual authentication;
-- artifact/repository synchronization;
+- source/artifact synchronization;
 - source confidentiality;
-- resource reporting;
+- capability/resource reporting;
 - failure semantics;
-- a new threat model.
+- a separate threat model.
+
+## 22. Core principle
+
+The architectural distinction is not:
+
+```text
+cloud versus local
+```
+
+It is:
+
+```text
+high-value cognition
+versus
+high-volume cognition
+versus
+deterministic machinery
+```
+
+Inference placement is chosen according to capability and policy while local control-plane authority remains stable.
