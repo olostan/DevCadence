@@ -239,3 +239,18 @@ No core protocol depends on one principal frontend. The initial first-class host
 ### DCI-108 — Setup mutation requires explicit authority
 Environment discovery is read-only. Package installation, model download, authentication, service changes, device/group permissions and other setup mutations require a visible plan and the appropriate user approval; privileged/high-impact changes are never silently applied.
 
+### DCI-109 — Managed projects require a canonical documentation baseline
+A repository is not DevCadience-ready for normal managed engineering work until the required canonical project documentation set exists in Git and has passed the project Adoption Readiness Gate.
+
+### DCI-110 — Brownfield reconstruction preserves provenance
+Retrospective reconstruction must distinguish observed behavior, inherited documentation, model inference, human-confirmed intent, unknowns and contradictions. Reconstructed understanding must not be serialized as historical fact merely because it is plausible.
+
+### DCI-111 — Existing documentation is evidence, not automatic authority
+README files, design notes, comments and other inherited documentation inform adoption but do not become canonical solely by existing. Material conflicts with code, tests, schemas or current human intent remain explicit until reconciled.
+
+### DCI-112 — Adoption baseline is version-controlled
+The accepted canonical documentation baseline and its adoption decision are tied to explicit Git commits. Normal managed work begins from that accepted baseline, not from an uncommitted reconstruction held only in model or control-plane memory.
+
+### DCI-113 — Pre-adoption autonomy is bounded
+Before project adoption reaches READY, DevCadience may perform bounded investigation and isolated adoption work, but it must not treat the repository as ready for normal autonomous implementation, acceptance or integration.
+
