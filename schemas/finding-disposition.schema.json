@@ -139,17 +139,35 @@
       },
       "else": {
         "not": {
-          "anyOf": [
-            {
-              "required": [
-                "why_now"
-              ]
-            },
-            {
-              "required": [
-                "repair_guidance"
-              ]
-            }
+          "required": [
+            "why_now"
+          ]
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "disposition": {
+            "const": "fix_now"
+          }
+        },
+        "required": [
+          "disposition"
+        ]
+      },
+      "then": {
+        "properties": {
+          "repair_guidance": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "else": {
+        "not": {
+          "required": [
+            "repair_guidance"
           ]
         }
       }
@@ -201,11 +219,18 @@
           "reconsideration_trigger"
         ],
         "properties": {
+          "materiality": {
+            "const": "material_non_blocking"
+          },
           "deferred_target": {
             "type": "string",
             "minLength": 1
           },
           "reconsideration_trigger": {
+            "type": "string",
+            "minLength": 1
+          },
+          "accepted_risk_ref": {
             "type": "string",
             "minLength": 1
           }

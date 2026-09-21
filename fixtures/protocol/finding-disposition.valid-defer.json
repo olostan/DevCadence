@@ -4,7 +4,7 @@
   "campaign_id": "rc_001",
   "finding_id": "finding_003",
   "severity": "low",
-  "materiality": "opportunistic",
+  "materiality": "material_non_blocking",
   "disposition": "defer",
   "rationale": "The change is real but outside this milestone's closure bar.",
   "deferred_target": "M7",

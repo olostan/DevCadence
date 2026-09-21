@@ -1,0 +1,14 @@
+{
+  "schema_version": "1.0",
+  "disposition_id": "fd_bad_004",
+  "campaign_id": "rc_001",
+  "finding_id": "finding_bad_004",
+  "severity": "low",
+  "materiality": "opportunistic",
+  "disposition": "defer",
+  "rationale": "Opportunistic findings must not be deferred inside the active campaign.",
+  "deferred_target": "M7",
+  "reconsideration_trigger": "Revisit when the backlog item is selected.",
+  "decided_by": "human",
+  "recorded_at": "2026-09-21T00:00:00Z"
+}
