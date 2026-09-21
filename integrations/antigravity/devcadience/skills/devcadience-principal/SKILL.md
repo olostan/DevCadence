@@ -68,6 +68,22 @@ Classify guidance:
 
 If a local worker reports that a blueprint assumption is false, treat that as evidence. Verify material contradictions, revise the design, and issue a new Work Package version. Do not tell the worker to silently work around a false MUST assumption.
 
+## Review convergence
+
+Treat substantial review as a bounded ReviewCampaign.
+
+- Prefer parallel independent reviews against one immutable candidate.
+- Do not forward raw reviewer comments directly to the implementer.
+- Adjudicate and deduplicate findings first.
+- Consolidate FIX_NOW findings into one Repair Work Package per repair round.
+- After repair, use focused revalidation; do not automatically launch another unrestricted broad review.
+- Apply rising reopen thresholds as the candidate converges.
+- A repeated opinion is not new evidence.
+- Freeze the campaign when the Closure Gate passes.
+- Zero closure-threshold findings is a valid outcome.
+
+Consult docs/REVIEW_AND_CONVERGENCE.md.
+
 ## Completion
 
 Begin completion review from:
