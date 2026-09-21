@@ -270,3 +270,44 @@ Large outputs should use artifact references, not bloated database rows.
 - running every expensive check on every trivial task;
 - skipping deep checks on risky tiny changes because LOC is small;
 - majority-vote acceptance without analyzing disagreement.
+
+
+## Bounded review campaigns and closure
+
+Verification must converge.
+
+For substantial candidates, independent review dimensions SHOULD run against the same immutable candidate before repair begins. Their outputs are normalized and adjudicated together rather than triggering serial code changes.
+
+Default campaign:
+
+1. deterministic validation;
+2. parallel broad review;
+3. principal deduplication/adjudication;
+4. one consolidated Repair Work Package;
+5. focused revalidation of accepted repairs and regressions;
+6. closure review with a higher reporting threshold;
+7. ClosureDecision -> FROZEN or explicit repair/escalation.
+
+After the broad phase, another unrestricted review is not the default verification action.
+
+### Threshold progression
+
+- broad review: material MEDIUM+ findings may enter current repair;
+- focused revalidation: HIGH/material issue or repair regression may reopen;
+- closure: only blocker / correctness / security / integrity / invariant / durable-contract defects reopen.
+
+The exact policy is configurable, but the threshold MUST NOT decrease as a campaign converges without an explicit policy exception.
+
+### Finding budgets
+
+Reviewers report only the configured number of most consequential findings (default 5). Zero findings is valid. The budget never suppresses critical safety/integrity findings.
+
+### Reopen rule
+
+An adjudicated or frozen issue reopens only with materially new evidence or changed requirements. Repeated equivalent model opinion is not new evidence.
+
+### Residual risk
+
+Real below-threshold findings are not erased. They become explicit deferred risk/debt with target or reconsideration trigger.
+
+See [REVIEW_AND_CONVERGENCE.md](REVIEW_AND_CONVERGENCE.md).
