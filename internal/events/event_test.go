@@ -266,3 +266,33 @@ func TestDecodingAnEventValidatesTheEnvelope(t *testing.T) {
 		t.Fatal("an event with an unsupported schema version decoded successfully")
 	}
 }
+
+// TestLessonScopeIsTheClosedEnum keeps the event and the LessonCandidate it
+// references from disagreeing about how widely a lesson may apply, which
+// DCI-073 makes the whole point of the field.
+func TestLessonScopeIsTheClosedEnum(t *testing.T) {
+	payload := &events.LessonCandidateCreated{
+		LessonCandidateID: "lc_1", Observation: "Bounded reads need a test.",
+		RecordDigest: "sha256:0", Scope: protocol.LessonScope("everywhere"),
+	}
+	if err := payload.Validate(); err == nil {
+		t.Fatal("an unknown lesson scope was accepted")
+	}
+	payload.Scope = protocol.LessonScopeProject
+	if err := payload.Validate(); err != nil {
+		t.Fatalf("a known lesson scope was refused: %v", err)
+	}
+}
+
+// TestReviewCorrelationCarriesTheWorkPackage keeps observability able to join
+// a review to the blueprint it judged without reopening the record.
+func TestReviewCorrelationCarriesTheWorkPackage(t *testing.T) {
+	correlation := events.CorrelationFor(&events.ReviewCompleted{
+		TaskID: "tsk_1", AttemptID: "att_1", ReviewID: "rev_1", WorkPackageID: "wp_1",
+		Dimension: protocol.DimensionCorrectness, Verdict: protocol.VerdictPass,
+		RecordDigest: "sha256:0",
+	})
+	if correlation.WorkPackageID != "wp_1" {
+		t.Fatalf("work package correlation = %q, want wp_1", correlation.WorkPackageID)
+	}
+}

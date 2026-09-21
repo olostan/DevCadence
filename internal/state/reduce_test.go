@@ -444,9 +444,10 @@ func TestRejectedEventLeavesTheProjectionUntouched(t *testing.T) {
 					Add(&events.EscalationRaised{
 						TaskID: taskID, EscalationID: "esc_0001",
 						Reason: tasks.BlockedReason{
-							Trigger:   "contradicted_assumption",
-							Statement: "Assumption A2 is false.",
-							Authority: protocol.AuthorityPrincipal,
+							Trigger:      "contradicted_assumption",
+							Statement:    "Assumption A2 is false.",
+							Authority:    protocol.AuthorityPrincipal,
+							EvidenceRefs: []string{"ev_callers"},
 						},
 					})
 			},

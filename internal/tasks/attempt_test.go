@@ -72,9 +72,10 @@ func TestBlockedAttemptMustCarryItsReason(t *testing.T) {
 		t.Fatal("a blocked attempt without a reason was accepted")
 	}
 	attempt.BlockReason = &tasks.BlockedReason{
-		Trigger:   "contradicted_assumption",
-		Statement: "Assumption A2 is false: three callers build the query positionally.",
-		Authority: protocol.AuthorityPrincipal,
+		Trigger:      "contradicted_assumption",
+		Statement:    "Assumption A2 is false: three callers build the query positionally.",
+		Authority:    protocol.AuthorityPrincipal,
+		EvidenceRefs: []string{"ev_callers"},
 	}
 	if err := attempt.Validate(); err != nil {
 		t.Fatalf("valid blocked attempt rejected: %v", err)
@@ -104,7 +105,10 @@ func TestAttemptStatusTransitions(t *testing.T) {
 }
 
 func TestBlockedReasonRequiresADecisionOwner(t *testing.T) {
-	reason := tasks.BlockedReason{Trigger: "contradiction", Statement: "A2 is false"}
+	reason := tasks.BlockedReason{
+		Trigger: "contradiction", Statement: "A2 is false",
+		EvidenceRefs: []string{"ev_callers"},
+	}
 	if err := reason.Validate(); err == nil {
 		t.Fatal("a block with no authority was accepted; nobody could unblock it")
 	}
@@ -123,7 +127,8 @@ func TestTaskBlockedStateAndReasonMustAgree(t *testing.T) {
 		t.Fatal("a blocked task with no reason was accepted")
 	}
 	task.Blocked = &tasks.BlockedReason{
-		Trigger: "contradiction", Statement: "A2 is false", Authority: protocol.AuthorityPrincipal,
+		Trigger: "contradiction", Statement: "A2 is false",
+		Authority: protocol.AuthorityPrincipal, EvidenceRefs: []string{"ev_callers"},
 	}
 	if err := task.Validate(); err != nil {
 		t.Fatalf("valid blocked task rejected: %v", err)
@@ -133,5 +138,27 @@ func TestTaskBlockedStateAndReasonMustAgree(t *testing.T) {
 	task.State = tasks.StateRunning
 	if err := task.Validate(); err == nil {
 		t.Fatal("a running task carrying a block reason was accepted")
+	}
+}
+
+// TestBlockWithoutEvidenceIsRefused makes the type meet the contract its own
+// documentation states. A block is an escalation someone must act on, and the
+// decision owner cannot judge one that points at nothing (DCI-011).
+func TestBlockWithoutEvidenceIsRefused(t *testing.T) {
+	reason := tasks.BlockedReason{
+		Trigger: "contradicted_assumption", Statement: "Assumption A2 is false.",
+		Authority: protocol.AuthorityPrincipal,
+	}
+	if err := reason.Validate(); err == nil {
+		t.Fatal("a block citing no evidence was accepted")
+	}
+	// An empty entry is the same absence spelled differently.
+	reason.EvidenceRefs = []string{""}
+	if err := reason.Validate(); err == nil {
+		t.Fatal("a block whose only evidence reference is empty was accepted")
+	}
+	reason.EvidenceRefs = []string{"ev_callers"}
+	if err := reason.Validate(); err != nil {
+		t.Fatalf("a block citing evidence was refused: %v", err)
 	}
 }

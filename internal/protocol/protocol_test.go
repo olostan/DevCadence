@@ -205,3 +205,49 @@ func TestMarshalRefusesAnInvalidRecord(t *testing.T) {
 		t.Fatal("an invalid record was serialised")
 	}
 }
+
+// TestValidationPassRequiresSomethingToHavePassed pins the claim
+// ValidationOutcome already makes in prose: it omits "skipped" because a run
+// in which nothing executed has validated nothing. A run with no checks at
+// all is that same claim with less ceremony, and both used to be accepted as
+// a pass — letting "validated" mean "we tried nothing and found no problems".
+func TestValidationPassRequiresSomethingToHavePassed(t *testing.T) {
+	result := func(checks ...protocol.CheckResult) *protocol.ValidationResult {
+		return &protocol.ValidationResult{
+			SchemaVersion: protocol.SchemaVersion1,
+			ValidationID:  "val_1", ProjectID: "example",
+			Subject: protocol.ValidationSubject{
+				Kind: protocol.ScopeAttempt, TaskID: "tsk_1", AttemptID: "att_1",
+			},
+			Commit: "cafebabe1234567", Status: protocol.ValidationPass, Checks: checks,
+		}
+	}
+	check := func(status protocol.CheckStatus) protocol.CheckResult {
+		return protocol.CheckResult{
+			ID: "chk_test", Kind: "test", Status: status,
+			StartedAt:  protocol.NewTimestamp(time.Unix(0, 0).UTC()),
+			FinishedAt: protocol.NewTimestamp(time.Unix(60, 0).UTC()),
+		}
+	}
+
+	for _, tc := range []struct {
+		name   string
+		checks []protocol.CheckResult
+	}{
+		{"no checks at all", nil},
+		{"every check skipped", []protocol.CheckResult{check(protocol.CheckSkipped)}},
+		{"every check cancelled", []protocol.CheckResult{check(protocol.CheckCancelled)}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := result(tc.checks...).Validate(); err == nil {
+				t.Fatal("a pass was accepted although no check executed")
+			}
+		})
+	}
+
+	// Control: one genuine pass alongside a skip is a real pass.
+	passing := result(check(protocol.CheckPass), check(protocol.CheckSkipped))
+	if err := passing.Validate(); err != nil {
+		t.Fatalf("a run with a passing check was refused: %v", err)
+	}
+}

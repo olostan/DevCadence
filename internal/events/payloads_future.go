@@ -1,6 +1,9 @@
 package events
 
-import "github.com/olostan/DevCadience/internal/errs"
+import (
+	"github.com/olostan/DevCadience/internal/errs"
+	"github.com/olostan/DevCadience/internal/protocol"
+)
 
 // Event types that later milestones act on. They are registered in M1 so that
 // the journal can already represent them and so that a build which encounters
@@ -20,9 +23,12 @@ const (
 // LessonCandidateCreated records a proposal derived from trajectories (M8).
 type LessonCandidateCreated struct {
 	LessonCandidateID string `json:"lesson_candidate_id"`
-	Scope             string `json:"scope"`
-	Observation       string `json:"observation"`
-	RecordDigest      string `json:"record_digest"`
+	// Scope is the protocol enum, not a free string: the event and the
+	// LessonCandidate it references must agree on how widely a lesson may
+	// apply, and DCI-073 makes that bound the whole point of the field.
+	Scope        protocol.LessonScope `json:"scope"`
+	Observation  string               `json:"observation"`
+	RecordDigest string               `json:"record_digest"`
 }
 
 // Type implements Payload.
@@ -33,6 +39,10 @@ func (p *LessonCandidateCreated) Validate() error {
 	if p.LessonCandidateID == "" || p.Observation == "" || p.RecordDigest == "" {
 		return errs.New(errs.CategoryInvalidArgument,
 			"LessonCandidateCreated: lesson_candidate_id, observation and record_digest are required")
+	}
+	if !p.Scope.Valid() {
+		return errs.New(errs.CategoryInvalidArgument,
+			"LessonCandidateCreated: scope %q is not a known lesson scope", string(p.Scope))
 	}
 	return nil
 }

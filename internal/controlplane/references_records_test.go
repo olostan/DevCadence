@@ -602,3 +602,43 @@ func TestSpecificationReviewReferencesItsOwnRecordKind(t *testing.T) {
 		}
 	})
 }
+
+// TestRepeatedMetadataMustAgreeWithTheRecord extends the cross-check to every
+// fact the compact event repeats, not only the identifying ones.
+//
+// The approval event repeats the blueprint's baseline metadata, and that
+// metadata is what makes a stale plan detectable (docs/PROJECT_STATE.md §7).
+// A digest-valid work package stored against one baseline while the journal
+// records another would make staleness undetectable in the case it exists to
+// catch — and every identifying field would still agree.
+func TestRepeatedMetadataMustAgreeWithTheRecord(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		break_ func(*events.WorkPackageApproved)
+		what   string
+	}{
+		{
+			name:   "project state revision",
+			break_: func(a *events.WorkPackageApproved) { a.ProjectStateRevision = "ps_999999999" },
+			what:   "an approval recording a different state revision than its blueprint",
+		},
+		{
+			name:   "base commit",
+			break_: func(a *events.WorkPackageApproved) { a.BaseCommit = "0000000deadbee" },
+			what:   "an approval recording a different base commit than its blueprint",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h := testsupport.NewHarness(t)
+			taskID := designedTask(t, h)
+			workPackage := testsupport.WorkPackage("example", taskID, "wp_0001", 1)
+			payload := approval(taskID, testsupport.Digest(t, workPackage), 1)
+			tc.break_(payload)
+			refusesWith(t, h, controlplane.AppendTypedEventInput{
+				ProjectID: "example",
+				Payload:   payload,
+				Records:   []controlplane.RecordToStore{{Version: 1, Record: workPackage}},
+			}, tc.what)
+		})
+	}
+}

@@ -190,6 +190,7 @@ func (v *ValidationResult) Validate() error {
 		return enumError(kind, "status", string(v.Status), "pass", "fail", "error", "cancelled")
 	}
 	sawFailure := false
+	sawPass := false
 	for _, c := range v.Checks {
 		if err := requireNonEmpty(kind, "checks[].id", c.ID); err != nil {
 			return err
@@ -208,6 +209,19 @@ func (v *ValidationResult) Validate() error {
 		if c.Status == CheckFail || c.Status == CheckError {
 			sawFailure = true
 		}
+		if c.Status == CheckPass {
+			sawPass = true
+		}
+	}
+	// A pass must rest on something that actually ran. ValidationOutcome
+	// omits "skipped" precisely because a run in which nothing executed has
+	// validated nothing — and a run with no checks at all is the same claim
+	// with less ceremony. Accepting either would let "validated" mean "we
+	// tried nothing and found no problems" (DCI-040: deterministic evidence
+	// is what acceptance rests on).
+	if v.Status == ValidationPass && !sawPass {
+		return errs.New(errs.CategoryIntegrity,
+			"%s: status is pass but no check passed; a run that executed nothing has validated nothing", kind)
 	}
 	// A run that reports "pass" while containing a failed check would let a
 	// model-authored summary override tool output, which DCI-041 forbids.

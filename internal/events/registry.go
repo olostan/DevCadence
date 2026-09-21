@@ -118,7 +118,14 @@ func CorrelationFor(payload Payload) Correlation {
 	case *ValidationCompleted:
 		return Correlation{TaskID: p.TaskID, AttemptID: p.AttemptID, ValidationID: p.ValidationID}
 	case *ReviewCompleted:
-		return Correlation{TaskID: p.TaskID, AttemptID: p.AttemptID, ReviewID: p.ReviewID}
+		// The work package belongs here for the same reason the event now
+		// carries it: a review is defined against the blueprint the attempt
+		// executed, so review-level observability must be able to join the
+		// two without reopening the record.
+		return Correlation{
+			TaskID: p.TaskID, AttemptID: p.AttemptID,
+			WorkPackageID: p.WorkPackageID, ReviewID: p.ReviewID,
+		}
 	case *ChangeAccepted:
 		return Correlation{TaskID: p.TaskID, AttemptID: p.AttemptID, WorkPackageID: p.WorkPackageID}
 	case *ChangeRejected:

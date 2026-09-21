@@ -56,7 +56,8 @@ func storeDecisionAndRequirement(
 		ProjectID: "example",
 		Actor:     protocol.Actor{Kind: protocol.ActorHuman, ID: "operator"},
 		Payload: &events.ProductDecisionRecorded{
-			ProductDecisionID: "PD-001", Question: "Offline?", Answer: "Yes.",
+			ProductDecisionID: "PD-001", Question: "Must this work offline?",
+			Answer:       "Yes, fully offline.",
 			RecordDigest: testsupport.Digest(t, decision(status)), Status: status,
 		},
 		Records: []controlplane.RecordToStore{{Version: 1, Record: decision(status)}},

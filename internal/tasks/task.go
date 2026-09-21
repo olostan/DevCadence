@@ -7,9 +7,12 @@ import (
 
 // BlockedReason preserves why a task cannot progress.
 //
-// ENGINEERING_STANDARDS.md §15 and DCI-045 require that a block name the
-// violated or uncertain assumption, cite evidence, and identify a decision
-// owner, so that escalation is decision-oriented rather than a failure dump.
+// AGENTS.md §15 (failure behavior) requires that a block state the violated or
+// uncertain assumption, cite evidence, and identify a decision owner, so that
+// escalation is decision-oriented rather than a failure dump. DCI-011 is what
+// makes the evidence requirement binding: a material claim must point at
+// something retrievable, and "this work cannot proceed" is exactly such a
+// claim.
 type BlockedReason struct {
 	// Trigger is the short machine-readable cause, e.g.
 	// "contradicted_assumption" or "integration_regression".
@@ -18,7 +21,9 @@ type BlockedReason struct {
 	Statement string `json:"statement"`
 	// Authority names who can unblock the task.
 	Authority protocol.DecisionAuthority `json:"authority"`
-	// EvidenceRefs point at the evidence supporting the block (DCI-011).
+	// EvidenceRefs point at the evidence supporting the block (DCI-011). At
+	// least one is required; the field stays omitempty only so that an
+	// absent list serialises as absent rather than as null.
 	EvidenceRefs []string `json:"evidence_refs,omitempty"`
 	// AttemptID names the attempt that surfaced the block, when there was one.
 	AttemptID string `json:"attempt_id,omitempty"`
@@ -39,6 +44,21 @@ func (r BlockedReason) Validate() error {
 	if !r.Authority.Valid() {
 		return errs.New(errs.CategoryInvalidArgument,
 			"blocked reason: authority %q is not a known decision authority", string(r.Authority))
+	}
+	// A block is an escalation someone must act on, and the decision owner
+	// cannot judge it without reaching what it rests on. An empty entry is
+	// the same absence spelled differently.
+	hasEvidence := false
+	for _, ref := range r.EvidenceRefs {
+		if ref != "" {
+			hasEvidence = true
+			break
+		}
+	}
+	if !hasEvidence {
+		return errs.New(errs.CategoryInvalidArgument,
+			"blocked reason: at least one evidence_ref is required; "+
+				"a decision owner cannot act on a block that points at nothing (DCI-011)")
 	}
 	return nil
 }

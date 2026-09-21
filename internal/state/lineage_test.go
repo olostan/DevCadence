@@ -303,6 +303,7 @@ func TestEscalationCannotCiteAnotherTasksAttempt(t *testing.T) {
 		Reason: tasks.BlockedReason{
 			Trigger: "contradicted_assumption", Statement: "A2 is false.",
 			Authority: protocol.AuthorityPrincipal, AttemptID: attemptTwo,
+			EvidenceRefs: []string{"ev_callers"},
 		},
 	}, errs.CategoryIntegrity)
 }

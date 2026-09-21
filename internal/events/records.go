@@ -48,6 +48,16 @@ type RecordReferencing interface {
 	CheckReferencedRecord(document []byte) error
 }
 
+// sameOptional compares a repeated field the event may legitimately omit. A
+// compact event that says nothing about an optional field is not contradicting
+// the record; one that names a different value is.
+func sameOptional(claimed string, stored *string) bool {
+	if claimed == "" {
+		return true
+	}
+	return stored != nil && *stored == claimed
+}
+
 // mismatch reports a compact claim that the durable record contradicts.
 func mismatch(event, field string, claimed, stored any) error {
 	return errs.New(errs.CategoryIntegrity,
@@ -83,6 +93,17 @@ func (p *WorkPackageApproved) CheckReferencedRecord(document []byte) error {
 	}
 	if p.ChangeClass != "" && wp.ChangeClass != p.ChangeClass {
 		return mismatch(event, "change_class", p.ChangeClass, wp.ChangeClass)
+	}
+	// The baseline metadata is what makes a stale plan detectable
+	// (docs/PROJECT_STATE.md §7). A blueprint stored against one baseline
+	// while the journal records another would make staleness undetectable in
+	// exactly the case it exists to catch.
+	if wp.ProjectStateRevision != p.ProjectStateRevision {
+		return mismatch(event, "project_state_revision",
+			p.ProjectStateRevision, wp.ProjectStateRevision)
+	}
+	if wp.BaseCommit != p.BaseCommit {
+		return mismatch(event, "base_commit", p.BaseCommit, wp.BaseCommit)
 	}
 	return nil
 }
@@ -226,6 +247,21 @@ func (p *ProductDecisionRecorded) CheckReferencedRecord(document []byte) error {
 	if decision.Status != p.Status {
 		return mismatch(event, "status", p.Status, decision.Status)
 	}
+	if decision.Question != p.Question {
+		return mismatch(event, "question", p.Question, decision.Question)
+	}
+	if decision.Answer != p.Answer {
+		return mismatch(event, "answer", p.Answer, decision.Answer)
+	}
+	// The human who decided and the decision superseded are the provenance a
+	// later reader follows; a journal that names a different actor than the
+	// record would misattribute human authority (DCI-009).
+	if !sameOptional(p.AuthorityActor, decision.AuthorityActor) {
+		return mismatch(event, "authority_actor", p.AuthorityActor, decision.AuthorityActor)
+	}
+	if !sameOptional(p.Supersedes, decision.Supersedes) {
+		return mismatch(event, "supersedes", p.Supersedes, decision.Supersedes)
+	}
 	return nil
 }
 
@@ -240,9 +276,15 @@ func (p *DiscoveryExperimentStarted) CheckReferencedRecord(document []byte) erro
 	if err := protocol.Unmarshal(document, &experiment); err != nil {
 		return err
 	}
+	const event = "DiscoveryExperimentStarted"
 	if experiment.ExperimentID != p.ExperimentID {
-		return mismatch("DiscoveryExperimentStarted", "experiment_id",
-			p.ExperimentID, experiment.ExperimentID)
+		return mismatch(event, "experiment_id", p.ExperimentID, experiment.ExperimentID)
+	}
+	if experiment.Question != p.Question {
+		return mismatch(event, "question", p.Question, experiment.Question)
+	}
+	if experiment.Hypothesis != p.Hypothesis {
+		return mismatch(event, "hypothesis", p.Hypothesis, experiment.Hypothesis)
 	}
 	return nil
 }
@@ -264,6 +306,9 @@ func (p *DiscoveryExperimentCompleted) CheckReferencedRecord(document []byte) er
 	}
 	if experiment.Status != p.Status {
 		return mismatch(event, "status", p.Status, experiment.Status)
+	}
+	if !sameOptional(p.ResultSummary, experiment.ResultSummary) {
+		return mismatch(event, "result_summary", p.ResultSummary, experiment.ResultSummary)
 	}
 	return nil
 }
@@ -307,9 +352,13 @@ func (p *LessonCandidateCreated) CheckReferencedRecord(document []byte) error {
 	if err := protocol.Unmarshal(document, &candidate); err != nil {
 		return err
 	}
+	const event = "LessonCandidateCreated"
 	if candidate.LessonCandidateID != p.LessonCandidateID {
-		return mismatch("LessonCandidateCreated", "lesson_candidate_id",
+		return mismatch(event, "lesson_candidate_id",
 			p.LessonCandidateID, candidate.LessonCandidateID)
+	}
+	if candidate.Scope != p.Scope {
+		return mismatch(event, "scope", p.Scope, candidate.Scope)
 	}
 	return nil
 }
