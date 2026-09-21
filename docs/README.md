@@ -110,3 +110,12 @@ If documents appear to conflict, use this order and surface the inconsistency:
 7. implementation suggestion.
 
 A conflict is evidence to resolve, not permission to silently choose whichever text is convenient.
+
+
+### Working on review, repair, or milestone closure
+1. [REVIEW_AND_CONVERGENCE.md](REVIEW_AND_CONVERGENCE.md)
+2. [VERIFICATION.md](VERIFICATION.md)
+3. [PRINCIPAL_ENGINEER.md](PRINCIPAL_ENGINEER.md)
+4. [../prompts/reviewer.md](../prompts/reviewer.md)
+5. [../prompts/review-synthesizer.md](../prompts/review-synthesizer.md)
+6. [../prompts/closure-reviewer.md](../prompts/closure-reviewer.md)
