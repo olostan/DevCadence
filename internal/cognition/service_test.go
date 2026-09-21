@@ -268,6 +268,70 @@ func TestVerifiedAccelerationFlowsFromProbeToCandidateAndProjection(t *testing.T
 	}
 }
 
+// TestAnUnnamedOffloadIsNamedOnlyWhenUnambiguous covers the runtime that proves
+// offload without saying through what — Ollama's VRAM residency.
+func TestAnUnnamedOffloadIsNamedOnlyWhenUnambiguous(t *testing.T) {
+	// The machine's assessment has exactly one supported accelerated backend
+	// (Vulkan; ROCm is uncertain for gfx90c), so the offload can be named.
+	unnamed := protocol.AccelerationSignal{
+		Source: "ollama:/api/ps", Trust: protocol.TrustAuthoritative,
+		Backend: protocol.BackendUnknown, Offloaded: true,
+		Statement: "resident model reports size_vram=3220000000 of size=3220000000",
+	}
+	adapter := &cognition.FakeAdapter{
+		AdapterID: "ollama",
+		Endpoints: []protocol.CognitionEndpoint{cognition.LocalEndpoint("ollama:small", "ollama", "small")},
+		Results: map[string]cognition.ProbeResult{
+			"ollama:small": {
+				Status:  protocol.FindingObserved,
+				Backend: protocol.BackendUnknown,
+				Signals: []protocol.AccelerationSignal{unnamed},
+			},
+		},
+	}
+	service := newService(t, adapter)
+	out := profile(t, service, cognition.ProfileInput{
+		Facts: facts(t, environment.LinuxAMDIntegrated(), protocol.DepthInference),
+		Depth: protocol.DepthInference,
+	})
+	endpoint, _ := endpointByID(out, "ollama:small")
+	if endpoint.Acceleration.Backend != protocol.BackendVulkan {
+		t.Fatalf("backend = %q, want vulkan (the only supported accelerated candidate)",
+			endpoint.Acceleration.Backend)
+	}
+	if !endpoint.AccelerationVerified() {
+		t.Fatalf("the offload was not verified: %+v", endpoint.Acceleration)
+	}
+	// The inference must be visible in the evidence, not silent.
+	if !strings.Contains(endpoint.Acceleration.Signals[0].Statement, "did not name the backend") {
+		t.Errorf("the naming inference was not recorded: %q", endpoint.Acceleration.Signals[0].Statement)
+	}
+	// The candidate list must now agree with the endpoint that proved it.
+	for _, candidate := range out.AcceleratorCandidates {
+		if candidate.Backend == protocol.BackendVulkan && candidate.State != protocol.StateVerified {
+			t.Errorf("the vulkan candidate was not lifted to verified: %+v", candidate)
+		}
+	}
+
+	// With two supported accelerated backends the name stays unknown rather than
+	// being guessed between them. The discrete-AMD fixture has both: a
+	// ROCm-supported architecture with a writable /dev/kfd, and a writable render
+	// node with a Vulkan loader installed.
+	out = profile(t, service, cognition.ProfileInput{
+		Facts: facts(t, environment.LinuxAMDDiscreteROCm(), protocol.DepthInference),
+		Depth: protocol.DepthInference,
+	})
+	endpoint, _ = endpointByID(out, "ollama:small")
+	if endpoint.Acceleration.Backend != protocol.BackendUnknown {
+		t.Errorf("backend = %q, want unknown with two supported accelerated candidates",
+			endpoint.Acceleration.Backend)
+	}
+	// Offload was still observed, so it is still verified — just not attributed.
+	if !endpoint.AccelerationVerified() {
+		t.Error("an observed offload stopped being verified merely because it could not be named")
+	}
+}
+
 // TestCPUFallbackProfileReportsFailedNotVerified is the "runtime installed, GPU
 // present, work ran on the CPU" case.
 func TestCPUFallbackProfileReportsFailedNotVerified(t *testing.T) {

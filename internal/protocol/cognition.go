@@ -578,9 +578,9 @@ func (e AccelerationEvidence) Validate() error {
 	// that verified it and the instant it was verified. Without both, a
 	// later reader cannot tell a real verification from an assertion.
 	if e.State == StateVerified {
-		if e.VerifiedAt == nil {
+		if e.VerifiedAt == nil || e.VerifiedAt.Time().IsZero() {
 			return errs.New(errs.CategoryInvalidArgument,
-				"%s: acceleration state verified requires verified_at", kind)
+				"%s: acceleration state verified requires a verified_at instant", kind)
 		}
 		authoritative := false
 		for _, s := range e.Signals {
@@ -840,6 +840,18 @@ func (e CognitionEndpoint) Validate() error {
 		return errs.New(errs.CategoryInvalidArgument,
 			"%s: endpoints[%s] is a local runtime with auth_status %s; local runtimes have no account",
 			kind, e.ID, e.Auth)
+	}
+	// An unset observation instant would serialise as year 1 and still satisfy
+	// the schema's date-time format, so a record whose producer forgot to stamp
+	// it would look valid while claiming to have been observed two millennia
+	// ago. Requiring it here turns that into a caught defect.
+	if e.ObservedAt.Time().IsZero() {
+		return errs.New(errs.CategoryInvalidArgument,
+			"%s: endpoints[%s] has no observed_at", kind, e.ID)
+	}
+	if e.VerifiedAt != nil && e.VerifiedAt.Time().IsZero() {
+		return errs.New(errs.CategoryInvalidArgument,
+			"%s: endpoints[%s] has a zero verified_at", kind, e.ID)
 	}
 	if e.ContextTokens != nil && *e.ContextTokens < 1 {
 		return errs.New(errs.CategoryInvalidArgument,

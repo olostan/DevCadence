@@ -326,6 +326,50 @@ func uninformative(value any) bool {
 	return false
 }
 
+// TestTheGoReaderRejectsWhatTheSchemaRejects checks that the twins agree on the
+// *negatives*, not only on the positives.
+//
+// TestInvalidFixturesAreRejected proves the schema refuses each invalid document.
+// That is only half the contract: if the Go type accepted one of them, a record
+// the schema calls invalid could be constructed, validated by Go and persisted —
+// with the divergence surfacing at an integration boundary instead of here.
+//
+// The check is scoped to the schemas whose semantic rules live substantially in
+// Go rather than in JSON Schema, which is where the two are most likely to drift.
+func TestTheGoReaderRejectsWhatTheSchemaRejects(t *testing.T) {
+	for _, prefix := range []string{
+		"machine-capability-profile.invalid-",
+		"project-state.invalid-",
+	} {
+		for _, file := range fixtures(t, prefix) {
+			t.Run(filepath.Base(file), func(t *testing.T) {
+				document := read(t, file)
+				record, err := protocol.NewRecord(recordKindFor(t, file))
+				if err != nil {
+					t.Fatalf("no Go record for this fixture: %v", err)
+				}
+				if err := protocol.Unmarshal(document, record); err == nil {
+					t.Error("the Go reader accepted a document its schema rejects")
+				}
+			})
+		}
+	}
+}
+
+// recordKindFor maps a fixture file to the Go record kind that governs it.
+func recordKindFor(t *testing.T, file string) string {
+	t.Helper()
+	base := filepath.Base(file)
+	switch {
+	case strings.HasPrefix(base, "machine-capability-profile."):
+		return "MachineCapabilityProfile"
+	case strings.HasPrefix(base, "project-state."):
+		return "ProjectState"
+	}
+	t.Fatalf("no record kind is mapped for fixture %s", base)
+	return ""
+}
+
 // TestRenderedDiscoveryProjectionSatisfiesTheSchema closes the loop between
 // the reducer and the published contract: the discovery block the reducer
 // produces must validate against project-state.schema.json, not merely

@@ -257,6 +257,15 @@ func (a *Adapter) Discover(ctx context.Context, in cognition.DiscoveryInput) ([]
 	base.Health = protocol.EndpointHealthInstalled
 	base.Version = presence.Version
 	base.ObservedAt = in.ObservedAt
+	if presence.VersionStatus == protocol.VersionIncompatible {
+		// Below the declared compatibility floor. Contacting it anyway would
+		// produce failures that look like a broken server rather than an
+		// unsupported version, so discovery stops here.
+		base.Health = protocol.EndpointHealthUnsupported
+		base.Findings = append(base.Findings, finding(base.ID, "version", protocol.FindingUnsupported,
+			"version "+presence.Version+" is below the compatibility floor this build declares"))
+		return []protocol.CognitionEndpoint{base}, nil
+	}
 	// Ollama's HTTP API supports a JSON schema in `format`, so structured output
 	// is a declared capability until a probe confirms it here.
 	base.StructuredOutput = protocol.FeatureDeclared

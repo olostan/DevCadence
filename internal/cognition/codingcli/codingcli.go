@@ -165,6 +165,20 @@ func (a *Adapter) Discover(_ context.Context, in cognition.DiscoveryInput) ([]pr
 			endpoint.Findings = append(endpoint.Findings, finding(endpoint.ID, "version",
 				protocol.FindingAbsent, "the CLI reported no recognisable version"))
 		}
+		if presence.VersionStatus == protocol.VersionIncompatible {
+			// Below the declared compatibility floor. This is distinct from
+			// absence: installing something does not fix it, and probing it
+			// would produce a confusing failure rather than a clear state. No
+			// coding CLI in the shipped inventory declares a floor today, so
+			// this path is reachable only when one is configured — which is the
+			// point of having it rather than discovering the need later.
+			endpoint.Health = protocol.EndpointHealthUnsupported
+			endpoint.Findings = append(endpoint.Findings, finding(endpoint.ID, "version",
+				protocol.FindingUnsupported,
+				"version "+presence.Version+" is below the compatibility floor this build declares"))
+			endpoints = append(endpoints, endpoint)
+			continue
+		}
 		if descriptor.PromptArgs == nil {
 			endpoint.Findings = append(endpoint.Findings, finding(endpoint.ID, "health",
 				protocol.FindingUnsupported,

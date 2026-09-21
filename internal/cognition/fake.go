@@ -2,6 +2,7 @@ package cognition
 
 import (
 	"context"
+	"time"
 
 	"github.com/olostan/DevCadience/internal/errs"
 	"github.com/olostan/DevCadience/internal/protocol"
@@ -71,6 +72,15 @@ func (f *FakeAdapter) Probe(ctx context.Context, endpoint protocol.CognitionEndp
 	return result, nil
 }
 
+// fixtureObservedAt is the observation instant the builders below stamp.
+//
+// They stamp one at all because an endpoint with no observed_at is not a valid
+// record — it would serialise as year 1 — so a builder that left it unset would
+// hand every test an invalid endpoint. Real discovery overwrites it from
+// DiscoveryInput.ObservedAt, and a test that cares about the instant sets it
+// explicitly.
+var fixtureObservedAt = protocol.NewTimestamp(time.Date(2026, 9, 21, 10, 0, 0, 0, time.UTC))
+
 // LocalEndpoint builds a local-runtime endpoint for tests.
 //
 // Health starts at unverified, which is where discovery of a live-but-unprobed
@@ -78,6 +88,7 @@ func (f *FakeAdapter) Probe(ctx context.Context, endpoint protocol.CognitionEndp
 // has no account.
 func LocalEndpoint(id, runtime, model string) protocol.CognitionEndpoint {
 	return protocol.CognitionEndpoint{
+		ObservedAt:             fixtureObservedAt,
 		ID:                     id,
 		Kind:                   protocol.EndpointLocalRuntime,
 		Provider:               runtime,
@@ -100,6 +111,7 @@ func LocalEndpoint(id, runtime, model string) protocol.CognitionEndpoint {
 // credential files to find out.
 func CLIEndpoint(id, provider string) protocol.CognitionEndpoint {
 	return protocol.CognitionEndpoint{
+		ObservedAt:             fixtureObservedAt,
 		ID:                     id,
 		Kind:                   protocol.EndpointAuthenticatedCLI,
 		Provider:               provider,
@@ -117,6 +129,7 @@ func CLIEndpoint(id, provider string) protocol.CognitionEndpoint {
 // RemoteEndpoint builds a remote-API endpoint for tests.
 func RemoteEndpoint(id, provider string, cost protocol.CostClass) protocol.CognitionEndpoint {
 	return protocol.CognitionEndpoint{
+		ObservedAt:             fixtureObservedAt,
 		ID:                     id,
 		Kind:                   protocol.EndpointRemoteAPI,
 		Provider:               provider,

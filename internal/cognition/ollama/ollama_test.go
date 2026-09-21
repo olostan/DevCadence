@@ -150,6 +150,31 @@ func TestHealthyServerWithNoModelIsNotAFailure(t *testing.T) {
 	}
 }
 
+// TestAnIncompatibleRuntimeVersionStopsDiscovery keeps an unsupported version
+// from producing failures that look like a broken server.
+func TestAnIncompatibleRuntimeVersionStopsDiscovery(t *testing.T) {
+	transport := &fakeTransport{Responses: map[string]response{
+		"GET /api/version": ok(`{"version":"0.0.1"}`),
+	}}
+	adapter := newAdapter(t, transport)
+	in := discoveryInput(t, environment.LinuxAMDIntegrated(), protocol.DepthHealth)
+	for i := range in.Facts.Software {
+		if in.Facts.Software[i].ID == "ollama" {
+			in.Facts.Software[i].VersionStatus = protocol.VersionIncompatible
+		}
+	}
+	endpoints, err := adapter.Discover(context.Background(), in)
+	if err != nil {
+		t.Fatalf("discover: %v", err)
+	}
+	if len(endpoints) != 1 || endpoints[0].Health != protocol.EndpointHealthUnsupported {
+		t.Fatalf("endpoints = %+v, want one at health unsupported", endpoints)
+	}
+	if len(transport.Requests) != 0 {
+		t.Errorf("an unsupported runtime was contacted anyway: %v", transport.Requests)
+	}
+}
+
 func TestHealthyServerWithModelsYieldsUnverifiedEndpoints(t *testing.T) {
 	transport := &fakeTransport{Responses: map[string]response{
 		"GET /api/version": ok(`{"version":"0.12.3"}`),

@@ -119,6 +119,60 @@ func TestDiscoveredCLIStopsAtInstalledWithUnknownAuth(t *testing.T) {
 	}
 }
 
+// TestAnIncompatibleVersionIsUnsupportedNotAbsent keeps "installing something
+// would fix this" distinct from "installing something would not".
+//
+// Facts are built directly here rather than through a fixture machine, because
+// the condition under test is a compatibility judgement the shipped inventory
+// declares for no coding CLI today — there is no floor to fall below.
+func TestAnIncompatibleVersionIsUnsupportedNotAbsent(t *testing.T) {
+	facts := protocol.EnvironmentFacts{
+		ObservedAt:     protocol.NewTimestamp(time.Date(2026, 9, 21, 10, 0, 0, 0, time.UTC)),
+		Host:           protocol.HostFacts{Family: protocol.OSLinux, Arch: "amd64"},
+		Virtualization: protocol.VirtualizationFacts{Container: protocol.ContainerNone},
+		Software: []protocol.SoftwarePresence{{
+			ID: "codex-cli", Category: protocol.SoftwareCognitionCLI, Installed: true,
+			Path: "/usr/local/bin/codex", Version: "0.1.0",
+			VersionStatus: protocol.VersionIncompatible,
+		}},
+	}
+	adapter := newAdapter(t, &environment.FakeCommandProbe{})
+	endpoints, err := adapter.Discover(context.Background(), cognition.DiscoveryInput{
+		Facts: facts, Depth: protocol.DepthInference, ObservedAt: facts.ObservedAt,
+	})
+	if err != nil {
+		t.Fatalf("discover: %v", err)
+	}
+	if len(endpoints) != 1 {
+		t.Fatalf("endpoints = %+v", endpoints)
+	}
+	endpoint := endpoints[0]
+	if endpoint.Health != protocol.EndpointHealthUnsupported {
+		t.Errorf("health = %q, want unsupported", endpoint.Health)
+	}
+	var explained bool
+	for _, f := range endpoint.Findings {
+		if strings.Contains(f.Detail, "below the compatibility floor") {
+			explained = true
+		}
+	}
+	if !explained {
+		t.Errorf("the unsupported version was not explained: %+v", endpoint.Findings)
+	}
+	if err := endpoint.Validate(); err != nil {
+		t.Errorf("endpoint violates the contract: %v", err)
+	}
+	// An unsupported endpoint must never be routable.
+	decision := cognition.Route(cognition.DefaultRequirements()[cognition.RoleImplementer],
+		cognition.Policy{
+			MaxSourceExposure: protocol.ExposureToolMediatedWorktree,
+			MaxCostClass:      protocol.CostRemoteStrong,
+		}, endpoints)
+	if decision.Outcome != cognition.OutcomeNoEligibleEndpoint {
+		t.Error("an unsupported-version endpoint was routed work")
+	}
+}
+
 // TestSeveralCLIsAreDiscoveredIndependently is DCI-104 across endpoints.
 func TestSeveralCLIsAreDiscoveredIndependently(t *testing.T) {
 	fixture := withCLI(withCLI(environment.LinuxCPUOnly(), "codex", "1.4.0"), "claude", "")

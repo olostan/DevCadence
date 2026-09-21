@@ -419,10 +419,14 @@ func (s *Service) applyProbeResult(
 	if backend == "" {
 		backend = expectedBackend(candidates)
 	}
+	signals := result.Signals
+	if backend == protocol.BackendUnknown {
+		backend, signals = resolveUnnamedBackend(candidates, signals)
+	}
 	evidence := EvaluateAcceleration(AccelerationInput{
 		Backend:        backend,
 		Candidate:      candidateForBackend(candidates, backend),
-		Signals:        result.Signals,
+		Signals:        signals,
 		ProbeRan:       true,
 		ProbeSucceeded: succeeded,
 		ObservedAt:     protocol.NewTimestamp(s.clock.Now()),
@@ -519,6 +523,62 @@ func reconcileCandidates(candidates []protocol.AcceleratorCandidate, endpoints [
 		}
 	}
 	return out
+}
+
+// resolveUnnamedBackend names the backend behind an observed-but-unnamed offload.
+//
+// Some runtimes report *that* they offloaded without saying through what: Ollama
+// exposes a resident model's VRAM residency, which authoritatively establishes
+// offload, and never names CUDA, ROCm, Vulkan or Metal. Leaving the backend as
+// `unknown` would be honest but would also make the verified endpoint and the
+// machine's candidate list disagree — the endpoint reporting verified offload
+// while the Vulkan candidate it actually used still reads `runtime_available`.
+//
+// So the *name* is taken from the machine's assessment, and only when the
+// assessment is unambiguous: exactly one accelerated backend assessed as
+// supported. The inference is strictly about naming; whether offload happened is
+// still decided solely by the runtime's own signal. With zero or several
+// supported accelerated candidates the backend stays `unknown`, which keeps a
+// verified-but-unnamed offload truthful rather than guessing between two devices.
+func resolveUnnamedBackend(
+	candidates []protocol.AcceleratorCandidate,
+	signals []protocol.AccelerationSignal,
+) (protocol.BackendKind, []protocol.AccelerationSignal) {
+	var named protocol.BackendKind
+	matches := 0
+	for _, candidate := range candidates {
+		if candidate.Backend == protocol.BackendCPU || candidate.Backend == protocol.BackendUnknown {
+			continue
+		}
+		if candidate.Support != protocol.SupportSupported {
+			continue
+		}
+		named = candidate.Backend
+		matches++
+	}
+	if matches != 1 {
+		return protocol.BackendUnknown, signals
+	}
+	// Re-label only the unnamed signals. A signal that named a backend itself is
+	// left exactly as the adapter reported it.
+	out := make([]protocol.AccelerationSignal, 0, len(signals))
+	for _, signal := range signals {
+		if signal.Backend == protocol.BackendUnknown {
+			signal.Backend = named
+			signal.Statement = appendStatement(signal.Statement,
+				"the runtime did not name the backend; identified as "+string(named)+
+					" from the machine's only supported accelerated candidate")
+		}
+		out = append(out, signal)
+	}
+	return named, out
+}
+
+func appendStatement(existing, addition string) string {
+	if existing == "" {
+		return addition
+	}
+	return existing + "; " + addition
 }
 
 func candidateForBackend(candidates []protocol.AcceleratorCandidate, backend protocol.BackendKind) *protocol.AcceleratorCandidate {
