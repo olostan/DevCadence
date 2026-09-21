@@ -168,7 +168,9 @@ Antigravity should receive:
 
 The target source repository should not need to be Antigravity’s directly writable workspace in the strict information-firewall configuration.
 
-Exact Antigravity MCP configuration should live under a versioned integration example once the MCP binary exists, because product configuration can evolve independently of DevCadience semantics.
+The concrete configuration, strict principal-workspace topology, plugin packaging, permissions strategy, smoke test, and current Antigravity file locations are specified in [ANTIGRAVITY_INTEGRATION.md](ANTIGRAVITY_INTEGRATION.md).
+
+A versioned plugin skeleton is already maintained under `integrations/antigravity/devcadience/`. It becomes directly usable once the `devcadience-mcp` binary is implemented and available on PATH.
 
 ## 12. External consultants
 
