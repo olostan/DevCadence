@@ -1,8 +1,10 @@
-# Local Engineering Agents
+# Execution Engineering Agents
 
 ## Scope
 
-This document defines the local roles that perform high-volume engineering cognition. A role is a stable responsibility and authority boundary; the model/runtime assigned to a role is replaceable.
+This document defines the bounded roles that perform high-volume engineering cognition and repository work. The historical filename `LOCAL_AGENTS.md` is retained for compatibility, but "local agent" no longer implies that model inference itself must run locally.
+
+A role is a stable responsibility and authority boundary. Its cognition may come from deterministic tooling, a local model runtime, an authenticated coding CLI, or another policy-authorized remote endpoint. Repository mutation, worktrees, deterministic validation, evidence and acceptance remain under the local DevCadience control plane.
 
 ## 1. Role graph
 
@@ -35,9 +37,9 @@ flowchart TB
 
 Not every task invokes every role.
 
-## 2. Shared local-agent principles
+## 2. Shared execution-agent principles
 
-All local roles:
+All execution roles:
 - operate under explicit authority;
 - distinguish observation from interpretation;
 - preserve evidence references;
@@ -50,7 +52,7 @@ All local roles:
 ## 3. Repository Scout
 
 ### Purpose
-Spend local tokens freely to answer focused repository questions.
+Spend the cheapest policy-compliant cognition and deterministic repository tooling freely enough to answer focused repository questions without pushing repository noise into frontier principal context.
 
 ### Input
 - InvestigationRequest;
@@ -323,37 +325,45 @@ Role profiles may include:
 
 Model routing is a policy/evaluation problem, not hard-coded identity.
 
-## 18. Local model runtime hygiene
+## 18. Cognition endpoint hygiene
 
-Long-running local systems should:
+For local model runtimes:
 - unload models when resource policy requires;
 - monitor memory pressure;
 - bound concurrent contexts;
-- record runtime/model version;
+- record runtime/model/backend version;
 - detect truncation;
-- preserve prompt/output artifacts subject to privacy policy;
 - fail explicitly when requested context exceeds configured capability.
+
+For remote/CLI cognition endpoints:
+- record endpoint/provider/model identity when available;
+- detect auth/rate-limit/provider failures distinctly;
+- obey source-exposure and cost policy;
+- preserve prompt/output artifacts only according to privacy policy;
+- support cancellation and bounded tool/session behavior where the adapter permits it.
+
+Endpoint selection is capability/policy-driven; no role requires a particular inference locality.
 
 ## 19. Output discipline
 
-Local agents return structured outputs. Free-form prose may supplement them.
+Execution agents return structured outputs. Free-form prose may supplement them.
 
 Critical fields must not be recoverable only by brittle prose parsing.
 
 ## 20. Anti-patterns
 
-- one “super local agent” with all authorities;
+- one “super agent” with all authorities;
 - reviewers inheriting implementer reasoning by default;
 - “confidence: 95%” replacing evidence;
 - unlimited retry loops;
 - worker silently broadening task scope;
 - worker rewriting architecture to make tests pass;
-- using the strongest local model for trivial log compression when smaller/deterministic processing is sufficient.
+- using an expensive/strong cognition endpoint for trivial log compression when smaller/deterministic processing is sufficient.
 
 
 ## Review campaign behavior
 
-Local reviewers participate in a bounded ReviewCampaign.
+Execution reviewers participate in a bounded ReviewCampaign.
 
 ### Broad reviewers
 - inspect the immutable campaign candidate;
@@ -377,6 +387,6 @@ It does not restart a general search for lower-severity improvements.
 ### Closure reviewer
 Uses prompts/closure-reviewer.md. It reports only threshold-crossing issues and treats a zero-finding outcome as valid.
 
-Local reviewers do not reopen adjudicated findings without materially new evidence.
+Execution reviewers do not reopen adjudicated findings without materially new evidence.
 
 See [REVIEW_AND_CONVERGENCE.md](REVIEW_AND_CONVERGENCE.md).
