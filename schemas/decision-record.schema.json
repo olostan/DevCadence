@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/olostan/DevCadience/schemas/decision-record.schema.json",
+  "title": "DevCadience DecisionRecord",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "decision_id", "project_id", "question", "alternatives", "selected", "criteria", "rationale", "evidence_refs", "consequences"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "decision_id": {"type": "string"},
+    "project_id": {"type": "string"},
+    "question": {"type": "string"},
+    "alternatives": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "summary"],
+        "properties": {
+          "id": {"type": "string"},
+          "summary": {"type": "string"},
+          "benefits": {"type": "array", "items": {"type": "string"}},
+          "risks": {"type": "array", "items": {"type": "string"}},
+          "invalidators": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    },
+    "selected": {"type": "string"},
+    "criteria": {"type": "array", "items": {"type": "string"}},
+    "rationale": {"type": "string"},
+    "evidence_refs": {"type": "array", "items": {"type": "string"}},
+    "dissent": {"type": "array", "items": {"type": "string"}},
+    "unresolved_uncertainty": {"type": "array", "items": {"type": "string"}},
+    "consequences": {"type": "array", "items": {"type": "string"}},
+    "invariant_changes": {"type": "array", "items": {"type": "string"}},
+    "supersedes": {"type": ["string", "null"]},
+    "adr_ref": {"type": ["string", "null"]}
+  }
+}
