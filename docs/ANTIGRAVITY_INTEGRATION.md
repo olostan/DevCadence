@@ -4,9 +4,11 @@
 
 This document defines the concrete integration between Google Antigravity and DevCadience.
 
-Antigravity is the first supported **frontier principal frontend**. It is not the DevCadience control plane and should not normally act as the repository implementation worker.
+Antigravity is the **reference** frontier principal frontend. It is not the DevCadience control plane and should not normally act as the repository implementation worker.
 
-This document is intentionally product-specific. The core DevCadience architecture remains provider/frontend independent.
+The initial first-class principal-host set is Antigravity, Cursor and Visual Studio Code. This document remains intentionally Antigravity-specific; host-neutral behavior and blank-machine host onboarding are defined in [PRINCIPAL_HOSTS.md](PRINCIPAL_HOSTS.md).
+
+The core DevCadience architecture remains provider/frontend independent.
 
 ## 1. Supported Antigravity concepts
 
