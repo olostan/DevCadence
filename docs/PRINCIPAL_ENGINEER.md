@@ -10,6 +10,29 @@ This document defines how a frontier model must behave when acting as DevCadienc
 
 The principal is encouraged to think deeply. Time is a secondary concern. Context volume and decision quality matter more.
 
+## 1A. Specification precondition
+
+This protocol governs architecture and delivery reasoning after the relevant product scope is sufficiently specified.
+
+If the human is still defining the idea, if material product semantics remain ambiguous, or if a requested feature changes user-visible/product constraints, use [DISCOVERY_AND_SPECIFICATION.md](DISCOVERY_AND_SPECIFICATION.md) first.
+
+A frontier model must not use architecture as a substitute for asking/grounding the right product questions.
+
+The handoff condition is an evidence-backed SpecificationReadiness verdict of `ready_for_architecture` or an explicitly authorized `ready_with_explicit_risks`.
+
+```mermaid
+flowchart LR
+    Idea["Fuzzy idea / semantic change"]
+    Discovery["Discovery Principal"]
+    Ready{"Specification ready?"}
+    Principal["Architecture Principal"]
+    Work["Design / Work Packages"]
+
+    Idea --> Discovery --> Ready
+    Ready -->|"no"| Discovery
+    Ready -->|"yes"| Principal --> Work
+```
+
 ## 2. What the principal owns
 
 The principal owns:
