@@ -165,6 +165,39 @@ Setup/remediation MUST expose planned mutating actions before execution. Privile
 ### FR-049 — Guided terminal UX
 Interactive setup/doctor flows SHOULD provide a compact, colored terminal experience with selections, confirmations and status/progress feedback when useful, while preserving accessible, plain and machine-readable modes for SSH, scripts and CI.
 
+### FR-050 — Brownfield project adoption
+The system MUST support adopting an existing Git repository whose documentation may be absent, stale, incomplete or non-canonical through a retrospective reconstruction workflow.
+
+### FR-051 — Mandatory canonical project baseline
+A project MUST NOT enter normal DevCadience-managed engineering work until the required canonical project documentation set exists in committed repository state and passes an Adoption Readiness Gate.
+
+### FR-052 — Required canonical project artifacts
+The adoption baseline MUST contain stable canonical slots for vision, requirements, architecture, invariants, security, test strategy, operations and architectural decisions. A genuinely inapplicable topic MUST be represented explicitly rather than silently omitted.
+
+### FR-053 — Existing-document harvest
+Project adoption MUST discover and classify relevant existing documentation and machine-readable contracts regardless of whether they use DevCadience filenames or formats.
+
+### FR-054 — Retrospective evidence provenance
+Material reconstructed statements MUST preserve whether they are observed from current evidence, inherited from documentation, inferred, human-confirmed, reconstructed-confirmed, unknown, contradicted or accepted as bounded risk.
+
+### FR-055 — Code/test/history reconstruction
+Project adoption SHOULD use current source, tests, schemas/configuration and Git history to reconstruct current behavior, important contracts and durable architectural rationale, while keeping inference distinguishable from fact.
+
+### FR-056 — Adoption ambiguity and contradiction handling
+Material contradictions among documentation, code, tests, schemas or current human intent MUST remain explicit until resolved or deliberately accepted as bounded risk by the appropriate authority.
+
+### FR-057 — Version-controlled adoption baseline
+The canonical adoption documentation MUST be created in isolated repository state and committed. The adoption decision MUST identify the source commit reconstructed and the accepted baseline commit.
+
+### FR-058 — Pre-adoption execution boundary
+Before adoption READY, DevCadience MAY perform bounded investigation and isolated adoption work but MUST block normal managed implementation, acceptance and integration.
+
+### FR-059 — Adoption Readiness Gate
+The system MUST represent an explicit readiness decision proving that required canonical artifacts exist, material architecture/contracts are sufficiently reconstructed, critical ambiguities are resolved or safely deferred, and remaining uncertainty is bounded and visible.
+
+### FR-060 — Canonical documentation entry point
+Each managed project MUST expose a stable configured canonical documentation root. For brownfield adoption the default SHOULD be `docs/devcadience/`, while another committed location MAY be configured explicitly.
+
 ## 2A. Discovery and specification requirements
 
 ### FR-D-001 — ProblemModel
@@ -296,6 +329,15 @@ The supported installation journey SHOULD start from an ordinary macOS or Linux 
 ### NFR-018 — Interactive/non-interactive parity
 Terminal UI enhancements MUST NOT become the only way to configure or diagnose the system. Core setup/doctor operations must remain testable and automatable without an interactive terminal.
 
+### NFR-019 — Bounded brownfield uncertainty
+Project adoption MUST optimize for bounded material uncertainty rather than exhaustive reverse engineering of every repository file.
+
+### NFR-020 — Canonical documentation durability
+The canonical documentation baseline MUST live in version-controlled project state and remain available independently of model sessions, local databases or external provider history.
+
+### NFR-021 — Non-destructive documentation adoption
+Brownfield adoption SHOULD preserve useful native project documentation and references rather than rewriting unrelated documentation solely for stylistic uniformity.
+
 ## 6. Quality attributes and architecture response
 
 ```mermaid
@@ -325,6 +367,8 @@ The bootstrap experiment MUST demonstrate:
 9. token/context comparison can be measured against a direct cloud coding baseline;
 10. the same core protocols remain usable under strong-local, hybrid-thin and no-local-model/cloud-cognition configurations;
 11. a blank-machine setup can discover capabilities and reach an explicit readiness profile without assuming Ollama, MLX, Antigravity or paid consultant subscriptions already exist.
+12. an existing repository with incomplete/non-canonical documentation can be retrospectively reconstructed into the mandatory canonical project baseline;
+13. normal managed implementation is blocked until that brownfield baseline is committed and the Adoption Readiness Gate passes.
 
 ## 8. Requirement evolution
 
