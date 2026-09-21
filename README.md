@@ -18,36 +18,50 @@ DevCadience creates a strict information boundary between those roles.
 
 ## The intelligence hierarchy
 
-~~~text
-Human
-  |
-  v
-Frontier Principal Engineer
-  |  deep reasoning, alternatives, research, consultants,
-  |  architecture, algorithms, pseudocode, work packages
-  v
-Engineering Control Plane
-  |  canonical project state, policies, task graph,
-  |  risk, evidence, history, learning
-  +----------------+----------------+----------------+
-  |                |                |                |
-  v                v                v                v
-Scout           Implementer     Reviewers        Validators
-local LLM       local LLM       local LLMs       deterministic
-  |                |                |                |
-  +----------------+----------------+----------------+
-                   |
-                   v
-             Git worktrees
-             repository
-             compiler/tests
-                   |
-                   v
-             Evidence packets
-                   |
-                   v
-        Frontier Principal Engineer
-~~~
+```mermaid
+flowchart TB
+    H["Human / Project Owner"]
+    P["Frontier Principal Engineer<br/>deep reasoning, research, alternatives,<br/>architecture, algorithms, pseudocode"]
+    C["Engineering Control Plane<br/>state, policy, task graph, evidence, learning"]
+
+    subgraph Local["Abundant local cognition"]
+      S["Repository Scout"]
+      I["Implementer"]
+      R["Independent Reviewers"]
+      F["Failure / Health Analysts"]
+    end
+
+    subgraph Tools["Deterministic evidence"]
+      G["Git worktrees"]
+      B["Build / compiler"]
+      T["Tests / fuzz / benchmarks"]
+      A["Static / security analysis"]
+    end
+
+    E["Evidence Packets / Change Reports"]
+    X["Optional frontier consultants<br/>OpenAI/Codex · Claude · others"]
+
+    H --> P
+    P <--> C
+    P -. independent consultation .-> X
+    C --> S
+    C --> I
+    C --> R
+    C --> F
+    S --> G
+    I --> G
+    R --> G
+    G --> B
+    G --> T
+    G --> A
+    B --> E
+    T --> E
+    A --> E
+    S --> E
+    R --> E
+    E --> C
+    C --> P
+```
 
 Frontier consultants such as OpenAI/Codex or Claude may be invoked through provider adapters when independent reasoning, adversarial review, or escalation is warranted.
 
@@ -71,6 +85,23 @@ DevCadience treats software engineering as four coupled loops:
 2. **Architecture loop** — alternatives, assumptions, critique, consultant review, ADRs, invariants, baseline.
 3. **Delivery loop** — scouting, frontier-authored Engineering Work Packages, local implementation, verification, independent review, integration.
 4. **Health loop** — code-health measurement, refactoring epochs, architecture reconciliation, postmortems, learning and policy improvement.
+
+The loops continuously feed one another:
+
+```mermaid
+flowchart LR
+    Product["Product Loop<br/>idea → requirements"]
+    Arch["Architecture Loop<br/>explore → critique → decide"]
+    Delivery["Delivery Loop<br/>blueprint → code → verify"]
+    Health["Health Loop<br/>measure → refactor → learn"]
+
+    Product --> Arch
+    Arch --> Delivery
+    Delivery --> Health
+    Health --> Product
+    Health --> Arch
+    Health --> Delivery
+```
 
 See [docs/LIFECYCLE.md](docs/LIFECYCLE.md).
 
