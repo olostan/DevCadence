@@ -165,8 +165,20 @@ rather than stored as a decision that merely looks justified. Specifically:
   that produced a candidate;
 - an **acceptance** requires all of the above plus: the candidate commit
   matches the attempt's, the named Work Package is the task's approved one,
-  the attempt ran against that same version, and every cited validation and
-  review id names evidence recorded for *that* task and *that* attempt;
+  the attempt ran against that same version, at least one validation id and
+  at least one review id are cited, and every cited validation and review id
+  names evidence recorded for *that* task and *that* attempt.
+
+  The two minimum-one rules come from DCI-032: a candidate change has, at
+  minimum, validation results, review results and a decision. Deterministic
+  validation and independent review are separate signals (DCI-040), and
+  neither substitutes for the other. If review evidence could be empty a
+  task could pass through REVIEWING without any review having happened,
+  which would make the state ceremonial. *Which* review dimensions and how
+  many are required — correctness alone for a local change, correctness plus
+  architecture for a systemic one, further vectors for security-sensitive or
+  architectural work — is an M6 policy decision keyed on change class and
+  risk. The domain floor is one; policy raises it;
 - a **rejection** carries the same attempt and candidate requirements minus
   the evidence citations;
 - an **escalation** that cites an attempt must cite one of the task's own.

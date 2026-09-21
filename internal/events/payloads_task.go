@@ -458,10 +458,17 @@ func (p *ChangeAccepted) Validate() error {
 			"ChangeAccepted: at least one validation_id is required; "+
 				"model review is not a substitute for deterministic evidence (DCI-040)")
 	}
-	// ReviewIDs is deliberately not required here: which reviews a change
-	// needs is a policy decision that varies by change class (M6), so the
-	// count belongs to policy while the lineage of any cited review is
-	// checked by the reducer.
+	// DCI-032: a candidate change has, at minimum, validation results,
+	// review results and a decision. Accepting with no review evidence at
+	// all would make REVIEWING ceremonial, so the domain requires at least
+	// one review. *Which* reviews and how many remain an M6 policy decision
+	// that varies by change class and risk; the lineage of every cited
+	// review is checked by the reducer.
+	if len(p.ReviewIDs) == 0 {
+		return errs.New(errs.CategoryInvalidArgument,
+			"ChangeAccepted: at least one review_id is required; "+
+				"an implementation candidate may not be accepted without independent review (DCI-032)")
+	}
 	if !p.DecidedBy.Valid() {
 		return errs.New(errs.CategoryInvalidArgument,
 			"ChangeAccepted: decided_by %q is not a known decision authority", string(p.DecidedBy))

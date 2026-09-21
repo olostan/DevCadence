@@ -189,3 +189,45 @@ func TestPayloadValidationRejectsIncompleteFacts(t *testing.T) {
 func tasksBlockedReasonWithoutAuthority() tasks.BlockedReason {
 	return tasks.BlockedReason{Trigger: "contradiction", Statement: "A2 is false"}
 }
+
+// TestAcceptanceRequiresReviewEvidence pins the DCI-032 floor: an accepted
+// implementation candidate must cite deterministic validation *and*
+// independent review. Without the review requirement a task could pass
+// through REVIEWING without any review having happened, making the state
+// ceremonial. How many reviews, and along which dimensions, is M6 policy;
+// zero is not a policy choice the domain permits.
+func TestAcceptanceRequiresReviewEvidence(t *testing.T) {
+	complete := func() *events.ChangeAccepted {
+		return &events.ChangeAccepted{
+			TaskID: "task_1", AttemptID: "att_1", WorkPackageID: "wp_1",
+			CandidateCommit: "c0ffee", SemanticSummary: "Did the thing.",
+			ValidationIDs: []string{"val_1"}, ReviewIDs: []string{"rev_1"},
+			DecidedBy: protocol.AuthorityPrincipal,
+		}
+	}
+	// Control: the fixture must be accepted, so the refusals below are
+	// caused by the one field each case empties.
+	if err := complete().Validate(); err != nil {
+		t.Fatalf("a complete acceptance was refused: %v", err)
+	}
+	for _, tc := range []struct {
+		name  string
+		empty func(*events.ChangeAccepted)
+	}{
+		{"no review evidence", func(a *events.ChangeAccepted) { a.ReviewIDs = nil }},
+		{"empty review evidence", func(a *events.ChangeAccepted) { a.ReviewIDs = []string{} }},
+		{"no validation evidence", func(a *events.ChangeAccepted) { a.ValidationIDs = nil }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			payload := complete()
+			tc.empty(payload)
+			err := payload.Validate()
+			if err == nil {
+				t.Fatal("an acceptance with no evidence of its own kind was accepted")
+			}
+			if got := errs.CategoryOf(err); got != errs.CategoryInvalidArgument {
+				t.Fatalf("category = %s, want %s (%v)", got, errs.CategoryInvalidArgument, err)
+			}
+		})
+	}
+}
