@@ -133,9 +133,9 @@ derivation rules are in docs/PROJECT_STATE.md §17.1.
 Recording these facts is M1; *performing* discovery is not. The adaptive
 questioning loop (FR-D-006), human reflection (FR-D-007), external grounding
 (FR-D-008), running experiments (FR-D-009) and independent specification
-review (FR-D-010) all need a model runtime and the MCP surface, so they belong
-to M3 and M4. M1 guarantees that when those arrive, the state they produce is
-already durable, typed and reconstructable.
+review (FR-D-010) require cognition endpoints from M3 and the semantic principal
+surface from M4A. M1 guarantees that when those arrive, the state they produce
+is already durable, typed and reconstructable.
 
 ### Architectural decisions taken during M1
 - [adr/0002-control-plane-persistence.md](adr/0002-control-plane-persistence.md)
@@ -160,8 +160,8 @@ already durable, typed and reconstructable.
   nothing writes them yet (M2).
 - The discovery workflow is absent: the records, events and projection exist,
   but nothing *performs* discovery — no questioning loop, no human reflection
-  round, no experiment execution, no specification review. Those need a model
-  runtime (M3) and the MCP surface (M4).
+  round, no experiment execution, no specification review. Those require M3
+  cognition capability and the M4A semantic principal surface.
 - Experiment and review events are recorded but not projected, because the
   `discovery` object in the schema carries no counts for them.
 
