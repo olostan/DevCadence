@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/olostan/DevCadience/schemas/lesson-candidate.schema.json",
-  "title": "DevCadience LessonCandidate",
+  "$id": "https://github.com/olostan/DevCadence/schemas/lesson-candidate.schema.json",
+  "title": "DevCadence LessonCandidate",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema_version", "lesson_candidate_id", "scope", "type", "observation", "trajectory_refs", "proposed_change", "evaluation_plan", "status"],

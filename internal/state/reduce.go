@@ -1,10 +1,10 @@
 package state
 
 import (
-	"github.com/olostan/DevCadience/internal/errs"
-	"github.com/olostan/DevCadience/internal/events"
-	"github.com/olostan/DevCadience/internal/protocol"
-	"github.com/olostan/DevCadience/internal/tasks"
+	"github.com/olostan/DevCadence/internal/errs"
+	"github.com/olostan/DevCadence/internal/events"
+	"github.com/olostan/DevCadence/internal/protocol"
+	"github.com/olostan/DevCadence/internal/tasks"
 )
 
 // Apply folds one event into the projection.

@@ -1,4 +1,4 @@
-// Command devcadience is the DevCadience control-plane CLI.
+// Command devcadence is the DevCadence control-plane CLI.
 //
 // In M1 it is an inspection and debugging surface over the application
 // services: it initialises a project, creates tasks, appends typed
@@ -15,7 +15,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/olostan/DevCadience/internal/errs"
+	"github.com/olostan/DevCadence/internal/errs"
 )
 
 // version is the build identity. It is overridden at release time with
@@ -34,7 +34,7 @@ func main() {
 		if errors.Is(err, errFlagHelp) {
 			return
 		}
-		fmt.Fprintln(os.Stderr, "devcadience: "+err.Error())
+		fmt.Fprintln(os.Stderr, "devcadence: "+err.Error())
 		os.Exit(exitCode(err))
 	}
 }

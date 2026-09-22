@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/olostan/DevCadience/internal/errs"
-	"github.com/olostan/DevCadience/internal/process"
+	"github.com/olostan/DevCadence/internal/errs"
+	"github.com/olostan/DevCadence/internal/process"
 )
 
 // cleanupGitTimeout bounds the best-effort `git worktree remove` issued
@@ -74,7 +74,7 @@ func (r *Repository) CheckMerge(ctx context.Context, base, head string) (MergeCh
 		return MergeCheck{FastForward: true}, nil
 	}
 
-	tmpDir, err := os.MkdirTemp("", "devcadience-mergecheck-*")
+	tmpDir, err := os.MkdirTemp("", "devcadence-mergecheck-*")
 	if err != nil {
 		return MergeCheck{}, errs.Wrap(errs.CategoryInternal, err, "repository: create merge-check scratch dir")
 	}

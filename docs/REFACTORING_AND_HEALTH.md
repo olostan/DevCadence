@@ -2,7 +2,7 @@
 
 ## Scope
 
-DevCadience treats code health as a continuously monitored system property. Functional delivery does not erase structural debt, and long-running AI implementation is expected to accumulate local optimizations that can degrade global coherence.
+DevCadence treats code health as a continuously monitored system property. Functional delivery does not erase structural debt, and long-running AI implementation is expected to accumulate local optimizations that can degrade global coherence.
 
 ## 1. Health loop
 
@@ -257,4 +257,4 @@ Example:
 
 ## 16. Long-term objective
 
-A mature DevCadience project should periodically emerge from refactoring with **less accidental complexity than before the preceding feature wave**, rather than accepting monotonically increasing entropy.
+A mature DevCadence project should periodically emerge from refactoring with **less accidental complexity than before the preceding feature wave**, rather than accepting monotonically increasing entropy.

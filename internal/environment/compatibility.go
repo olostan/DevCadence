@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/olostan/DevCadience/internal/protocol"
+	"github.com/olostan/DevCadence/internal/protocol"
 )
 
 // Backend-candidate assessment: the first place this package stops reporting
@@ -129,7 +129,7 @@ func appleCandidates(facts protocol.EnvironmentFacts, device protocol.Accelerato
 // The four states this keeps apart are exactly the ones
 // docs/MODEL_RUNTIME.md §11 asks for: hardware present, driver usable, runtime
 // available, inference actually offloading. A full CUDA development toolkit is
-// never required — the runtimes DevCadience adapts need a driver, not an SDK.
+// never required — the runtimes DevCadence adapts need a driver, not an SDK.
 func nvidiaCandidate(facts protocol.EnvironmentFacts, device protocol.AcceleratorDevice, installed map[string]protocol.SoftwarePresence) protocol.AcceleratorCandidate {
 	candidate := protocol.AcceleratorCandidate{
 		Backend:  protocol.BackendCUDA,

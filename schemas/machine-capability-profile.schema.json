@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/olostan/DevCadience/schemas/machine-capability-profile.schema.json",
-  "title": "DevCadience MachineCapabilityProfile",
+  "$id": "https://github.com/olostan/DevCadence/schemas/machine-capability-profile.schema.json",
+  "title": "DevCadence MachineCapabilityProfile",
   "description": "Machine-scoped assessment of observed hardware, installed software and usable cognition endpoints. Facts, assessment and evidence are separate: `environment` is observed fact, `accelerator_candidates` and `endpoints` are assessment, and every capability or acceleration claim carries the provenance it rests on (ADR-0011, ADR-0013, DCI-106). The profile carries no project_id: hardware and installed runtimes are the same for every project on the host, and per-project differences are policy, not capability.",
   "type": "object",
   "additionalProperties": false,

@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/olostan/DevCadience/schemas/engineering-work-package.schema.json",
-  "title": "DevCadience EngineeringWorkPackage",
+  "$id": "https://github.com/olostan/DevCadence/schemas/engineering-work-package.schema.json",
+  "title": "DevCadence EngineeringWorkPackage",
   "type": "object",
   "additionalProperties": false,
   "required": [

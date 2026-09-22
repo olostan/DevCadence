@@ -40,7 +40,7 @@ never to process cwd.
 
 A worktree's path and branch are pure functions of validated identifiers —
 `<root>/<project>/<task>/<attempt>` and
-`devcadience/<task>/<attempt>` — never of caller-supplied path fragments.
+`devcadence/<task>/<attempt>` — never of caller-supplied path fragments.
 Task/attempt identifiers are checked against a restrictive character class
 before they ever reach a path, so "../" or an absolute path disguised as an
 identifier cannot escape the worktree root. Two calls with the same
@@ -120,7 +120,7 @@ stale candidate belongs to the caller (eventually M6/M9 orchestration).
 - Integration feasibility can be checked repeatedly and concurrently without
   ever risking the accepted branch.
 - Cross-process worktree-manifest concurrency is out of scope for M2 and
-  must be revisited before DevCadience runs more than one daemon process
+  must be revisited before DevCadence runs more than one daemon process
   against the same project.
 
 ## Alternatives considered
@@ -130,7 +130,7 @@ stale candidate belongs to the caller (eventually M6/M9 orchestration).
   transactional worktree state.
 - **`git merge-tree` for conflict detection**, which needs no scratch
   worktree at all. Rejected because its output format is not a stable
-  machine format across the Git versions DevCadience must support, and
+  machine format across the Git versions DevCadence must support, and
   docs/IMPLEMENTATION_PLAN.md M2 explicitly prefers a temporary/integration
   worktree over parsing Git's less stable surfaces.
 - **`git worktree prune` as the default recovery path.** Rejected per

@@ -16,37 +16,37 @@ import (
 	"strings"
 	"time"
 
-	"github.com/olostan/DevCadience/internal/artifacts"
-	"github.com/olostan/DevCadience/internal/errs"
-	"github.com/olostan/DevCadience/internal/ids"
-	"github.com/olostan/DevCadience/internal/process"
-	"github.com/olostan/DevCadience/internal/protocol"
-	"github.com/olostan/DevCadience/internal/repository"
-	"github.com/olostan/DevCadience/internal/validation"
-	"github.com/olostan/DevCadience/internal/worktrees"
+	"github.com/olostan/DevCadence/internal/artifacts"
+	"github.com/olostan/DevCadence/internal/errs"
+	"github.com/olostan/DevCadence/internal/ids"
+	"github.com/olostan/DevCadence/internal/process"
+	"github.com/olostan/DevCadence/internal/protocol"
+	"github.com/olostan/DevCadence/internal/repository"
+	"github.com/olostan/DevCadence/internal/validation"
+	"github.com/olostan/DevCadence/internal/worktrees"
 )
 
-// defaultUnderHome resolves $DEVCADIENCE_HOME/<sub>, mirroring
-// defaultDatabasePath in run.go so every piece of DevCadience state lives
+// defaultUnderHome resolves $DEVCADENCE_HOME/<sub>, mirroring
+// defaultDatabasePath in run.go so every piece of DevCadence state lives
 // under one root by default.
 func defaultUnderHome(sub string) (string, error) {
-	home := os.Getenv("DEVCADIENCE_HOME")
+	home := os.Getenv("DEVCADENCE_HOME")
 	if home == "" {
 		userHome, err := os.UserHomeDir()
 		if err != nil {
 			return "", errs.Wrap(errs.CategoryInvalidArgument, err, "cannot determine home directory")
 		}
-		home = filepath.Join(userHome, ".devcadience")
+		home = filepath.Join(userHome, ".devcadence")
 	}
 	if !filepath.IsAbs(home) {
-		return "", errs.New(errs.CategoryInvalidArgument, "DEVCADIENCE_HOME must be an absolute path, got %q", home)
+		return "", errs.New(errs.CategoryInvalidArgument, "DEVCADENCE_HOME must be an absolute path, got %q", home)
 	}
 	return filepath.Join(home, sub), nil
 }
 
 func runRepo(ctx context.Context, e *env, args []string) error {
 	if len(args) == 0 {
-		return errs.New(errs.CategoryInvalidArgument, "usage: devcadience repo <inspect>")
+		return errs.New(errs.CategoryInvalidArgument, "usage: devcadence repo <inspect>")
 	}
 	switch args[0] {
 	case "inspect":
@@ -92,7 +92,7 @@ func runRepoInspect(ctx context.Context, e *env, args []string) error {
 
 func runWorktree(ctx context.Context, e *env, args []string) error {
 	if len(args) == 0 {
-		return errs.New(errs.CategoryInvalidArgument, "usage: devcadience worktree <create|list|cleanup|recover>")
+		return errs.New(errs.CategoryInvalidArgument, "usage: devcadence worktree <create|list|cleanup|recover>")
 	}
 	switch args[0] {
 	case "create":
@@ -134,7 +134,7 @@ func runWorktreeCreate(ctx context.Context, e *env, args []string) error {
 	taskID := fs.String("task", "", "task identifier")
 	attemptID := fs.String("attempt", "", "attempt identifier")
 	base := fs.String("base", "", "base commit")
-	root := fs.String("root", "", "worktree storage root (default $DEVCADIENCE_HOME/worktrees)")
+	root := fs.String("root", "", "worktree storage root (default $DEVCADENCE_HOME/worktrees)")
 	if err := parseFlags(fs, e, args); err != nil {
 		return err
 	}
@@ -162,7 +162,7 @@ func runWorktreeCreate(ctx context.Context, e *env, args []string) error {
 func runWorktreeList(ctx context.Context, e *env, args []string) error {
 	fs := flag.NewFlagSet("worktree list", flag.ContinueOnError)
 	projectID := fs.String("project", "", "project identifier")
-	root := fs.String("root", "", "worktree storage root (default $DEVCADIENCE_HOME/worktrees)")
+	root := fs.String("root", "", "worktree storage root (default $DEVCADENCE_HOME/worktrees)")
 	asJSON := fs.Bool("json", false, "emit JSON")
 	if err := parseFlags(fs, e, args); err != nil {
 		return err
@@ -196,7 +196,7 @@ func runWorktreeCleanup(ctx context.Context, e *env, args []string) error {
 	projectID := fs.String("project", "", "project identifier")
 	repoPath := fs.String("repo", "", "repository path")
 	id := fs.String("id", "", "worktree id (task/attempt)")
-	root := fs.String("root", "", "worktree storage root (default $DEVCADIENCE_HOME/worktrees)")
+	root := fs.String("root", "", "worktree storage root (default $DEVCADENCE_HOME/worktrees)")
 	force := fs.Bool("force", false, "remove even if the worktree has uncommitted changes")
 	if err := parseFlags(fs, e, args); err != nil {
 		return err
@@ -224,7 +224,7 @@ func runWorktreeRecover(ctx context.Context, e *env, args []string) error {
 	projectID := fs.String("project", "", "project identifier")
 	repoPath := fs.String("repo", "", "repository path (optional; used to reconcile Git's own bookkeeping)")
 	id := fs.String("id", "", "worktree id (task/attempt)")
-	root := fs.String("root", "", "worktree storage root (default $DEVCADIENCE_HOME/worktrees)")
+	root := fs.String("root", "", "worktree storage root (default $DEVCADENCE_HOME/worktrees)")
 	confirmGone := fs.Bool("confirm-gone", false, "confirm the worktree directory is gone and should be closed as removed")
 	if err := parseFlags(fs, e, args); err != nil {
 		return err
@@ -265,7 +265,7 @@ func runRun(ctx context.Context, e *env, args []string) error {
 		rest = args[dashDash+1:]
 	}
 	if len(rest) == 0 {
-		return errs.New(errs.CategoryInvalidArgument, "usage: devcadience run -dir <path> -- <executable> [args...]")
+		return errs.New(errs.CategoryInvalidArgument, "usage: devcadence run -dir <path> -- <executable> [args...]")
 	}
 	if *dir == "" {
 		return errs.New(errs.CategoryInvalidArgument, "-dir is required")
@@ -319,7 +319,7 @@ func runValidate(ctx context.Context, e *env, args []string) error {
 	scope := fs.String("scope", "", "attempt, integration or baseline")
 	taskID := fs.String("task", "", "task id (attempt/integration scope)")
 	attemptID := fs.String("attempt", "", "attempt id (attempt scope)")
-	artifactRoot := fs.String("artifacts", "", "artifact storage root (default $DEVCADIENCE_HOME/artifacts)")
+	artifactRoot := fs.String("artifacts", "", "artifact storage root (default $DEVCADENCE_HOME/artifacts)")
 	if err := parseFlags(fs, e, args); err != nil {
 		return err
 	}
@@ -391,7 +391,7 @@ func runValidate(ctx context.Context, e *env, args []string) error {
 
 func runCandidate(ctx context.Context, e *env, args []string) error {
 	if len(args) == 0 {
-		return errs.New(errs.CategoryInvalidArgument, "usage: devcadience candidate <show>")
+		return errs.New(errs.CategoryInvalidArgument, "usage: devcadence candidate <show>")
 	}
 	switch args[0] {
 	case "show":

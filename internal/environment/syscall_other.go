@@ -4,7 +4,7 @@ package environment
 
 // accessSyscall reports that the question cannot be asked on this platform.
 //
-// A platform DevCadience has not integrated must still produce valid
+// A platform DevCadence has not integrated must still produce valid
 // environment facts: an unanswerable probe is an explicit "unsupported"
 // finding, never a crash and never a guess (DCI-104).
 func accessSyscall(string, AccessMode) error { return ErrProbeUnsupported }

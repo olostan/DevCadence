@@ -4,8 +4,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/olostan/DevCadience/internal/errs"
-	"github.com/olostan/DevCadience/internal/protocol"
+	"github.com/olostan/DevCadence/internal/errs"
+	"github.com/olostan/DevCadence/internal/protocol"
 )
 
 // Capability routing: which endpoint, if any, may play a role.

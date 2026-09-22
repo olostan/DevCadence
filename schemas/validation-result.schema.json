@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/olostan/DevCadience/schemas/validation-result.schema.json",
-  "title": "DevCadience ValidationResult",
+  "$id": "https://github.com/olostan/DevCadence/schemas/validation-result.schema.json",
+  "title": "DevCadence ValidationResult",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema_version", "validation_id", "project_id", "subject", "commit", "status", "checks"],

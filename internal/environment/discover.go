@@ -8,9 +8,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/olostan/DevCadience/internal/clock"
-	"github.com/olostan/DevCadience/internal/errs"
-	"github.com/olostan/DevCadience/internal/protocol"
+	"github.com/olostan/DevCadence/internal/clock"
+	"github.com/olostan/DevCadence/internal/errs"
+	"github.com/olostan/DevCadence/internal/protocol"
 )
 
 // Options configures a Discoverer.
@@ -33,7 +33,7 @@ type Options struct {
 	Depth protocol.ProbeDepth
 	// StoragePaths are the filesystem paths whose capacity matters. Empty
 	// selects the home directory root, because that is where model weights
-	// and DevCadience state land.
+	// and DevCadence state land.
 	StoragePaths []string
 	// Software overrides the inventory table. Empty selects DefaultInventory.
 	Software []SoftwareDescriptor

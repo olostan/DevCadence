@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/olostan/DevCadience/internal/protocol"
+	"github.com/olostan/DevCadence/internal/protocol"
 )
 
 // This file provides the deterministic doubles the test suite runs on.

@@ -1,10 +1,10 @@
-# DevCadience Agent Operating Directives
+# DevCadence Agent Operating Directives
 
 This file is normative for every human or AI agent modifying this repository. If a lower-level prompt conflicts with this file, stop and surface the conflict rather than silently overriding these rules.
 
 ## 1. Mission
 
-DevCadience is an intelligent software-engineering control plane. Its job is to combine deep frontier-model reasoning with high-volume lower-cost execution cognition through typed protocols, evidence, deterministic verification, independent review, and auditable governance.
+DevCadence is an intelligent software-engineering control plane. Its job is to combine deep frontier-model reasoning with high-volume lower-cost execution cognition through typed protocols, evidence, deterministic verification, independent review, and auditable governance.
 
 Local-first means local project authority, repository execution, canonical state and evidence. It does **not** mean every model inference must run locally.
 
@@ -37,7 +37,7 @@ For environment discovery, cognition routing, setup, hardware/runtime detection 
 
 For principal-host integration, read docs/PRINCIPAL_HOSTS.md and the relevant host-specific integration document.
 
-For existing/brownfield project onboarding, read docs/PROJECT_ADOPTION.md. A merely registered repository is not automatically ready for normal DevCadience-managed work.
+For existing/brownfield project onboarding, read docs/PROJECT_ADOPTION.md. A merely registered repository is not automatically ready for normal DevCadence-managed work.
 
 For changes to review, quality, or learning, read docs/VERIFICATION.md, docs/REVIEW_AND_CONVERGENCE.md, docs/REFACTORING_AND_HEALTH.md, and docs/LEARNING.md.
 
@@ -96,7 +96,7 @@ Do not turn a fixed questionnaire into a substitute for adaptive discovery.
 
 ## 4B. Brownfield project adoption
 
-When DevCadience is introduced to an existing repository, read [docs/PROJECT_ADOPTION.md](docs/PROJECT_ADOPTION.md).
+When DevCadence is introduced to an existing repository, read [docs/PROJECT_ADOPTION.md](docs/PROJECT_ADOPTION.md).
 
 Agents must not assume existing Markdown is canonical, and must not infer that repository registration means the project is ready for managed engineering.
 
@@ -312,7 +312,7 @@ inspection, isolated worktrees, controlled external processes,
 content-addressed artifacts, validation profiles, candidate metadata and
 non-mutating integration checks. None of that requires a model runtime.
 
-**M3A** adds environment intelligence and the cognition runtime. DevCadience
+**M3A** adds environment intelligence and the cognition runtime. DevCadence
 discovers hardware and software from operating-system facts, assesses accelerator
 backend candidates as a pure function of those facts, discovers cognition
 endpoints across local runtimes / authenticated coding CLIs / remote APIs,

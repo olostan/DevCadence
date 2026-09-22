@@ -8,14 +8,14 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/olostan/DevCadience/internal/errs"
-	"github.com/olostan/DevCadience/internal/schema"
-	"github.com/olostan/DevCadience/internal/storage"
+	"github.com/olostan/DevCadence/internal/errs"
+	"github.com/olostan/DevCadence/internal/schema"
+	"github.com/olostan/DevCadence/internal/storage"
 )
 
 func runSchema(ctx context.Context, e *env, args []string) error {
 	if len(args) == 0 {
-		return errs.New(errs.CategoryInvalidArgument, "usage: devcadience schema <list|validate>")
+		return errs.New(errs.CategoryInvalidArgument, "usage: devcadence schema <list|validate>")
 	}
 	switch args[0] {
 	case "list":

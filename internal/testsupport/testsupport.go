@@ -13,11 +13,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/olostan/DevCadience/internal/clock"
-	"github.com/olostan/DevCadience/internal/controlplane"
-	"github.com/olostan/DevCadience/internal/ids"
-	"github.com/olostan/DevCadience/internal/observability"
-	"github.com/olostan/DevCadience/internal/storage"
+	"github.com/olostan/DevCadence/internal/clock"
+	"github.com/olostan/DevCadence/internal/controlplane"
+	"github.com/olostan/DevCadence/internal/ids"
+	"github.com/olostan/DevCadence/internal/observability"
+	"github.com/olostan/DevCadence/internal/storage"
 )
 
 // Epoch is the instant every deterministic clock starts at. It is a fixed

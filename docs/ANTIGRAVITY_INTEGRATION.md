@@ -2,17 +2,17 @@
 
 ## Scope
 
-This document defines the concrete integration between Google Antigravity and DevCadience.
+This document defines the concrete integration between Google Antigravity and DevCadence.
 
-Antigravity is the **reference** frontier principal frontend. It is not the DevCadience control plane and should not normally act as the repository implementation worker.
+Antigravity is the **reference** frontier principal frontend. It is not the DevCadence control plane and should not normally act as the repository implementation worker.
 
 The initial first-class principal-host set is Antigravity, Cursor and Visual Studio Code. This document remains intentionally Antigravity-specific; host-neutral behavior and blank-machine host onboarding are defined in [PRINCIPAL_HOSTS.md](PRINCIPAL_HOSTS.md).
 
-The core DevCadience architecture remains provider/frontend independent.
+The core DevCadence architecture remains provider/frontend independent.
 
 ## 1. Supported Antigravity concepts
 
-Current Antigravity supports the exact primitives DevCadience needs:
+Current Antigravity supports the exact primitives DevCadence needs:
 
 - workspace-local or global MCP servers through `mcp_config.json`;
 - local `stdio` MCP servers using `command` + optional `args`, `env`, and `cwd`;
@@ -28,7 +28,7 @@ Current upstream documentation:
 - https://antigravity.google/docs/plugins
 - https://antigravity.google/docs/permissions
 
-Because Antigravity can evolve independently, treat this directory as a versioned adapter. Update it when upstream configuration changes; do not leak Antigravity-specific syntax into DevCadience core protocols.
+Because Antigravity can evolve independently, treat this directory as a versioned adapter. Update it when upstream configuration changes; do not leak Antigravity-specific syntax into DevCadence core protocols.
 
 ## 2. Recommended topology
 
@@ -38,13 +38,13 @@ The recommended production-like configuration is **strict principal workspace mo
 flowchart LR
     subgraph PrincipalWorkspace["Antigravity principal workspace"]
         AG["Gemini / Antigravity"]
-        Rules["DevCadience rules"]
+        Rules["DevCadence rules"]
         Skill["Principal skill"]
         MCPConfig["mcp_config.json"]
     end
 
-    MCP["devcadience-mcp<br/>stdio"]
-    Daemon["DevCadience daemon"]
+    MCP["devcadence-mcp<br/>stdio"]
+    Daemon["DevCadence daemon"]
     State["ProjectState / Evidence / Policy"]
     Local["Ollama / MLX-LM"]
     Repo["Target source repository"]
@@ -68,14 +68,14 @@ flowchart LR
 The target source repository is **not opened as the Antigravity workspace** in strict mode.
 
 Antigravity sees:
-- DevCadience semantic MCP tools;
+- DevCadence semantic MCP tools;
 - compact ProjectState;
 - EvidencePackets;
 - Work Packages and decisions;
 - selected evidence requested through MCP;
 - internet/browser research when permitted.
 
-The DevCadience daemon owns direct repository access.
+The DevCadence daemon owns direct repository access.
 
 ## 3. Why use a separate principal workspace
 
@@ -96,18 +96,18 @@ This is the recommended mode for the M5 central-hypothesis experiment.
 A principal workspace may be nearly empty:
 
 ```text
-~/devcadience-workspaces/hearthmind-principal/
+~/devcadence-workspaces/hearthmind-principal/
   PROJECT.md
   .agents/
     mcp_config.json
     rules/
-      devcadience-principal.md
+      devcadence-principal.md
     skills/
-      devcadience-principal/
+      devcadence-principal/
         SKILL.md
 ```
 
-Alternatively, install the bundled DevCadience plugin globally and keep only `PROJECT.md` in the workspace.
+Alternatively, install the bundled DevCadence plugin globally and keep only `PROJECT.md` in the workspace.
 
 `PROJECT.md` should contain human-facing project identity and operator goals, not a copied source tree.
 
@@ -116,10 +116,10 @@ Example:
 ```markdown
 # HearthMind Principal Workspace
 
-DevCadience project ID: hearthmind
+DevCadence project ID: hearthmind
 
-The authoritative source repository is managed by DevCadience.
-Use the DevCadience MCP tools for project state, repository evidence,
+The authoritative source repository is managed by DevCadence.
+Use the DevCadence MCP tools for project state, repository evidence,
 implementation delegation, validation, review and acceptance.
 
 Current operator objective:
@@ -142,19 +142,19 @@ and global MCP configuration at:
 
 The standard format contains one `mcpServers` object.
 
-DevCadience defines this bootstrap executable contract:
+DevCadence defines this bootstrap executable contract:
 
-> Running `devcadience-mcp` with no arguments starts the stdio MCP server.
+> Running `devcadence-mcp` with no arguments starts the stdio MCP server.
 
 Therefore the workspace configuration is:
 
 ```json
 {
   "mcpServers": {
-    "devcadience": {
-      "command": "devcadience-mcp",
+    "devcadence": {
+      "command": "devcadence-mcp",
       "env": {
-        "DEVCADIENCE_PROJECT_ID": "hearthmind"
+        "DEVCADENCE_PROJECT_ID": "hearthmind"
       }
     }
   }
@@ -166,17 +166,17 @@ If the binary is not on PATH:
 ```json
 {
   "mcpServers": {
-    "devcadience": {
-      "command": "/absolute/path/to/devcadience-mcp",
+    "devcadence": {
+      "command": "/absolute/path/to/devcadence-mcp",
       "env": {
-        "DEVCADIENCE_PROJECT_ID": "hearthmind"
+        "DEVCADENCE_PROJECT_ID": "hearthmind"
       }
     }
   }
 }
 ```
 
-Optional `cwd` may be set to a DevCadience runtime/configuration directory. It SHOULD NOT need to be the target source repository.
+Optional `cwd` may be set to a DevCadence runtime/configuration directory. It SHOULD NOT need to be the target source repository.
 
 ## 6. MCP server responsibilities
 
@@ -216,14 +216,14 @@ See [MCP_API.md](MCP_API.md).
 
 ## 7. Plugin packaging
 
-DevCadience includes a plugin skeleton under:
+DevCadence includes a plugin skeleton under:
 
 ```text
-integrations/antigravity/devcadience/
+integrations/antigravity/devcadence/
   plugin.json
   mcp_config.json
   skills/
-    devcadience-principal/
+    devcadence-principal/
       SKILL.md
   rules/
     principal-boundary.md
@@ -236,23 +236,23 @@ Antigravity supports:
 
 ### Development install
 
-After building `devcadience-mcp` and placing it on PATH:
+After building `devcadence-mcp` and placing it on PATH:
 
 ```bash
-agy plugin install ./integrations/antigravity/devcadience
+agy plugin install ./integrations/antigravity/devcadence
 agy plugin list
 ```
 
 For the standalone IDE, the plugin directory may instead be copied to:
 
 ```text
-~/.gemini/config/plugins/devcadience/
+~/.gemini/config/plugins/devcadence/
 ```
 
 or workspace-local:
 
 ```text
-<principal-workspace>/.agents/plugins/devcadience/
+<principal-workspace>/.agents/plugins/devcadence/
 ```
 
 ## 8. Skill behavior
@@ -278,7 +278,7 @@ Its core objective is:
 
 ## 8A. Discovery Principal skill
 
-The plugin also packages `devcadience-discovery`, used before architecture for greenfield ideas and product-semantic changes.
+The plugin also packages `devcadence-discovery`, used before architecture for greenfield ideas and product-semantic changes.
 
 It instructs Antigravity to:
 - avoid immediate architecture;
@@ -296,7 +296,7 @@ Antigravity should select the discovery skill when the human is defining what to
 
 The plugin rule is an always-applicable principal boundary in plugin deployments.
 
-It states that normal engineering work should go through DevCadience semantic tools and that Antigravity must not silently become the implementation worker.
+It states that normal engineering work should go through DevCadence semantic tools and that Antigravity must not silently become the implementation worker.
 
 Rules are deliberately shorter than the full skill. They enforce durable boundaries; the skill describes the richer procedure.
 
@@ -316,8 +316,8 @@ Deny rules take precedence over Ask and Allow.
 Start conservatively:
 
 - permission preset: **Default** or **Request Review**, not Turbo;
-- allow DevCadience read/analysis MCP tools without repeated prompts once trusted;
-- optionally Ask for higher-authority DevCadience tools such as `accept`, `record_decision`, and future destructive/integration operations;
+- allow DevCadence read/analysis MCP tools without repeated prompts once trusted;
+- optionally Ask for higher-authority DevCadence tools such as `accept`, `record_decision`, and future destructive/integration operations;
 - do not grant arbitrary command execution merely to make orchestration convenient;
 - do not enable non-workspace access to the target repository in strict mode;
 - allow web reading/search as appropriate because current external grounding is part of the principal role.
@@ -326,25 +326,25 @@ Conceptual permission policy:
 
 ```text
 ALLOW:
-  mcp(devcadience/project_state)
-  mcp(devcadience/investigate)
-  mcp(devcadience/task_status)
-  mcp(devcadience/request_evidence)
-  mcp(devcadience/validate)
-  mcp(devcadience/review)
+  mcp(devcadence/project_state)
+  mcp(devcadence/investigate)
+  mcp(devcadence/task_status)
+  mcp(devcadence/request_evidence)
+  mcp(devcadence/validate)
+  mcp(devcadence/review)
 
 ASK initially:
-  mcp(devcadience/create_work_package)
-  mcp(devcadience/delegate)
-  mcp(devcadience/record_decision)
-  mcp(devcadience/accept)
-  mcp(devcadience/reject)
-  mcp(devcadience/consult)
+  mcp(devcadence/create_work_package)
+  mcp(devcadence/delegate)
+  mcp(devcadence/record_decision)
+  mcp(devcadence/accept)
+  mcp(devcadence/reject)
+  mcp(devcadence/consult)
 
 DENY / avoid:
   arbitrary repository filesystem access outside principal workspace
   arbitrary unsandboxed shell
-  destructive Git operations outside DevCadience
+  destructive Git operations outside DevCadence
 ```
 
 Exact permission-list persistence syntax is intentionally not hard-coded here unless validated against the installed Antigravity version. Configure through Antigravity Settings/Permissions or `/permissions`; the resource names above are the stable policy intent.
@@ -355,7 +355,7 @@ Exact permission-list persistence syntax is intentionally not hard-coded here un
 
 ```mermaid
 flowchart LR
-    AG["Antigravity"] --> MCP["DevCadience MCP"]
+    AG["Antigravity"] --> MCP["DevCadence MCP"]
     MCP --> Repo["Repository"]
     AG -. only requested evidence .-> Repo
 ```
@@ -372,7 +372,7 @@ Properties:
 Antigravity may open the target repository and use native file tools.
 
 Use when:
-- DevCadience itself is incomplete;
+- DevCadence itself is incomplete;
 - debugging the MCP/control plane;
 - an architecture escalation explicitly requires broad direct inspection.
 
@@ -388,11 +388,11 @@ The design protocol should distinguish:
 - inference;
 - recommendation.
 
-External research should not bypass DevCadience project decisions. Grounding informs the principal, which records durable conclusions as DecisionRecords/ADRs/Work Packages.
+External research should not bypass DevCadence project decisions. Grounding informs the principal, which records durable conclusions as DecisionRecords/ADRs/Work Packages.
 
 ## 13. Consultants
 
-Consultants should normally be invoked through DevCadience's semantic `consult` operation rather than by teaching Antigravity provider-specific CLI commands.
+Consultants should normally be invoked through DevCadence's semantic `consult` operation rather than by teaching Antigravity provider-specific CLI commands.
 
 This enables:
 - normalized requests/results;
@@ -417,7 +417,7 @@ A greenfield project does not need an existing source repository.
 sequenceDiagram
     actor H as Human
     participant P as Antigravity Principal
-    participant D as DevCadience
+    participant D as DevCadence
     participant C as Consultants
 
     H->>P: idea / desired outcome
@@ -447,7 +447,7 @@ The project enters source implementation only after appropriate design readiness
 sequenceDiagram
     actor H as Human
     participant P as Antigravity Principal
-    participant D as DevCadience
+    participant D as DevCadence
     participant S as Local Scout
 
     H->>P: register existing project / goal
@@ -461,16 +461,16 @@ sequenceDiagram
     P->>P: design/plan
 ```
 
-Do not ask the principal to ingest the entire repository merely because no prior DevCadience state exists.
+Do not ask the principal to ingest the entire repository merely because no prior DevCadence state exists.
 
 ## 16. Expected first conversation
 
 A useful operator prompt after configuration is:
 
 ```text
-Act as the DevCadience principal engineer for the configured project.
+Act as the DevCadence principal engineer for the configured project.
 
-Read the canonical project state through DevCadience.
+Read the canonical project state through DevCadence.
 Do not begin implementation yet.
 
 Assess the current milestone, unresolved risks and required decisions.
@@ -487,8 +487,8 @@ The plugin skill/rules should make most of this redundant, but it is a useful sm
 
 Before declaring Antigravity integration functional:
 
-- [ ] `devcadience-mcp` is on PATH or configured by absolute path.
-- [ ] Antigravity shows the `devcadience` MCP server connected.
+- [ ] `devcadence-mcp` is on PATH or configured by absolute path.
+- [ ] Antigravity shows the `devcadence` MCP server connected.
 - [ ] Principal skill is discoverable.
 - [ ] Principal rule is active.
 - [ ] `project_state` works.
@@ -499,7 +499,7 @@ Before declaring Antigravity integration functional:
 - [ ] `delegate` starts an isolated local Attempt.
 - [ ] principal receives compact status/evidence, not raw execution chatter.
 - [ ] permission prompts match intended authority.
-- [ ] all actions appear in DevCadience audit/trajectory records.
+- [ ] all actions appear in DevCadence audit/trajectory records.
 
 ## 18. Version drift
 

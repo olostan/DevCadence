@@ -1,8 +1,8 @@
 package events
 
 import (
-	"github.com/olostan/DevCadience/internal/errs"
-	"github.com/olostan/DevCadience/internal/protocol"
+	"github.com/olostan/DevCadence/internal/errs"
+	"github.com/olostan/DevCadence/internal/protocol"
 )
 
 // Event types that later milestones act on. They are registered in M1 so that

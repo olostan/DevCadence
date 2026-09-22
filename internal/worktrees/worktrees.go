@@ -23,9 +23,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/olostan/DevCadience/internal/errs"
-	"github.com/olostan/DevCadience/internal/process"
-	"github.com/olostan/DevCadience/internal/repository"
+	"github.com/olostan/DevCadence/internal/errs"
+	"github.com/olostan/DevCadence/internal/process"
+	"github.com/olostan/DevCadence/internal/repository"
 )
 
 // Status is a worktree's lifecycle state.
@@ -119,7 +119,7 @@ func (m *Manager) lockFor(projectID string) *sync.Mutex {
 //
 // Path and branch are deterministic functions of the identifiers
 // (`<root>/<project>/<task>/<attempt>`,
-// `devcadience/<task>/<attempt>`), never caller-supplied strings, which is
+// `devcadence/<task>/<attempt>`), never caller-supplied strings, which is
 // what makes "no writing into another attempt's worktree" a structural
 // property rather than a convention: two calls with the same identifiers
 // always name the same worktree, and different identifiers can never
@@ -164,7 +164,7 @@ func (m *Manager) Create(ctx context.Context, repo *repository.Repository, spec 
 	}
 
 	path := filepath.Join(m.root, spec.ProjectID, spec.TaskID, spec.AttemptID)
-	branch := fmt.Sprintf("devcadience/%s/%s", spec.TaskID, spec.AttemptID)
+	branch := fmt.Sprintf("devcadence/%s/%s", spec.TaskID, spec.AttemptID)
 
 	if _, err := os.Stat(path); err == nil {
 		return nil, errs.New(errs.CategoryConflict,

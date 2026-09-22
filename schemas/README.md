@@ -1,6 +1,6 @@
-# DevCadience Protocol Schemas
+# DevCadence Protocol Schemas
 
-This directory contains versioned machine-readable contracts for durable DevCadience objects.
+This directory contains versioned machine-readable contracts for durable DevCadence objects.
 
 ## Initial schemas
 
@@ -103,13 +103,13 @@ A record kind with no schema registered here cannot be persisted at all. That st
 
 ## Fixtures
 
-Example documents live in [../fixtures/protocol/](../fixtures/protocol/) and are checked by `tests/schema_fixtures_test.go`: valid fixtures must validate and round-trip through their Go types without semantic loss; invalid fixtures must be rejected. `devcadience schema validate <file>...` runs the same check from the command line.
+Example documents live in [../fixtures/protocol/](../fixtures/protocol/) and are checked by `tests/schema_fixtures_test.go`: valid fixtures must validate and round-trip through their Go types without semantic loss; invalid fixtures must be rejected. `devcadence schema validate <file>...` runs the same check from the command line.
 
 ## Changelog
 
 ### 1.0 — refined during M1
 
-No durable DevCadience records existed before M1, so these refinements were made in place at version 1.0. From the first tagged release onward, 1.0 is frozen and changes require a version bump.
+No durable DevCadence records existed before M1, so these refinements were made in place at version 1.0. From the first tagged release onward, 1.0 is frozen and changes require a version bump.
 
 - `project-state.schema.json`: `git.accepted_commit` is now nullable. A project registered before any change has been accepted — which is every M1 project, since M1 is repository-independent — has no accepted commit, and an explicit `null` keeps that absence visible rather than encoding it as an empty string. The field remains required, so the absence is always stated.
 - `project-state.schema.json`: `capabilities` was an unconstrained object, which would have forced a `map[string]any` into a durable record against ENGINEERING_STANDARDS.md §4. It is now a closed object with typed `local_models` and `consultants` arrays. M1 leaves it empty; no model runtime exists yet.

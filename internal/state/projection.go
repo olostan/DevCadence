@@ -16,10 +16,10 @@ import (
 	"sort"
 	"strconv"
 
-	"github.com/olostan/DevCadience/internal/errs"
-	"github.com/olostan/DevCadience/internal/events"
-	"github.com/olostan/DevCadience/internal/protocol"
-	"github.com/olostan/DevCadience/internal/tasks"
+	"github.com/olostan/DevCadence/internal/errs"
+	"github.com/olostan/DevCadence/internal/events"
+	"github.com/olostan/DevCadence/internal/protocol"
+	"github.com/olostan/DevCadence/internal/tasks"
 )
 
 // Projection is the materialised reduction of an event prefix.

@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/olostan/DevCadience/internal/errs"
-	"github.com/olostan/DevCadience/internal/protocol"
+	"github.com/olostan/DevCadence/internal/errs"
+	"github.com/olostan/DevCadence/internal/protocol"
 )
 
 // FakeAdapter is a scripted Adapter.
@@ -118,7 +118,7 @@ func LocalEndpoint(id, runtime, model string) protocol.CognitionEndpoint {
 // CLIEndpoint builds an authenticated-CLI endpoint.
 //
 // Auth is unknown by default because that is the honest default: no supported
-// CLI publishes a safe, non-mutating way to ask, and DevCadience will not read
+// CLI publishes a safe, non-mutating way to ask, and DevCadence will not read
 // credential files to find out. Cost class is unknown for the same reason — the
 // same binary may be billed by subscription, by metered API key or by an
 // enterprise account, and discovery cannot tell. Only an operator Declaration

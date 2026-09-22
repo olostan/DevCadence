@@ -1,9 +1,9 @@
 package state
 
 import (
-	"github.com/olostan/DevCadience/internal/errs"
-	"github.com/olostan/DevCadience/internal/events"
-	"github.com/olostan/DevCadience/internal/protocol"
+	"github.com/olostan/DevCadence/internal/errs"
+	"github.com/olostan/DevCadence/internal/events"
+	"github.com/olostan/DevCadence/internal/protocol"
 )
 
 // discoveryState is the reducer's working set for the Day-0 discovery

@@ -1,8 +1,8 @@
 package events
 
 import (
-	"github.com/olostan/DevCadience/internal/errs"
-	"github.com/olostan/DevCadience/internal/protocol"
+	"github.com/olostan/DevCadence/internal/errs"
+	"github.com/olostan/DevCadence/internal/protocol"
 )
 
 // RecordRef names the durable record a compact event claims exists.

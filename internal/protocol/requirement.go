@@ -3,7 +3,7 @@ package protocol
 import (
 	"encoding/json"
 
-	"github.com/olostan/DevCadience/internal/errs"
+	"github.com/olostan/DevCadence/internal/errs"
 )
 
 // ProductDecisionStatus is the lifecycle of a human product decision.

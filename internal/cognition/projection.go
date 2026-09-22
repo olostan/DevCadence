@@ -3,7 +3,7 @@ package cognition
 import (
 	"sort"
 
-	"github.com/olostan/DevCadience/internal/protocol"
+	"github.com/olostan/DevCadence/internal/protocol"
 )
 
 // Project reduces a machine profile to the compact ProjectState projection.

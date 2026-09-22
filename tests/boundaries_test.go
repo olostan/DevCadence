@@ -9,10 +9,10 @@ import (
 // coreDomainPackages are the packages that define the model-independent
 // semantic language of the system.
 var coreDomainPackages = []string{
-	"github.com/olostan/DevCadience/internal/protocol",
-	"github.com/olostan/DevCadience/internal/events",
-	"github.com/olostan/DevCadience/internal/tasks",
-	"github.com/olostan/DevCadience/internal/state",
+	"github.com/olostan/DevCadence/internal/protocol",
+	"github.com/olostan/DevCadence/internal/events",
+	"github.com/olostan/DevCadence/internal/tasks",
+	"github.com/olostan/DevCadence/internal/state",
 }
 
 // TestCoreDomainHasNoExternalDependencies enforces DCI-054 and DCI-055
@@ -32,7 +32,7 @@ func TestCoreDomainHasNoExternalDependencies(t *testing.T) {
 				if !strings.Contains(firstSegment, ".") {
 					continue // standard library paths have no dotted domain in the first path segment
 				}
-				if strings.HasPrefix(dep, "github.com/olostan/DevCadience/") {
+				if strings.HasPrefix(dep, "github.com/olostan/DevCadence/") {
 					continue
 				}
 				t.Errorf("core package %s depends on %s", pkg, dep)
@@ -50,7 +50,7 @@ func TestCoreDomainHasNoExternalDependencies(t *testing.T) {
 // the runtimes they adapt (internal/cognition/ollama, .../mlx), and matching on
 // their paths would have flagged the very code that keeps the SDKs out.
 //
-// The invariant itself is unchanged and is if anything stronger now: DevCadience
+// The invariant itself is unchanged and is if anything stronger now: DevCadence
 // drives Ollama over its documented HTTP API and MLX-LM through the controlled
 // process runner, so `go test ./...` still needs no model SDK, no Python and no
 // GPU. A future adapter that reached for a vendor SDK would fail here.
@@ -64,7 +64,7 @@ func TestNoPackageDependsOnAModelProviderSDK(t *testing.T) {
 		if !strings.Contains(firstSegment, ".") {
 			continue // standard library
 		}
-		if strings.HasPrefix(dep, "github.com/olostan/DevCadience/") {
+		if strings.HasPrefix(dep, "github.com/olostan/DevCadence/") {
 			continue // first-party; covered by the adapter-isolation check below
 		}
 		lowered := strings.ToLower(dep)
@@ -80,10 +80,10 @@ func TestNoPackageDependsOnAModelProviderSDK(t *testing.T) {
 // adapterPackages are the packages that know about a specific runtime, CLI or
 // provider.
 var adapterPackages = []string{
-	"github.com/olostan/DevCadience/internal/cognition/ollama",
-	"github.com/olostan/DevCadience/internal/cognition/mlx",
-	"github.com/olostan/DevCadience/internal/cognition/codingcli",
-	"github.com/olostan/DevCadience/internal/cognition/remoteapi",
+	"github.com/olostan/DevCadence/internal/cognition/ollama",
+	"github.com/olostan/DevCadence/internal/cognition/mlx",
+	"github.com/olostan/DevCadence/internal/cognition/codingcli",
+	"github.com/olostan/DevCadence/internal/cognition/remoteapi",
 }
 
 // TestProviderAdaptersDoNotLeakIntoTheCore is the M3A half of DCI-055.
@@ -99,10 +99,10 @@ var adapterPackages = []string{
 // dependency while every other test still passed.
 func TestProviderAdaptersDoNotLeakIntoTheCore(t *testing.T) {
 	core := append([]string{
-		"github.com/olostan/DevCadience/internal/cognition",
-		"github.com/olostan/DevCadience/internal/environment",
-		"github.com/olostan/DevCadience/internal/principalhosts",
-		"github.com/olostan/DevCadience/internal/controlplane",
+		"github.com/olostan/DevCadence/internal/cognition",
+		"github.com/olostan/DevCadence/internal/environment",
+		"github.com/olostan/DevCadence/internal/principalhosts",
+		"github.com/olostan/DevCadence/internal/controlplane",
 	}, coreDomainPackages...)
 	for _, pkg := range core {
 		t.Run(pkg, func(t *testing.T) {
@@ -125,10 +125,10 @@ func TestAdaptersDependOnlyOnTheContractTheyImplement(t *testing.T) {
 		t.Run(pkg, func(t *testing.T) {
 			for _, dep := range dependenciesOf(t, pkg) {
 				for _, forbidden := range []string{
-					"github.com/olostan/DevCadience/internal/storage",
-					"github.com/olostan/DevCadience/internal/controlplane",
-					"github.com/olostan/DevCadience/internal/state",
-					"github.com/olostan/DevCadience/internal/events",
+					"github.com/olostan/DevCadence/internal/storage",
+					"github.com/olostan/DevCadence/internal/controlplane",
+					"github.com/olostan/DevCadence/internal/state",
+					"github.com/olostan/DevCadence/internal/events",
 				} {
 					if dep == forbidden {
 						t.Errorf("adapter %s depends on %s", pkg, forbidden)
@@ -143,11 +143,11 @@ func TestAdaptersDependOnlyOnTheContractTheyImplement(t *testing.T) {
 // of persistence concerns, so that the contract can be reused by an adapter
 // that stores nothing.
 func TestProtocolDoesNotDependOnStorage(t *testing.T) {
-	for _, dep := range dependenciesOf(t, "github.com/olostan/DevCadience/internal/protocol") {
+	for _, dep := range dependenciesOf(t, "github.com/olostan/DevCadence/internal/protocol") {
 		for _, forbidden := range []string{
-			"github.com/olostan/DevCadience/internal/storage",
-			"github.com/olostan/DevCadience/internal/controlplane",
-			"github.com/olostan/DevCadience/internal/schema",
+			"github.com/olostan/DevCadence/internal/storage",
+			"github.com/olostan/DevCadence/internal/controlplane",
+			"github.com/olostan/DevCadence/internal/schema",
 		} {
 			if dep == forbidden {
 				t.Errorf("internal/protocol depends on %s", dep)

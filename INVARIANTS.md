@@ -1,4 +1,4 @@
-# DevCadience System Invariants
+# DevCadence System Invariants
 
 These invariants are non-negotiable constraints. They exist to prevent local optimization, model confidence, or implementation convenience from silently changing the character of the system.
 
@@ -222,7 +222,7 @@ Operational UI is useful but must not precede a reliable control-plane vertical 
 Fine-tuning local models is not a bootstrap dependency. Start with prompting, retrieval, protocols, routing and evaluation.
 
 ### DCI-103 — No uncontrolled recursive self-development
-DevCadience may eventually develop DevCadience, but self-changes follow the same isolation, validation, review and governance requirements as any other project.
+DevCadence may eventually develop DevCadence, but self-changes follow the same isolation, validation, review and governance requirements as any other project.
 
 ### DCI-104 — Capability absence degrades; it does not contaminate unrelated capability
 Missing optional local models, accelerators, consultant subscriptions, cognition endpoints or principal hosts reduce the available operating profile but do not turn otherwise valid deterministic/control-plane capabilities into failure.
@@ -240,7 +240,7 @@ No core protocol depends on one principal frontend. The initial first-class host
 Environment discovery is read-only. Package installation, model download, authentication, service changes, device/group permissions and other setup mutations require a visible plan and the appropriate user approval; privileged/high-impact changes are never silently applied.
 
 ### DCI-109 — Managed projects require a canonical documentation baseline
-A repository is not DevCadience-ready for normal managed engineering work until the required canonical project documentation set exists in Git and has passed the project Adoption Readiness Gate.
+A repository is not DevCadence-ready for normal managed engineering work until the required canonical project documentation set exists in Git and has passed the project Adoption Readiness Gate.
 
 ### DCI-110 — Brownfield reconstruction preserves provenance
 Retrospective reconstruction must distinguish observed behavior, inherited documentation, model inference, human-confirmed intent, unknowns and contradictions. Reconstructed understanding must not be serialized as historical fact merely because it is plausible.
@@ -252,5 +252,5 @@ README files, design notes, comments and other inherited documentation inform ad
 The accepted canonical documentation baseline and its adoption decision are tied to explicit Git commits. Normal managed work begins from that accepted baseline, not from an uncommitted reconstruction held only in model or control-plane memory.
 
 ### DCI-113 — Pre-adoption autonomy is bounded
-Before project adoption reaches READY, DevCadience may perform bounded investigation and isolated adoption work, but it must not treat the repository as ready for normal autonomous implementation, acceptance or integration.
+Before project adoption reaches READY, DevCadence may perform bounded investigation and isolated adoption work, but it must not treat the repository as ready for normal autonomous implementation, acceptance or integration.
 

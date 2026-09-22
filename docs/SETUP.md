@@ -7,7 +7,7 @@ environment intelligence with cognition routing (M3A) are implemented and merged
 
 Sections below describing hardware, runtime, coding-CLI and principal-host
 **discovery** are therefore implemented behaviour, observable through
-`devcadience environment inspect` and `devcadience cognition list`.
+`devcadence environment inspect` and `devcadence cognition list`.
 
 Sections describing guided **setup, remediation, installation, credential
 creation and the terminal UX** remain intended M3B behaviour; principal-host
@@ -31,8 +31,8 @@ Ollama, MLX-LM, Antigravity, Cursor, VS Code, consultant CLIs and provider crede
 ## 2. Clone
 
 ```bash
-git clone https://github.com/olostan/DevCadience.git
-cd DevCadience
+git clone https://github.com/olostan/DevCadence.git
+cd DevCadence
 ```
 
 ## 3. Core tools
@@ -57,7 +57,7 @@ brew install ollama
 
 Start/verify according to the installed Ollama package.
 
-Model selection is configuration. DevCadience should not hard-code one model name in architecture.
+Model selection is configuration. DevCadence should not hard-code one model name in architecture.
 
 The bootstrap profile should target a strong coding model that fits with sufficient context headroom on the machine.
 
@@ -74,7 +74,7 @@ source .venv-mlx/bin/activate
 uv pip install mlx-lm
 ```
 
-DevCadience should communicate with MLX-LM through a controlled adapter/process boundary so the Go core does not absorb Python dependency semantics.
+DevCadence should communicate with MLX-LM through a controlled adapter/process boundary so the Go core does not absorb Python dependency semantics.
 
 ## 6. Keep machine headroom
 
@@ -83,7 +83,7 @@ Do not size local models based only on weight memory.
 Leave memory for:
 - macOS;
 - IDE/Antigravity;
-- DevCadience daemon;
+- DevCadence daemon;
 - Git/worktrees;
 - compiler/test processes;
 - KV/context cache;
@@ -93,21 +93,21 @@ The initial scheduler should prefer sequential strong-model use to unsafe memory
 
 ## 7. Go bootstrap
 
-The module is `github.com/olostan/DevCadience`. Its `go` directive is 1.25.0,
+The module is `github.com/olostan/DevCadence`. Its `go` directive is 1.25.0,
 which the SQLite driver requires; a newer toolchain is fetched automatically
 by recent Go releases.
 
 ```bash
 make verify        # go vet ./... && go test ./... && schema validation
-make build         # bin/devcadience
+make build         # bin/devcadence
 ```
 
 The build needs no C toolchain: the SQLite driver is pure Go
 ([ADR-0002](adr/0002-control-plane-persistence.md)).
 
 Binaries:
-- `devcadience` — CLI/daemon (implemented in M1);
-- `devcadience-mcp` — stdio semantic MCP adapter (M4, not yet present).
+- `devcadence` — CLI/daemon (implemented in M1);
+- `devcadence-mcp` — stdio semantic MCP adapter (M4, not yet present).
 
 ## 7A. Guided bootstrap (M3)
 
@@ -118,14 +118,14 @@ The intended normal onboarding path is not manual runtime installation.
 These commands exist today. All are read-only and none mutates the machine.
 
 ```bash
-devcadience environment inspect                   # observed hardware/software facts
-devcadience environment inspect --depth inventory # filesystem only; runs no command
-devcadience environment inspect --json
-devcadience cognition list                        # endpoints, health, assessment
-devcadience cognition list --depth inventory      # filesystem only; runs no command
-devcadience cognition probe <endpoint-id>         # verify one endpoint explicitly
-devcadience cognition route --role implementer    # explainable routing decision
-devcadience cognition route --source-exposure local_only --max-cost local_compute
+devcadence environment inspect                   # observed hardware/software facts
+devcadence environment inspect --depth inventory # filesystem only; runs no command
+devcadence environment inspect --json
+devcadence cognition list                        # endpoints, health, assessment
+devcadence cognition list --depth inventory      # filesystem only; runs no command
+devcadence cognition probe <endpoint-id>         # verify one endpoint explicitly
+devcadence cognition route --role implementer    # explainable routing decision
+devcadence cognition route --source-exposure local_only --max-cost local_compute
 ```
 
 `environment inspect`, `cognition list` and `cognition route` all refuse
@@ -141,7 +141,7 @@ uses only models that already exist locally and never downloads one.
 
 A discovered coding CLI is reported with `cost_class: unknown`. Finding `claude`
 or `codex` on PATH says nothing about whether a subscription, a metered API key or
-an enterprise account is being billed, and DevCadience will not read credentials
+an enterprise account is being billed, and DevCadence will not read credentials
 to guess. Routing treats `unknown` as dearer than every known class, so an
 operator who wants a CLI preferred on cost declares its class explicitly.
 
@@ -152,10 +152,10 @@ The remaining commands plan and apply changes, and do not exist yet.
 Conceptual commands:
 
 ```bash
-devcadience doctor
-devcadience setup
-devcadience setup --dry-run
-devcadience setup verify
+devcadence doctor
+devcadence setup
+devcadence setup --dry-run
+devcadence setup verify
 ```
 
 The setup engine starts by discovering the machine and existing software.
@@ -192,7 +192,7 @@ Do not store runtime state inside target project source trees by default.
 Proposed layout:
 
 ```text
-~/.devcadience/
+~/.devcadence/
   config/
   state/
   artifacts/
@@ -204,11 +204,11 @@ Proposed layout:
 Per-project configuration references repository paths and policies.
 
 Settled by [ADR-0002](adr/0002-control-plane-persistence.md) §9: the
-control-plane database is `$DEVCADIENCE_HOME/state/control-plane.db`, with
-`DEVCADIENCE_HOME` defaulting to `~/.devcadience`. The path must be absolute.
-`devcadience -db <path>` overrides it, which is what the test suite and
+control-plane database is `$DEVCADENCE_HOME/state/control-plane.db`, with
+`DEVCADENCE_HOME` defaulting to `~/.devcadence`. The path must be absolute.
+`devcadence -db <path>` overrides it, which is what the test suite and
 throwaway experiments use. A full XDG layout was not adopted: the macOS-first
-target and the single `DEVCADIENCE_HOME` indirection cover the need with one
+target and the single `DEVCADENCE_HOME` indirection cover the need with one
 variable.
 
 ## 9. Target repository registration
@@ -216,7 +216,7 @@ variable.
 Future CLI shape:
 
 ```bash
-devcadience project add \
+devcadence project add \
   --id hearthmind \
   --repo ~/src/HearthMind
 ```
@@ -225,7 +225,7 @@ This syntax is illustrative until implemented.
 
 ## 10. Validation setup
 
-Each target project should define safe validation profiles through DevCadience configuration rather than allowing a model to invent arbitrary shell commands every run.
+Each target project should define safe validation profiles through DevCadence configuration rather than allowing a model to invent arbitrary shell commands every run.
 
 Example conceptual config:
 
@@ -261,8 +261,8 @@ The intended bootstrap topology is:
 ```mermaid
 flowchart LR
     AG["Antigravity"]
-    MCP["devcadience-mcp<br/>stdio"]
-    D["DevCadience daemon"]
+    MCP["devcadence-mcp<br/>stdio"]
+    D["DevCadence daemon"]
     Local["Ollama / MLX-LM"]
     Repo["Target repo"]
 
@@ -273,7 +273,7 @@ flowchart LR
 ```
 
 Antigravity should receive:
-- the DevCadience principal Skill/Rules;
+- the DevCadence principal Skill/Rules;
 - semantic MCP tools;
 - project design artifacts when useful.
 
@@ -281,7 +281,7 @@ The target source repository should not need to be Antigravity’s directly writ
 
 The concrete configuration, strict principal-workspace topology, plugin packaging, permissions strategy, smoke test, and current Antigravity file locations are specified in [ANTIGRAVITY_INTEGRATION.md](ANTIGRAVITY_INTEGRATION.md).
 
-A versioned plugin skeleton is already maintained under `integrations/antigravity/devcadience/`. It becomes directly usable once the `devcadience-mcp` binary is implemented and available on PATH.
+A versioned plugin skeleton is already maintained under `integrations/antigravity/devcadence/`. It becomes directly usable once the `devcadence-mcp` binary is implemented and available on PATH.
 
 ## 12. External cognition and consultants
 
@@ -330,9 +330,9 @@ The first real setup demo should begin from a blank or intentionally stripped en
 3. configure any desired local runtime and verify the actual acceleration backend, or explicitly choose no-local-model operation;
 4. discover/configure at least one implementation cognition endpoint;
 5. discover an existing principal host or select/install one of Antigravity, Cursor or VS Code;
-6. start DevCadience daemon;
+6. start DevCadence daemon;
 7. register a small target repository;
-8. start `devcadience-mcp`;
+8. start `devcadence-mcp`;
 9. verify the principal-host semantic connection;
 10. ask principal to inspect ProjectState;
 11. issue a targeted investigation;

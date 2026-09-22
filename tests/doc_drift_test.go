@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/olostan/DevCadience/internal/events"
+	"github.com/olostan/DevCadence/internal/events"
 )
 
 // TestDocumentedEventTypesAreImplemented detects drift between the event

@@ -4,9 +4,9 @@ import (
 	"context"
 	"testing"
 
-	"github.com/olostan/DevCadience/internal/errs"
-	"github.com/olostan/DevCadience/internal/protocol"
-	"github.com/olostan/DevCadience/internal/storage"
+	"github.com/olostan/DevCadence/internal/errs"
+	"github.com/olostan/DevCadence/internal/protocol"
+	"github.com/olostan/DevCadence/internal/storage"
 )
 
 func sampleWorkPackage(version int, objective string) *protocol.EngineeringWorkPackage {

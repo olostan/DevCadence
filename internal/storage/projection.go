@@ -5,10 +5,10 @@ import (
 	"database/sql"
 	"encoding/json"
 
-	"github.com/olostan/DevCadience/internal/errs"
-	"github.com/olostan/DevCadience/internal/protocol"
-	"github.com/olostan/DevCadience/internal/state"
-	"github.com/olostan/DevCadience/internal/tasks"
+	"github.com/olostan/DevCadence/internal/errs"
+	"github.com/olostan/DevCadence/internal/protocol"
+	"github.com/olostan/DevCadence/internal/state"
+	"github.com/olostan/DevCadence/internal/tasks"
 )
 
 // SaveProjection writes the whole derived view for a project.
@@ -123,7 +123,7 @@ func (s ProjectSummary) verify() error {
 		s.ProjectStateDigest, []byte(s.ProjectStateJSON)); err != nil {
 		return errs.Wrap(errs.CategoryIntegrity, err,
 			"materialised state for project %s is not what was written; "+
-				"rebuild it from the journal with `devcadience state rebuild`", s.ProjectID)
+				"rebuild it from the journal with `devcadence state rebuild`", s.ProjectID)
 	}
 	return nil
 }

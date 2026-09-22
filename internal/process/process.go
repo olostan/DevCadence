@@ -1,7 +1,7 @@
 // Package process implements the controlled external-process runner
 // (docs/SECURITY.md §5, ENGINEERING_STANDARDS.md §8, DCI-033).
 //
-// The runner is the only way the rest of DevCadience executes an external
+// The runner is the only way the rest of DevCadence executes an external
 // binary. It never interprets a shell string: callers supply an explicit
 // executable and argv, an explicit working directory and an explicit
 // environment. There is no implicit inheritance of the daemon's own
@@ -21,7 +21,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/olostan/DevCadience/internal/errs"
+	"github.com/olostan/DevCadence/internal/errs"
 )
 
 // Status is the terminal condition of a run. It exists so callers can

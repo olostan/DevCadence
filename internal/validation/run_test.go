@@ -5,11 +5,11 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/olostan/DevCadience/internal/artifacts"
-	"github.com/olostan/DevCadience/internal/errs"
-	"github.com/olostan/DevCadience/internal/ids"
-	"github.com/olostan/DevCadience/internal/protocol"
-	"github.com/olostan/DevCadience/internal/validation"
+	"github.com/olostan/DevCadence/internal/artifacts"
+	"github.com/olostan/DevCadence/internal/errs"
+	"github.com/olostan/DevCadence/internal/ids"
+	"github.com/olostan/DevCadence/internal/protocol"
+	"github.com/olostan/DevCadence/internal/validation"
 )
 
 func newArtifactStore(t *testing.T) *artifacts.Store {
@@ -85,7 +85,7 @@ func TestRunProfileMissingExecutableIsCheckError(t *testing.T) {
 	dir := t.TempDir()
 	profile := validation.Profile{
 		Name:   "bad-exe",
-		Checks: []validation.CheckSpec{{ID: "missing", Argv: []string{"devcadience-no-such-tool-xyz"}, Timeout: 5000000000}},
+		Checks: []validation.CheckSpec{{ID: "missing", Argv: []string{"devcadence-no-such-tool-xyz"}, Timeout: 5000000000}},
 	}
 	checks, outcome, err := validation.RunProfile(context.Background(), profile, validation.RunOptions{
 		Dir: dir, ProjectID: "proj-a", Artifacts: newArtifactStore(t),

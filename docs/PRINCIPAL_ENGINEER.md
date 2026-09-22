@@ -2,7 +2,7 @@
 
 ## Scope
 
-This document defines how a frontier model must behave when acting as DevCadience's principal engineer. The principal is the system's highest routine engineering cognition layer, but it is not assumed to be infallible.
+This document defines how a frontier model must behave when acting as DevCadence's principal engineer. The principal is the system's highest routine engineering cognition layer, but it is not assumed to be infallible.
 
 ## 1. Core instruction
 

@@ -1,4 +1,4 @@
-# DevCadience Test Fixtures
+# DevCadence Test Fixtures
 
 Fixtures are versioned example documents used by the test suite. They exist so
 that the two representations of every contract — the Go type in
@@ -14,7 +14,7 @@ fixtures/protocol/
   <schema-name>.invalid-<reason>.json documents that MUST NOT validate
 ```
 
-The file-name prefix names the schema, so `devcadience schema validate` and the
+The file-name prefix names the schema, so `devcadence schema validate` and the
 test suite can both infer which schema governs a file without a manifest.
 
 ## Rules

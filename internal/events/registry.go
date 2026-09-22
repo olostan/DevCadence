@@ -7,7 +7,7 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/olostan/DevCadience/internal/errs"
+	"github.com/olostan/DevCadence/internal/errs"
 )
 
 // registry maps an event type to a factory producing a zero payload of the

@@ -3,8 +3,8 @@ package protocol_test
 import (
 	"testing"
 
-	"github.com/olostan/DevCadience/internal/errs"
-	"github.com/olostan/DevCadience/internal/protocol"
+	"github.com/olostan/DevCadence/internal/errs"
+	"github.com/olostan/DevCadence/internal/protocol"
 )
 
 // TestConfirmedRequirementMustTraceToAHuman is the discovery subsystem's

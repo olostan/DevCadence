@@ -12,7 +12,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/olostan/DevCadience/internal/errs"
+	"github.com/olostan/DevCadence/internal/errs"
 )
 
 // migrationFS holds the ordered SQL migrations.
@@ -157,7 +157,7 @@ func verifyAppliedMigrations(embedded []Migration, applied []AppliedMigration) e
 		if !known[a.Version] {
 			return errs.New(errs.CategoryIntegrity,
 				"database has migration %04d_%s applied, which this build does not carry; "+
-					"it was migrated by a newer DevCadience and must not be used with this one",
+					"it was migrated by a newer DevCadence and must not be used with this one",
 				a.Version, a.Name)
 		}
 		if a.Version > highest {

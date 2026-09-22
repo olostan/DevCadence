@@ -2,7 +2,7 @@
 
 ## Scope
 
-DevCadience must explain what it is doing, why it did it, and which evidence supported a decision. Observability serves operators, debugging, evaluation, security, and learning.
+DevCadence must explain what it is doing, why it did it, and which evidence supported a decision. Observability serves operators, debugging, evaluation, security, and learning.
 
 ## 1. Correlation hierarchy
 

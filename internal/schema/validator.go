@@ -1,7 +1,7 @@
 package schema
 
 import (
-	"github.com/olostan/DevCadience/internal/errs"
+	"github.com/olostan/DevCadence/internal/errs"
 )
 
 // RecordValidator is the write-boundary check that a durable record's

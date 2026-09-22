@@ -1,8 +1,8 @@
 package state
 
 import (
-	"github.com/olostan/DevCadience/internal/errs"
-	"github.com/olostan/DevCadience/internal/tasks"
+	"github.com/olostan/DevCadence/internal/errs"
+	"github.com/olostan/DevCadence/internal/tasks"
 )
 
 // evidenceRef is the compact lineage of one piece of recorded evidence.

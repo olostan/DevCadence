@@ -6,7 +6,7 @@ import (
 	"io/fs"
 	"syscall"
 
-	"github.com/olostan/DevCadience/internal/errs"
+	"github.com/olostan/DevCadence/internal/errs"
 )
 
 // accessSyscall answers the access question the way the kernel would.

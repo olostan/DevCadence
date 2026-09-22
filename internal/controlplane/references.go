@@ -3,9 +3,9 @@ package controlplane
 import (
 	"context"
 
-	"github.com/olostan/DevCadience/internal/errs"
-	"github.com/olostan/DevCadience/internal/protocol"
-	"github.com/olostan/DevCadience/internal/storage"
+	"github.com/olostan/DevCadence/internal/errs"
+	"github.com/olostan/DevCadence/internal/protocol"
+	"github.com/olostan/DevCadence/internal/storage"
 )
 
 // checkProductAuthorityRefs verifies the references that carry human product

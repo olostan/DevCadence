@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/olostan/DevCadience/schemas/problem-model.schema.json",
-  "title": "DevCadience ProblemModel",
+  "$id": "https://github.com/olostan/DevCadence/schemas/problem-model.schema.json",
+  "title": "DevCadence ProblemModel",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema_version", "problem_model_id", "project_id", "revision", "problem_statement", "desired_outcomes", "actors", "primary_workflows", "scope", "success_criteria", "failure_criteria", "constraints", "assumptions", "unknowns", "risk_refs"],

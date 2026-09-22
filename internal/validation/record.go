@@ -5,12 +5,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/olostan/DevCadience/internal/controlplane"
-	"github.com/olostan/DevCadience/internal/errs"
-	"github.com/olostan/DevCadience/internal/events"
-	"github.com/olostan/DevCadience/internal/ids"
-	"github.com/olostan/DevCadience/internal/process"
-	"github.com/olostan/DevCadience/internal/protocol"
+	"github.com/olostan/DevCadence/internal/controlplane"
+	"github.com/olostan/DevCadence/internal/errs"
+	"github.com/olostan/DevCadence/internal/events"
+	"github.com/olostan/DevCadence/internal/ids"
+	"github.com/olostan/DevCadence/internal/process"
+	"github.com/olostan/DevCadence/internal/protocol"
 )
 
 // headCommitTimeout bounds the `git rev-parse HEAD` check ExecuteAndRecord
@@ -261,7 +261,7 @@ func defaultActor(a protocol.Actor) protocol.Actor {
 		a.Kind = protocol.ActorTool
 	}
 	if a.ID == "" {
-		a.ID = "devcadience-validation"
+		a.ID = "devcadence-validation"
 	}
 	return a
 }

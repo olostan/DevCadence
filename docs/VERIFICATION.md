@@ -2,7 +2,7 @@
 
 ## Scope
 
-DevCadience separates deterministic verification, model-assisted review, evidence quality, and acceptance policy. No single signal proves correctness.
+DevCadence separates deterministic verification, model-assisted review, evidence quality, and acceptance policy. No single signal proves correctness.
 
 ## 1. Verification stack
 
@@ -162,7 +162,7 @@ flowchart LR
 
 ## 8. Seeded defect evaluation
 
-To evaluate reviewer quality, DevCadience should maintain fixture repositories/tasks with known defects:
+To evaluate reviewer quality, DevCadence should maintain fixture repositories/tasks with known defects:
 - off-by-one boundary;
 - missing cancellation;
 - public API break;

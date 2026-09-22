@@ -7,9 +7,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/olostan/DevCadience/internal/errs"
-	"github.com/olostan/DevCadience/internal/storage"
-	"github.com/olostan/DevCadience/internal/testsupport"
+	"github.com/olostan/DevCadence/internal/errs"
+	"github.com/olostan/DevCadence/internal/storage"
+	"github.com/olostan/DevCadence/internal/testsupport"
 )
 
 func TestMigrationsAreOrderedAndUniquelyVersioned(t *testing.T) {
@@ -65,7 +65,7 @@ func TestMigrationFromAnEmptyDatabase(t *testing.T) {
 	}
 }
 
-// TestReopeningAMigratedDatabaseIsIdempotent is what makes `devcadience`
+// TestReopeningAMigratedDatabaseIsIdempotent is what makes `devcadence`
 // safe to run repeatedly: opening must not re-apply or mutate the schema.
 func TestReopeningAMigratedDatabaseIsIdempotent(t *testing.T) {
 	ctx := context.Background()

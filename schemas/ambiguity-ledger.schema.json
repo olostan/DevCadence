@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/olostan/DevCadience/schemas/ambiguity-ledger.schema.json",
-  "title": "DevCadience AmbiguityLedger",
+  "$id": "https://github.com/olostan/DevCadence/schemas/ambiguity-ledger.schema.json",
+  "title": "DevCadence AmbiguityLedger",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema_version", "ambiguity_ledger_id", "project_id", "revision", "entries"],

@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/olostan/DevCadience/internal/clock"
+	"github.com/olostan/DevCadence/internal/clock"
 )
 
 func TestFakeClockAdvancesDeterministically(t *testing.T) {

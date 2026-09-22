@@ -2,7 +2,7 @@
 // migrations, the append-only event journal, the immutable record store and
 // the derived projections.
 //
-// SQLite is the source of truth for DevCadience control-plane records; Git
+// SQLite is the source of truth for DevCadence control-plane records; Git
 // remains the source of truth for code (docs/ARCHITECTURE.md §10). The driver
 // is pure Go so that a single static binary runs on macOS and Linux without a
 // C toolchain; see docs/adr/0002-control-plane-persistence.md.
@@ -17,9 +17,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/olostan/DevCadience/internal/clock"
-	"github.com/olostan/DevCadience/internal/errs"
-	"github.com/olostan/DevCadience/internal/schema"
+	"github.com/olostan/DevCadence/internal/clock"
+	"github.com/olostan/DevCadence/internal/errs"
+	"github.com/olostan/DevCadence/internal/schema"
 
 	_ "modernc.org/sqlite" // pure-Go SQLite driver
 )
@@ -96,7 +96,7 @@ func Open(ctx context.Context, cfg Config) (*Store, error) {
 		if _, err := os.Stat(cfg.Path); err != nil {
 			if os.IsNotExist(err) {
 				return nil, errs.New(errs.CategoryNotFound,
-					"database %s does not exist; run `devcadience project init` first", cfg.Path)
+					"database %s does not exist; run `devcadence project init` first", cfg.Path)
 			}
 			return nil, errs.Wrap(errs.CategoryInvalidArgument, err, "open database %s", cfg.Path)
 		}
@@ -143,7 +143,7 @@ func Open(ctx context.Context, cfg Config) (*Store, error) {
 		if version == 0 {
 			_ = db.Close()
 			return nil, errs.New(errs.CategoryNotFound,
-				"database %s has no DevCadience schema; run `devcadience project init` first", cfg.Path)
+				"database %s has no DevCadence schema; run `devcadence project init` first", cfg.Path)
 		}
 		// Read-only skips applying migrations, not verifying them: reporting
 		// from a schema this build does not understand is a quieter failure

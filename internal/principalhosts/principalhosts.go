@@ -17,14 +17,14 @@ package principalhosts
 import (
 	"sort"
 
-	"github.com/olostan/DevCadience/internal/protocol"
+	"github.com/olostan/DevCadence/internal/protocol"
 )
 
 // HostID identifies a supported principal host.
 //
 // The set is bounded by ADR-0011 §6 to the three first-class hosts. Other
 // editors are future integration candidates, and listing one here before its
-// integration exists would advertise support DevCadience does not have.
+// integration exists would advertise support DevCadence does not have.
 type HostID string
 
 const (
@@ -38,7 +38,7 @@ func SupportedHosts() []HostID { return []HostID{HostAntigravity, HostCursor, Ho
 
 // Host is what could be observed about one principal host.
 //
-// IntegrationConfigured is deliberately absent. Whether DevCadience's semantic
+// IntegrationConfigured is deliberately absent. Whether DevCadence's semantic
 // integration is installed in a host is an M4A question, and a field reserved
 // for it here would be read as "not configured" when the truth is "nothing has
 // ever tried".
@@ -74,7 +74,7 @@ func (i Inventory) Installed() []Host {
 
 // Any reports whether any supported host is installed.
 //
-// False is a normal blank-machine state, not an error: DevCadience's control
+// False is a normal blank-machine state, not an error: DevCadence's control
 // plane and its CLI work without a host, and M3B asks the user which one they
 // want rather than assuming one exists.
 func (i Inventory) Any() bool { return len(i.Installed()) > 0 }
@@ -107,7 +107,7 @@ func FromEnvironment(facts protocol.EnvironmentFacts) Inventory {
 			host.VersionStatus = entry.VersionStatus
 			host.Detail = entry.Detail
 			if host.Detail == "" {
-				host.Detail = "installed; DevCadience integration is not configured by this milestone"
+				host.Detail = "installed; DevCadence integration is not configured by this milestone"
 			}
 		}
 		inventory.Hosts = append(inventory.Hosts, host)

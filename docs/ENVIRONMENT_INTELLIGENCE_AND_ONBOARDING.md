@@ -2,7 +2,7 @@
 
 ## Scope
 
-DevCadience must be useful on a blank developer machine, not only on a preconfigured workstation.
+DevCadence must be useful on a blank developer machine, not only on a preconfigured workstation.
 
 The supported starting state includes:
 
@@ -73,7 +73,7 @@ inference runtime can use it
 actual inference is accelerated
 ```
 
-DevCadience MUST NOT report GPU acceleration as ready merely because a GPU or inference runtime is installed.
+DevCadence MUST NOT report GPU acceleration as ready merely because a GPU or inference runtime is installed.
 
 A supported acceleration path becomes `verified` only after a real probe demonstrates that the selected runtime actually executes through the intended backend.
 
@@ -216,7 +216,7 @@ Roles bind to capabilities, not permanent model names.
 
 ## 7. AI software discovery
 
-Discovery SHOULD recognize supported tools even when DevCadience did not install them.
+Discovery SHOULD recognize supported tools even when DevCadence did not install them.
 
 Examples include:
 
@@ -309,7 +309,7 @@ Typical authority classes:
 
 ### User-level confirmation
 
-- create DevCadience directories/config;
+- create DevCadence directories/config;
 - create virtual environments;
 - install user-level packages;
 - download a model;
@@ -330,13 +330,13 @@ Typical authority classes:
 - operations requiring reboot;
 - broad credential-store mutation.
 
-DevCadience MUST NOT silently perform privileged/high-impact remediation.
+DevCadence MUST NOT silently perform privileged/high-impact remediation.
 
-`devcadience setup --dry-run` should expose the planned actions before mutation.
+`devcadence setup --dry-run` should expose the planned actions before mutation.
 
 ## 12. Credentials and authentication
 
-DevCadience configuration stores credential references, never routine raw API keys.
+DevCadence configuration stores credential references, never routine raw API keys.
 
 Preferred sources:
 
@@ -368,7 +368,7 @@ The initial first-class host set is intentionally bounded to:
 - Cursor;
 - Visual Studio Code.
 
-If none is installed, this is a normal blank-machine state. Setup asks which supported host the user wants, guides/automates installation where safe, installs/configures the DevCadience integration when that milestone supports it, and verifies connectivity.
+If none is installed, this is a normal blank-machine state. Setup asks which supported host the user wants, guides/automates installation where safe, installs/configures the DevCadence integration when that milestone supports it, and verifies connectivity.
 
 The user may skip principal-host setup and return later.
 
@@ -397,7 +397,7 @@ Guidelines:
 Examples:
 
 ```text
-$ devcadience setup
+$ devcadence setup
 
 Environment
   ✓ Git 2.x
@@ -408,7 +408,7 @@ Environment
 
 Recommended profile: HYBRID_THIN
 
-What would you like DevCadience to configure?
+What would you like DevCadence to configure?
 
   > Local lightweight inference
     Principal host
@@ -421,18 +421,18 @@ What would you like DevCadience to configure?
 Conceptual commands:
 
 ```text
-devcadience setup
-devcadience setup hardware
-devcadience setup inference
-devcadience setup cognition
-devcadience setup principal
-devcadience setup consultants
-devcadience setup auth
+devcadence setup
+devcadence setup hardware
+devcadence setup inference
+devcadence setup cognition
+devcadence setup principal
+devcadence setup consultants
+devcadence setup auth
 
-devcadience doctor
-devcadience doctor --fix
-devcadience setup --dry-run
-devcadience setup verify
+devcadence doctor
+devcadence doctor --fix
+devcadence setup --dry-run
+devcadence setup verify
 ```
 
 The interactive UI is an adapter over typed setup/capability services. Business logic must remain independently testable and usable without a terminal.
@@ -464,7 +464,7 @@ Implementation notes that qualify the prose above:
   operator (recorded as `configured`) or stay `unknown`.
 - Coding-CLI **authentication** is `unknown` unless a probe's output says the
   user is signed out. No supported CLI publishes a safe, non-mutating way to ask,
-  and DevCadience will not read credential files to find out.
+  and DevCadence will not read credential files to find out.
 - Everything is **read-only**. Contracts are settled in
   [adr/0013-environment-intelligence-and-cognition-contracts.md](adr/0013-environment-intelligence-and-cognition-contracts.md).
 
@@ -521,7 +521,7 @@ Hardware-specific integration probes should be separable from the deterministic 
 
 The onboarding goal is not:
 
-> install the DevCadience-preferred stack.
+> install the DevCadence-preferred stack.
 
 It is:
 

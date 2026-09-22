@@ -5,10 +5,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/olostan/DevCadience/internal/clock"
-	"github.com/olostan/DevCadience/internal/environment"
-	"github.com/olostan/DevCadience/internal/principalhosts"
-	"github.com/olostan/DevCadience/internal/protocol"
+	"github.com/olostan/DevCadence/internal/clock"
+	"github.com/olostan/DevCadence/internal/environment"
+	"github.com/olostan/DevCadence/internal/principalhosts"
+	"github.com/olostan/DevCadence/internal/protocol"
 )
 
 func facts(t *testing.T, fixture environment.Fixture) protocol.EnvironmentFacts {
@@ -30,7 +30,7 @@ func hostByID(inventory principalhosts.Inventory, id principalhosts.HostID) prin
 	return principalhosts.Host{}
 }
 
-// TestNoHostInstalledIsANormalState is the blank-machine case: DevCadience's
+// TestNoHostInstalledIsANormalState is the blank-machine case: DevCadence's
 // control plane works without any principal host (DCI-107).
 func TestNoHostInstalledIsANormalState(t *testing.T) {
 	inventory := principalhosts.FromEnvironment(facts(t, environment.LinuxCPUOnly()))

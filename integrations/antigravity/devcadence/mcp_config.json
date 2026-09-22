@@ -1,0 +1,7 @@
+{
+  "mcpServers": {
+    "devcadence": {
+      "command": "devcadence-mcp"
+    }
+  }
+}

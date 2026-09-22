@@ -5,12 +5,12 @@ import (
 	"flag"
 	"fmt"
 
-	"github.com/olostan/DevCadience/internal/errs"
+	"github.com/olostan/DevCadence/internal/errs"
 )
 
 func runState(ctx context.Context, e *env, args []string) error {
 	if len(args) == 0 {
-		return errs.New(errs.CategoryInvalidArgument, "usage: devcadience state <show|rebuild>")
+		return errs.New(errs.CategoryInvalidArgument, "usage: devcadence state <show|rebuild>")
 	}
 	switch args[0] {
 	case "show":

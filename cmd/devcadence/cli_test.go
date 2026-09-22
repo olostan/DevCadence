@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/olostan/DevCadience/internal/protocol"
-	"github.com/olostan/DevCadience/internal/testsupport"
+	"github.com/olostan/DevCadence/internal/protocol"
+	"github.com/olostan/DevCadence/internal/testsupport"
 )
 
 // cli runs the CLI in-process and returns stdout, stderr and the error.
@@ -38,7 +38,7 @@ func (c *cli) mustRun(args ...string) string {
 	c.t.Helper()
 	stdout, stderr, err := c.run(args...)
 	if err != nil {
-		c.t.Fatalf("devcadience %s: %v\nstderr: %s", strings.Join(args, " "), err, stderr)
+		c.t.Fatalf("devcadence %s: %v\nstderr: %s", strings.Join(args, " "), err, stderr)
 	}
 	return stdout
 }
@@ -46,7 +46,7 @@ func (c *cli) mustRun(args ...string) string {
 func TestCLIVersion(t *testing.T) {
 	c := newCLI(t)
 	out := c.mustRun("version")
-	if !strings.HasPrefix(out, "devcadience ") {
+	if !strings.HasPrefix(out, "devcadence ") {
 		t.Fatalf("version output = %q", out)
 	}
 }

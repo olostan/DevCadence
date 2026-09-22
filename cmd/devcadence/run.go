@@ -10,12 +10,12 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/olostan/DevCadience/internal/clock"
-	"github.com/olostan/DevCadience/internal/controlplane"
-	"github.com/olostan/DevCadience/internal/errs"
-	"github.com/olostan/DevCadience/internal/ids"
-	"github.com/olostan/DevCadience/internal/observability"
-	"github.com/olostan/DevCadience/internal/storage"
+	"github.com/olostan/DevCadence/internal/clock"
+	"github.com/olostan/DevCadence/internal/controlplane"
+	"github.com/olostan/DevCadence/internal/errs"
+	"github.com/olostan/DevCadence/internal/ids"
+	"github.com/olostan/DevCadence/internal/observability"
+	"github.com/olostan/DevCadence/internal/storage"
 )
 
 // errFlagHelp signals that help was requested and nothing went wrong.
@@ -64,10 +64,10 @@ func commands() []command {
 }
 
 func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
-	fs := flag.NewFlagSet("devcadience", flag.ContinueOnError)
+	fs := flag.NewFlagSet("devcadence", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	var g globals
-	fs.StringVar(&g.dbPath, "db", "", "control-plane database path (default $DEVCADIENCE_HOME/state/control-plane.db)")
+	fs.StringVar(&g.dbPath, "db", "", "control-plane database path (default $DEVCADENCE_HOME/state/control-plane.db)")
 	fs.StringVar(&g.logLevel, "log-level", "warn", "log level: debug, info, warn, error")
 	fs.BoolVar(&g.logJSON, "log-json", false, "emit structured logs as JSON")
 	fs.Usage = func() { usage(stderr, fs) }
@@ -101,7 +101,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 }
 
 func usage(w io.Writer, fs *flag.FlagSet) {
-	fmt.Fprintln(w, "usage: devcadience [global flags] <command> [arguments]")
+	fmt.Fprintln(w, "usage: devcadence [global flags] <command> [arguments]")
 	fmt.Fprintln(w, "\nCommands:")
 	for _, c := range commands() {
 		fmt.Fprintf(w, "  %-10s %s\n", c.name, c.summary)
@@ -110,24 +110,24 @@ func usage(w io.Writer, fs *flag.FlagSet) {
 	fs.PrintDefaults()
 }
 
-// defaultDatabasePath resolves $DEVCADIENCE_HOME/state/control-plane.db.
+// defaultDatabasePath resolves $DEVCADENCE_HOME/state/control-plane.db.
 //
 // docs/SETUP.md §8 keeps runtime state out of target project source trees by
-// default, so the database lives under the user's DevCadience home rather
+// default, so the database lives under the user's DevCadence home rather
 // than the working directory.
 func defaultDatabasePath() (string, error) {
-	home := os.Getenv("DEVCADIENCE_HOME")
+	home := os.Getenv("DEVCADENCE_HOME")
 	if home == "" {
 		userHome, err := os.UserHomeDir()
 		if err != nil {
 			return "", errs.Wrap(errs.CategoryInvalidArgument, err,
 				"cannot determine home directory; pass -db explicitly")
 		}
-		home = filepath.Join(userHome, ".devcadience")
+		home = filepath.Join(userHome, ".devcadence")
 	}
 	if !filepath.IsAbs(home) {
 		return "", errs.New(errs.CategoryInvalidArgument,
-			"DEVCADIENCE_HOME must be an absolute path, got %q", home)
+			"DEVCADENCE_HOME must be an absolute path, got %q", home)
 	}
 	return filepath.Join(home, "state", "control-plane.db"), nil
 }
@@ -202,6 +202,6 @@ func splitList(value string) []string {
 }
 
 func runVersion(_ context.Context, e *env, _ []string) error {
-	fmt.Fprintf(e.stdout, "devcadience %s\n", version)
+	fmt.Fprintf(e.stdout, "devcadence %s\n", version)
 	return nil
 }

@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/olostan/DevCadience/schemas/review-campaign.schema.json",
-  "title": "DevCadience ReviewCampaign",
+  "$id": "https://github.com/olostan/DevCadence/schemas/review-campaign.schema.json",
+  "title": "DevCadence ReviewCampaign",
   "type": "object",
   "additionalProperties": false,
   "required": [

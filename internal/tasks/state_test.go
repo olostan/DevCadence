@@ -4,9 +4,9 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/olostan/DevCadience/internal/errs"
-	"github.com/olostan/DevCadience/internal/protocol"
-	"github.com/olostan/DevCadience/internal/tasks"
+	"github.com/olostan/DevCadence/internal/errs"
+	"github.com/olostan/DevCadence/internal/protocol"
+	"github.com/olostan/DevCadence/internal/tasks"
 )
 
 // legalTransitions is the lifecycle of docs/LIFECYCLE.md §12, written out by

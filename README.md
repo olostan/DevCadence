@@ -1,6 +1,6 @@
-# DevCadience
+# DevCadence
 
-**DevCadience is a local-first intelligent software-development control plane.** It combines scarce frontier-model reasoning with capability-routed execution cognition through explicit engineering protocols, evidence-backed project state, deterministic verification, independent review, and risk-based escalation.
+**DevCadence is a local-first intelligent software-development control plane.** It combines scarce frontier-model reasoning with capability-routed execution cognition through explicit engineering protocols, evidence-backed project state, deterministic verification, independent review, and risk-based escalation.
 
 Local-first means that repository authority, canonical state, deterministic execution, evidence and acceptance remain under the local control plane. Model inference itself may be local or remote according to capability, privacy, cost and policy.
 
@@ -8,7 +8,7 @@ The central idea is simple:
 
 > Spend frontier intelligence on the decisions where intelligence has the greatest leverage. Spend lower-cost cognition and deterministic compute on the high-volume work of repository exploration, implementation, testing, critique, and repeated verification.
 
-DevCadience is not intended to be another chat-based coding assistant. It is designed as a persistent engineering organization that can accompany a project from a vague idea through research, architecture, implementation, refactoring, long-term evolution, and learning from previous mistakes.
+DevCadence is not intended to be another chat-based coding assistant. It is designed as a persistent engineering organization that can accompany a project from a vague idea through research, architecture, implementation, refactoring, long-term evolution, and learning from previous mistakes.
 
 ## Core thesis
 
@@ -18,7 +18,7 @@ Strong local models are one excellent execution option, but not a prerequisite. 
 
 The invariant is not “cloud versus local.” It is **high-leverage cognition versus high-volume cognition versus deterministic machinery**, with source exposure and cost controlled explicitly.
 
-DevCadience creates a strict information boundary between those roles.
+DevCadence creates a strict information boundary between those roles.
 
 ## The intelligence hierarchy
 
@@ -75,7 +75,7 @@ No individual model provider, local runtime, consultant subscription, or princip
 
 ## Non-goals
 
-DevCadience is not:
+DevCadence is not:
 - a system that blindly replaces engineers;
 - a prompt wrapper around one model;
 - an attempt to minimize all frontier-model calls;
@@ -87,7 +87,7 @@ Time is intentionally a secondary optimization target. For important work, hours
 
 ## Four continuous loops
 
-DevCadience treats software engineering as four coupled loops:
+DevCadence treats software engineering as four coupled loops:
 
 1. **Product loop** — idea, problem framing, requirements, non-goals, constraints, research, validation.
 2. **Architecture loop** — alternatives, assumptions, critique, consultant review, ADRs, invariants, baseline.
@@ -115,7 +115,7 @@ See [docs/LIFECYCLE.md](docs/LIFECYCLE.md).
 
 ## Discovery before architecture
 
-DevCadience does not assume a human arrives with a complete specification. A dedicated **Discovery Principal** collaborates with the human, local evidence, current external research, experiments, and independent consultants to turn a fuzzy idea into a versioned ProblemModel and evidence-backed requirements.
+DevCadence does not assume a human arrives with a complete specification. A dedicated **Discovery Principal** collaborates with the human, local evidence, current external research, experiments, and independent consultants to turn a fuzzy idea into a versioned ProblemModel and evidence-backed requirements.
 
 The Discovery Principal maintains an **Ambiguity Ledger**, asks only the highest-impact questions that require human authority, reflects its current interpretation back to the human, and runs an independent specification red-team before architecture begins.
 
@@ -125,21 +125,21 @@ See [docs/DISCOVERY_AND_SPECIFICATION.md](docs/DISCOVERY_AND_SPECIFICATION.md).
 
 ## Existing-project adoption
 
-DevCadience is not only for projects created under DevCadience from Day 0.
+DevCadence is not only for projects created under DevCadence from Day 0.
 
-An existing repository may start with no useful documentation, stale design notes, undocumented contracts, or code/tests that disagree with prose. DevCadience treats that as a **brownfield adoption** problem rather than pretending registration equals understanding.
+An existing repository may start with no useful documentation, stale design notes, undocumented contracts, or code/tests that disagree with prose. DevCadence treats that as a **brownfield adoption** problem rather than pretending registration equals understanding.
 
 The adoption workflow inventories the repository, harvests existing docs, reconstructs contracts from source/tests/schemas/history, exposes contradictions and human-authority questions, and materializes a mandatory canonical project documentation baseline in Git.
 
-A brownfield repository is not READY for normal DevCadience-managed implementation until that baseline is committed and the Adoption Readiness Gate passes.
+A brownfield repository is not READY for normal DevCadence-managed implementation until that baseline is committed and the Adoption Readiness Gate passes.
 
 See [docs/PROJECT_ADOPTION.md](docs/PROJECT_ADOPTION.md).
 
 ## Adaptive environment onboarding
 
-DevCadience also assumes the machine itself may be blank: no Ollama, no MLX, no GPU runtime, no AI CLI, no provider credentials and no supported principal host.
+DevCadence also assumes the machine itself may be blank: no Ollama, no MLX, no GPU runtime, no AI CLI, no provider credentials and no supported principal host.
 
-`devcadience doctor` / `devcadience setup` are intended to discover hardware and software, verify actual acceleration rather than infer it, find existing authenticated cognition endpoints, recommend a deployment profile, and guide approved installation/configuration.
+`devcadence doctor` / `devcadence setup` are intended to discover hardware and software, verify actual acceleration rather than infer it, find existing authenticated cognition endpoints, recommend a deployment profile, and guide approved installation/configuration.
 
 Initial principal hosts are deliberately bounded to **Antigravity, Cursor, and Visual Studio Code**. Antigravity is the reference integration, not a dependency.
 
@@ -167,7 +167,7 @@ The Work Package is a compiled form of frontier reasoning. It should reduce the 
 
 ## Canonical project state
 
-The principal does not rely on a huge chat transcript as project memory. DevCadience maintains a compact, versioned Engineering State Model containing:
+The principal does not rely on a huge chat transcript as project memory. DevCadence maintains a compact, versioned Engineering State Model containing:
 - current revision and baseline commit;
 - product intent and active milestone;
 - component state and public contracts;
@@ -184,7 +184,7 @@ The state is derived from append-only engineering events where practical so that
 
 ## Evidence before confidence
 
-Model confidence is not evidence. DevCadience distinguishes:
+Model confidence is not evidence. DevCadence distinguishes:
 - deterministic facts from tools and tests;
 - repository observations with exact provenance;
 - model interpretations;
@@ -211,7 +211,7 @@ The first plausible solution is not automatically the final solution.
 
 ## High-volume execution philosophy
 
-High-volume cognition is treated as a routable resource. DevCadience may intentionally use:
+High-volume cognition is treated as a routable resource. DevCadence may intentionally use:
 - deterministic repository search/indexing before any model call;
 - repeated repository scouting;
 - small local models for ranking/extraction/compression;
@@ -231,7 +231,7 @@ The scheduler optimizes primarily for correctness, durable quality, privacy and 
 
 Independent review is intentionally abundant, but serial review/repair loops are not allowed to consume context indefinitely.
 
-DevCadience groups review into a bounded **ReviewCampaign**: multiple independent reviewers inspect the same immutable candidate, the principal adjudicates findings once, current repairs are consolidated into one Repair Work Package, revalidation is focused, and a higher-threshold Closure Review freezes the candidate when residual risk is bounded.
+DevCadence groups review into a bounded **ReviewCampaign**: multiple independent reviewers inspect the same immutable candidate, the principal adjudicates findings once, current repairs are consolidated into one Repair Work Package, revalidation is focused, and a higher-threshold Closure Review freezes the candidate when residual risk is bounded.
 
 A frozen decision is reopened only by materially new evidence or changed requirements—not because another model prefers a different valid design.
 
@@ -241,7 +241,7 @@ See [docs/REVIEW_AND_CONVERGENCE.md](docs/REVIEW_AND_CONVERGENCE.md).
 
 Long-running LLM implementation can accumulate the same local optimizations and global smells seen in human development, amplified by autonomous repetition. Refactoring is therefore a planned lifecycle phase rather than optional cleanup.
 
-DevCadience schedules **Refactoring Epochs** and periodic **Architecture Reconciliation** to detect:
+DevCadence schedules **Refactoring Epochs** and periodic **Architecture Reconciliation** to detect:
 - duplicated or overlapping abstractions;
 - layer leakage;
 - API growth;
@@ -293,7 +293,7 @@ Start here:
 | [docs/adr/0000-template.md](docs/adr/0000-template.md) | Architecture Decision Record template |
 | [docs/adr/](docs/adr/) | Accepted ADRs, including bounded review convergence, adaptive onboarding/cognition, and mandatory brownfield adoption |
 
-Machine-readable schema definitions live under [schemas/](schemas/). Frontier behavior sources include [skills/antigravity-discovery/](skills/antigravity-discovery/) for Day-0 specification work and [skills/antigravity-principal/](skills/antigravity-principal/) for architecture/delivery. The installable Antigravity adapter skeleton lives under [integrations/antigravity/devcadience/](integrations/antigravity/devcadience/). Local role templates are under [prompts/](prompts/) and an illustrative project policy is in [config/project.example.yaml](config/project.example.yaml).
+Machine-readable schema definitions live under [schemas/](schemas/). Frontier behavior sources include [skills/antigravity-discovery/](skills/antigravity-discovery/) for Day-0 specification work and [skills/antigravity-principal/](skills/antigravity-principal/) for architecture/delivery. The installable Antigravity adapter skeleton lives under [integrations/antigravity/devcadence/](integrations/antigravity/devcadence/). Local role templates are under [prompts/](prompts/) and an illustrative project policy is in [config/project.example.yaml](config/project.example.yaml).
 
 ## Proposed implementation shape
 
@@ -316,7 +316,7 @@ These are architectural defaults, not unchangeable dogma. Changes require eviden
 
 The first important experiment is intentionally focused:
 
-> Can a frontier principal successfully drive real implementation tasks through DevCadience using compact state/evidence, while repository-heavy work is handled by the cheapest policy-compliant cognition and deterministic tools, with strong validation/review and materially less frontier repository context?
+> Can a frontier principal successfully drive real implementation tasks through DevCadence using compact state/evidence, while repository-heavy work is handled by the cheapest policy-compliant cognition and deterministic tools, with strong validation/review and materially less frontier repository context?
 
 The proof must work across materially different deployment profiles:
 - strong local cognition;
@@ -324,7 +324,7 @@ The proof must work across materially different deployment profiles:
 - no-local-model/cloud-cognition operation.
 
 It must also prove both:
-- a DevCadience-native/greenfield project;
+- a DevCadence-native/greenfield project;
 - a brownfield repository reconstructed into the mandatory canonical documentation baseline before managed work begins.
 
 If that hypothesis fails, the architecture must be revised before adding autonomous campaigns or self-improvement.
@@ -337,34 +337,34 @@ endpoints from observed evidence — all without requiring any model runtime.
 M3B will add guided setup, remediation planning and the terminal UX.
 
 ```bash
-go build -o bin/devcadience ./cmd/devcadience
+go build -o bin/devcadence ./cmd/devcadence
 
 # Initialise a project. The database lives at
-# $DEVCADIENCE_HOME/state/control-plane.db (default ~/.devcadience); pass
+# $DEVCADENCE_HOME/state/control-plane.db (default ~/.devcadence); pass
 # -db to override it.
-bin/devcadience project init -id demo -name Demo   -milestone-id M1 -milestone-title "Domain core"
+bin/devcadence project init -id demo -name Demo   -milestone-id M1 -milestone-title "Domain core"
 
-bin/devcadience task create -project demo -alias DC-001   -title "Bounded journal reads" -class systemic
+bin/devcadence task create -project demo -alias DC-001   -title "Bounded journal reads" -class systemic
 
-bin/devcadience state show   -project demo      # canonical ProjectState
-bin/devcadience events list  -project demo      # the engineering journal
-bin/devcadience task show    -project demo -task DC-001
-bin/devcadience task states                     # the lifecycle
-bin/devcadience event types                     # the event vocabulary
+bin/devcadence state show   -project demo      # canonical ProjectState
+bin/devcadence events list  -project demo      # the engineering journal
+bin/devcadence task show    -project demo -task DC-001
+bin/devcadence task states                     # the lifecycle
+bin/devcadence event types                     # the event vocabulary
 ```
 
 Engineering events are appended as typed payloads, which is how a synthetic
 project is driven through its lifecycle:
 
 ```bash
-bin/devcadience event append -project demo -type TaskDesignStarted   -task DC-001 -payload '{"reason":"initial design"}'
+bin/devcadence event append -project demo -type TaskDesignStarted   -task DC-001 -payload '{"reason":"initial design"}'
 ```
 
 An event that references a durable record — a Work Package, a validation or a
 review result — is appended together with that record, in one transaction:
 
 ```bash
-bin/devcadience event append -project demo -type ValidationCompleted -task DC-001 \
+bin/devcadence event append -project demo -type ValidationCompleted -task DC-001 \
   -payload '{"attempt_id":"att_1","validation_id":"val_1","scope":"attempt","status":"pass","commit":"cafebabe1234","record_digest":"sha256:..."}' \
   -record @validation-result.json
 ```
@@ -378,8 +378,8 @@ The materialised state is derived, never authoritative. It can be destroyed
 and rebuilt from the journal alone:
 
 ```bash
-bin/devcadience state rebuild -project demo
-bin/devcadience state show -project demo -at 4   # any historical revision
+bin/devcadence state rebuild -project demo
+bin/devcadence state show -project demo -at 4   # any historical revision
 ```
 
 Verification:
@@ -393,32 +393,32 @@ make race          # the suite under the race detector
 
 ```bash
 # Inspect a repository (registration + deterministic Git facts; no mutation).
-bin/devcadience repo inspect -project demo -path /absolute/path/to/repo
+bin/devcadence repo inspect -project demo -path /absolute/path/to/repo
 
 # Create an isolated worktree for one attempt, from an explicit base commit.
 # This prints "created worktree DC-001/att-1 at <path> (branch ...)" — under
-# $DEVCADIENCE_HOME/worktrees/demo/DC-001/att-1 by default, or under -root if
+# $DEVCADENCE_HOME/worktrees/demo/DC-001/att-1 by default, or under -root if
 # one was given; use the path it actually prints, not a guessed one.
-bin/devcadience worktree create -project demo -repo /absolute/path/to/repo \
+bin/devcadence worktree create -project demo -repo /absolute/path/to/repo \
   -task DC-001 -attempt att-1 -base "$(git -C /absolute/path/to/repo rev-parse HEAD)"
 
-bin/devcadience worktree list -project demo
+bin/devcadence worktree list -project demo
 
 # Run one controlled command (no shell) against a working directory (the
 # path worktree create printed above).
-bin/devcadience run -dir "$DEVCADIENCE_HOME/worktrees/demo/DC-001/att-1" -- go build ./...
+bin/devcadence run -dir "$DEVCADENCE_HOME/worktrees/demo/DC-001/att-1" -- go build ./...
 
 # Execute a validation profile and persist a real ValidationResult +
 # ValidationCompleted, with matching digests, in one control-plane transaction.
-bin/devcadience validate -project demo -profile-file config/project.example.yaml \
+bin/devcadence validate -project demo -profile-file config/project.example.yaml \
   -profile fast -dir /absolute/path/to/repo -commit <head-sha> -scope baseline
 
 # Deterministic candidate/diff/integration metadata, without touching main.
-bin/devcadience candidate show -project demo -repo /absolute/path/to/repo \
+bin/devcadence candidate show -project demo -repo /absolute/path/to/repo \
   -base <base-sha> -head <head-sha>
 
 # Clean up (refuses a dirty worktree unless -force).
-bin/devcadience worktree cleanup -project demo -repo /absolute/path/to/repo -id DC-001/att-1
+bin/devcadence worktree cleanup -project demo -repo /absolute/path/to/repo -id DC-001/att-1
 ```
 
 Every one of these is a thin adapter over `internal/repository`,
@@ -427,11 +427,11 @@ Every one of these is a thin adapter over `internal/repository`,
 
 ## Status
 
-DevCadience has completed **M0 (normative baseline)**, **M1 (domain core and canonical state)**, **M2 (repository, worktree and process execution)** and **M3A (environment intelligence and cognition runtime)**.
+DevCadence has completed **M0 (normative baseline)**, **M1 (domain core and canonical state)**, **M2 (repository, worktree and process execution)** and **M3A (environment intelligence and cognition runtime)**.
 
-M2 is merged on `main`: DevCadience can operate deterministically on real Git repositories using isolated worktrees, controlled subprocesses, content-addressed artifacts, validation profiles, commit-bound evidence and non-mutating candidate/integration inspection without requiring any LLM.
+M2 is merged on `main`: DevCadence can operate deterministically on real Git repositories using isolated worktrees, controlled subprocesses, content-addressed artifacts, validation profiles, commit-bound evidence and non-mutating candidate/integration inspection without requiring any LLM.
 
-M3A adds environment intelligence on that substrate. DevCadience discovers the
+M3A adds environment intelligence on that substrate. DevCadence discovers the
 machine from operating-system facts rather than from vendor tooling, assesses
 which accelerator backends are plausible, discovers cognition endpoints across
 local runtimes, authenticated coding CLIs and remote APIs, verifies local
@@ -442,10 +442,10 @@ supported operating state rather than a failure, and nothing in M3A mutates the
 machine.
 
 ```bash
-bin/devcadience environment inspect         # hardware, software, backend candidates
-bin/devcadience cognition list              # endpoints, health, readiness assessment
-bin/devcadience cognition probe <endpoint>  # explicit synthetic inference probe
-bin/devcadience cognition route --role implementer
+bin/devcadence environment inspect         # hardware, software, backend candidates
+bin/devcadence cognition list              # endpoints, health, readiness assessment
+bin/devcadence cognition probe <endpoint>  # explicit synthetic inference probe
+bin/devcadence cognition route --role implementer
 ```
 
 See [docs/adr/0013-environment-intelligence-and-cognition-contracts.md](docs/adr/0013-environment-intelligence-and-cognition-contracts.md)

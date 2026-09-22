@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/olostan/DevCadience/internal/protocol"
+	"github.com/olostan/DevCadence/internal/protocol"
 )
 
 // macOS discovery goes through sysctl and sw_vers rather than a pseudo

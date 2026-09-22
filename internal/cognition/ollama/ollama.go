@@ -38,9 +38,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/olostan/DevCadience/internal/cognition"
-	"github.com/olostan/DevCadience/internal/errs"
-	"github.com/olostan/DevCadience/internal/protocol"
+	"github.com/olostan/DevCadence/internal/cognition"
+	"github.com/olostan/DevCadence/internal/errs"
+	"github.com/olostan/DevCadence/internal/protocol"
 )
 
 // AdapterID is the stable adapter identity and the prefix of its endpoint ids.
@@ -89,7 +89,7 @@ type HTTPTransport struct {
 //
 // baseURL empty selects OLLAMA_HOST when set and DefaultBaseURL otherwise,
 // matching the runtime's own convention so that a user who moved the port does
-// not have to configure DevCadience twice.
+// not have to configure DevCadence twice.
 func NewHTTPTransport(baseURL string) (*HTTPTransport, error) {
 	if baseURL == "" {
 		baseURL = strings.TrimSpace(os.Getenv("OLLAMA_HOST"))
@@ -648,7 +648,7 @@ func appendDetail(existing, addition string) string {
 // sanitize bounds and de-fangs text taken from the runtime.
 //
 // Model names, version strings and error text all originate outside
-// DevCadience and end up in durable records and operator terminals, so control
+// DevCadence and end up in durable records and operator terminals, so control
 // characters are dropped and length is bounded (DCI-083).
 func sanitize(value string, max int) string {
 	var b strings.Builder

@@ -2,7 +2,7 @@
 
 ## Scope
 
-DevCadience is driven through a **PrincipalHost** integration, not by one mandatory editor or model vendor.
+DevCadence is driven through a **PrincipalHost** integration, not by one mandatory editor or model vendor.
 
 The initial supported host scope is deliberately narrow:
 
@@ -25,15 +25,15 @@ Examples:
 ```text
 Antigravity host
   -> Gemini cognition
-  -> DevCadience semantic MCP
+  -> DevCadence semantic MCP
 
 Cursor host
   -> configured model/provider
-  -> DevCadience semantic MCP
+  -> DevCadence semantic MCP
 
 VS Code host
   -> configured agent/model
-  -> DevCadience semantic MCP
+  -> DevCadence semantic MCP
 ```
 
 Codex CLI, Claude Code, local Ollama, remote APIs and similar tools are normally cognition endpoints or worker/consultant integrations, not principal-host requirements.
@@ -90,12 +90,12 @@ The onboarding flow should:
 6. request approval for mutating actions;
 7. guide or automate installation where safe;
 8. verify the installed version;
-9. configure the DevCadience integration when available;
+9. configure the DevCadence integration when available;
 10. smoke-test the semantic connection.
 
 The user may choose **Skip for now**.
 
-DevCadience remains usable for deterministic/local worker capabilities that do not require a principal host.
+DevCadence remains usable for deterministic/local worker capabilities that do not require a principal host.
 
 ## 4. Existing-host preference
 
@@ -117,7 +117,7 @@ Alternatives:
   Install Cursor
 ```
 
-If multiple supported hosts exist, the user chooses. DevCadience should not silently replace the operator's preferred environment.
+If multiple supported hosts exist, the user chooses. DevCadence should not silently replace the operator's preferred environment.
 
 ## 5. Initial host sequence
 
@@ -165,8 +165,8 @@ In particular:
 - installation is explicit;
 - host login/authentication uses supported vendor mechanisms;
 - plugin/MCP configuration is planned and auditable;
-- DevCadience does not scrape or copy unrelated host credentials;
-- rollback/removal should be possible for DevCadience-owned configuration.
+- DevCadence does not scrape or copy unrelated host credentials;
+- rollback/removal should be possible for DevCadence-owned configuration.
 
 ## 8. Verification
 
@@ -175,7 +175,7 @@ A host is not considered ready merely because its executable/application exists.
 Verification should establish, where applicable:
 
 - supported/compatible version;
-- DevCadience integration installed/configured;
+- DevCadence integration installed/configured;
 - semantic MCP endpoint launches/connects;
 - expected principal instructions are available;
 - a harmless semantic smoke operation succeeds;
@@ -202,4 +202,4 @@ This section is a compatibility direction, not a promise to implement every list
 
 The onboarding experience should communicate:
 
-> DevCadience adapts to the development environment you already use. Antigravity, Cursor and VS Code are the initial first-class hosts; none is a mandatory architectural dependency.
+> DevCadence adapts to the development environment you already use. Antigravity, Cursor and VS Code are the initial first-class hosts; none is a mandatory architectural dependency.

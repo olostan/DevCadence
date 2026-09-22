@@ -151,7 +151,7 @@ projection would then never match its original.
 
 ## Implementation guidance
 
-- `internal/ids` and `internal/clock` have no dependencies on other DevCadience
+- `internal/ids` and `internal/clock` have no dependencies on other DevCadence
   packages, so any package may use them.
 - Domain and storage code never calls `time.Now()`; it takes a `Clock`.
 - `controlplane.Service` holds one clock and one ID source and passes the same

@@ -6,9 +6,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/olostan/DevCadience/internal/errs"
-	"github.com/olostan/DevCadience/internal/repository"
-	"github.com/olostan/DevCadience/internal/testsupport"
+	"github.com/olostan/DevCadence/internal/errs"
+	"github.com/olostan/DevCadence/internal/repository"
+	"github.com/olostan/DevCadence/internal/testsupport"
 )
 
 func TestRegisterValidRepository(t *testing.T) {

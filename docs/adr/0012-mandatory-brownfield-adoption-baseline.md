@@ -7,11 +7,11 @@
 
 ## Context
 
-DevCadience must be able to take over existing repositories, including projects with no useful documentation, stale documentation, arbitrary documentation formats, undocumented tests/contracts, and architectural rationale preserved only in code or Git history.
+DevCadence must be able to take over existing repositories, including projects with no useful documentation, stale documentation, arbitrary documentation formats, undocumented tests/contracts, and architectural rationale preserved only in code or Git history.
 
-Repository registration alone is insufficient. If DevCadience begins normal managed engineering work before reconstructing the project's current engineering contract, later agents can make locally reasonable changes against incorrect assumptions.
+Repository registration alone is insufficient. If DevCadence begins normal managed engineering work before reconstructing the project's current engineering contract, later agents can make locally reasonable changes against incorrect assumptions.
 
-Conversely, requiring every existing repository to already contain DevCadience-formatted documentation would prevent brownfield adoption entirely.
+Conversely, requiring every existing repository to already contain DevCadence-formatted documentation would prevent brownfield adoption entirely.
 
 ## Decision
 
@@ -23,7 +23,7 @@ The workflow may inspect code, tests, existing documentation, configuration and 
 
 ### 2. Canonical project documentation is mandatory
 
-A repository is not DevCadience-ready until a required canonical documentation baseline exists in Git and passes the Adoption Readiness Gate.
+A repository is not DevCadence-ready until a required canonical documentation baseline exists in Git and passes the Adoption Readiness Gate.
 
 The required semantic slots are:
 
@@ -36,7 +36,7 @@ The required semantic slots are:
 - OPERATIONS.md;
 - adr/README.md plus the applicable ADR set.
 
-The default canonical root for adopted projects is `docs/devcadience/`. Another committed path may be configured explicitly.
+The default canonical root for adopted projects is `docs/devcadence/`. Another committed path may be configured explicitly.
 
 Required artifacts are not optional. A genuinely inapplicable concern is represented explicitly as NOT_APPLICABLE with rationale.
 
@@ -62,13 +62,13 @@ The adoption record pins:
 - evidence and unresolved-risk references;
 - readiness decision.
 
-This creates a durable historical boundary between legacy repository state and DevCadience-managed state.
+This creates a durable historical boundary between legacy repository state and DevCadence-managed state.
 
 ### 6. Normal managed work is gated
 
 Before adoption READY, bounded discovery and adoption work are allowed.
 
-Normal autonomous implementation, acceptance and integration as a DevCadience-managed project are blocked.
+Normal autonomous implementation, acceptance and integration as a DevCadence-managed project are blocked.
 
 ### 7. Readiness means bounded uncertainty
 
@@ -85,11 +85,11 @@ The gate requires enough evidence that:
 
 ### Positive
 
-- DevCadience can safely adopt poorly documented existing repositories.
+- DevCadence can safely adopt poorly documented existing repositories.
 - Every managed project presents a predictable canonical contract to future agents.
 - Existing documentation is preserved rather than destructively reformatted.
 - Code/tests/history can repair stale or missing documentation.
-- The point where DevCadience begins managing the project is auditable in Git.
+- The point where DevCadence begins managing the project is auditable in Git.
 - Reconstructed rationale does not masquerade as original documented intent.
 
 ### Costs

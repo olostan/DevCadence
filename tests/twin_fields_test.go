@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/olostan/DevCadience/internal/protocol"
+	"github.com/olostan/DevCadence/internal/protocol"
 )
 
 // TestSchemaTopLevelFieldsMatchTheGoTwin catches the drift that fixture tests

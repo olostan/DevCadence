@@ -1,8 +1,8 @@
-# DevCadience Engineering Lifecycle
+# DevCadence Engineering Lifecycle
 
 ## Scope
 
-This document defines how DevCadience handles a project from Day 0 through long-term maintenance. The lifecycle is deliberately broader than code generation.
+This document defines how DevCadence handles a project from Day 0 through long-term maintenance. The lifecycle is deliberately broader than code generation.
 
 ## 1. Whole-project lifecycle
 

@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/olostan/DevCadience/internal/errs"
+	"github.com/olostan/DevCadence/internal/errs"
 	"gopkg.in/yaml.v3"
 )
 

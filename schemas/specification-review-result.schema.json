@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/olostan/DevCadience/schemas/specification-review-result.schema.json",
-  "title": "DevCadience SpecificationReviewResult",
+  "$id": "https://github.com/olostan/DevCadence/schemas/specification-review-result.schema.json",
+  "title": "DevCadence SpecificationReviewResult",
   "description": "Independent evidence about a specification, produced before implementation exists. Distinct from ReviewResult, which judges a candidate against an Engineering Work Package.",
   "type": "object",
   "additionalProperties": false,

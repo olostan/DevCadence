@@ -1,4 +1,4 @@
-# DevCadience developer entry points.
+# DevCadence developer entry points.
 #
 # These are the checks a contributor runs locally and the ones a milestone
 # verification gate runs. Keep them boring: the Makefile exists so that
@@ -11,9 +11,9 @@ BIN_DIR ?= bin
 
 all: verify
 
-## build: compile the CLI into bin/devcadience.
+## build: compile the CLI into bin/devcadence.
 build:
-	$(GO) build -o $(BIN_DIR)/devcadience ./cmd/devcadience
+	$(GO) build -o $(BIN_DIR)/devcadence ./cmd/devcadence
 
 ## test: run the full suite. No model runtime is required.
 test:
@@ -29,7 +29,7 @@ race:
 
 ## schemas: validate the published fixtures against the published schemas.
 schemas: build
-	$(BIN_DIR)/devcadience schema validate fixtures/protocol/*.valid*.json
+	$(BIN_DIR)/devcadence schema validate fixtures/protocol/*.valid*.json
 
 ## verify: the milestone verification gate.
 verify: vet test schemas

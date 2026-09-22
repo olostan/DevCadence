@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/olostan/DevCadience/internal/errs"
+	"github.com/olostan/DevCadence/internal/errs"
 )
 
 func TestErrorsMatchByCategoryNotByMessage(t *testing.T) {

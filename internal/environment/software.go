@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/olostan/DevCadience/internal/protocol"
+	"github.com/olostan/DevCadence/internal/protocol"
 )
 
 // Software discovery answers "what is installed", and deliberately stops there.
@@ -56,7 +56,7 @@ const InventoryRevision = "software-inventory/2026-09-21"
 // DefaultInventory is the software this build knows how to look for.
 //
 // It is intentionally short. A universal software database is explicitly out of
-// scope; the list covers the deterministic tooling DevCadience depends on, the
+// scope; the list covers the deterministic tooling DevCadence depends on, the
 // local runtimes it can adapt, the coding CLIs it can route to, the accelerator
 // utilities that enrich hardware facts, and the three first-class principal
 // hosts of ADR-0011 §6.

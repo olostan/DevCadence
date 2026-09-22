@@ -2,7 +2,7 @@
 
 ## Scope
 
-The Engineering State Model is DevCadience's compact, durable representation of what matters about a project **now**. It exists so the principal can reason effectively without reconstructing the project from repository source or chat history.
+The Engineering State Model is DevCadence's compact, durable representation of what matters about a project **now**. It exists so the principal can reason effectively without reconstructing the project from repository source or chat history.
 
 ## 1. Design goals
 
@@ -58,7 +58,7 @@ flowchart TB
 
 ```yaml
 schema_version: "1.0"
-project_id: devcadience
+project_id: devcadence
 state_revision: "ps_000184"
 git:
   accepted_commit: 91acd82
@@ -171,7 +171,7 @@ ProjectState fields that are derived should identify or make retrievable the evi
 
 ## 5. Event-sourced orientation
 
-DevCadience should prefer durable transition facts over arbitrary state mutation.
+DevCadence should prefer durable transition facts over arbitrary state mutation.
 
 ```mermaid
 sequenceDiagram
@@ -241,7 +241,7 @@ ProjectState is a **pure function of the event-journal prefix** it summarises:
 - Staleness is a numeric comparison: a Work Package planned at `ps_000000004`
   is older than current `ps_000000013`.
 - Historical revisions are **reconstructed on demand** by reducing the journal
-  prefix (`devcadience state show -project P -at N`) rather than stored. Only
+  prefix (`devcadence state show -project P -at N`) rather than stored. Only
   the current revision is materialised.
 
 The accepted commit advances when integration validation passes, not when a
@@ -485,7 +485,7 @@ Bootstrap may implement only a subset, but the persistence architecture should p
 
 As of M1 this is implemented and tested: the materialised projection can be
 destroyed entirely and rebuilt from the journal alone, producing a
-byte-identical ProjectState. `devcadience state rebuild -project P` performs
+byte-identical ProjectState. `devcadence state rebuild -project P` performs
 the recovery; `TestProjectionCanBeDestroyedAndRebuilt` proves it. Git facts
 and normative documents are not yet reducer inputs — M1 is
 repository-independent — so the accepted commit currently comes from recorded
@@ -654,7 +654,7 @@ A future M4B projection may expose a compact shape such as:
 adoption:
   status: reconciling
   source_commit: abc123
-  canonical_docs_root: docs/devcadience
+  canonical_docs_root: docs/devcadence
   required_artifacts:
     ready: 6
     blocked: 2

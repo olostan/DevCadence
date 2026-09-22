@@ -3,7 +3,7 @@ package protocol
 import (
 	"encoding/json"
 
-	"github.com/olostan/DevCadience/internal/errs"
+	"github.com/olostan/DevCadence/internal/errs"
 )
 
 // This file holds the durable representation of *cognition capability*: which
@@ -130,7 +130,7 @@ func (h EndpointHealth) Usable() bool { return h == EndpointHealthReady }
 // AuthStatus is the authentication state of an endpoint.
 //
 // AuthUnknown is the correct answer whenever no official, non-mutating,
-// non-secret-reading mechanism exposes the answer. DevCadience never inspects
+// non-secret-reading mechanism exposes the answer. DevCadence never inspects
 // credential files, copies tokens or launches a login flow to find out
 // (docs/SECURITY.md §7).
 type AuthStatus string
@@ -156,7 +156,7 @@ func (s AuthStatus) Valid() bool {
 
 // CostClass is a coarse monetary class.
 //
-// Classes, not amounts: DevCadience does not know a user's plan, per-token
+// Classes, not amounts: DevCadence does not know a user's plan, per-token
 // price or quota, and a fabricated number would be worse than an honest class
 // (docs/MODEL_RUNTIME.md §19). Cost is a property of an *endpoint*, not of a
 // provider: one provider commonly exposes several endpoints in different
@@ -328,7 +328,7 @@ const (
 	ProvenanceUnknown CapabilityProvenance = "unknown"
 	// ProvenanceConfigured means a human or an operator policy asserted it.
 	// That is a legitimate source of authority — the operator knows things
-	// DevCadience cannot measure — but it is not a measurement, and it is
+	// DevCadence cannot measure — but it is not a measurement, and it is
 	// recorded as configuration so a surprising routing choice can be traced
 	// to the person who declared it.
 	ProvenanceConfigured CapabilityProvenance = "configured"

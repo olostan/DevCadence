@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/olostan/DevCadience/schemas/decision-record.schema.json",
-  "title": "DevCadience DecisionRecord",
+  "$id": "https://github.com/olostan/DevCadence/schemas/decision-record.schema.json",
+  "title": "DevCadence DecisionRecord",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema_version", "decision_id", "project_id", "question", "alternatives", "selected", "criteria", "rationale", "evidence_refs", "consequences"],

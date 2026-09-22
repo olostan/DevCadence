@@ -10,17 +10,17 @@
 
 ## Context
 
-DevCadience originally specified a strong architecture/delivery pipeline once a project had enough product definition to design.
+DevCadence originally specified a strong architecture/delivery pipeline once a project had enough product definition to design.
 
 That left a dangerous gap at Day 0: a frontier principal could receive a fuzzy human idea and silently resolve product ambiguity through plausible assumptions before architecture even began.
 
-Because DevCadience explicitly relies on frontier models for high-leverage reasoning, early misunderstood intent would be compressed into durable architecture and Work Packages, amplifying rather than correcting the error.
+Because DevCadence explicitly relies on frontier models for high-leverage reasoning, early misunderstood intent would be compressed into durable architecture and Work Packages, amplifying rather than correcting the error.
 
 ## Verified facts
 
 - Human ideas are commonly incomplete and ambiguous at first articulation.
 - Many seemingly small product ambiguities materially change architecture, privacy, persistence, latency, operational burden, or scope.
-- Current DevCadience invariants already require material assumptions to be visible and challenged.
+- Current DevCadence invariants already require material assumptions to be visible and challenged.
 - Consultants, external research, local tools, and experiments can resolve different classes of uncertainty more appropriately than repeatedly asking the human.
 
 ## Assumptions
@@ -93,7 +93,7 @@ Because DevCadience explicitly relies on frontier models for high-leverage reaso
 
 Adopt Option C.
 
-DevCadience will treat Discovery & Specification as a first-class lifecycle phase before architecture for greenfield projects and product-semantic changes.
+DevCadence will treat Discovery & Specification as a first-class lifecycle phase before architecture for greenfield projects and product-semantic changes.
 
 New durable protocol objects:
 - ProblemModel;
@@ -109,7 +109,7 @@ The Antigravity integration will provide a dedicated Discovery Principal skill.
 
 The most expensive architecture error is often a correct implementation of the wrong product interpretation.
 
-DevCadience's central thesis is to use frontier intelligence where it has leverage. Day-0 problem disambiguation is one of the highest-leverage places to spend frontier reasoning, consultant diversity, current research, and human collaboration.
+DevCadence's central thesis is to use frontier intelligence where it has leverage. Day-0 problem disambiguation is one of the highest-leverage places to spend frontier reasoning, consultant diversity, current research, and human collaboration.
 
 ## Consequences
 

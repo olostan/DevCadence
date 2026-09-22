@@ -4,8 +4,8 @@ import (
 	"os"
 	"testing"
 
-	"github.com/olostan/DevCadience/internal/errs"
-	"github.com/olostan/DevCadience/internal/validation"
+	"github.com/olostan/DevCadence/internal/errs"
+	"github.com/olostan/DevCadence/internal/validation"
 )
 
 const exampleDoc = `

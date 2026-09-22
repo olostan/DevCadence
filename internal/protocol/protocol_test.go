@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/olostan/DevCadience/internal/errs"
-	"github.com/olostan/DevCadience/internal/protocol"
+	"github.com/olostan/DevCadence/internal/errs"
+	"github.com/olostan/DevCadence/internal/protocol"
 )
 
 func TestUnsupportedSchemaVersionIsRefusedExplicitly(t *testing.T) {

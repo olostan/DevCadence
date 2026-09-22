@@ -1,4 +1,4 @@
--- DevCadience control-plane baseline schema (M1).
+-- DevCadence control-plane baseline schema (M1).
 --
 -- Two kinds of table live here and they must not be confused:
 --

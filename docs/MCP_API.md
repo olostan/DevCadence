@@ -8,7 +8,7 @@ Exact MCP transport/configuration is adapter-level and may evolve without changi
 
 ### Bootstrap executable contract
 
-The `devcadience-mcp` binary MUST start the stdio MCP server when invoked with no arguments. The no-argument stdio behavior is a host-neutral compatibility contract intended to make integration straightforward from supported principal hosts.
+The `devcadence-mcp` binary MUST start the stdio MCP server when invoked with no arguments. The no-argument stdio behavior is a host-neutral compatibility contract intended to make integration straightforward from supported principal hosts.
 
 Antigravity is the reference host; Cursor and Visual Studio Code are also initial first-class host targets. Host-specific configuration remains adapter-level.
 

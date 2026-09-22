@@ -23,9 +23,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/olostan/DevCadience/internal/cognition"
-	"github.com/olostan/DevCadience/internal/errs"
-	"github.com/olostan/DevCadience/internal/protocol"
+	"github.com/olostan/DevCadence/internal/cognition"
+	"github.com/olostan/DevCadence/internal/errs"
+	"github.com/olostan/DevCadence/internal/protocol"
 )
 
 // AdapterID is the stable adapter identity and the prefix of its endpoint ids.
@@ -33,7 +33,7 @@ const AdapterID = "api"
 
 // Description is what a provider client discloses about one endpoint.
 //
-// It is what a *client* knows, not what DevCadience concludes: capability grades
+// It is what a *client* knows, not what DevCadence concludes: capability grades
 // are absent because no provider's self-description is evidence of capability
 // (DCI-012). An operator who knows better declares grades through
 // cognition.Declaration, where they are recorded as configuration.

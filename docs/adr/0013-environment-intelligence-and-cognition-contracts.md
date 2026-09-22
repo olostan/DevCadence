@@ -168,7 +168,7 @@ something change that invalidates prior verification?"
 record validation refuses any graded capability whose provenance is `unknown`.
 
 - `configured` — a human or operator policy asserted it. This is legitimate
-  authority: the operator knows things DevCadience cannot measure. It is recorded
+  authority: the operator knows things DevCadence cannot measure. It is recorded
   as configuration so a surprising routing choice traces back to the person who
   declared it.
 - `measured` — an M3A probe observed it. M3A probes establish *operational*
@@ -229,7 +229,7 @@ routing decision and grade no capability beyond what they measured.
 
 The core domain, the environment layer and the cognition core are buildable
 without any adapter; an adapter is selected at the edge, in
-`cmd/devcadience`. `tests/boundaries_test.go` enforces both directions: no
+`cmd/devcadence`. `tests/boundaries_test.go` enforces both directions: no
 third-party model SDK enters the module, and no core package imports an adapter.
 
 Compatibility knowledge — which GPU architectures ROCm supports, which CLIs exist
