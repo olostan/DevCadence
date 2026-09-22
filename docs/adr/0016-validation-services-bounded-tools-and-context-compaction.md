@@ -31,13 +31,13 @@ Integrating real-world execution and testing (such as Firebase emulators, Vite d
 - **Verified Teardown & Ownership:**
   - Services enforce an absolute `MaxLifetime` (default 15m).
   - Teardown executes unconditionally on success, failure, cancellation, and partial startup: graceful `SIGTERM` followed by forced `SIGKILL` and process reaping.
-  - Controller restart reconciliation: PID files alone never authorize termination. Process ownership is verified via start time and executable path. If ownership cannot be verified, DevCadence reports `StatusCleanupFailed` / `unresolved_reconciliation` without signaling the PID.
+  - Controller restart reconciliation: PID files alone never authorize termination. Process ownership is verified via start time matching (anti-PID recycling). Full executable path resolution across platform variants is deferred to the background task daemon integration. If ownership cannot be verified, DevCadence reports `StatusCleanupFailed` / `unresolved_reconciliation` without signaling the PID.
 
 ### 3. Bounded Tools & Universal Artifact Pagination
 
-- **Decoupled Output Sink:** `internal/process.Runner` accepts an `OutputSink` interface. The validation/tooling layer streams up to `MaxArtifactBytes` (50 MiB) into `internal/artifacts` while returning an inline preview capped at `MaxInlinePreviewBytes` (4 KiB / 20 lines).
+- **Decoupled Output Sinks:** `internal/process.Runner` accepts decoupled `StdoutSink` and `StderrSink` (`io.Writer`) interfaces. In the current foundation, process execution decoupling is delivered in the runner; direct validation streaming into `internal/artifacts` with 4 KiB previews is scheduled for the full daemon milestone.
 - **Metadata Distinctions:** Responses explicitly indicate `has_more: bool`, `capture_truncated: bool`, and `in_progress: bool`.
-- **`fetch_content` Universal Pager:** Accepts `(content_ref, offset, limit, unit="lines"|"bytes")`, operating over immutable artifact snapshots.
+- **`fetch_content` Universal Pager:** Accepts `(content_ref, offset, limit, unit="lines"|"bytes")`, operating over immutable artifact snapshots with strict byte caps and contiguous pagination.
 - **`read_file`:** `show_line_numbers` defaults to `false` to optimize tokens; set to `true` only for edit anchor targeting.
 - **`grep_search`:** Normalized `ripgrep` / `git grep` backend capped at 20 matches with `content_ref` generated.
 
@@ -45,13 +45,13 @@ Integrating real-world execution and testing (such as Firebase emulators, Vite d
 
 - A long-running command execution is an **`Operation`** (`OperationID`), distinct from an engineering `Task`.
 - 10 seconds is a **response/yield threshold**, not a process timeout. After 10s, the operation returns `status: "running"` and continues uninterrupted under its original deadline.
-- **Reactive Wakeup:** Principal hosts capable of event notifications wake the session on `OperationCompleted`. Synchronous-only hosts receive bounded status queries without busy-polling. Paused cognition state (`PAUSED_BUDGET_EXCEEDED`) is strictly decoupled from process completion.
+- **Reactive Wakeup:** Principal hosts capable of event notifications wake the session on `OperationCompleted`. Synchronous-only hosts receive bounded status queries without busy-polling. Paused cognition state (`PAUSED_BUDGET_EXCEEDED`) is strictly decoupled from process completion. Durable SQLite event logging for operations is aligned with the daemon execution milestone.
 
 ### 5. Multi-Tier Context Compaction
 
 - **Admission-Safe Context Budgeting:**
   - Denominator $C$ is the endpoint's verified/configured request token ceiling (`ContextTokens`). Unknown $C$ fails admission with an explicit error (`ErrContextLimitUnknown`); arbitrary defaults are forbidden.
-  - Total serialized load: $T_{\text{total}} = T_{\text{in}} + T_{\text{reserve}}$.
+  - Total serialized load: $T_{\text{total}} = T_{\text{in}} + T_{\text{reserve}}$. In the current foundation, token estimation uses heuristic field accounting, and summarizer delegation enforces privacy/locality policies; exact model-specific tokenizers and independent summarizer input admission are deferred to the cognition host integration.
   - Tier 1 (Deterministic Tool Pruning) triggers at $T_{\text{total}} > 75\% \cdot C$. Pruning replaces aged tool outputs with `content_ref` stubs while preserving atomic tool-call/result groups.
   - Stateful rearming: if Tier 1 yields $< 5\%$ reduction, it is marked exhausted for that turn.
   - Intermediate interval $(65\% \cdot C, 85\% \cdot C]$ proceeds to inference if it passes the final admission check.
@@ -59,16 +59,27 @@ Integrating real-world execution and testing (such as Firebase emulators, Vite d
   - **Universal Final Admission Guard:** On every path, $T_{\text{total}} \le C$ is asserted. If exceeded, the turn is halted with an admission escalation error; constraints are never dropped.
 - **Assignment & Epistemic Preservation:**
   - Protected context preserves the original EWP and subsequent authorized amendments, user corrections, and stop instructions ordered by authority level and journal sequence.
-  - Trajectory Digests are lossy derived context placed in lower-trust user messages (never system instructions). Digest claims (`authorized_by`, `evidence_ref`) must be validated against journaled records.
+  - Trajectory Digests are lossy derived context placed in lower-trust user messages (never system instructions). Digest claims (`authorized_by`, `evidence_ref`) must be validated against journaled records. Decision reference validity (`ReferenceValid`) is distinguished from statement verification.
   - Workspace checkpoints replace static diffs, tying test evidence to exact source SHAs and marking earlier evidence **STALE** after subsequent edits.
   - Summarizers inherit the parent session's exact privacy, locality, disclosure, and cost policies (`local_only` never routes remotely). Summarizer requests pass admission against their endpoint's limit without recursive compaction.
 
 ### 6. Syntactic Symbol Inspection
 
-- `find_symbol` provides **syntactic pattern matching** via Tree-sitter for Go and TypeScript/JavaScript.
-- Output explicitly states `resolution_level: "syntactic"`. Compiler-level semantic resolution (LSP) is deferred.
+- `find_symbol` provides **syntactic pattern matching** via native Go AST for Go and regex-based syntactic matching (`syntactic-regex`) for TypeScript/JavaScript. Full Cgo-dependent Tree-sitter grammar parsing is deferred to a dedicated language-service enhancement to avoid Cgo build constraints in base environments.
+- Output explicitly states `resolution_level: "syntactic"` and reports the active backend. Compiler-level semantic resolution (LSP) is deferred.
 
 ## Consequences
 
 - **Positive:** Supervised test services prevent port conflicts and daemon leaks; execution tools prevent context overflow; context compaction safely fits local models while preserving assignment integrity and privacy.
 - **Negative:** Services requiring non-standard port configuration require explicit `PortConfig` declarations.
+
+### Delivered Foundations vs. Deferred Scope
+
+| Component | Delivered Foundation | Deferred to Subsequent Milestones |
+| :--- | :--- | :--- |
+| **Output Sinks** | Decoupled `StdoutSink`/`StderrSink` in `process.Runner` | Direct validation streaming into `artifacts.Store` with live previews (Task Daemon) |
+| **Operations** | In-memory `OperationManager` with 10s yield threshold and PID reconciliation | Durable SQLite operation events across daemon restarts (Task Daemon) |
+| **Compaction** | Multi-tier pruning/summarization watermarks with strict final admission guard | BPE tokenizers and independent summarizer input admission (Cognition Integration) |
+| **Symbols** | Native Go AST + TypeScript syntactic-regex with backend reporting | Cgo Tree-sitter parser (Language Service Enhancement) |
+| **Reconciliation** | Start-time verification against PID recycling | Full cross-platform executable binary path validation |
+

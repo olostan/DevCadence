@@ -141,43 +141,45 @@ func fetchLinesFromReader(ref string, rc io.Reader, offset, limit int, maxBytes 
 
 	for {
 		line, err := readBoundedLine(reader, maxLineBuf)
-		if len(line) > 0 || (err == nil && lineIdx < end) {
-			lineIdx++
-			// Trim trailing newline for line representation
-			trimmed := strings.TrimRight(line, "\r\n")
+		if err == io.EOF && len(line) == 0 {
+			break
+		}
+		if err != nil && err != io.EOF {
+			return PagedContentResult{}, errs.Wrap(errs.CategoryInternal, err, "fetch_content: read lines %q", ref)
+		}
 
-			if lineIdx >= start && lineIdx <= end && !stoppedSelecting {
-				lineBytes := int64(len(trimmed))
-				if len(selected) > 0 {
-					lineBytes += 1 // account for newline join
-				}
+		lineIdx++
+		// Trim trailing newline for line representation
+		trimmed := strings.TrimRight(line, "\r\n")
 
-				if currentBytes+lineBytes > maxBytes {
-					truncated = true
-					stoppedSelecting = true
-					if len(selected) == 0 {
-						// Oversized first line: enforce byte ceiling by truncating line
-						if int64(len(trimmed)) > maxBytes {
-							trimmed = trimmed[:maxBytes]
-						}
-						selected = append(selected, trimmed)
-						firstOmittedLine = lineIdx + 1
-					} else {
-						// Subsequent line exceeds cap: stop selecting immediately (no holes)
-						firstOmittedLine = lineIdx
+		if lineIdx >= start && lineIdx <= end && !stoppedSelecting {
+			lineBytes := int64(len(trimmed))
+			if len(selected) > 0 {
+				lineBytes += 1 // account for newline join
+			}
+
+			if currentBytes+lineBytes > maxBytes {
+				truncated = true
+				stoppedSelecting = true
+				if len(selected) == 0 {
+					// Oversized first line: enforce byte ceiling by truncating line
+					if int64(len(trimmed)) > maxBytes {
+						trimmed = trimmed[:maxBytes]
 					}
-				} else {
 					selected = append(selected, trimmed)
-					currentBytes += lineBytes
+					firstOmittedLine = lineIdx + 1
+				} else {
+					// Subsequent line exceeds cap: stop selecting immediately (no holes)
+					firstOmittedLine = lineIdx
 				}
+			} else {
+				selected = append(selected, trimmed)
+				currentBytes += lineBytes
 			}
 		}
 
-		if err != nil {
-			if err == io.EOF {
-				break
-			}
-			return PagedContentResult{}, errs.Wrap(errs.CategoryInternal, err, "fetch_content: read lines %q", ref)
+		if err == io.EOF {
+			break
 		}
 	}
 

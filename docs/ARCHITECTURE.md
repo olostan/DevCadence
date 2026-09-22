@@ -587,9 +587,9 @@ The absence of local inference is a supported capability state.
 
 Real-world integration and execution requires robust service management and context discipline (ADR-0016):
 
-- **Supervised Services:** Auxiliary test services (Firebase emulators, dev preview servers) run under strict lifecycle supervision with dynamic port allocation, bounded lifetimes, and verified PID/process-group reaping.
-- **Bounded Tools & Universal Pagination:** Streaming output is captured into artifact storage up to 50 MiB, while inline previews are strictly bounded; `fetch_content` pages through immutable artifact snapshots.
-- **Admission-Safe Context Compaction:** Execution sessions apply multi-tier compaction (Tier 1 deterministic tool pruning, Tier 2 episodic trajectory summarization) based on endpoint token limits without arbitrary capacity guessing, preserving the authorized assignment, workspace checkpoints, and privacy boundaries.
+- **Supervised Services:** Auxiliary test services (Firebase emulators, dev preview servers) run under strict lifecycle supervision with dynamic port allocation, bounded lifetimes, and verified PID/process-group reaping (with full cross-platform executable resolution deferred to daemon execution).
+- **Bounded Tools & Universal Pagination:** Process runner outputs are decoupled via `StdoutSink`/`StderrSink`, and `fetch_content` pages through immutable artifact snapshots with strict byte caps and contiguous pagination. Full validation live streaming into artifact storage with inline previews is scheduled with the background runner milestone.
+- **Admission-Safe Context Compaction:** Execution sessions apply multi-tier compaction (Tier 1 deterministic tool pruning, Tier 2 episodic trajectory summarization) based on endpoint token limits without arbitrary capacity guessing, preserving the authorized assignment, workspace checkpoints, and privacy boundaries. Exact tokenizer integration and independent summarizer input admission are deferred to cognition host integrations.
 
 ## 13. Deployment topology: bootstrap
 

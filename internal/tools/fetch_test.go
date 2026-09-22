@@ -267,3 +267,84 @@ func TestClosureLinePageHasNoHoles(t *testing.T) {
 		t.Errorf("Expected HasMore true")
 	}
 }
+
+func TestClosureBlankLinesAfterPageCountedInTotal(t *testing.T) {
+	tempDir := t.TempDir()
+	store, err := artifacts.NewStore(filepath.Join(tempDir, "artifacts"), nil)
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+
+	// Source "a\n\n" (2 lines: "a" and blank)
+	putRes, err := store.PutBytes(t.Context(), "test_proj", "evidence", "text/plain", []byte("a\n\n"), 0)
+	if err != nil {
+		t.Fatalf("PutBytes: %v", err)
+	}
+
+	res, err := FetchContent(FetchContentOptions{
+		Artifacts:  store,
+		ProjectID:  "test_proj",
+		ContentRef: putRes.Ref.Locator,
+		Offset:     1,
+		Limit:      1,
+		Unit:       "lines",
+	})
+	if err != nil {
+		t.Fatalf("FetchContent: %v", err)
+	}
+
+	if res.TotalCount != 2 {
+		t.Errorf("Expected TotalCount 2 for 'a\\n\\n', got %d", res.TotalCount)
+	}
+	if !res.HasMore {
+		t.Errorf("Expected HasMore true when trailing blank line exists outside page")
+	}
+	if res.NextOffset != 2 {
+		t.Errorf("Expected NextOffset 2, got %d", res.NextOffset)
+	}
+}
+
+func TestClosureBlankLinesPreservedInTotals(t *testing.T) {
+	tempDir := t.TempDir()
+	store, err := artifacts.NewStore(filepath.Join(tempDir, "artifacts"), nil)
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+
+	// Source "a\n\nb\n\n" (4 lines: "a", blank, "b", blank)
+	putRes, err := store.PutBytes(t.Context(), "test_proj", "evidence", "text/plain", []byte("a\n\nb\n\n"), 0)
+	if err != nil {
+		t.Fatalf("PutBytes: %v", err)
+	}
+
+	resLimit1, err := FetchContent(FetchContentOptions{
+		Artifacts:  store,
+		ProjectID:  "test_proj",
+		ContentRef: putRes.Ref.Locator,
+		Offset:     1,
+		Limit:      1,
+		Unit:       "lines",
+	})
+	if err != nil {
+		t.Fatalf("FetchContent limit 1: %v", err)
+	}
+
+	resLimit20, err := FetchContent(FetchContentOptions{
+		Artifacts:  store,
+		ProjectID:  "test_proj",
+		ContentRef: putRes.Ref.Locator,
+		Offset:     1,
+		Limit:      20,
+		Unit:       "lines",
+	})
+	if err != nil {
+		t.Fatalf("FetchContent limit 20: %v", err)
+	}
+
+	if resLimit1.TotalCount != 4 {
+		t.Errorf("Limit 1: expected TotalCount 4, got %d", resLimit1.TotalCount)
+	}
+	if resLimit20.TotalCount != 4 {
+		t.Errorf("Limit 20: expected TotalCount 4, got %d", resLimit20.TotalCount)
+	}
+}
