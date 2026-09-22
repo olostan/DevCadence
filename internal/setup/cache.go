@@ -77,14 +77,15 @@ func (c *CacheManager) targetPath(target protocol.CacheTarget) (string, error) {
 }
 
 // ReadEntry loads and validates a cached object, returning whether it was found
-// and whether it is expired. Unlike Read, ReadEntry does NOT delete expired cache files,
+// ReadEnvelope loads and validates a cached object along with its envelope.
+// Unlike Read, ReadEnvelope does NOT delete expired cache files,
 // allowing callers to inspect stale evidence when fresh probes are shallower.
 // If the cache is missing or corrupted, it returns (zero, false, false, nil).
 // If fingerprint does not match, it returns (zero, false, false, nil).
-// If expired, it returns (data, true, true, nil).
-// If fresh and valid, it returns (data, true, false, nil).
-func ReadEntry[T any](ctx context.Context, c *CacheManager, target protocol.CacheTarget, expectedFingerprint string) (T, bool, bool, error) {
-	var zero T
+// If expired, it returns (env, true, true, nil).
+// If fresh and valid, it returns (env, true, false, nil).
+func ReadEnvelope[T any](ctx context.Context, c *CacheManager, target protocol.CacheTarget, expectedFingerprint string) (CacheEnvelope[T], bool, bool, error) {
+	var zero CacheEnvelope[T]
 	path, err := c.targetPath(target)
 	if err != nil {
 		return zero, false, false, err
@@ -134,7 +135,14 @@ func ReadEntry[T any](ctx context.Context, c *CacheManager, target protocol.Cach
 	now := c.clock.Now()
 	expired := !env.ExpiresAt.Time().IsZero() && !now.Before(env.ExpiresAt.Time())
 
-	return env.Data, true, expired, nil
+	return env, true, expired, nil
+}
+
+// ReadEntry loads and validates a cached object, returning whether it was found
+// and whether it is expired.
+func ReadEntry[T any](ctx context.Context, c *CacheManager, target protocol.CacheTarget, expectedFingerprint string) (T, bool, bool, error) {
+	env, found, expired, err := ReadEnvelope[T](ctx, c, target, expectedFingerprint)
+	return env.Data, found, expired, err
 }
 
 // Read loads and validates a cached object. If the cache is missing, expired,
@@ -148,15 +156,21 @@ func Read[T any](ctx context.Context, c *CacheManager, target protocol.CacheTarg
 	return data, true, nil
 }
 
-// Write atomically serialises data into the target cache file under an exclusive file lock.
+// Write atomically serialises data into the target cache file with a given TTL.
 func Write[T any](ctx context.Context, c *CacheManager, target protocol.CacheTarget, fingerprint string, data T, ttl time.Duration) error {
+	now := c.clock.Now()
+	var expiresAt time.Time
+	if ttl > 0 {
+		expiresAt = now.Add(ttl)
+	}
+	return WriteWithExpiresAt(ctx, c, target, fingerprint, data, expiresAt)
+}
+
+// WriteWithExpiresAt atomically serialises data into the target cache file with an explicit expiration.
+func WriteWithExpiresAt[T any](ctx context.Context, c *CacheManager, target protocol.CacheTarget, fingerprint string, data T, expiresAt time.Time) error {
 	path, err := c.targetPath(target)
 	if err != nil {
 		return err
-	}
-
-	if ttl <= 0 {
-		ttl = c.defaultTTL
 	}
 
 	if err := os.MkdirAll(c.rootDir, 0700); err != nil {
@@ -179,7 +193,7 @@ func Write[T any](ctx context.Context, c *CacheManager, target protocol.CacheTar
 	env := CacheEnvelope[T]{
 		SchemaVersion:      protocol.SchemaVersion1,
 		CreatedAt:          protocol.NewTimestamp(now),
-		ExpiresAt:          protocol.NewTimestamp(now.Add(ttl)),
+		ExpiresAt:          protocol.NewTimestamp(expiresAt),
 		MachineFingerprint: fingerprint,
 		Data:               data,
 	}

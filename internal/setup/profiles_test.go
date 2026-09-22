@@ -386,4 +386,3 @@ func TestProfileRecommenderLocalLackingImplementationGradeExcluded(t *testing.T)
 		t.Fatalf("local runtime lacking implementation capability grade must NOT be selected for local-heavy")
 	}
 }
-

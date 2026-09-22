@@ -2,11 +2,11 @@ package setup
 
 import (
 	"fmt"
-	"os/exec"
 	"sort"
 	"strings"
 
 	"github.com/olostan/DevCadence/internal/clock"
+	"github.com/olostan/DevCadence/internal/environment"
 	"github.com/olostan/DevCadence/internal/errs"
 	"github.com/olostan/DevCadence/internal/ids"
 	"github.com/olostan/DevCadence/internal/protocol"
@@ -29,6 +29,7 @@ type PlannerOptions struct {
 	IDs              ids.Source
 	RecipeSetVersion string
 	Facts            *protocol.EnvironmentFacts
+	SelectedRuntimes []string
 }
 
 // Planner generates an immutable SetupPlan from a DoctorReport and setup target.
@@ -37,6 +38,7 @@ type Planner struct {
 	ids              ids.Source
 	recipeSetVersion string
 	facts            *protocol.EnvironmentFacts
+	selectedRuntimes []string
 }
 
 // NewPlanner returns a Planner.
@@ -55,6 +57,7 @@ func NewPlanner(opts PlannerOptions) (*Planner, error) {
 		ids:              opts.IDs,
 		recipeSetVersion: opts.RecipeSetVersion,
 		facts:            opts.Facts,
+		selectedRuntimes: opts.SelectedRuntimes,
 	}, nil
 }
 
@@ -193,107 +196,167 @@ func (p *Planner) Plan(report *protocol.DoctorReport, target protocol.SetupTarge
 		}
 
 		if shouldPullOllama {
-			ollamaPath := "/usr/local/bin/ollama"
-			ollamaVersion := "0.5"
+			trustworthyIdentity := false
+			var ollamaPath string
+			var ollamaVersion string
+
 			if p.facts != nil {
-				for _, sw := range p.facts.Software {
-					if sw.ID == "ollama" {
-						if sw.Path != "" {
+				factsFp, fpErr := environment.Fingerprint(*p.facts)
+				if fpErr == nil && factsFp == report.MachineFingerprint {
+					for _, sw := range p.facts.Software {
+						if sw.ID == "ollama" && sw.Installed && sw.Path != "" && sw.Version != "" {
 							ollamaPath = sw.Path
-						}
-						if sw.Version != "" {
 							ollamaVersion = sw.Version
+							trustworthyIdentity = true
+							break
 						}
-						break
 					}
 				}
-			} else if lp, err := exec.LookPath("ollama"); err == nil && lp != "" {
-				ollamaPath = lp
 			}
 
 			actID := fmt.Sprintf("act_pull_model_%04d", actionIndex)
 			actionIndex++
-			op := protocol.TypedOperation{
-				Kind: protocol.OpKindOllamaPullModel,
-				OllamaPullModel: &protocol.OllamaPullModelParams{
-					ModelTag:            DefaultOllamaModelTag,
-					ResolvedDigest:      DefaultOllamaDigest,
-					ExpectedSizeBytes:   DefaultOllamaSizeBytes,
-					AllowedRegistryHost: DefaultOllamaRegistryHost,
-					LicenseReference:    DefaultOllamaLicense,
-				},
+
+			if trustworthyIdentity {
+				op := protocol.TypedOperation{
+					Kind: protocol.OpKindOllamaPullModel,
+					OllamaPullModel: &protocol.OllamaPullModelParams{
+						ModelTag:            DefaultOllamaModelTag,
+						ResolvedDigest:      DefaultOllamaDigest,
+						ExpectedSizeBytes:   DefaultOllamaSizeBytes,
+						AllowedRegistryHost: DefaultOllamaRegistryHost,
+						LicenseReference:    DefaultOllamaLicense,
+					},
+				}
+				effects, auth := protocol.IntrinsicPolicy(op)
+				actions = append(actions, protocol.SetupAction{
+					ActionID:      actID,
+					RecipeID:      "recipe.ollama.pull_model",
+					RecipeVersion: p.recipeSetVersion,
+					Title:         fmt.Sprintf("Pull model: %s", DefaultOllamaModelTag),
+					Description:   fmt.Sprintf("Pulls verified local coding model %s via Ollama", DefaultOllamaModelTag),
+					Authority:     auth,
+					Effects:       effects,
+					Operation:     &op,
+					DependsOn:     dirActionIDs,
+					Preconditions: []protocol.Condition{
+						{
+							Kind: protocol.CondKindCommandAvailable,
+							CommandAvailable: &protocol.CommandAvailableOperand{
+								CommandName: "ollama",
+							},
+						},
+						{
+							Kind: protocol.CondKindExecutableVerified,
+							ExecutableVerified: &protocol.ExecutableVerifiedOperand{
+								CanonicalPath:   ollamaPath,
+								ExpectedVersion: ollamaVersion,
+							},
+						},
+						{
+							Kind: protocol.CondKindPortListening,
+							PortListening: &protocol.PortOperand{
+								Host: "127.0.0.1",
+								Port: 11434,
+							},
+						},
+					},
+					Postconditions: []protocol.Condition{
+						{
+							Kind: protocol.CondKindModelDigestPresent,
+							ModelDigestPresent: &protocol.ModelDigestOperand{
+								Runtime:  "ollama",
+								ModelTag: DefaultOllamaModelTag,
+								Digest:   DefaultOllamaDigest,
+							},
+						},
+					},
+					ExpectedMutations: []protocol.ExpectedMutation{
+						{
+							Kind:   "model_pulled",
+							Target: DefaultOllamaModelTag,
+							Detail: fmt.Sprintf("Model %s with digest %s pulled to local storage", DefaultOllamaModelTag, DefaultOllamaDigest),
+						},
+					},
+					IdempotencyKey: fmt.Sprintf("ollama_pull_%s", DefaultOllamaModelTag),
+				})
+			} else {
+				actions = append(actions, protocol.SetupAction{
+					ActionID:      actID,
+					RecipeID:      "recipe.manual.pull_ollama_model",
+					RecipeVersion: p.recipeSetVersion,
+					Title:         fmt.Sprintf("Pull model manually: %s", DefaultOllamaModelTag),
+					Description:   fmt.Sprintf("Verified executable identity for Ollama is unavailable; manual model pull is required for %s", DefaultOllamaModelTag),
+					Authority:     protocol.AuthorityHighImpactManual,
+					Effects:       []protocol.EffectCategory{protocol.EffectPackageDownload, protocol.EffectFilesystemWrite},
+					DependsOn:     dirActionIDs,
+					ManualInstructions: &protocol.ManualGuide{
+						Summary: fmt.Sprintf("Pull %s using Ollama CLI", DefaultOllamaModelTag),
+						Steps: []string{
+							"Ensure Ollama is running and accessible",
+							fmt.Sprintf("Run: ollama pull %s", DefaultOllamaModelTag),
+						},
+						VerificationCheck: []protocol.Condition{
+							{
+								Kind: protocol.CondKindModelDigestPresent,
+								ModelDigestPresent: &protocol.ModelDigestOperand{
+									Runtime:  "ollama",
+									ModelTag: DefaultOllamaModelTag,
+									Digest:   DefaultOllamaDigest,
+								},
+							},
+						},
+					},
+					Postconditions: []protocol.Condition{
+						{
+							Kind: protocol.CondKindModelDigestPresent,
+							ModelDigestPresent: &protocol.ModelDigestOperand{
+								Runtime:  "ollama",
+								ModelTag: DefaultOllamaModelTag,
+								Digest:   DefaultOllamaDigest,
+							},
+						},
+					},
+					ExpectedMutations: []protocol.ExpectedMutation{
+						{
+							Kind:   "model_pulled",
+							Target: DefaultOllamaModelTag,
+							Detail: fmt.Sprintf("Model %s with digest %s pulled to local storage", DefaultOllamaModelTag, DefaultOllamaDigest),
+						},
+					},
+					IdempotencyKey: fmt.Sprintf("manual_ollama_pull_%s", DefaultOllamaModelTag),
+				})
 			}
-			effects, auth := protocol.IntrinsicPolicy(op)
-			actions = append(actions, protocol.SetupAction{
-				ActionID:      actID,
-				RecipeID:      "recipe.ollama.pull_model",
-				RecipeVersion: p.recipeSetVersion,
-				Title:         fmt.Sprintf("Pull model: %s", DefaultOllamaModelTag),
-				Description:   fmt.Sprintf("Pulls verified local coding model %s via Ollama", DefaultOllamaModelTag),
-				Authority:     auth,
-				Effects:       effects,
-				Operation:     &op,
-				DependsOn:     dirActionIDs,
-				Preconditions: []protocol.Condition{
-					{
-						Kind: protocol.CondKindCommandAvailable,
-						CommandAvailable: &protocol.CommandAvailableOperand{
-							CommandName: "ollama",
-						},
-					},
-					{
-						Kind: protocol.CondKindExecutableVerified,
-						ExecutableVerified: &protocol.ExecutableVerifiedOperand{
-							CanonicalPath:   ollamaPath,
-							ExpectedVersion: ollamaVersion,
-						},
-					},
-					{
-						Kind: protocol.CondKindPortListening,
-						PortListening: &protocol.PortOperand{
-							Host: "127.0.0.1",
-							Port: 11434,
-						},
-					},
-				},
-				Postconditions: []protocol.Condition{
-					{
-						Kind: protocol.CondKindModelDigestPresent,
-						ModelDigestPresent: &protocol.ModelDigestOperand{
-							Runtime:  "ollama",
-							ModelTag: DefaultOllamaModelTag,
-							Digest:   DefaultOllamaDigest,
-						},
-					},
-				},
-				ExpectedMutations: []protocol.ExpectedMutation{
-					{
-						Kind:   "model_pulled",
-						Target: DefaultOllamaModelTag,
-						Detail: fmt.Sprintf("Model %s with digest %s pulled to local storage", DefaultOllamaModelTag, DefaultOllamaDigest),
-					},
-				},
-				IdempotencyKey: fmt.Sprintf("ollama_pull_%s", DefaultOllamaModelTag),
-			})
 		}
 
-		// Check MLX setup
-		hasMLX := false
-		for _, ep := range report.DiscoveredEndpoints {
-			if strings.Contains(strings.ToLower(ep.ID), "mlx") {
-				hasMLX = true
+		// Check MLX setup: Gate to compatible Darwin/arm64 systems
+		isDarwinArm64 := p.facts != nil && p.facts.Host.Family == protocol.OSDarwin && p.facts.Host.Arch == "arm64"
+
+		mlxSelected := false
+		for _, r := range p.selectedRuntimes {
+			if strings.EqualFold(r, "mlx") || strings.EqualFold(r, "mlx-lm") {
+				mlxSelected = true
 				break
 			}
 		}
-		if !hasMLX && p.facts != nil {
+
+		mlxDetected := false
+		for _, ep := range report.DiscoveredEndpoints {
+			if strings.Contains(strings.ToLower(ep.ID), "mlx") {
+				mlxDetected = true
+				break
+			}
+		}
+		if !mlxDetected && p.facts != nil {
 			for _, sw := range p.facts.Software {
-				if sw.ID == "mlx" || sw.ID == "mlx-lm" {
-					hasMLX = true
+				if (sw.ID == "mlx" || sw.ID == "mlx-lm") && sw.Installed {
+					mlxDetected = true
 					break
 				}
 			}
 		}
-		if hasMLX {
+
+		if isDarwinArm64 && (mlxDetected || mlxSelected) {
 			actID := fmt.Sprintf("act_setup_mlx_%04d", actionIndex)
 			actionIndex++
 			actions = append(actions, protocol.SetupAction{

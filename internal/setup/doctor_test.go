@@ -442,21 +442,39 @@ func TestDoctorCachedInferenceEvidenceMergedAndPreserved(t *testing.T) {
 	// Prime the cache with verified acceleration and evaluated implementation capability
 	cachedVerifiedTime := protocol.NewTimestamp(now.Add(-10 * time.Minute))
 	cachedProfile := protocol.MachineCapabilityProfile{
-		SchemaVersion:      protocol.SchemaVersion1,
-		ProfileID:          "mcp_cached",
-		MachineFingerprint: fingerprint,
-		ObservedAt:         protocol.NewTimestamp(now.Add(-10 * time.Minute)),
+		SchemaVersion:         protocol.SchemaVersion1,
+		ProfileID:             "mcp_cached",
+		MachineFingerprint:    fingerprint,
+		KnowledgeRevision:     "2026-09-22",
+		ProbeDepth:            protocol.DepthInference,
+		Assessment:            protocol.AssessmentReady,
+		ObservedAt:            protocol.NewTimestamp(now.Add(-10 * time.Minute)),
+		Environment:           facts,
+		AcceleratorCandidates: []protocol.AcceleratorCandidate{},
 		Endpoints: []protocol.CognitionEndpoint{
 			{
-				ID:       "ollama_local",
-				Kind:     protocol.EndpointLocalRuntime,
-				Locality: protocol.LocalityLocal,
-				Health:   protocol.EndpointHealthReady,
-				Auth:     protocol.AuthNotApplicable,
+				ID:                     "ollama_local",
+				Kind:                   protocol.EndpointLocalRuntime,
+				Locality:               protocol.LocalityLocal,
+				Health:                 protocol.EndpointHealthReady,
+				Auth:                   protocol.AuthNotApplicable,
+				CostClass:              protocol.CostLocalCompute,
+				RequiredSourceExposure: protocol.ExposureLocalOnly,
+				ObservedAt:             protocol.NewTimestamp(now.Add(-10 * time.Minute)),
+				StructuredOutput:       protocol.FeatureDeclared,
+				ToolUse:                protocol.FeatureDeclared,
 				Acceleration: &protocol.AccelerationEvidence{
 					Backend:    protocol.BackendMetal,
 					State:      protocol.StateVerified,
 					VerifiedAt: &cachedVerifiedTime,
+					Signals: []protocol.AccelerationSignal{
+						{
+							Source:    "ollama:/api/ps",
+							Trust:     protocol.TrustAuthoritative,
+							Backend:   protocol.BackendMetal,
+							Offloaded: true,
+						},
+					},
 				},
 				Capabilities: []protocol.GradedCapability{
 					{
@@ -467,6 +485,9 @@ func TestDoctorCachedInferenceEvidenceMergedAndPreserved(t *testing.T) {
 				},
 			},
 		},
+	}
+	if err := cachedProfile.Validate(); err != nil {
+		t.Fatalf("cachedProfile must be valid: %v", err)
 	}
 	if err := Write(ctx, cm, protocol.CacheTargetMachineProfile, fingerprint, cachedProfile, 1*time.Hour); err != nil {
 		t.Fatalf("Write cache: %v", err)
@@ -568,5 +589,14 @@ func TestDoctorCachedInferenceEvidenceMergedAndPreserved(t *testing.T) {
 	if statusExpired != "stale_inference_retained" {
 		t.Fatalf("expected evidenceStatus stale_inference_retained, got %q", statusExpired)
 	}
-}
 
+	// Calling discoverEndpoints a second time with the expired cache must also return "stale_inference_retained"
+	// (proves that the first health probe did not refresh the stale inference evidence in cache)
+	_, _, _, statusExpired2, err := docExpired.discoverEndpoints(ctx, facts, fingerprint)
+	if err != nil {
+		t.Fatalf("discoverEndpoints second call with expired cache: %v", err)
+	}
+	if statusExpired2 != "stale_inference_retained" {
+		t.Fatalf("expected evidenceStatus stale_inference_retained on second run, got %q", statusExpired2)
+	}
+}

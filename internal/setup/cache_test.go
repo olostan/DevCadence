@@ -190,4 +190,3 @@ func TestCacheManagerReadEntryRetainsExpired(t *testing.T) {
 		t.Fatalf("expected file to be retained on disk, but found=%v, expired=%v, err=%v", found2, expired2, err2)
 	}
 }
-

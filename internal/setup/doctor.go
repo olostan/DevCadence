@@ -379,12 +379,16 @@ func (d *Doctor) discoverEndpoints(ctx context.Context, facts protocol.Environme
 		inferenceTargets = []string{d.verifyEndpointID}
 	}
 
+	var cachedEnv CacheEnvelope[protocol.MachineCapabilityProfile]
 	var cachedProfile *protocol.MachineCapabilityProfile
 	cachedExpired := false
 	if d.cache != nil {
-		if cached, found, expired, err := ReadEntry[protocol.MachineCapabilityProfile](ctx, d.cache, protocol.CacheTargetMachineProfile, fingerprint); err == nil && found {
-			cachedProfile = &cached
-			cachedExpired = expired
+		if env, found, expired, err := ReadEnvelope[protocol.MachineCapabilityProfile](ctx, d.cache, protocol.CacheTargetMachineProfile, fingerprint); err == nil && found {
+			if valErr := env.Data.Validate(); valErr == nil {
+				cachedEnv = env
+				cachedProfile = &cachedEnv.Data
+				cachedExpired = expired
+			}
 		}
 	}
 
@@ -396,16 +400,25 @@ func (d *Doctor) discoverEndpoints(ctx context.Context, facts protocol.Environme
 	if err != nil {
 		return nil, nil, nil, "", err
 	}
+	if err := profile.Validate(); err != nil {
+		return nil, nil, nil, "", err
+	}
 
+	activeProfile := &profile
 	usedCachedInference := false
-	if cachedProfile != nil {
+
+	if cachedProfile != nil && depth < protocol.DepthInference {
+		combined := profile
+		combined.Endpoints = make([]protocol.CognitionEndpoint, len(profile.Endpoints))
+		copy(combined.Endpoints, profile.Endpoints)
+
 		cachedMap := make(map[string]protocol.CognitionEndpoint, len(cachedProfile.Endpoints))
 		for _, cep := range cachedProfile.Endpoints {
 			cachedMap[cep.ID] = cep
 		}
 
-		for i := range profile.Endpoints {
-			ep := &profile.Endpoints[i]
+		for i := range combined.Endpoints {
+			ep := &combined.Endpoints[i]
 			cep, ok := cachedMap[ep.ID]
 			if !ok {
 				continue
@@ -451,6 +464,17 @@ func (d *Doctor) discoverEndpoints(ctx context.Context, facts protocol.Environme
 				ep.ContextTokens = cep.ContextTokens
 			}
 		}
+
+		if usedCachedInference {
+			// Profile with verified acceleration requires probe depth >= inference
+			combined.ProbeDepth = protocol.DepthInference
+			if err := combined.Validate(); err == nil {
+				activeProfile = &combined
+			} else {
+				usedCachedInference = false
+				activeProfile = &profile
+			}
+		}
 	}
 
 	if d.verifyEndpointID != "" {
@@ -465,13 +489,25 @@ func (d *Doctor) discoverEndpoints(ctx context.Context, facts protocol.Environme
 		evidenceStatus = "live"
 	}
 
-	// Durably cache the discovered machine profile
+	// Durably cache the discovered machine profile according to probe depth:
+	// - Full inference probes write fresh cache with DefaultCacheTTL.
+	// - Health probes with unexpired cached inference write back preserving the original inference expiration.
+	// - Health probes with expired cached inference DO NOT write to cache (never refresh stale inference).
+	// - Shallow probes without cached inference write fresh health profile with DefaultCacheTTL.
 	if d.cache != nil {
-		_ = Write(ctx, d.cache, protocol.CacheTargetMachineProfile, fingerprint, profile, DefaultCacheTTL)
+		if d.verifyEndpointID != "" {
+			_ = Write(ctx, d.cache, protocol.CacheTargetMachineProfile, fingerprint, *activeProfile, DefaultCacheTTL)
+		} else if usedCachedInference {
+			if !cachedExpired {
+				_ = WriteWithExpiresAt(ctx, d.cache, protocol.CacheTargetMachineProfile, fingerprint, *activeProfile, cachedEnv.ExpiresAt.Time())
+			}
+		} else {
+			_ = Write(ctx, d.cache, protocol.CacheTargetMachineProfile, fingerprint, *activeProfile, DefaultCacheTTL)
+		}
 	}
 
 	hasCoding := false
-	for _, ep := range profile.Endpoints {
+	for _, ep := range activeProfile.Endpoints {
 		var backend *protocol.BackendKind
 		isVerified := false
 		if ep.Acceleration != nil {
@@ -533,7 +569,7 @@ func (d *Doctor) discoverEndpoints(ctx context.Context, facts protocol.Environme
 		})
 	}
 
-	return summaries, findings, &profile, evidenceStatus, nil
+	return summaries, findings, activeProfile, evidenceStatus, nil
 }
 
 func provenanceRank(p protocol.CapabilityProvenance) int {
