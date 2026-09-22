@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/olostan/DevCadience/schemas/discovery-experiment.schema.json",
-  "title": "DevCadience DiscoveryExperiment",
+  "$id": "https://github.com/olostan/DevCadence/schemas/discovery-experiment.schema.json",
+  "title": "DevCadence DiscoveryExperiment",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema_version", "experiment_id", "project_id", "question", "hypothesis", "method", "environment", "status", "limitations"],

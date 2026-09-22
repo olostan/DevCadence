@@ -1,8 +1,8 @@
 package controlplane
 
 import (
-	"github.com/olostan/DevCadience/internal/errs"
-	"github.com/olostan/DevCadience/internal/events"
+	"github.com/olostan/DevCadence/internal/errs"
+	"github.com/olostan/DevCadence/internal/events"
 )
 
 // canonicalCorrelation derives an event's correlation identifiers from its

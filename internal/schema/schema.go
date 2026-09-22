@@ -20,8 +20,8 @@ import (
 	"strings"
 	"sync"
 
-	devcadience "github.com/olostan/DevCadience"
-	"github.com/olostan/DevCadience/internal/errs"
+	devcadence "github.com/olostan/DevCadence"
+	"github.com/olostan/DevCadence/internal/errs"
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
 )
@@ -101,7 +101,7 @@ var (
 // Default returns the schemas embedded in this build, compiling them once.
 func Default() (*Set, error) {
 	defaultOnce.Do(func() {
-		defaultSet, defaultErr = Load(devcadience.SchemaFS, "schemas")
+		defaultSet, defaultErr = Load(devcadence.SchemaFS, "schemas")
 	})
 	return defaultSet, defaultErr
 }
@@ -143,7 +143,7 @@ func Load(fsys fs.FS, dir string) (*Set, error) {
 		}
 		// Resources are registered under their file name so that a schema can
 		// be addressed without depending on the $id host.
-		resource := "devcadience:///" + entry.Name()
+		resource := "devcadence:///" + entry.Name()
 		if err := compiler.AddResource(resource, document); err != nil {
 			return nil, errs.Wrap(errs.CategoryInvalidArgument, err, "register schema %s", entry.Name())
 		}

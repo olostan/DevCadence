@@ -1,4 +1,4 @@
-# DevCadience Discovery Principal Skill
+# DevCadence Discovery Principal Skill
 
 ## Purpose
 
@@ -68,7 +68,7 @@ Record human-authoritative decisions as ProductDecisions.
 ## Research before questioning
 
 Before asking a human a factual technical question, determine whether it can be resolved by:
-- DevCadience repository/local investigation;
+- DevCadence repository/local investigation;
 - current authoritative web research;
 - a bounded local experiment/benchmark;
 - independent consultant reasoning.

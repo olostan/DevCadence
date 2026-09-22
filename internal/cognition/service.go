@@ -5,12 +5,12 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/olostan/DevCadience/internal/artifacts"
-	"github.com/olostan/DevCadience/internal/clock"
-	"github.com/olostan/DevCadience/internal/environment"
-	"github.com/olostan/DevCadience/internal/errs"
-	"github.com/olostan/DevCadience/internal/ids"
-	"github.com/olostan/DevCadience/internal/protocol"
+	"github.com/olostan/DevCadence/internal/artifacts"
+	"github.com/olostan/DevCadence/internal/clock"
+	"github.com/olostan/DevCadence/internal/environment"
+	"github.com/olostan/DevCadence/internal/errs"
+	"github.com/olostan/DevCadence/internal/ids"
+	"github.com/olostan/DevCadence/internal/protocol"
 )
 
 // Profile assembly: environment facts plus adapter discovery plus operator
@@ -36,7 +36,7 @@ import (
 
 // Declaration is operator-supplied configuration about one endpoint.
 //
-// It exists because an operator legitimately knows things DevCadience cannot
+// It exists because an operator legitimately knows things DevCadence cannot
 // measure — that a particular remote CLI is a strong implementer, that a project
 // may only send semantic evidence. Every capability it supplies is recorded with
 // provenance "configured", never "measured", so a routing decision can always be
@@ -813,8 +813,8 @@ func truncate(value string, max int) string {
 //
 // It is a pure function of the profile so that the verdict cannot disagree with
 // the endpoints it summarises. The precedence matters: a missing deterministic
-// prerequisite outranks missing cognition, because DevCadience without Git
-// cannot do its local-authority job at all, whereas DevCadience without a model
+// prerequisite outranks missing cognition, because DevCadence without Git
+// cannot do its local-authority job at all, whereas DevCadence without a model
 // is a documented operating profile (docs/MODEL_RUNTIME.md §7).
 func Assess(profile protocol.MachineCapabilityProfile) (protocol.CognitionAssessment, []string) {
 	var limitations []string

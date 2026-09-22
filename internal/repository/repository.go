@@ -16,8 +16,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/olostan/DevCadience/internal/errs"
-	"github.com/olostan/DevCadience/internal/process"
+	"github.com/olostan/DevCadence/internal/errs"
+	"github.com/olostan/DevCadence/internal/process"
 )
 
 // DefaultGitTimeout bounds an individual Git inspection command. Inspection

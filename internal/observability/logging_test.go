@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/olostan/DevCadience/internal/observability"
+	"github.com/olostan/DevCadence/internal/observability"
 )
 
 func TestCorrelationEmitsOnlyPopulatedIdentifiers(t *testing.T) {

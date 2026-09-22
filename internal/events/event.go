@@ -17,8 +17,8 @@ import (
 	"encoding/json"
 	"io"
 
-	"github.com/olostan/DevCadience/internal/errs"
-	"github.com/olostan/DevCadience/internal/protocol"
+	"github.com/olostan/DevCadence/internal/errs"
+	"github.com/olostan/DevCadence/internal/protocol"
 )
 
 // Type names an event. Values are stable strings written to durable storage;

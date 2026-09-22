@@ -3,8 +3,8 @@ package storage
 import (
 	"context"
 
-	"github.com/olostan/DevCadience/internal/errs"
-	"github.com/olostan/DevCadience/internal/protocol"
+	"github.com/olostan/DevCadence/internal/errs"
+	"github.com/olostan/DevCadence/internal/protocol"
 )
 
 // StoredRecord is a durable protocol document as it sits in the store.

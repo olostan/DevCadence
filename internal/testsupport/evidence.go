@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/olostan/DevCadience/internal/protocol"
+	"github.com/olostan/DevCadence/internal/protocol"
 )
 
 // Synthetic evidence for tests and walkthroughs.

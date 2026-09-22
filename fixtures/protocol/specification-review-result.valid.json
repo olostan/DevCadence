@@ -15,7 +15,7 @@
       "why_it_matters": "Two competent teams would build different products: one vendoring every dependency, one fetching at install time. The choice binds the distribution model.",
       "affected_refs": ["FR-018", "PD-001"],
       "resolution_authority": "human",
-      "recommended_question": "During first-time setup only, may DevCadience download dependencies from a package registry?",
+      "recommended_question": "During first-time setup only, may DevCadence download dependencies from a package registry?",
       "evidence_refs": ["ev_setup_notes"],
       "blocks_readiness": true
     }

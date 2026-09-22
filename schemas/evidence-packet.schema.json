@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/olostan/DevCadience/schemas/evidence-packet.schema.json",
-  "title": "DevCadience EvidencePacket",
+  "$id": "https://github.com/olostan/DevCadence/schemas/evidence-packet.schema.json",
+  "title": "DevCadence EvidencePacket",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema_version", "evidence_packet_id", "project_id", "base_commit", "question", "claims", "counterevidence", "disagreements", "uncertainties", "raw_evidence_refs"],

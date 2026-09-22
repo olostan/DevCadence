@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/olostan/DevCadience/schemas/specification-readiness.schema.json",
-  "title": "DevCadience SpecificationReadiness",
+  "$id": "https://github.com/olostan/DevCadence/schemas/specification-readiness.schema.json",
+  "title": "DevCadence SpecificationReadiness",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema_version", "readiness_id", "project_id", "problem_model_id", "problem_model_revision", "checks", "verdict"],

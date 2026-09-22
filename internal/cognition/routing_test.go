@@ -5,9 +5,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/olostan/DevCadience/internal/cognition"
-	"github.com/olostan/DevCadience/internal/errs"
-	"github.com/olostan/DevCadience/internal/protocol"
+	"github.com/olostan/DevCadence/internal/cognition"
+	"github.com/olostan/DevCadence/internal/errs"
+	"github.com/olostan/DevCadence/internal/protocol"
 )
 
 // The five end-to-end routing scenarios M3A must support are each a test here:

@@ -4,9 +4,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/olostan/DevCadience/internal/events"
-	"github.com/olostan/DevCadience/internal/protocol"
-	"github.com/olostan/DevCadience/internal/tasks"
+	"github.com/olostan/DevCadence/internal/events"
+	"github.com/olostan/DevCadence/internal/protocol"
+	"github.com/olostan/DevCadence/internal/tasks"
 )
 
 // ScenarioBuilder assembles an event stream with sequences and timestamps
@@ -33,7 +33,7 @@ func NewScenario(t *testing.T, projectID string) *ScenarioBuilder {
 // Add appends an event with the next sequence and timestamp.
 func (b *ScenarioBuilder) Add(payload events.Payload) *ScenarioBuilder {
 	b.t.Helper()
-	return b.AddAs(protocol.Actor{Kind: protocol.ActorControlPlane, ID: "devcadience"}, payload)
+	return b.AddAs(protocol.Actor{Kind: protocol.ActorControlPlane, ID: "devcadence"}, payload)
 }
 
 // AddAs appends an event attributed to a specific actor.

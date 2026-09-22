@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/olostan/DevCadience/schemas/project-state.schema.json",
-  "title": "DevCadience ProjectState",
+  "$id": "https://github.com/olostan/DevCadence/schemas/project-state.schema.json",
+  "title": "DevCadence ProjectState",
   "type": "object",
   "additionalProperties": false,
   "required": [

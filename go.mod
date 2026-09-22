@@ -1,4 +1,4 @@
-module github.com/olostan/DevCadience
+module github.com/olostan/DevCadence
 
 go 1.25.0
 

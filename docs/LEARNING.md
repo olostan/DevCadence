@@ -2,7 +2,7 @@
 
 ## Scope
 
-DevCadience learns by improving its engineering system: knowledge, skills, prompts, routing, verification, task design and policies. Learning is evidence-driven and governed. It is not uncontrolled prompt self-editing.
+DevCadence learns by improving its engineering system: knowledge, skills, prompts, routing, verification, task design and policies. Learning is evidence-driven and governed. It is not uncontrolled prompt self-editing.
 
 ## 1. Learning loop
 
@@ -238,7 +238,7 @@ Promotion scopes:
 - project;
 - language/framework;
 - organization;
-- global DevCadience default.
+- global DevCadence default.
 
 Higher scope requires stronger evidence.
 
@@ -269,17 +269,17 @@ Example:
 
 ## 15. Self-development
 
-DevCadience may develop DevCadience, but self-referential work follows identical policy.
+DevCadence may develop DevCadence, but self-referential work follows identical policy.
 
 ```mermaid
 flowchart LR
-    DC["DevCadience current version"]
+    DC["DevCadence current version"]
     Task["Self-improvement task"]
     EWP["Frontier Work Package"]
     Local["Local implementation"]
     Verify["Independent verification"]
     Decision["Authorized acceptance"]
-    Next["DevCadience next version"]
+    Next["DevCadence next version"]
 
     DC --> Task --> EWP --> Local --> Verify --> Decision --> Next
 ```

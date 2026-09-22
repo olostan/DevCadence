@@ -1,5 +1,5 @@
 // Package ids generates the opaque stable identifiers used by durable
-// DevCadience records.
+// DevCadence records.
 //
 // docs/PROTOCOLS.md §2 requires opaque stable string IDs (ULID/UUID shaped)
 // with human-readable aliases layered on top. This package implements ULIDs

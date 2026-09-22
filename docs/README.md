@@ -1,4 +1,4 @@
-# DevCadience Documentation Map
+# DevCadence Documentation Map
 
 The documentation is intentionally split by durable concern so humans and agents can load focused context instead of a single enormous specification.
 
@@ -99,7 +99,7 @@ flowchart TB
 5. [MCP_API.md](MCP_API.md)
 6. [ANTIGRAVITY_INTEGRATION.md](ANTIGRAVITY_INTEGRATION.md)
 7. [CONSULTANTS.md](CONSULTANTS.md)
-8. [../integrations/antigravity/devcadience/skills/devcadience-principal/SKILL.md](../integrations/antigravity/devcadience/skills/devcadience-principal/SKILL.md)
+8. [../integrations/antigravity/devcadence/skills/devcadence-principal/SKILL.md](../integrations/antigravity/devcadence/skills/devcadence-principal/SKILL.md)
 
 ### Working on execution cognition
 1. [LOCAL_AGENTS.md](LOCAL_AGENTS.md)

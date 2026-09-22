@@ -6,14 +6,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/olostan/DevCadience/internal/artifacts"
-	"github.com/olostan/DevCadience/internal/clock"
-	"github.com/olostan/DevCadience/internal/cognition"
-	"github.com/olostan/DevCadience/internal/environment"
-	"github.com/olostan/DevCadience/internal/errs"
-	"github.com/olostan/DevCadience/internal/ids"
-	"github.com/olostan/DevCadience/internal/protocol"
-	"github.com/olostan/DevCadience/internal/schema"
+	"github.com/olostan/DevCadence/internal/artifacts"
+	"github.com/olostan/DevCadence/internal/clock"
+	"github.com/olostan/DevCadence/internal/cognition"
+	"github.com/olostan/DevCadence/internal/environment"
+	"github.com/olostan/DevCadence/internal/errs"
+	"github.com/olostan/DevCadence/internal/ids"
+	"github.com/olostan/DevCadence/internal/protocol"
+	"github.com/olostan/DevCadence/internal/schema"
 )
 
 func testClock() clock.Clock {
@@ -565,7 +565,7 @@ func TestTheProbePromptCarriesNoRepositoryContent(t *testing.T) {
 		// The probe must not mention this repository, its packages, its paths
 		// or any project vocabulary.
 		for _, forbidden := range []string{
-			"devcadience", "projectstate", "internal/", ".go", "package ", "func ",
+			"devcadence", "projectstate", "internal/", ".go", "package ", "func ",
 			"repository", "worktree", "commit",
 		} {
 			if strings.Contains(lowered, forbidden) {

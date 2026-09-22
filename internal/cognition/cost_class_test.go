@@ -4,12 +4,12 @@ import (
 	"context"
 	"testing"
 
-	"github.com/olostan/DevCadience/internal/cognition"
-	"github.com/olostan/DevCadience/internal/environment"
-	"github.com/olostan/DevCadience/internal/protocol"
+	"github.com/olostan/DevCadence/internal/cognition"
+	"github.com/olostan/DevCadence/internal/environment"
+	"github.com/olostan/DevCadence/internal/protocol"
 )
 
-// Cost class is a commercial fact, and DevCadience can observe almost none of it.
+// Cost class is a commercial fact, and DevCadence can observe almost none of it.
 //
 // It can see that a binary exists and that it answered a prompt. It cannot see
 // which of a subscription, a metered API key, an enterprise agreement or a credit

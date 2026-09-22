@@ -7,12 +7,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/olostan/DevCadience/internal/clock"
-	"github.com/olostan/DevCadience/internal/cognition"
-	"github.com/olostan/DevCadience/internal/cognition/ollama"
-	"github.com/olostan/DevCadience/internal/environment"
-	"github.com/olostan/DevCadience/internal/errs"
-	"github.com/olostan/DevCadience/internal/protocol"
+	"github.com/olostan/DevCadence/internal/clock"
+	"github.com/olostan/DevCadence/internal/cognition"
+	"github.com/olostan/DevCadence/internal/cognition/ollama"
+	"github.com/olostan/DevCadence/internal/environment"
+	"github.com/olostan/DevCadence/internal/errs"
+	"github.com/olostan/DevCadence/internal/protocol"
 )
 
 // fakeTransport answers Ollama's HTTP API from a table.
@@ -448,7 +448,7 @@ func TestTheProbeRequestCarriesOnlySyntheticContent(t *testing.T) {
 	if !strings.Contains(generateBody, cognition.SyntheticProbePrompt) {
 		t.Errorf("the request did not carry the synthetic prompt: %s", generateBody)
 	}
-	for _, forbidden := range []string{"devcadience", "internal/", ".go", "ProjectState"} {
+	for _, forbidden := range []string{"devcadence", "internal/", ".go", "ProjectState"} {
 		if strings.Contains(generateBody, forbidden) {
 			t.Errorf("the request carried project content %q: %s", forbidden, generateBody)
 		}

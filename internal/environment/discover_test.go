@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/olostan/DevCadience/internal/clock"
-	"github.com/olostan/DevCadience/internal/environment"
-	"github.com/olostan/DevCadience/internal/protocol"
+	"github.com/olostan/DevCadence/internal/clock"
+	"github.com/olostan/DevCadence/internal/environment"
+	"github.com/olostan/DevCadence/internal/protocol"
 )
 
 // fixedClock is the injected clock every test uses, so that observed_at is

@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/olostan/DevCadience/internal/errs"
-	"github.com/olostan/DevCadience/internal/ids"
+	"github.com/olostan/DevCadence/internal/errs"
+	"github.com/olostan/DevCadence/internal/ids"
 )
 
 // infiniteReader never returns EOF or blocks, simulating an unbounded live

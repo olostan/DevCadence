@@ -2,19 +2,19 @@
 
 ## Scope
 
-This document defines how DevCadience obtains independent review without falling into unbounded reviewer/implementer/principal ping-pong.
+This document defines how DevCadence obtains independent review without falling into unbounded reviewer/implementer/principal ping-pong.
 
 Review is an evidence-gathering process, not a search for perfection.
 
 > **A change is complete when material residual risk is bounded, not when further criticism becomes impossible.**
 
-Repeated intelligent review can almost always produce another locally defensible improvement. DevCadience therefore needs an explicit **termination mechanism for cognition**.
+Repeated intelligent review can almost always produce another locally defensible improvement. DevCadence therefore needs an explicit **termination mechanism for cognition**.
 
 ## 1. Core principles
 
 ### 1.1 Optimize for bounded residual risk
 
-DevCadience does not require zero conceivable criticism.
+DevCadence does not require zero conceivable criticism.
 
 A candidate is closable when:
 - deterministic validation passes;

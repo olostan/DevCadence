@@ -18,7 +18,7 @@ __pycache__/
 # Anchored to the repo root (leading /) so these only match the top-level
 # runtime-state directories a running daemon creates, not the source
 # packages internal/artifacts and internal/worktrees (M2).
-.devcadience/
+.devcadence/
 /artifacts/
 /worktrees/
 *.db

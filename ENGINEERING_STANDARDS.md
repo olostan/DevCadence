@@ -1,6 +1,6 @@
-# DevCadience Engineering Standards
+# DevCadence Engineering Standards
 
-This document defines implementation standards for the DevCadience codebase. Architectural invariants take precedence over convenience.
+This document defines implementation standards for the DevCadence codebase. Architectural invariants take precedence over convenience.
 
 ## 1. Architectural style
 
@@ -10,8 +10,8 @@ Preferred initial boundaries:
 
 ~~~text
 cmd/
-  devcadience/
-  devcadience-mcp/
+  devcadence/
+  devcadence-mcp/
 
 internal/
   controlplane/
@@ -51,7 +51,7 @@ start.
 As of M3A the implemented layout is:
 
 ~~~text
-cmd/devcadience/            CLI adapter (no domain logic)
+cmd/devcadence/            CLI adapter (no domain logic)
 internal/
   protocol/                 durable typed contracts (twin of schemas/)
   events/                   event envelope, typed payloads, type registry
@@ -92,7 +92,7 @@ The M3A boundaries are load-bearing rather than cosmetic, and
   logic. It must stay buildable with no adapter present.
 - Adapter subpackages are the only place a runtime, CLI or provider exists. They
   speak only in `protocol` types, may not import `storage`, `controlplane`,
-  `state` or `events`, and are selected at the edge in `cmd/devcadience`.
+  `state` or `events`, and are selected at the edge in `cmd/devcadence`.
 - `principalhosts` is deliberately separate from `cognition`: a host is a
   frontend a human drives, not a source of cognition (DCI-107).
 
@@ -326,7 +326,7 @@ contains `MilestoneStarted`, `ComponentDeclared`, `DecisionRequired`,
 `IntegrationValidationStarted` — each added because a documented ProjectState
 field or lifecycle transition had no event to derive it from; see
 [docs/adr/0004-canonical-task-state-machine.md](docs/adr/0004-canonical-task-state-machine.md).
-`devcadience event types` prints the current vocabulary.
+`devcadence event types` prints the current vocabulary.
 
 Every event listed above, the discovery ones included, is implemented and
 registered, and `tests/doc_drift_test.go` fails if this list ever names one
@@ -369,7 +369,7 @@ Retry creates a new Attempt under the same task rather than erasing history.
 ~~~
 
 The complete edge table, the block semantics and the ProjectState task-bucket
-mapping are in ADR-0004. `devcadience task states` prints the implemented
+mapping are in ADR-0004. `devcadence task states` prints the implemented
 machine.
 
 Illegal transitions return errors and do not partially mutate state. In the

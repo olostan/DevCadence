@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/olostan/DevCadience/internal/errs"
+	"github.com/olostan/DevCadence/internal/errs"
 )
 
 func testDir(t *testing.T) string {
@@ -63,7 +63,7 @@ func TestRunMissingExecutable(t *testing.T) {
 	r := NewRunner()
 	dir := testDir(t)
 	_, err := r.Run(context.Background(), Spec{
-		Executable: "devcadience-does-not-exist-xyz",
+		Executable: "devcadence-does-not-exist-xyz",
 		Dir:        dir,
 		Env:        BaseEnv(),
 		Timeout:    5 * time.Second,
@@ -191,7 +191,7 @@ func TestRunInvalidSpecRejected(t *testing.T) {
 func TestRunDirDoesNotExist(t *testing.T) {
 	r := NewRunner()
 	_, err := r.Run(context.Background(), Spec{
-		Executable: "echo", Dir: filepath.Join(os.TempDir(), "devcadience-no-such-dir-xyz"), Env: BaseEnv(), Timeout: time.Second,
+		Executable: "echo", Dir: filepath.Join(os.TempDir(), "devcadence-no-such-dir-xyz"), Env: BaseEnv(), Timeout: time.Second,
 	})
 	if errs.CategoryOf(err) != errs.CategoryInvalidArgument {
 		t.Fatalf("category = %s", errs.CategoryOf(err))

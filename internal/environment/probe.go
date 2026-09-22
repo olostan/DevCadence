@@ -29,9 +29,9 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/olostan/DevCadience/internal/errs"
-	"github.com/olostan/DevCadience/internal/process"
-	"github.com/olostan/DevCadience/internal/protocol"
+	"github.com/olostan/DevCadence/internal/errs"
+	"github.com/olostan/DevCadence/internal/process"
+	"github.com/olostan/DevCadence/internal/protocol"
 )
 
 // MaxProbeFileBytes bounds a single SysProbe file read.

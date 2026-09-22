@@ -4,7 +4,7 @@
 
 This document defines the bounded roles that perform high-volume engineering cognition and repository work. The historical filename `LOCAL_AGENTS.md` is retained for compatibility, but "local agent" no longer implies that model inference itself must run locally.
 
-A role is a stable responsibility and authority boundary. Its cognition may come from deterministic tooling, a local model runtime, an authenticated coding CLI, or another policy-authorized remote endpoint. Repository mutation, worktrees, deterministic validation, evidence and acceptance remain under the local DevCadience control plane.
+A role is a stable responsibility and authority boundary. Its cognition may come from deterministic tooling, a local model runtime, an authenticated coding CLI, or another policy-authorized remote endpoint. Repository mutation, worktrees, deterministic validation, evidence and acceptance remain under the local DevCadence control plane.
 
 ## 1. Role graph
 

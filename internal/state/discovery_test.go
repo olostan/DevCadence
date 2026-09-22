@@ -3,11 +3,11 @@ package state_test
 import (
 	"testing"
 
-	"github.com/olostan/DevCadience/internal/errs"
-	"github.com/olostan/DevCadience/internal/events"
-	"github.com/olostan/DevCadience/internal/protocol"
-	"github.com/olostan/DevCadience/internal/state"
-	"github.com/olostan/DevCadience/internal/testsupport"
+	"github.com/olostan/DevCadence/internal/errs"
+	"github.com/olostan/DevCadence/internal/events"
+	"github.com/olostan/DevCadence/internal/protocol"
+	"github.com/olostan/DevCadence/internal/state"
+	"github.com/olostan/DevCadence/internal/testsupport"
 )
 
 const testDigest = "sha256:0000000000000000000000000000000000000000000000000000000000000000"

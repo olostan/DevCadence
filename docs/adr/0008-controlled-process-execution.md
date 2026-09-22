@@ -20,8 +20,8 @@ to distinguish infrastructure failure from an ordinary nonzero exit.
 
 `internal/process.Runner.Run` accepts a `Spec{Executable, Args, Dir, Env,
 Timeout, ...}` and never a shell string. There is no second, more permissive
-entry point anywhere in the M2 packages; every command DevCadience issues —
-Git inspection, worktree operations, validation checks, the ad hoc `devcadience
+entry point anywhere in the M2 packages; every command DevCadence issues —
+Git inspection, worktree operations, validation checks, the ad hoc `devcadence
 run` CLI command — goes through this one function.
 
 ### Environment is never inherited implicitly

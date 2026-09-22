@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/olostan/DevCadience/schemas/requirement.schema.json",
-  "title": "DevCadience Requirement",
+  "$id": "https://github.com/olostan/DevCadence/schemas/requirement.schema.json",
+  "title": "DevCadence Requirement",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema_version", "requirement_id", "project_id", "kind", "statement", "strength", "status", "source"],

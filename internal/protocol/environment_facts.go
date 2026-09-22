@@ -1,6 +1,6 @@
 package protocol
 
-import "github.com/olostan/DevCadience/internal/errs"
+import "github.com/olostan/DevCadence/internal/errs"
 
 // This file holds the durable representation of *observed machine facts*.
 //
@@ -22,7 +22,7 @@ import "github.com/olostan/DevCadience/internal/errs"
 
 // OSFamily is the operating-system family a probe observed.
 //
-// It is deliberately coarse. DevCadience branches on OS family only where the
+// It is deliberately coarse. DevCadence branches on OS family only where the
 // *location* of a fact differs (sysfs versus ioreg); capability decisions
 // branch on observed evidence, never on the family name.
 type OSFamily string
@@ -65,7 +65,7 @@ const (
 	FindingPermissionDenied FindingStatus = "permission_denied"
 	// FindingMalformed means the source existed and was read but its content
 	// did not parse. External output is untrusted data (DCI-083); malformed
-	// output is a fact about the tool, not a defect in DevCadience.
+	// output is a fact about the tool, not a defect in DevCadence.
 	FindingMalformed FindingStatus = "malformed"
 	// FindingTimeout means a probe exceeded its bound and was stopped.
 	FindingTimeout FindingStatus = "timeout"
@@ -156,7 +156,7 @@ type MemoryFacts struct {
 	SwapTotalBytes *int64 `json:"swap_total_bytes,omitempty"`
 }
 
-// StorageFacts is available capacity at one path DevCadience cares about.
+// StorageFacts is available capacity at one path DevCadence cares about.
 type StorageFacts struct {
 	Path           string `json:"path"`
 	TotalBytes     *int64 `json:"total_bytes,omitempty"`

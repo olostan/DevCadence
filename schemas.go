@@ -1,8 +1,8 @@
-// Package devcadience is the module root. It exists solely to publish the
+// Package devcadence is the module root. It exists solely to publish the
 // canonical JSON Schema files under schemas/ to Go packages that need them,
 // so that the schemas have exactly one source of truth in the repository
 // (ENGINEERING_STANDARDS.md §23: do not mirror generated documentation).
-package devcadience
+package devcadence
 
 import "embed"
 

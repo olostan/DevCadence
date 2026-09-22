@@ -1,4 +1,4 @@
-# Illustrative DevCadience project configuration.
+# Illustrative DevCadence project configuration.
 # This file is a design example until the configuration loader is implemented.
 #
 # The `cognition` block below is shaped to the M3A types it will load into
@@ -25,7 +25,7 @@ principal:
   allow_raw_source_escalation: true
 
 cognition:
-  # Endpoints are *discovered*, not declared: `devcadience cognition list` reports
+  # Endpoints are *discovered*, not declared: `devcadence cognition list` reports
   # what exists, its health, its cost class and whether its acceleration was
   # verified. The block below declares only what discovery cannot observe.
   #
@@ -34,7 +34,7 @@ cognition:
   declarations:
     - endpoint: "ollama:<model-as-discovered>"
       # Capability grades are recorded with provenance "configured", never
-      # "measured": an operator may legitimately assert what DevCadience cannot
+      # "measured": an operator may legitimately assert what DevCadence cannot
       # measure, and the assertion stays traceable to whoever made it. A measured
       # or evaluated grade is never overwritten by a declaration.
       capabilities:

@@ -2,7 +2,7 @@
 
 ## Scope
 
-DevCadience executes models, repository tools and external consultants with real write authority. Security is therefore part of the control-plane architecture, not an add-on.
+DevCadence executes models, repository tools and external consultants with real write authority. Security is therefore part of the control-plane architecture, not an add-on.
 
 ## 1. Trust boundaries
 
@@ -12,7 +12,7 @@ flowchart TB
     Host["Principal host<br/>Antigravity / Cursor / VS Code"]
     Principal["Frontier principal"]
     MCP["Semantic MCP gateway"]
-    Daemon["DevCadience daemon"]
+    Daemon["DevCadence daemon"]
     Local["Optional local cognition runtime"]
     Remote["Optional remote cognition endpoint / CLI / API"]
     Repo["Target repository"]
@@ -78,7 +78,7 @@ flowchart LR
     Principal["Principal workspace"]
     Allowed["Allowed:<br/>ProjectState, docs, MCP"]
     Denied["Denied by policy:<br/>target repo / arbitrary shell"]
-    Gateway["DevCadience MCP"]
+    Gateway["DevCadence MCP"]
     Repo["Target repo"]
 
     Principal --> Allowed
@@ -119,7 +119,7 @@ Validate:
 
 Credentials should be:
 - stored in OS credential manager/Secret Service, a provider's supported authenticated session, or protected environment;
-- represented in DevCadience configuration by opaque CredentialRef-style references rather than routine raw API keys;
+- represented in DevCadence configuration by opaque CredentialRef-style references rather than routine raw API keys;
 - injected only into provider processes/clients that need them;
 - redacted from logs;
 - excluded from trajectory prompts;
@@ -127,7 +127,7 @@ Credentials should be:
 
 Guided setup should discover existing authenticated CLIs/sessions before asking users to create additional credentials.
 
-Authentication flows SHOULD use provider-supported login/device/browser mechanisms when available. DevCadience must not scrape unrelated host/provider credential files.
+Authentication flows SHOULD use provider-supported login/device/browser mechanisms when available. DevCadence must not scrape unrelated host/provider credential files.
 
 A consultant or cognition request should reference an authenticated adapter, not carry an API key.
 

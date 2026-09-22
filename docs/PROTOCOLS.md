@@ -1,4 +1,4 @@
-# DevCadience Protocols
+# DevCadence Protocols
 
 ## Scope
 
@@ -12,7 +12,7 @@ Machine-readable definitions live in `schemas/`. This document explains semantic
 
 A model should not have to infer organizational meaning from free-form chat.
 
-DevCadience uses explicit artifacts:
+DevCadence uses explicit artifacts:
 
 ```mermaid
 flowchart LR

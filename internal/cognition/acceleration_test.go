@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/olostan/DevCadience/internal/cognition"
-	"github.com/olostan/DevCadience/internal/protocol"
+	"github.com/olostan/DevCadence/internal/cognition"
+	"github.com/olostan/DevCadence/internal/protocol"
 )
 
 func at() protocol.Timestamp {

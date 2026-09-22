@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/olostan/DevCadience/schemas/product-decision.schema.json",
-  "title": "DevCadience ProductDecision",
+  "$id": "https://github.com/olostan/DevCadence/schemas/product-decision.schema.json",
+  "title": "DevCadence ProductDecision",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema_version", "decision_id", "project_id", "question", "answer", "authority", "status", "consequences"],

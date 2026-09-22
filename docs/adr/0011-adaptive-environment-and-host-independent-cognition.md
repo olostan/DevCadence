@@ -11,7 +11,7 @@ The original bootstrap assumptions emphasized a 48 GB Apple Silicon developer ma
 
 Those assumptions are useful reference configurations but are too narrow as product requirements.
 
-A real DevCadience installation may begin on:
+A real DevCadence installation may begin on:
 
 - a modest Linux machine with 32 GB RAM and an integrated GPU;
 - hardware where a strong local coding model is impractical;
@@ -27,7 +27,7 @@ The control plane already separates durable state, worktrees, validation and mod
 
 ### 1. Local-first describes authority, not inference location
 
-DevCadience keeps project authority, repository mutation, deterministic validation, evidence and canonical state under the local control plane.
+DevCadence keeps project authority, repository mutation, deterministic validation, evidence and canonical state under the local control plane.
 
 Model cognition may be local or remote according to capability, privacy, cost and policy.
 
@@ -50,13 +50,13 @@ Missing optional endpoints reduce available capability rather than automatically
 
 Bootstrap assumes a blank machine.
 
-DevCadience discovers hardware, accelerator candidates, software, supported principal hosts, cognition endpoints and authentication readiness; builds a structured assessment; proposes a remediation/setup plan; requests approval; verifies the result; and records measured capability.
+DevCadence discovers hardware, accelerator candidates, software, supported principal hosts, cognition endpoints and authentication readiness; builds a structured assessment; proposes a remediation/setup plan; requests approval; verifies the result; and records measured capability.
 
 ### 4. Acceleration must be empirically verified
 
 GPU presence and runtime installation do not prove accelerated inference.
 
-DevCadience reports an accelerator/backend as ready only after a supported real workload demonstrates use of the intended backend with sufficient evidence.
+DevCadence reports an accelerator/backend as ready only after a supported real workload demonstrates use of the intended backend with sufficient evidence.
 
 ### 5. Setup recipes are versioned knowledge
 
@@ -94,7 +94,7 @@ The UI is not business logic. Non-interactive/plain/JSON operation remains suppo
 
 ### Positive
 
-- DevCadience can run usefully on modest hardware.
+- DevCadence can run usefully on modest hardware.
 - Existing user subscriptions/tools can be reused.
 - Hardware/runtime misconfiguration such as CPU fallback becomes detectable.
 - M3 can route coding to economical remote cognition without weakening local repository authority.

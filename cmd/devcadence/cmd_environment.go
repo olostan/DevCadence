@@ -22,16 +22,16 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/olostan/DevCadience/internal/clock"
-	"github.com/olostan/DevCadience/internal/cognition"
-	"github.com/olostan/DevCadience/internal/cognition/codingcli"
-	"github.com/olostan/DevCadience/internal/cognition/mlx"
-	"github.com/olostan/DevCadience/internal/cognition/ollama"
-	"github.com/olostan/DevCadience/internal/environment"
-	"github.com/olostan/DevCadience/internal/errs"
-	"github.com/olostan/DevCadience/internal/ids"
-	"github.com/olostan/DevCadience/internal/principalhosts"
-	"github.com/olostan/DevCadience/internal/protocol"
+	"github.com/olostan/DevCadence/internal/clock"
+	"github.com/olostan/DevCadence/internal/cognition"
+	"github.com/olostan/DevCadence/internal/cognition/codingcli"
+	"github.com/olostan/DevCadence/internal/cognition/mlx"
+	"github.com/olostan/DevCadence/internal/cognition/ollama"
+	"github.com/olostan/DevCadence/internal/environment"
+	"github.com/olostan/DevCadence/internal/errs"
+	"github.com/olostan/DevCadence/internal/ids"
+	"github.com/olostan/DevCadence/internal/principalhosts"
+	"github.com/olostan/DevCadence/internal/protocol"
 )
 
 // parseDepth maps the -depth flag onto the probe-depth contract.
@@ -124,7 +124,7 @@ func buildProfile(ctx context.Context, depth protocol.ProbeDepth) (protocol.Mach
 
 func runEnvironment(ctx context.Context, e *env, args []string) error {
 	if len(args) == 0 {
-		return errs.New(errs.CategoryInvalidArgument, "usage: devcadience environment <inspect>")
+		return errs.New(errs.CategoryInvalidArgument, "usage: devcadence environment <inspect>")
 	}
 	switch args[0] {
 	case "inspect":
@@ -167,7 +167,7 @@ func runEnvironmentInspect(ctx context.Context, e *env, args []string) error {
 
 func runCognition(ctx context.Context, e *env, args []string) error {
 	if len(args) == 0 {
-		return errs.New(errs.CategoryInvalidArgument, "usage: devcadience cognition <list|probe|route>")
+		return errs.New(errs.CategoryInvalidArgument, "usage: devcadence cognition <list|probe|route>")
 	}
 	switch args[0] {
 	case "list":
@@ -223,7 +223,7 @@ func runCognitionProbe(ctx context.Context, e *env, args []string) error {
 	}
 	if fs.NArg() != 1 {
 		return errs.New(errs.CategoryInvalidArgument,
-			"usage: devcadience cognition probe <endpoint-id>; run `cognition list` to see the ids")
+			"usage: devcadence cognition probe <endpoint-id>; run `cognition list` to see the ids")
 	}
 	wanted := fs.Arg(0)
 	// Discovery is cheap and covers the whole machine; inference runs for this one
@@ -424,7 +424,7 @@ func renderFacts(w io.Writer, facts protocol.EnvironmentFacts) {
 func renderHosts(w io.Writer, inventory principalhosts.Inventory) {
 	fmt.Fprintln(w, "\nPrincipal hosts")
 	if !inventory.Any() {
-		fmt.Fprintln(w, "  none installed (a normal state; DevCadience does not require one)")
+		fmt.Fprintln(w, "  none installed (a normal state; DevCadence does not require one)")
 	}
 	for _, host := range inventory.Hosts {
 		if !host.Installed {
@@ -446,7 +446,7 @@ func renderCandidates(w io.Writer, candidates []protocol.AcceleratorCandidate) {
 		}
 	}
 	fmt.Fprintln(w, "\n  Assessment never reports a backend as verified; only an inference")
-	fmt.Fprintln(w, "  probe can (`devcadience cognition probe <endpoint>`).")
+	fmt.Fprintln(w, "  probe can (`devcadence cognition probe <endpoint>`).")
 }
 
 func renderProfile(w io.Writer, profile protocol.MachineCapabilityProfile) {

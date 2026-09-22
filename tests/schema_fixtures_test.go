@@ -12,8 +12,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/olostan/DevCadience/internal/protocol"
-	"github.com/olostan/DevCadience/internal/schema"
+	"github.com/olostan/DevCadence/internal/protocol"
+	"github.com/olostan/DevCadence/internal/schema"
 )
 
 // fixtureDir is the published fixture corpus, relative to this package.

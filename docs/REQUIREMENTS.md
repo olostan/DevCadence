@@ -1,19 +1,19 @@
-# DevCadience Requirements
+# DevCadence Requirements
 
 ## Scope
 
-This document defines the initial functional and non-functional requirements for DevCadience. IDs are stable and intended to appear in Work Packages, tests, ADRs and milestone verification.
+This document defines the initial functional and non-functional requirements for DevCadence. IDs are stable and intended to appear in Work Packages, tests, ADRs and milestone verification.
 
 ## 1. Product goals
 
-DevCadience MUST enable a frontier principal to guide software development using compact, evidence-backed project context while bounded execution workers perform repository-heavy implementation and verification. Worker cognition may be local or remote according to capability, privacy, cost and policy; repository authority, deterministic execution, evidence and canonical state remain under the local control plane.
+DevCadence MUST enable a frontier principal to guide software development using compact, evidence-backed project context while bounded execution workers perform repository-heavy implementation and verification. Worker cognition may be local or remote according to capability, privacy, cost and policy; repository authority, deterministic execution, evidence and canonical state remain under the local control plane.
 
 The system MUST cover both greenfield and evolving projects.
 
 ## 2. Functional requirements
 
 ### FR-001 — Project registration
-The system MUST register a local Git repository as a DevCadience project with:
+The system MUST register a local Git repository as a DevCadence project with:
 - stable project ID;
 - repository path;
 - accepted/base branch;
@@ -169,13 +169,13 @@ Interactive setup/doctor flows SHOULD provide a compact, colored terminal experi
 The system MUST support adopting an existing Git repository whose documentation may be absent, stale, incomplete or non-canonical through a retrospective reconstruction workflow.
 
 ### FR-051 — Mandatory canonical project baseline
-A project MUST NOT enter normal DevCadience-managed engineering work until the required canonical project documentation set exists in committed repository state and passes an Adoption Readiness Gate.
+A project MUST NOT enter normal DevCadence-managed engineering work until the required canonical project documentation set exists in committed repository state and passes an Adoption Readiness Gate.
 
 ### FR-052 — Required canonical project artifacts
 The adoption baseline MUST contain stable canonical slots for vision, requirements, architecture, invariants, security, test strategy, operations and architectural decisions. A genuinely inapplicable topic MUST be represented explicitly rather than silently omitted.
 
 ### FR-053 — Existing-document harvest
-Project adoption MUST discover and classify relevant existing documentation and machine-readable contracts regardless of whether they use DevCadience filenames or formats.
+Project adoption MUST discover and classify relevant existing documentation and machine-readable contracts regardless of whether they use DevCadence filenames or formats.
 
 ### FR-054 — Retrospective evidence provenance
 Material reconstructed statements MUST preserve whether they are observed from current evidence, inherited from documentation, inferred, human-confirmed, reconstructed-confirmed, unknown, contradicted or accepted as bounded risk.
@@ -190,13 +190,13 @@ Material contradictions among documentation, code, tests, schemas or current hum
 The canonical adoption documentation MUST be created in isolated repository state and committed. The adoption decision MUST identify the source commit reconstructed and the accepted baseline commit.
 
 ### FR-058 — Pre-adoption execution boundary
-Before adoption READY, DevCadience MAY perform bounded investigation and isolated adoption work but MUST block normal managed implementation, acceptance and integration.
+Before adoption READY, DevCadence MAY perform bounded investigation and isolated adoption work but MUST block normal managed implementation, acceptance and integration.
 
 ### FR-059 — Adoption Readiness Gate
 The system MUST represent an explicit readiness decision proving that required canonical artifacts exist, material architecture/contracts are sufficiently reconstructed, critical ambiguities are resolved or safely deferred, and remaining uncertainty is bounded and visible.
 
 ### FR-060 — Canonical documentation entry point
-Each managed project MUST expose a stable configured canonical documentation root. For brownfield adoption the default SHOULD be `docs/devcadience/`, while another committed location MAY be configured explicitly.
+Each managed project MUST expose a stable configured canonical documentation root. For brownfield adoption the default SHOULD be `docs/devcadence/`, while another committed location MAY be configured explicitly.
 
 ## 2A. Discovery and specification requirements
 
@@ -279,7 +279,7 @@ External consultant/source access MUST be governed per project.
 Quality, reproducibility and bounded authority have priority over wall-clock latency.
 
 ### NFR-002 — Local-first authority
-The control plane, repository/worktrees, deterministic execution substrate, evidence store and primary state store MUST be able to operate locally without a mandatory DevCadience cloud service. Model inference MAY be local or remote according to explicit project/operator policy.
+The control plane, repository/worktrees, deterministic execution substrate, evidence store and primary state store MUST be able to operate locally without a mandatory DevCadence cloud service. Model inference MAY be local or remote according to explicit project/operator policy.
 
 ### NFR-003 — Provider independence
 No core domain contract may require one LLM provider.

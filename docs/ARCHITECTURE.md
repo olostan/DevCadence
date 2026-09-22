@@ -1,12 +1,12 @@
-# DevCadience Architecture
+# DevCadence Architecture
 
 ## Scope and authority
 
-This document defines the target architecture and durable component boundaries for DevCadience. It is normative for system structure but intentionally leaves replaceable model/provider choices to configuration and adapters.
+This document defines the target architecture and durable component boundaries for DevCadence. It is normative for system structure but intentionally leaves replaceable model/provider choices to configuration and adapters.
 
 ## 1. Architectural thesis
 
-DevCadience separates **high-value cognition** from **high-volume cognition**.
+DevCadence separates **high-value cognition** from **high-volume cognition**.
 
 - Frontier principals spend context on product intent, architecture, alternatives, algorithms, current external grounding, consultant synthesis, and detailed Engineering Work Packages.
 - Local agents spend abundant inference on repository exploration, implementation, debugging, repeated review, and verification.
@@ -27,7 +27,7 @@ flowchart TB
         ConsultantB["Consultant<br/>Claude"]
     end
 
-    subgraph DevCadience["DevCadience Control Plane"]
+    subgraph DevCadence["DevCadence Control Plane"]
         MCP["Semantic MCP Gateway"]
         Orchestrator["Orchestrator / Scheduler"]
         State["Engineering State Model"]
@@ -87,7 +87,7 @@ flowchart TB
 
 ## 2A. Product-definition boundary
 
-Before the architecture/delivery principal acts, DevCadience may be in Discovery mode.
+Before the architecture/delivery principal acts, DevCadence may be in Discovery mode.
 
 ```mermaid
 flowchart LR
@@ -124,7 +124,7 @@ The initial implementation is a **modular monolith**, not a fleet of network ser
 
 ```mermaid
 flowchart LR
-    subgraph Process["devcadience daemon"]
+    subgraph Process["devcadence daemon"]
         API["Application Services"]
         Protocol["Protocol Types"]
         State["State Reducer"]
@@ -254,7 +254,7 @@ Stores ProblemModel revisions, Ambiguity Ledger entries, ProductDecisions, requi
 It provides compact discovery state to frontier sessions and keeps raw conversation from becoming the sole product-memory mechanism.
 
 ### 6.1B Project adoption service
-Owns brownfield retrospective reconstruction and the transition from a merely registered repository to a DevCadience-managed project.
+Owns brownfield retrospective reconstruction and the transition from a merely registered repository to a DevCadence-managed project.
 
 It coordinates:
 - repository/document inventory;
@@ -299,7 +299,7 @@ internal/cognition      Adapter contract, acceleration evidence, capability
         │               routing, profile assembly, ProjectState projection
         ▼
   ollama/ mlx/          the only packages that know a runtime, CLI or provider;
-  codingcli/ remoteapi/ selected at the edge in cmd/devcadience
+  codingcli/ remoteapi/ selected at the edge in cmd/devcadence
 ```
 
 `internal/principalhosts` sits beside rather than inside this: a principal host is
@@ -516,7 +516,7 @@ flowchart TD
     Git --> Artifacts
 ```
 
-Git remains source of truth for code. SQLite is source of truth for DevCadience control-plane records. Large artifacts should be content-addressed or otherwise immutable where practical.
+Git remains source of truth for code. SQLite is source of truth for DevCadence control-plane records. Large artifacts should be content-addressed or otherwise immutable where practical.
 
 ## 11. Worktree and integration architecture
 
@@ -582,8 +582,8 @@ The bootstrap keeps local authority simple while allowing cognition placement to
 ```mermaid
 flowchart LR
     Host["Principal Host<br/>Antigravity / Cursor / VS Code"]
-    MCP["devcadience-mcp<br/>stdio"]
-    D["devcadience daemon"]
+    MCP["devcadence-mcp<br/>stdio"]
+    D["devcadence daemon"]
     DB["SQLite"]
     Repo["Target Git repo"]
     Tools["Build/Test Tools"]
@@ -601,7 +601,7 @@ flowchart LR
 
 The initial first-class principal-host set is Antigravity, Cursor and Visual Studio Code. Antigravity is the reference integration, not a core dependency. See [PRINCIPAL_HOSTS.md](PRINCIPAL_HOSTS.md).
 
-No DevCadience-hosted cloud service is required. Remote model cognition may be used only when configured/policy-allowed.
+No DevCadence-hosted cloud service is required. Remote model cognition may be used only when configured/policy-allowed.
 
 Supported bootstrap profiles include:
 - strong-local;

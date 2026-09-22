@@ -2,7 +2,7 @@
 
 ## Scope
 
-This document defines DevCadience's Day-0 **Discovery & Specification subsystem**: the process that turns a fuzzy human idea into an evidence-backed, sufficiently unambiguous specification before architecture begins.
+This document defines DevCadence's Day-0 **Discovery & Specification subsystem**: the process that turns a fuzzy human idea into an evidence-backed, sufficiently unambiguous specification before architecture begins.
 
 This is primarily the prospective/greenfield product-discovery path. Existing repositories use the separate [Project Adoption and Retrospective Reconstruction](PROJECT_ADOPTION.md) workflow. Brownfield adoption reuses the same authority/provenance principles—ambiguity ledgers, human product authority, evidence-backed requirements and explicit readiness—but begins from repository reality and must materialize the mandatory canonical project documentation baseline before normal managed work.
 
@@ -44,7 +44,7 @@ Important unresolved meanings may include:
 - service availability;
 - acceptable operational complexity.
 
-A capable model can produce a coherent architecture while silently choosing answers to all of these. DevCadience considers that a failure of discovery.
+A capable model can produce a coherent architecture while silently choosing answers to all of these. DevCadence considers that a failure of discovery.
 
 ## 3. Day-0 lifecycle
 

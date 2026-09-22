@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/olostan/DevCadience/internal/protocol"
-	"github.com/olostan/DevCadience/internal/schema"
+	"github.com/olostan/DevCadence/internal/protocol"
+	"github.com/olostan/DevCadence/internal/schema"
 )
 
 // These tests run the inspection commands against the machine executing the

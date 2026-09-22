@@ -2,11 +2,11 @@
 
 ## Scope
 
-DevCadience supports both greenfield projects and existing repositories.
+DevCadence supports both greenfield projects and existing repositories.
 
 A greenfield project can establish its canonical engineering baseline prospectively through normal discovery/specification.
 
-An existing repository requires a **Project Adoption and Retrospective Reconstruction** workflow before it becomes a DevCadience-managed project.
+An existing repository requires a **Project Adoption and Retrospective Reconstruction** workflow before it becomes a DevCadence-managed project.
 
 The adoption workflow exists because an existing repository may have:
 
@@ -18,7 +18,7 @@ The adoption workflow exists because an existing repository may have:
 - architectural decisions preserved only in Git history;
 - current behavior whose original product rationale is no longer known.
 
-> **An existing repository is not DevCadience-ready merely because it can be registered, built, tested, or searched. It becomes DevCadience-ready only after a canonical, evidence-backed project baseline has been materialized in Git and accepted.**
+> **An existing repository is not DevCadence-ready merely because it can be registered, built, tested, or searched. It becomes DevCadence-ready only after a canonical, evidence-backed project baseline has been materialized in Git and accepted.**
 
 ## 1. Two onboarding dimensions
 
@@ -26,13 +26,13 @@ Environment onboarding and project onboarding are independent.
 
 ```text
 Environment onboarding
-  "Can this machine run DevCadience?"
+  "Can this machine run DevCadence?"
         |
         v
   hardware / runtimes / hosts / auth
 
 Project onboarding
-  "Does DevCadience understand this repository well enough
+  "Does DevCadence understand this repository well enough
    to manage changes safely?"
         |
         v
@@ -43,7 +43,7 @@ A machine may be environment-ready while a repository is not project-ready.
 
 ## 2. Adoption authority boundary
 
-Before adoption reaches READY, DevCadience may perform bounded read-only or isolated discovery activities needed to understand the repository, including:
+Before adoption reaches READY, DevCadence may perform bounded read-only or isolated discovery activities needed to understand the repository, including:
 
 - deterministic repository inventory;
 - source/index analysis;
@@ -53,7 +53,7 @@ Before adoption reaches READY, DevCadience may perform bounded read-only or isol
 - bounded experiments in disposable worktrees;
 - principal/consultant analysis.
 
-Before READY, DevCadience MUST NOT treat the project as normally managed engineering work.
+Before READY, DevCadence MUST NOT treat the project as normally managed engineering work.
 
 In particular, normal task delegation, autonomous implementation, acceptance and integration into the managed baseline are blocked until the Adoption Readiness Gate passes.
 
@@ -61,15 +61,15 @@ The adoption workflow itself may create an isolated documentation-baseline branc
 
 ## 3. Canonical project documentation is mandatory
 
-Every DevCadience-managed project MUST have a committed canonical project documentation set.
+Every DevCadence-managed project MUST have a committed canonical project documentation set.
 
 The default canonical root for adopted projects is:
 
 ```text
-docs/devcadience/
+docs/devcadence/
 ```
 
-A project MAY configure another committed canonical root, but the location must be explicit and stable. DevCadience must never infer the canonical location from whichever Markdown file happens to exist.
+A project MAY configure another committed canonical root, but the location must be explicit and stable. DevCadence must never infer the canonical location from whichever Markdown file happens to exist.
 
 ### Required baseline artifacts
 
@@ -119,7 +119,7 @@ The required baseline is intentionally compact enough to be universal while exte
 
 ## 4. Existing documentation is evidence, not automatic authority
 
-Adoption searches broadly for relevant material rather than expecting DevCadience filenames.
+Adoption searches broadly for relevant material rather than expecting DevCadence filenames.
 
 Sources may include:
 
@@ -409,19 +409,19 @@ reconstruction evidence
         v
 adoption worktree
         |
-        +-- docs/devcadience/...
+        +-- docs/devcadence/...
         |
         v
 adoption baseline commit B
 ```
 
-Commit B establishes the first revision from which DevCadience may regard the repository as managed.
+Commit B establishes the first revision from which DevCadence may regard the repository as managed.
 
 The baseline records/references the source commit A used for reconstruction so later changes during adoption cannot be silently mistaken for evidence from the original snapshot.
 
 ## 13. Existing native docs and canonical docs
 
-DevCadience should preserve useful existing documentation.
+DevCadence should preserve useful existing documentation.
 
 It must not rewrite a repository merely to impose stylistic uniformity.
 
@@ -436,7 +436,7 @@ Adoption source commit: abc123
 Primary native architecture source:
 - ../architecture.md
 
-DevCadience summary:
+DevCadence summary:
 - service A owns ...
 - service B owns ...
 - invariant ...
@@ -448,7 +448,7 @@ Adoption verification:
 
 The canonical document remains the stable entry point.
 
-If the native document later changes in a way that alters the contract, normal DevCadience change governance applies.
+If the native document later changes in a way that alters the contract, normal DevCadence change governance applies.
 
 ## 14. Adoption state machine
 
@@ -492,7 +492,7 @@ The gate optimizes for **bounded uncertainty**, not exhaustive understanding of 
 
 ## 16. No undocumented managed project
 
-Once READY, normal DevCadience work depends on the canonical baseline.
+Once READY, normal DevCadence work depends on the canonical baseline.
 
 Normal task planning and Work Packages may cite:
 
@@ -503,7 +503,7 @@ Normal task planning and Work Packages may cite:
 - ProjectState;
 - targeted EvidencePackets.
 
-If required canonical documentation is missing, corrupt, or materially stale such that the project contract cannot be trusted, DevCadience must surface that as a project-readiness problem rather than silently continuing as if the baseline were valid.
+If required canonical documentation is missing, corrupt, or materially stale such that the project contract cannot be trusted, DevCadence must surface that as a project-readiness problem rather than silently continuing as if the baseline were valid.
 
 ## 17. Evolution after adoption
 
@@ -515,7 +515,7 @@ After READY:
 Adoption Baseline
       |
       v
-normal DevCadience lifecycle
+normal DevCadence lifecycle
       |
       +-- requirements changes
       +-- ADRs
@@ -534,11 +534,11 @@ The fact that an invariant or ADR originated through reconstruction remains prov
 Conceptual surface:
 
 ```text
-devcadience project adopt <repo>
-devcadience project adoption status
-devcadience project adoption investigate
-devcadience project adoption review
-devcadience project adoption finalize
+devcadence project adopt <repo>
+devcadence project adoption status
+devcadence project adoption investigate
+devcadence project adoption review
+devcadence project adoption finalize
 ```
 
 The exact CLI belongs to its implementation milestone.
@@ -550,7 +550,7 @@ Interactive onboarding should explain:
 - what is missing;
 - what is contradictory;
 - what decisions require the user;
-- what canonical artifacts DevCadience proposes to create;
+- what canonical artifacts DevCadence proposes to create;
 - why the project is or is not READY.
 
 ## 19. Milestone ownership
@@ -593,4 +593,4 @@ The goal is not to generate impressive documentation from an old repository.
 
 The goal is:
 
-> **reconstruct a trustworthy, explicitly evidenced engineering contract, materialize that contract in the repository, and establish a versioned boundary from which DevCadience can safely manage future work.**
+> **reconstruct a trustworthy, explicitly evidenced engineering contract, materialize that contract in the repository, and establish a versioned boundary from which DevCadence can safely manage future work.**

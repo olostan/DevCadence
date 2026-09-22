@@ -1,6 +1,6 @@
-# Contributing to DevCadience
+# Contributing to DevCadence
 
-DevCadience welcomes changes that strengthen the central idea: deep, grounded frontier reasoning should create durable engineering guidance, while local agents perform high-volume repository work under explicit evidence and verification contracts.
+DevCadence welcomes changes that strengthen the central idea: deep, grounded frontier reasoning should create durable engineering guidance, while local agents perform high-volume repository work under explicit evidence and verification contracts.
 
 ## Before contributing
 

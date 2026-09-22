@@ -78,7 +78,7 @@ const (
 	// control plane relies on, such as a projection that disagrees with the
 	// event journal.
 	CategoryIntegrity Category = "integrity"
-	// CategoryInternal reports a defect in DevCadience itself.
+	// CategoryInternal reports a defect in DevCadence itself.
 	CategoryInternal Category = "internal"
 )
 

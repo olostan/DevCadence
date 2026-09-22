@@ -1,5 +1,5 @@
 // Package protocol contains the strongly typed Go representations of the
-// durable DevCadience contracts defined in docs/PROTOCOLS.md and published as
+// durable DevCadence contracts defined in docs/PROTOCOLS.md and published as
 // JSON Schema under schemas/.
 //
 // The Go type and the JSON Schema are twin representations of one contract
@@ -17,7 +17,7 @@ import (
 	"io"
 	"time"
 
-	"github.com/olostan/DevCadience/internal/errs"
+	"github.com/olostan/DevCadence/internal/errs"
 )
 
 // SchemaVersion1 is the only durable contract version this build writes.
@@ -51,7 +51,7 @@ const (
 	ActorHuman ActorKind = "human"
 	// ActorPrincipal is a frontier principal engineer.
 	ActorPrincipal ActorKind = "principal"
-	// ActorControlPlane is DevCadience itself.
+	// ActorControlPlane is DevCadence itself.
 	ActorControlPlane ActorKind = "control_plane"
 	// ActorLocalAgent is a local model acting in an engineering role.
 	ActorLocalAgent ActorKind = "local_agent"

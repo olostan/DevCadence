@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/olostan/DevCadience/schemas/finding-disposition.schema.json",
-  "title": "DevCadience FindingDisposition",
+  "$id": "https://github.com/olostan/DevCadence/schemas/finding-disposition.schema.json",
+  "title": "DevCadence FindingDisposition",
   "type": "object",
   "additionalProperties": false,
   "required": [

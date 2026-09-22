@@ -6,14 +6,14 @@ import (
 	"flag"
 	"fmt"
 
-	"github.com/olostan/DevCadience/internal/controlplane"
-	"github.com/olostan/DevCadience/internal/errs"
-	"github.com/olostan/DevCadience/internal/protocol"
+	"github.com/olostan/DevCadence/internal/controlplane"
+	"github.com/olostan/DevCadence/internal/errs"
+	"github.com/olostan/DevCadence/internal/protocol"
 )
 
 func runProject(ctx context.Context, e *env, args []string) error {
 	if len(args) == 0 {
-		return errs.New(errs.CategoryInvalidArgument, "usage: devcadience project <init|list>")
+		return errs.New(errs.CategoryInvalidArgument, "usage: devcadence project <init|list>")
 	}
 	switch args[0] {
 	case "init":

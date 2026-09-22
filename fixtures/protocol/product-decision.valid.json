@@ -2,7 +2,7 @@
   "schema_version": "1.0",
   "decision_id": "pd_000000000000000000000001",
   "project_id": "example",
-  "question": "Must DevCadience work with no network access at all, or only without a DevCadience cloud service?",
+  "question": "Must DevCadence work with no network access at all, or only without a DevCadence cloud service?",
   "answer": "It must work with no network access at all during normal operation. External research and consultants are explicitly optional escalations.",
   "authority": "human",
   "authority_actor": "project_owner",

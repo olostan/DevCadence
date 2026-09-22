@@ -4,10 +4,10 @@ import (
 	"context"
 	"strings"
 
-	"github.com/olostan/DevCadience/internal/errs"
-	"github.com/olostan/DevCadience/internal/events"
-	"github.com/olostan/DevCadience/internal/protocol"
-	"github.com/olostan/DevCadience/internal/storage"
+	"github.com/olostan/DevCadence/internal/errs"
+	"github.com/olostan/DevCadence/internal/events"
+	"github.com/olostan/DevCadence/internal/protocol"
+	"github.com/olostan/DevCadence/internal/storage"
 )
 
 // InitProjectInput registers a project.
@@ -182,7 +182,7 @@ type AppendTypedEventInput struct {
 func (s *Service) AppendTypedEvent(ctx context.Context, in AppendTypedEventInput) (Result, error) {
 	return s.Apply(ctx, Command{
 		ProjectID:   in.ProjectID,
-		Actor:       defaultActor(in.Actor, protocol.ActorControlPlane, "devcadience"),
+		Actor:       defaultActor(in.Actor, protocol.ActorControlPlane, "devcadence"),
 		Correlation: in.Correlation,
 		Payload:     in.Payload,
 		Records:     in.Records,

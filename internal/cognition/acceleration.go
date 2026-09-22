@@ -4,7 +4,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/olostan/DevCadience/internal/protocol"
+	"github.com/olostan/DevCadence/internal/protocol"
 )
 
 // Acceleration evaluation is the single place a backend may be called verified.

@@ -1,4 +1,4 @@
-# DevCadience Implementation Plan
+# DevCadence Implementation Plan
 
 ## Scope
 
@@ -67,7 +67,7 @@ A fresh capable engineer/model can explain the system and M1 boundaries without 
 Implement model-independent control-plane primitives.
 
 ### Deliverables
-- Go module and CLI skeleton — `cmd/devcadience`;
+- Go module and CLI skeleton — `cmd/devcadence`;
 - protocol/domain types, including discovery/specification records —
   `internal/protocol`;
 - ProblemModel/AmbiguityLedger/ProductDecision/Requirement/DiscoveryExperiment/
@@ -78,7 +78,7 @@ Implement model-independent control-plane primitives.
 - ProjectState reducer/materialized view — `internal/state`;
 - task/attempt state machine — `internal/tasks`;
 - fixture/test framework — `internal/testsupport`, `fixtures/`, `tests/`;
-- schema validation tooling — `internal/schema`, `devcadience schema validate`;
+- schema validation tooling — `internal/schema`, `devcadence schema validate`;
 - the `ProjectState.review` projection *shape* — `protocol.ReviewConvergenceState`,
   paired with the schema property so the two representations accept the same
   documents. Nothing reduces into it; bounded ReviewCampaign orchestration,
@@ -183,11 +183,11 @@ Safely operate on real repositories.
   execution against the real M1 `protocol.ValidationResult`/
   `ValidationCompleted`);
 - candidate commit/diff metadata — `internal/repository.Repository.Diff`,
-  `CheckMerge`, `StaleBase`, surfaced through `devcadience candidate show`.
+  `CheckMerge`, `StaleBase`, surfaced through `devcadence candidate show`.
 
 ### Verification
 Synthetic fixture repositories only (`internal/testsupport.NewGitRepo`),
-never the DevCadience repository itself:
+never the DevCadence repository itself:
 - parallel worktree isolation — `TestParallelWorktreesAreIsolated`,
   `TestConcurrentCreateSameProject`;
 - compile/test success/failure — `internal/process`, `internal/validation`
@@ -210,7 +210,7 @@ never the DevCadience repository itself:
 Run with `go test ./... && go test -race ./... && go vet ./...`, or `make verify`.
 
 ### Exit criterion
-DevCadience can safely run deterministic engineering work on real
+DevCadence can safely run deterministic engineering work on real
 repositories without an LLM.
 
 Met: `internal/validation`'s `TestExecuteAndRecordAttemptScopeDrivesTaskToReviewing`
@@ -243,7 +243,7 @@ still passes).
 - The process runner does not sandbox `Spec.Dir`; confinement to a worktree
   is structural (only `internal/worktrees.Manager` hands out worktree
   paths), not OS-enforced. See ADR-0008.
-- `devcadience validate`/`run`/`candidate show` are inspection and
+- `devcadence validate`/`run`/`candidate show` are inspection and
   operator/demo commands, not the eventual M3/M4 agent-facing execution
   surface; a future milestone's agent runtime calls
   `internal/validation`/`internal/process` directly, not the CLI.
@@ -252,7 +252,7 @@ still passes).
 
 ### Goal
 
-Make DevCadience adaptive to the machine and AI tooling it actually finds,
+Make DevCadence adaptive to the machine and AI tooling it actually finds,
 rather than assuming strong local hardware, Ollama/MLX, one subscription, or a
 preinstalled principal host.
 
@@ -317,14 +317,14 @@ Two deliverables below are narrower than the heading suggests, deliberately:
   plane capabilities.
 
 #### Exit criterion
-DevCadience can describe the machine and available cognition endpoints from
+DevCadence can describe the machine and available cognition endpoints from
 observed evidence, verify local acceleration where configured, and route roles
 without assuming a strong local coder exists.
 
 **Met.** Every verification case above is covered by a deterministic test against
 fixture machines in `internal/environment/fixtures.go`; the suite needs no GPU, no
 runtime, no Python, no credentials and no network. The read-only proof surface is
-`devcadience environment inspect`, `cognition list`, `cognition probe` and
+`devcadence environment inspect`, `cognition list`, `cognition probe` and
 `cognition route`.
 
 ### M3B — Guided bootstrap and onboarding
@@ -339,8 +339,8 @@ operator-supplied capability and policy, `AcceleratorCandidate.RequiredSoftware`
 for what to remediate, and the versioned compatibility tables to extend.
 
 #### Deliverables
-- `devcadience doctor`;
-- `devcadience setup`;
+- `devcadence doctor`;
+- `devcadence setup`;
 - modular setup surfaces for hardware/inference/cognition/principal/auth;
 - dry-run setup/remediation plans;
 - structured SetupAction authority levels;
@@ -373,7 +373,7 @@ for what to remediate, and the versioned compatibility tables to extend.
 
 #### Exit criterion
 A user new to local LLM tooling can start from an ordinary supported Mac/Linux
-machine and reach an explicit usable DevCadience deployment profile without
+machine and reach an explicit usable DevCadence deployment profile without
 having to understand accelerator stacks, model runtimes, or provider auth in
 advance.
 
@@ -396,7 +396,7 @@ the other initial first-class principal hosts. No one host is a core-domain
 dependency.
 
 #### Deliverables
-- stdio MCP adapter with no-argument `devcadience-mcp` launch contract;
+- stdio MCP adapter with no-argument `devcadence-mcp` launch contract;
 - host-neutral semantic principal contract;
 - PrincipalHost adapter boundary;
 - first-class integration support for:
@@ -445,7 +445,7 @@ See [PRINCIPAL_HOSTS.md](PRINCIPAL_HOSTS.md),
 
 #### Goal
 Allow an existing repository with absent, stale, incomplete or arbitrary
-documentation to become a trustworthy DevCadience-managed project.
+documentation to become a trustworthy DevCadence-managed project.
 
 Repository registration alone is not readiness.
 
@@ -467,7 +467,7 @@ Repository registration alone is not readiness.
   - contradicted;
   - accepted-risk;
 - mandatory canonical documentation baseline under
-  `docs/devcadience/` by default (or an explicitly configured committed
+  `docs/devcadence/` by default (or an explicitly configured committed
   canonical root), including:
   - VISION.md;
   - REQUIREMENTS.md;
@@ -503,7 +503,7 @@ Synthetic brownfield repositories including:
 - successful READY transition after blockers close.
 
 #### Exit criterion
-DevCadience can take an imperfect existing repository, reconstruct an
+DevCadence can take an imperfect existing repository, reconstruct an
 evidence-backed engineering contract, commit the mandatory canonical baseline,
 and refuse normal managed work until that baseline passes Adoption Readiness.
 
@@ -523,11 +523,11 @@ Use several real medium-complexity tasks and compare:
 
 **Baseline:** frontier coding agent directly handles the repository.
 
-**DevCadience:** deterministic/scout evidence -> principal design -> detailed
+**DevCadence:** deterministic/scout evidence -> principal design -> detailed
 Work Package -> isolated implementation worker -> deterministic validation ->
 independent review -> principal compact decision.
 
-The DevCadience path MUST be exercised under materially different profiles:
+The DevCadence path MUST be exercised under materially different profiles:
 
 1. **strong-local** — e.g. capable Apple Silicon/local coder;
 2. **hybrid-thin** — e.g. 32 GB-class Linux node with deterministic/local-small
@@ -536,7 +536,7 @@ The DevCadience path MUST be exercised under materially different profiles:
    authority with remote model cognition.
 
 The experiment must also cover:
-- a greenfield/DevCadience-native project path;
+- a greenfield/DevCadence-native project path;
 - a brownfield repository that enters through M4B reconstruction and reaches a
   committed Adoption Baseline before normal managed work.
 
@@ -557,7 +557,7 @@ The experiment must also cover:
 - whether protocol behavior changes across deployment profiles.
 
 ### Exit criterion
-DevCadience shows meaningful frontier context savings without unacceptable
+DevCadence shows meaningful frontier context savings without unacceptable
 quality loss; at least one task demonstrates useful independent
 review/escalation; the same core engineering protocols operate under
 strong-local, hybrid-thin and no-local-model profiles; and an imperfect
@@ -674,8 +674,8 @@ Run a multi-task milestone:
 
 ```text
 cmd/
-  devcadience/
-  devcadience-mcp/
+  devcadence/
+  devcadence-mcp/
 internal/
   protocol/
   state/

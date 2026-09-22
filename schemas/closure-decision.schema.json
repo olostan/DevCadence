@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/olostan/DevCadience/schemas/closure-decision.schema.json",
-  "title": "DevCadience ClosureDecision",
+  "$id": "https://github.com/olostan/DevCadence/schemas/closure-decision.schema.json",
+  "title": "DevCadence ClosureDecision",
   "type": "object",
   "additionalProperties": false,
   "required": [

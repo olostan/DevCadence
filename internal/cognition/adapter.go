@@ -23,7 +23,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/olostan/DevCadience/internal/protocol"
+	"github.com/olostan/DevCadence/internal/protocol"
 )
 
 // SyntheticProbePrompt is the only prompt this package ever sends.

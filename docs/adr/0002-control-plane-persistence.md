@@ -233,11 +233,11 @@ No external consultant was involved; M6 is where consultant adapters arrive.
    `-db` left an empty database behind while reporting the project missing.
 8. **Artifacts:** large logs, diffs and model transcripts are referenced by
    `protocol.ArtifactRef` (locator plus digest) and never stored in a column.
-9. **Location:** the database is `$DEVCADIENCE_HOME/state/control-plane.db`,
-   with `DEVCADIENCE_HOME` defaulting to `~/.devcadience`. The path must be
+9. **Location:** the database is `$DEVCADENCE_HOME/state/control-plane.db`,
+   with `DEVCADENCE_HOME` defaulting to `~/.devcadence`. The path must be
    absolute; `-db` overrides it. This settles the question docs/SETUP.md §8
    deferred. A full XDG layout is not adopted: the macOS-first target and the
-   single `DEVCADIENCE_HOME` indirection cover the need with one variable.
+   single `DEVCADENCE_HOME` indirection cover the need with one variable.
 
 ## Rationale
 

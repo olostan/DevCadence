@@ -8,10 +8,10 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/olostan/DevCadience/internal/errs"
-	"github.com/olostan/DevCadience/internal/repository"
-	"github.com/olostan/DevCadience/internal/testsupport"
-	"github.com/olostan/DevCadience/internal/worktrees"
+	"github.com/olostan/DevCadence/internal/errs"
+	"github.com/olostan/DevCadence/internal/repository"
+	"github.com/olostan/DevCadence/internal/testsupport"
+	"github.com/olostan/DevCadence/internal/worktrees"
 )
 
 func newManager(t *testing.T) *worktrees.Manager {
@@ -586,7 +586,7 @@ func TestCreateRollsBackGitWorktreeOnManifestSaveFailure(t *testing.T) {
 	if strings.Contains(entries, worktreePath) {
 		t.Fatalf("git still registers the rolled-back worktree: %s", entries)
 	}
-	branches := fixture.Git("branch", "--list", "devcadience/tsk1/att1")
+	branches := fixture.Git("branch", "--list", "devcadence/tsk1/att1")
 	if strings.TrimSpace(branches) != "" {
 		t.Fatalf("git still has the rolled-back branch: %q", branches)
 	}

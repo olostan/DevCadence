@@ -6,7 +6,7 @@ Consultants provide independent high-capability reasoning beyond the primary pri
 
 They are not automatic authorities.
 
-Consultants are also **optional capabilities**. DevCadience must not require the operator to subscribe to OpenAI, Anthropic, Google, xAI, or any other specific provider. Environment discovery should expose whichever compatible consultant/cognition endpoints are already installed, authenticated and policy-allowed; no available consultant means reduced cognitive diversity, not control-plane failure.
+Consultants are also **optional capabilities**. DevCadence must not require the operator to subscribe to OpenAI, Anthropic, Google, xAI, or any other specific provider. Environment discovery should expose whichever compatible consultant/cognition endpoints are already installed, authenticated and policy-allowed; no available consultant means reduced cognitive diversity, not control-plane failure.
 
 ## 1. Conceptual model
 

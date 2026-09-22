@@ -6,11 +6,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/olostan/DevCadience/internal/clock"
-	"github.com/olostan/DevCadience/internal/cognition"
-	"github.com/olostan/DevCadience/internal/cognition/mlx"
-	"github.com/olostan/DevCadience/internal/environment"
-	"github.com/olostan/DevCadience/internal/protocol"
+	"github.com/olostan/DevCadence/internal/clock"
+	"github.com/olostan/DevCadence/internal/cognition"
+	"github.com/olostan/DevCadence/internal/cognition/mlx"
+	"github.com/olostan/DevCadence/internal/environment"
+	"github.com/olostan/DevCadence/internal/protocol"
 )
 
 // The MLX adapter runs a Python program, so its tests drive the same
@@ -331,7 +331,7 @@ func TestTheProbeSendsOnlySyntheticContentAsArgv(t *testing.T) {
 	if strings.Contains(call, "&&") || strings.Contains(call, "|") || strings.Contains(call, ";") {
 		t.Errorf("the invocation looks like a shell string: %q", call)
 	}
-	for _, forbidden := range []string{"devcadience", "internal/", "ProjectState"} {
+	for _, forbidden := range []string{"devcadence", "internal/", "ProjectState"} {
 		if strings.Contains(call, forbidden) {
 			t.Errorf("project content reached the interpreter: %q", call)
 		}

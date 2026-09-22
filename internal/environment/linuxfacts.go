@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/olostan/DevCadience/internal/protocol"
+	"github.com/olostan/DevCadence/internal/protocol"
 )
 
 // Linux discovery reads the kernel's own view of the machine.
@@ -25,7 +25,7 @@ const (
 	pciClassProcessingAccelerator = "0x120000"
 )
 
-// PCI vendor identifiers for the accelerator vendors DevCadience distinguishes.
+// PCI vendor identifiers for the accelerator vendors DevCadence distinguishes.
 var pciVendors = map[string]protocol.AcceleratorVendor{
 	"0x10de": protocol.VendorNVIDIA,
 	"0x1002": protocol.VendorAMD,

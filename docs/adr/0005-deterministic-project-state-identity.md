@@ -160,7 +160,7 @@ instead of hand-picked fields, which is a far stronger statement of DCI-053.
 ### Positive
 - The §15 check "state revision matches journal high-water mark" holds
   structurally.
-- Any historical revision is retrievable (`devcadience state show -at N`).
+- Any historical revision is retrievable (`devcadence state show -at N`).
 - Rebuild equivalence is byte equality, not field-by-field similarity.
 - No snapshot table to keep consistent.
 

@@ -14,7 +14,7 @@ A powerful reviewer can almost always find another locally defensible improvemen
 
 ## Decision
 
-DevCadience adopts bounded **ReviewCampaigns**.
+DevCadence adopts bounded **ReviewCampaigns**.
 
 Key rules:
 - broad independent reviewers inspect the same immutable candidate in parallel where possible;

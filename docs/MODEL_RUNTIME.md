@@ -2,7 +2,7 @@
 
 ## Scope
 
-This document defines how DevCadience discovers, verifies, represents and routes model cognition.
+This document defines how DevCadence discovers, verifies, represents and routes model cognition.
 
 The discovery, verification, representation and routing described here are
 **implemented** as of M3A, in `internal/environment` and `internal/cognition`.
@@ -14,7 +14,7 @@ workers (§21) are unimplemented by design. The durable contracts are settled in
 
 The original bootstrap target of a 48 GB Apple Silicon machine remains a valuable **strong-local reference profile**, but it is not an architectural prerequisite.
 
-DevCadience must also run usefully on machines where:
+DevCadence must also run usefully on machines where:
 
 - only small local models are practical;
 - no local model runtime is installed;
@@ -265,7 +265,7 @@ For local runtimes, scheduling must preserve headroom for:
 
 - operating system;
 - IDE/principal host;
-- DevCadience daemon;
+- DevCadence daemon;
 - Git/worktrees;
 - compiler/test processes;
 - KV/context cache;

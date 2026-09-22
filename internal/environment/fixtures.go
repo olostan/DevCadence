@@ -4,8 +4,8 @@ import (
 	"context"
 	"strconv"
 
-	"github.com/olostan/DevCadience/internal/clock"
-	"github.com/olostan/DevCadience/internal/protocol"
+	"github.com/olostan/DevCadence/internal/clock"
+	"github.com/olostan/DevCadence/internal/protocol"
 )
 
 // Fixture machines.

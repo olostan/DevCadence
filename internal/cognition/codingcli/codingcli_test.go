@@ -6,11 +6,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/olostan/DevCadience/internal/clock"
-	"github.com/olostan/DevCadience/internal/cognition"
-	"github.com/olostan/DevCadience/internal/cognition/codingcli"
-	"github.com/olostan/DevCadience/internal/environment"
-	"github.com/olostan/DevCadience/internal/protocol"
+	"github.com/olostan/DevCadence/internal/clock"
+	"github.com/olostan/DevCadence/internal/cognition"
+	"github.com/olostan/DevCadence/internal/cognition/codingcli"
+	"github.com/olostan/DevCadence/internal/environment"
+	"github.com/olostan/DevCadence/internal/protocol"
 )
 
 // withCLI adds an installed coding CLI to a fixture machine.
@@ -324,7 +324,7 @@ func TestTheHealthProbeSendsNoRepositorySource(t *testing.T) {
 	if !strings.Contains(call, cognition.SyntheticProbePrompt) {
 		t.Errorf("the synthetic prompt was not sent: %q", call)
 	}
-	for _, forbidden := range []string{"devcadience", "internal/", ".go", "ProjectState", "diff"} {
+	for _, forbidden := range []string{"devcadence", "internal/", ".go", "ProjectState", "diff"} {
 		if strings.Contains(call, forbidden) {
 			t.Errorf("project content reached the CLI: %q", call)
 		}

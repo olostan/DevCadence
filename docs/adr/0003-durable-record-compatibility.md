@@ -35,7 +35,7 @@ lossless.
   (inspected directly).
 - `schemas/README.md` rule 7 requires unknown-field and migration behaviour to
   be explicit "before the first compatibility-sensitive release".
-- No durable DevCadience records exist anywhere yet: M1 is the first
+- No durable DevCadence records exist anywhere yet: M1 is the first
   implementation, and the repository was at Day 0 before it.
 
 ## Assumptions
@@ -89,7 +89,7 @@ lossless.
   field is additive. Mitigated by the migration rule below.
 
 **What would invalidate it**
-- A future topology where several DevCadience versions write to one store.
+- A future topology where several DevCadence versions write to one store.
 
 ### Option C — Ignore unknown fields silently
 

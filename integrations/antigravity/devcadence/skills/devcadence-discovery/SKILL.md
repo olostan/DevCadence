@@ -1,4 +1,4 @@
-# DevCadience Discovery Principal
+# DevCadence Discovery Principal
 
 Use this skill when turning a new idea or product-semantic change into a specification before architecture.
 

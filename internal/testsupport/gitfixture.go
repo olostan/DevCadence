@@ -13,10 +13,10 @@ import (
 // configuration (ENGINEERING_STANDARDS.md §17: deterministic tests).
 func gitEnv() []string {
 	return append(os.Environ(),
-		"GIT_AUTHOR_NAME=DevCadience Fixture",
-		"GIT_AUTHOR_EMAIL=fixture@devcadience.test",
-		"GIT_COMMITTER_NAME=DevCadience Fixture",
-		"GIT_COMMITTER_EMAIL=fixture@devcadience.test",
+		"GIT_AUTHOR_NAME=DevCadence Fixture",
+		"GIT_AUTHOR_EMAIL=fixture@devcadence.test",
+		"GIT_COMMITTER_NAME=DevCadence Fixture",
+		"GIT_COMMITTER_EMAIL=fixture@devcadence.test",
 		"GIT_AUTHOR_DATE=2026-01-02T03:04:05Z",
 		"GIT_COMMITTER_DATE=2026-01-02T03:04:05Z",
 	)
@@ -35,7 +35,7 @@ func runGit(t *testing.T, dir string, args ...string) string {
 }
 
 // GitRepo is a synthetic repository built for tests. It is never the
-// DevCadience repository itself (docs/IMPLEMENTATION_PLAN.md M2 §25).
+// DevCadence repository itself (docs/IMPLEMENTATION_PLAN.md M2 §25).
 type GitRepo struct {
 	t    *testing.T
 	Path string

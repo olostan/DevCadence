@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/olostan/DevCadience/internal/ids"
+	"github.com/olostan/DevCadence/internal/ids"
 )
 
 func TestULIDsAreWellShapedAndUnique(t *testing.T) {

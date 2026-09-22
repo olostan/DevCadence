@@ -6,17 +6,17 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/olostan/DevCadience/internal/controlplane"
-	"github.com/olostan/DevCadience/internal/errs"
-	"github.com/olostan/DevCadience/internal/events"
-	"github.com/olostan/DevCadience/internal/protocol"
-	"github.com/olostan/DevCadience/internal/storage"
-	"github.com/olostan/DevCadience/internal/tasks"
+	"github.com/olostan/DevCadence/internal/controlplane"
+	"github.com/olostan/DevCadence/internal/errs"
+	"github.com/olostan/DevCadence/internal/events"
+	"github.com/olostan/DevCadence/internal/protocol"
+	"github.com/olostan/DevCadence/internal/storage"
+	"github.com/olostan/DevCadence/internal/tasks"
 )
 
 func runTask(ctx context.Context, e *env, args []string) error {
 	if len(args) == 0 {
-		return errs.New(errs.CategoryInvalidArgument, "usage: devcadience task <create|list|show|states>")
+		return errs.New(errs.CategoryInvalidArgument, "usage: devcadence task <create|list|show|states>")
 	}
 	switch args[0] {
 	case "create":

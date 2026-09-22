@@ -9,11 +9,11 @@ import (
 	"os"
 	"strings"
 
-	"github.com/olostan/DevCadience/internal/controlplane"
-	"github.com/olostan/DevCadience/internal/errs"
-	"github.com/olostan/DevCadience/internal/events"
-	"github.com/olostan/DevCadience/internal/protocol"
-	"github.com/olostan/DevCadience/internal/storage"
+	"github.com/olostan/DevCadence/internal/controlplane"
+	"github.com/olostan/DevCadence/internal/errs"
+	"github.com/olostan/DevCadence/internal/events"
+	"github.com/olostan/DevCadence/internal/protocol"
+	"github.com/olostan/DevCadence/internal/storage"
 )
 
 // maxPayloadBytes bounds how much JSON the CLI will read for one event.
@@ -25,7 +25,7 @@ const maxPayloadBytes = 1 << 20
 
 func runEvent(ctx context.Context, e *env, args []string) error {
 	if len(args) == 0 {
-		return errs.New(errs.CategoryInvalidArgument, "usage: devcadience event <append|types>")
+		return errs.New(errs.CategoryInvalidArgument, "usage: devcadence event <append|types>")
 	}
 	switch args[0] {
 	case "append":
@@ -40,13 +40,13 @@ func runEvent(ctx context.Context, e *env, args []string) error {
 func runEventAppend(ctx context.Context, e *env, args []string) error {
 	fs := flag.NewFlagSet("event append", flag.ContinueOnError)
 	projectID := fs.String("project", "", "project identifier")
-	eventType := fs.String("type", "", "event type, e.g. TaskDelegated (see `devcadience event types`)")
+	eventType := fs.String("type", "", "event type, e.g. TaskDelegated (see `devcadence event types`)")
 	payloadArg := fs.String("payload", "-", "payload JSON: inline, @file, or - for stdin")
 	taskAlias := fs.String("task", "", "task alias; fills task_id in the payload when it is not set")
 	recordArg := fs.String("record", "", "durable record JSON (inline or @file) written atomically with the event; "+
 		"required when the payload references a record that is not already stored")
 	actorKind := fs.String("actor-kind", "control_plane", "actor kind recorded on the event")
-	actorID := fs.String("actor-id", "devcadience", "actor identifier recorded on the event")
+	actorID := fs.String("actor-id", "devcadence", "actor identifier recorded on the event")
 	if err := parseFlags(fs, e, args); err != nil {
 		return err
 	}

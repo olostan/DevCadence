@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/olostan/DevCadience/schemas/review-result.schema.json",
-  "title": "DevCadience ReviewResult",
+  "$id": "https://github.com/olostan/DevCadence/schemas/review-result.schema.json",
+  "title": "DevCadence ReviewResult",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema_version", "review_id", "project_id", "attempt_id", "work_package_id", "dimension", "verdict", "findings", "must_compliance", "principal_escalation_recommended"],

@@ -5,12 +5,12 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/olostan/DevCadience/internal/clock"
-	"github.com/olostan/DevCadience/internal/errs"
-	"github.com/olostan/DevCadience/internal/events"
-	"github.com/olostan/DevCadience/internal/protocol"
-	"github.com/olostan/DevCadience/internal/storage"
-	"github.com/olostan/DevCadience/internal/testsupport"
+	"github.com/olostan/DevCadence/internal/clock"
+	"github.com/olostan/DevCadence/internal/errs"
+	"github.com/olostan/DevCadence/internal/events"
+	"github.com/olostan/DevCadence/internal/protocol"
+	"github.com/olostan/DevCadence/internal/storage"
+	"github.com/olostan/DevCadence/internal/testsupport"
 )
 
 // testClock is the deterministic clock the storage suite stamps with.
@@ -34,7 +34,7 @@ func sampleEvent(id string, payload events.Payload) events.Event {
 		ProjectID:     "example",
 		EventType:     payload.Type(),
 		OccurredAt:    protocol.NewTimestamp(testsupport.Epoch),
-		Actor:         protocol.Actor{Kind: protocol.ActorControlPlane, ID: "devcadience"},
+		Actor:         protocol.Actor{Kind: protocol.ActorControlPlane, ID: "devcadence"},
 		Correlation:   events.CorrelationFor(payload),
 		Payload:       payload,
 	}
@@ -304,7 +304,7 @@ func TestUnknownStoredEventTypeIsReportedNotSkipped(t *testing.T) {
 			`INSERT INTO events (event_id, project_id, event_type, schema_version, occurred_at,
                 actor_kind, actor_id, correlation, payload, payload_digest)
              VALUES ('evt_future', 'example', 'SomethingFromTheFuture', '1.0',
-                     '2026-01-02T03:04:05.000000Z', 'control_plane', 'devcadience',
+                     '2026-01-02T03:04:05.000000Z', 'control_plane', 'devcadence',
                      '{}', ?, ?)`, futurePayload, protocol.DigestBytes([]byte(futurePayload)))
 	}); err != nil {
 		t.Fatalf("insert future event: %v", err)

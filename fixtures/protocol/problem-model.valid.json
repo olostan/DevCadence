@@ -11,7 +11,7 @@
   "actors": [
     {
       "id": "operator",
-      "description": "The single developer running DevCadience on their own machine.",
+      "description": "The single developer running DevCadence on their own machine.",
       "needs": ["See what is blocked", "Understand an acceptance decision"]
     },
     {

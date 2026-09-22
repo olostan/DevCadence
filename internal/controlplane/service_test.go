@@ -7,13 +7,13 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/olostan/DevCadience/internal/controlplane"
-	"github.com/olostan/DevCadience/internal/errs"
-	"github.com/olostan/DevCadience/internal/events"
-	"github.com/olostan/DevCadience/internal/protocol"
-	"github.com/olostan/DevCadience/internal/storage"
-	"github.com/olostan/DevCadience/internal/tasks"
-	"github.com/olostan/DevCadience/internal/testsupport"
+	"github.com/olostan/DevCadence/internal/controlplane"
+	"github.com/olostan/DevCadence/internal/errs"
+	"github.com/olostan/DevCadence/internal/events"
+	"github.com/olostan/DevCadence/internal/protocol"
+	"github.com/olostan/DevCadence/internal/storage"
+	"github.com/olostan/DevCadence/internal/tasks"
+	"github.com/olostan/DevCadence/internal/testsupport"
 )
 
 func initProject(t *testing.T, h *testsupport.Harness) {
