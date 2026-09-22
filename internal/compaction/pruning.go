@@ -55,19 +55,21 @@ func PruneToolResults(ctx context.Context, session *ExecutionSession, store *art
 		}
 
 		ref := msg.ContentRef
-		if ref == "" && store != nil {
-			putRes, err := store.PutBytes(ctx, projectID, "pruned_tool", "text/plain", []byte(msg.Content), 0)
-			if err == nil {
-				ref = putRes.Ref.Locator
-				msg.ContentRef = ref
+		if ref == "" {
+			if store == nil {
+				// Cannot safely prune without store; preserve original content intact
+				continue
 			}
+			putRes, err := store.PutBytes(ctx, projectID, "pruned_tool", "text/plain", []byte(msg.Content), 0)
+			if err != nil {
+				// Storage failure; leave message unpruned to avoid data loss
+				continue
+			}
+			ref = putRes.Ref.Locator
+			msg.ContentRef = ref
 		}
 
-		if ref != "" {
-			msg.Content = fmt.Sprintf(PrunedOutputTemplate, ref)
-		} else {
-			msg.Content = "[Pruned tool output. Preserved in execution store.]"
-		}
+		msg.Content = fmt.Sprintf(PrunedOutputTemplate, ref)
 		msg.IsPruned = true
 		prunedCount++
 	}

@@ -34,6 +34,8 @@ type RunOptions struct {
 	MaxOutputBytes int64
 	// RunID identifies this validation run, used for isolated service directories.
 	RunID string
+	// Modules provides the project's authoritative module catalog for resolving CheckSpec.ModuleID.
+	Modules []protocol.ModuleDefinition
 }
 
 // RunProfile executes every check in profile, in order, against opts.Dir.
@@ -49,7 +51,7 @@ type RunOptions struct {
 // protocol.ValidationResult; RunProfile does not build or persist one itself
 // so that callers validating a baseline, an attempt or an integration can
 // supply the right Subject.
-func RunProfile(ctx context.Context, profile Profile, opts RunOptions) ([]protocol.CheckResult, protocol.ValidationOutcome, error) {
+func RunProfile(ctx context.Context, profile Profile, opts RunOptions) (checks []protocol.CheckResult, outcome protocol.ValidationOutcome, err error) {
 	if opts.Dir == "" {
 		return nil, "", errs.New(errs.CategoryInvalidArgument, "validation: dir is required")
 	}
@@ -75,7 +77,7 @@ func RunProfile(ctx context.Context, profile Profile, opts RunOptions) ([]protoc
 		maxOutput = process.DefaultMaxOutputBytes
 	}
 
-	checks := make([]protocol.CheckResult, 0, len(profile.Checks))
+	checks = make([]protocol.CheckResult, 0, len(profile.Checks))
 	sawFail, sawError, sawCancel := false, false, false
 
 	var activeServices *ActiveServices
@@ -84,12 +86,21 @@ func RunProfile(ctx context.Context, profile Profile, opts RunOptions) ([]protoc
 		if runID == "" {
 			runID = fmt.Sprintf("val_%d", time.Now().UnixNano())
 		}
-		active, err := StartServices(ctx, profile.Services, opts.Dir, baseEnv, runID)
-		if err != nil {
-			return nil, protocol.ValidationError, err
+		active, startErr := StartServices(ctx, profile.Services, opts.Dir, baseEnv, runID)
+		if startErr != nil {
+			return nil, protocol.ValidationError, startErr
 		}
 		activeServices = active
-		defer activeServices.Teardown(context.Background())
+		defer func() {
+			if tErr := activeServices.Teardown(context.Background()); tErr != nil {
+				if err == nil {
+					err = tErr
+				} else {
+					err = fmt.Errorf("%w; teardown error: %v", err, tErr)
+				}
+				outcome = protocol.ValidationError
+			}
+		}()
 		baseEnv = activeServices.Env()
 	}
 
@@ -144,8 +155,52 @@ func RunProfile(ctx context.Context, profile Profile, opts RunOptions) ([]protoc
 		}
 
 		workingDir := opts.Dir
+		if spec.ModuleID != "" {
+			var foundMod *protocol.ModuleDefinition
+			for i := range opts.Modules {
+				if opts.Modules[i].ID == spec.ModuleID {
+					foundMod = &opts.Modules[i]
+					break
+				}
+			}
+			if foundMod == nil {
+				now := time.Now().UTC()
+				msg := fmt.Sprintf("module %q specified in check %q not found in project modules catalog", spec.ModuleID, spec.ID)
+				checks = append(checks, protocol.CheckResult{
+					ID:               spec.ID,
+					Kind:             spec.Kind,
+					Command:          spec.Argv,
+					WorkingDirectory: &opts.Dir,
+					Status:           protocol.CheckError,
+					Summary:          &msg,
+					StartedAt:        protocol.NewTimestamp(now),
+					FinishedAt:       protocol.NewTimestamp(now),
+				})
+				sawError = true
+				continue
+			}
+			moduleBaseDir, err := ValidateDirContainment(opts.Dir, foundMod.Path)
+			if err != nil {
+				now := time.Now().UTC()
+				msg := err.Error()
+				checks = append(checks, protocol.CheckResult{
+					ID:               spec.ID,
+					Kind:             spec.Kind,
+					Command:          spec.Argv,
+					WorkingDirectory: &opts.Dir,
+					Status:           protocol.CheckError,
+					Summary:          &msg,
+					StartedAt:        protocol.NewTimestamp(now),
+					FinishedAt:       protocol.NewTimestamp(now),
+				})
+				sawError = true
+				continue
+			}
+			workingDir = moduleBaseDir
+		}
+
 		if spec.Dir != "" {
-			containedDir, err := ValidateDirContainment(opts.Dir, spec.Dir)
+			containedDir, err := ValidateDirContainment(workingDir, spec.Dir)
 			if err != nil {
 				now := time.Now().UTC()
 				msg := err.Error()
@@ -165,8 +220,14 @@ func RunProfile(ctx context.Context, profile Profile, opts RunOptions) ([]protoc
 			workingDir = containedDir
 		}
 
+		checkCtx, cancel := context.WithCancelCause(ctx)
+		var stopMonitor func()
+		if activeServices != nil {
+			stopMonitor = activeServices.Monitor(checkCtx, cancel)
+		}
+
 		started := time.Now().UTC()
-		res, runErr := runner.Run(ctx, process.Spec{
+		res, runErr := runner.Run(checkCtx, process.Spec{
 			Executable:     spec.Argv[0],
 			Args:           spec.Argv[1:],
 			Dir:            workingDir,
@@ -176,6 +237,28 @@ func RunProfile(ctx context.Context, profile Profile, opts RunOptions) ([]protoc
 			MaxStderrBytes: maxOutput,
 		})
 		finished := time.Now().UTC()
+		if stopMonitor != nil {
+			stopMonitor()
+		}
+		cancel(nil)
+
+		// If execution aborted due to a background service crash, record immediately
+		if cause := context.Cause(checkCtx); cause != nil && cause != context.Canceled {
+			check := protocol.CheckResult{
+				ID:               spec.ID,
+				Kind:             spec.Kind,
+				Command:          spec.Argv,
+				WorkingDirectory: &workingDir,
+				StartedAt:        protocol.NewTimestamp(started),
+				FinishedAt:       protocol.NewTimestamp(finished),
+				Status:           protocol.CheckError,
+			}
+			summary := fmt.Sprintf("service failure during check execution: %v", cause)
+			check.Summary = &summary
+			sawError = true
+			checks = append(checks, check)
+			break
+		}
 
 		check := protocol.CheckResult{
 			ID:               spec.ID,
@@ -232,7 +315,14 @@ func RunProfile(ctx context.Context, profile Profile, opts RunOptions) ([]protoc
 		checks = append(checks, check)
 	}
 
-	outcome := protocol.ValidationPass
+	// Verify services remained healthy after the final check
+	if activeServices != nil && !sawError {
+		if err := activeServices.CheckHealth(); err != nil {
+			sawError = true
+		}
+	}
+
+	outcome = protocol.ValidationPass
 	switch {
 	case sawCancel:
 		outcome = protocol.ValidationCancelled

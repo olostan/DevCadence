@@ -109,5 +109,6 @@ type ExecutionSession struct {
 	Digest              *TrajectoryDigest
 	Messages            []Message
 	ActiveOperationIDs  []string
+	KnownDecisionIDs    map[string]bool
 	Policy              SessionPolicy
 }

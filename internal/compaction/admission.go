@@ -3,6 +3,7 @@ package compaction
 import (
 	"context"
 	"math"
+	"strings"
 
 	"github.com/olostan/DevCadence/internal/artifacts"
 	"github.com/olostan/DevCadence/internal/errs"
@@ -63,6 +64,22 @@ func (s SimpleTokenCounter) CountSession(session *ExecutionSession) int {
 	}
 	for _, am := range session.Assignment.Amendments {
 		tokens += s.CountString(am.Directive)
+	}
+	for _, op := range session.ActiveOperationIDs {
+		tokens += s.CountString(op)
+	}
+	tokens += s.CountString(session.Checkpoint.CurrentTreeSHA + session.Checkpoint.BaseCommit + session.Checkpoint.HeadCommit)
+	for _, f := range session.Checkpoint.StagedFiles {
+		tokens += s.CountString(f)
+	}
+	for _, f := range session.Checkpoint.UnstagedFiles {
+		tokens += s.CountString(f)
+	}
+	for _, f := range session.Checkpoint.UntrackedFiles {
+		tokens += s.CountString(f)
+	}
+	for _, te := range session.Checkpoint.TestEvidence {
+		tokens += s.CountString(te.CheckID + te.TreeSHA)
 	}
 	for _, msg := range session.Messages {
 		tokens += s.CountString(string(msg.Role)) + s.CountString(msg.Content)
@@ -134,7 +151,7 @@ func AdmitOrCompact(
 		} else if Ttotal > hardWatermark || Ttotal > C {
 			// Tier 2: Episodic Trajectory Summarization
 			if summarizer != nil {
-				applyTier2Summarization(ctx, session, summarizer, C)
+				applyTier2Summarization(ctx, session, summarizer, store, C)
 				Ttotal = calcTotal()
 			}
 		}
@@ -150,8 +167,14 @@ func AdmitOrCompact(
 	return nil
 }
 
-func applyTier2Summarization(ctx context.Context, session *ExecutionSession, summarizer Summarizer, C int) {
+func applyTier2Summarization(ctx context.Context, session *ExecutionSession, summarizer Summarizer, store *artifacts.Store, C int) {
 	if session == nil || len(session.Messages) < 4 {
+		return
+	}
+
+	targetCutoff := len(session.Messages) - 2
+	cutoff := findSafeCutoff(session.Messages, targetCutoff)
+	if cutoff <= 0 {
 		return
 	}
 
@@ -159,16 +182,28 @@ func applyTier2Summarization(ctx context.Context, session *ExecutionSession, sum
 	var toSummarize []Message
 	var remaining []Message
 
-	cutoff := len(session.Messages) - 2
 	for i, msg := range session.Messages {
-		if i < cutoff && !msg.Protected {
-			toSummarize = append(toSummarize, msg)
+		if strings.HasPrefix(msg.Content, "## Trajectory Digest") {
+			// Replace earlier digests instead of duplicating
+			continue
+		}
+		if i < cutoff {
+			if !msg.Protected {
+				toSummarize = append(toSummarize, msg)
+			} else {
+				remaining = append(remaining, msg)
+			}
 		} else {
 			remaining = append(remaining, msg)
 		}
 	}
 
 	if len(toSummarize) == 0 {
+		return
+	}
+
+	if err := ValidateAtomicToolGroups(remaining); err != nil {
+		// If splitting would orphan tool calls/results, abort Tier 2
 		return
 	}
 
@@ -183,12 +218,62 @@ func applyTier2Summarization(ctx context.Context, session *ExecutionSession, sum
 		return
 	}
 
+	// Validate evidence references and decision authority against authoritative store
+	var knownDecisions map[string]bool
+	if session.KnownDecisionIDs != nil {
+		knownDecisions = session.KnownDecisionIDs
+	}
+	digest.ValidateEvidenceAndAuthority(store, knownDecisions)
+
 	session.Digest = &digest
 	digestMsg := digest.FormatAsUserMessage()
 
-	// Reconstruct messages: digest first, then remaining
+	// Reconstruct messages: single canonical digest first, then remaining
 	newMessages := make([]Message, 0, len(remaining)+1)
 	newMessages = append(newMessages, digestMsg)
 	newMessages = append(newMessages, remaining...)
+
+	if err := ValidateAtomicToolGroups(newMessages); err != nil {
+		return
+	}
+
 	session.Messages = newMessages
+}
+
+func findSafeCutoff(messages []Message, target int) int {
+	if target <= 0 {
+		return 0
+	}
+	if target >= len(messages) {
+		return len(messages)
+	}
+
+	toolOwner := make(map[string]int)
+	groupEnd := make(map[int]int)
+
+	for i, msg := range messages {
+		if msg.Role == RoleAssistant && len(msg.ToolCalls) > 0 {
+			for _, tc := range msg.ToolCalls {
+				toolOwner[tc.ID] = i
+			}
+			groupEnd[i] = i
+		} else if msg.Role == RoleTool && msg.ToolCallID != "" {
+			if ownerIdx, ok := toolOwner[msg.ToolCallID]; ok {
+				if i > groupEnd[ownerIdx] {
+					groupEnd[ownerIdx] = i
+				}
+			}
+		}
+	}
+
+	// If target falls strictly inside [ownerIdx, groupEnd[ownerIdx]],
+	// shift target to ownerIdx so the entire group moves together.
+	cutoff := target
+	for ownerIdx, endIdx := range groupEnd {
+		if cutoff > ownerIdx && cutoff <= endIdx {
+			cutoff = ownerIdx
+		}
+	}
+
+	return cutoff
 }

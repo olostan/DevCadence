@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/olostan/DevCadence/internal/artifacts"
@@ -192,6 +193,81 @@ func TestRunProfileCheckDirEscapeRejected(t *testing.T) {
 	}
 	if checks[0].Status != protocol.CheckError {
 		t.Fatalf("status = %s, want CheckError", checks[0].Status)
+	}
+}
+
+func TestRunProfileModuleResolution(t *testing.T) {
+	dir := t.TempDir()
+	modDir := filepath.Join(dir, "packages", "core")
+	if err := os.MkdirAll(modDir, 0755); err != nil {
+		t.Fatalf("mkdir core: %v", err)
+	}
+
+	modules := []protocol.ModuleDefinition{
+		{
+			ID:       "pkg-core",
+			Path:     "packages/core",
+			Language: "go",
+		},
+	}
+
+	profile := validation.Profile{
+		Name: "mod-test",
+		Checks: []validation.CheckSpec{
+			{ID: "check-mod", ModuleID: "pkg-core", Argv: []string{"pwd"}, Timeout: 5000000000},
+		},
+	}
+
+	checks, outcome, err := validation.RunProfile(context.Background(), profile, validation.RunOptions{
+		Dir:       dir,
+		ProjectID: "proj-a",
+		Artifacts: newArtifactStore(t),
+		Modules:   modules,
+	})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if outcome != protocol.ValidationPass {
+		t.Fatalf("outcome = %s, want pass", outcome)
+	}
+
+	resolvedModDir, err := filepath.EvalSymlinks(modDir)
+	if err != nil {
+		t.Fatalf("eval symlinks: %v", err)
+	}
+	if checks[0].WorkingDirectory == nil || *checks[0].WorkingDirectory != resolvedModDir {
+		t.Errorf("working dir = %v, want %s", *checks[0].WorkingDirectory, resolvedModDir)
+	}
+}
+
+func TestRunProfileUnknownModuleRejected(t *testing.T) {
+	dir := t.TempDir()
+	profile := validation.Profile{
+		Name: "mod-reject",
+		Checks: []validation.CheckSpec{
+			{ID: "check-mod", ModuleID: "nonexistent-module", Argv: []string{"pwd"}, Timeout: 5000000000},
+		},
+	}
+
+	checks, outcome, err := validation.RunProfile(context.Background(), profile, validation.RunOptions{
+		Dir:       dir,
+		ProjectID: "proj-a",
+		Artifacts: newArtifactStore(t),
+		Modules: []protocol.ModuleDefinition{
+			{ID: "pkg-core", Path: "packages/core", Language: "go"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if outcome != protocol.ValidationError {
+		t.Fatalf("outcome = %s, want ValidationError", outcome)
+	}
+	if len(checks) == 0 || checks[0].Status != protocol.CheckError {
+		t.Fatalf("expected CheckError for unknown module, got %+v", checks)
+	}
+	if checks[0].Summary == nil || !strings.Contains(*checks[0].Summary, "not found in project modules catalog") {
+		t.Errorf("expected module not found message, got %v", checks[0].Summary)
 	}
 }
 

@@ -45,20 +45,33 @@ func (s Scope) ResolvePath(relPath string) (string, error) {
 		return "", errs.New(errs.CategoryPolicyDenied, "scope: path %q escapes worktree %q", relPath, s.WorktreePath)
 	}
 
-	// If file or dir exists, verify symlink resolution does not escape either
-	if info, err := os.Lstat(target); err == nil {
-		var resolvedTarget string
-		if info.Mode()&os.ModeSymlink != 0 {
-			resolvedTarget, err = filepath.EvalSymlinks(target)
-			if err != nil {
-				return "", errs.Wrap(errs.CategoryInvalidArgument, err, "scope: resolve symlink %q", target)
-			}
-			relTarget, err := filepath.Rel(resolvedWorktree, resolvedTarget)
-			if err != nil || strings.HasPrefix(relTarget, "..") {
-				return "", errs.New(errs.CategoryPolicyDenied, "scope: symlink %q escapes worktree %q", relPath, s.WorktreePath)
-			}
-			return resolvedTarget, nil
+	// Verify symlink resolution across the entire target path and its ancestors
+	resolvedTarget, err := filepath.EvalSymlinks(target)
+	if err == nil {
+		relTarget, err := filepath.Rel(resolvedWorktree, resolvedTarget)
+		if err != nil || strings.HasPrefix(relTarget, "..") {
+			return "", errs.New(errs.CategoryPolicyDenied, "scope: path %q resolves to %q which escapes worktree %q", relPath, resolvedTarget, s.WorktreePath)
 		}
+		return resolvedTarget, nil
+	} else if !os.IsNotExist(err) {
+		return "", errs.Wrap(errs.CategoryInvalidArgument, err, "scope: eval symlinks %q", target)
+	}
+
+	// Target does not exist yet: verify existing ancestor directory does not escape
+	curr := filepath.Dir(target)
+	for {
+		if resolvedAncestor, err := filepath.EvalSymlinks(curr); err == nil {
+			relAncestor, err := filepath.Rel(resolvedWorktree, resolvedAncestor)
+			if err != nil || strings.HasPrefix(relAncestor, "..") {
+				return "", errs.New(errs.CategoryPolicyDenied, "scope: ancestor %q of %q escapes worktree %q", curr, relPath, s.WorktreePath)
+			}
+			break
+		}
+		parent := filepath.Dir(curr)
+		if parent == curr {
+			break
+		}
+		curr = parent
 	}
 
 	return target, nil

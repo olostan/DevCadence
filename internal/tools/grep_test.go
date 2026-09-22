@@ -89,6 +89,7 @@ func TestGrepSearchCutoffAndArtifact(t *testing.T) {
 	// Verify pagination over the generated artifact
 	paged, err := FetchContent(FetchContentOptions{
 		Artifacts:  store,
+		ProjectID:  "default",
 		ContentRef: res.ContentRef,
 		Offset:     1,
 		Limit:      10,

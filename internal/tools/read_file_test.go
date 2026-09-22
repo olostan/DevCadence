@@ -125,6 +125,20 @@ func TestReadFileWorktreeContainment(t *testing.T) {
 	if err == nil {
 		t.Fatal("Expected error for symlink escape outside worktree")
 	}
+
+	// Ancestor directory symlink escape attempt (Finding 1)
+	symlinkDirPath := filepath.Join(worktreeDir, "leak_dir")
+	if err := os.Symlink(outsideDir, symlinkDirPath); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = ReadFile(ReadFileOptions{
+		Scope: scope,
+		Path:  "leak_dir/secret.txt",
+	})
+	if err == nil {
+		t.Fatal("Expected error for ancestor-directory symlink escape outside worktree")
+	}
 }
 
 func TestReadFileMaxBytesTruncation(t *testing.T) {

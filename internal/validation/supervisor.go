@@ -13,7 +13,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/olostan/DevCadence/internal/errs"
@@ -90,6 +89,45 @@ func (a *ActiveServices) CheckHealth() error {
 	return nil
 }
 
+// Monitor watches active services in the background during check execution.
+// If any service exits unexpectedly, it cancels the check context with the failure cause.
+func (a *ActiveServices) Monitor(ctx context.Context, cancel context.CancelCauseFunc) func() {
+	if a == nil {
+		return func() {}
+	}
+
+	stopCh := make(chan struct{})
+	var once sync.Once
+	stop := func() {
+		once.Do(func() {
+			close(stopCh)
+		})
+	}
+
+	a.mu.Lock()
+	services := append([]*ActiveService(nil), a.services...)
+	a.mu.Unlock()
+
+	for _, s := range services {
+		go func(svc *ActiveService) {
+			select {
+			case <-stopCh:
+				return
+			case <-ctx.Done():
+				return
+			case <-svc.doneCh:
+				err := a.CheckHealth()
+				if err == nil {
+					err = errs.New(errs.CategoryInternal, "service %q exited unexpectedly", svc.Spec.ID)
+				}
+				cancel(err)
+			}
+		}(s)
+	}
+
+	return stop
+}
+
 // Teardown stops and reaps all active services, cleaning up temp directories.
 func (a *ActiveServices) Teardown(ctx context.Context) error {
 	a.mu.Lock()
@@ -101,7 +139,7 @@ func (a *ActiveServices) Teardown(ctx context.Context) error {
 			close(s.lifetimeDone)
 
 			// Graceful SIGTERM
-			killServiceGroup(s.cmd.Process, syscall.SIGTERM)
+			killServiceGraceful(s.cmd.Process)
 
 			shutdownTimeout := s.Spec.ShutdownTimeout
 			if shutdownTimeout <= 0 {
@@ -113,7 +151,7 @@ func (a *ActiveServices) Teardown(ctx context.Context) error {
 				// Exited gracefully
 			case <-time.After(shutdownTimeout):
 				// Forced SIGKILL
-				killServiceGroup(s.cmd.Process, syscall.SIGKILL)
+				killServiceForced(s.cmd.Process)
 				select {
 				case <-s.doneCh:
 				case <-time.After(2 * time.Second):
@@ -306,7 +344,7 @@ func startSingleService(ctx context.Context, spec ServiceSpec, baseDir string, c
 			activeSvc.mu.Lock()
 			activeSvc.exceededLife = true
 			activeSvc.mu.Unlock()
-			killServiceGroup(cmd.Process, syscall.SIGKILL)
+			killServiceForced(cmd.Process)
 		case <-lifetimeDone:
 		case <-doneCh:
 		}
@@ -319,7 +357,7 @@ func startSingleService(ctx context.Context, spec ServiceSpec, baseDir string, c
 	}
 
 	if err := waitForReadiness(ctx, activeSvc, startupTimeout); err != nil {
-		killServiceGroup(cmd.Process, syscall.SIGKILL)
+		killServiceForced(cmd.Process)
 		<-doneCh
 		_ = os.RemoveAll(tempDir)
 		return nil, err
@@ -439,8 +477,7 @@ func VerifyProcessOwnership(record PIDRecord) bool {
 	}
 
 	// 1. Check if process exists
-	err := syscall.Kill(record.PID, 0)
-	if err != nil {
+	if !isPIDAlive(record.PID) {
 		return false
 	}
 
@@ -492,9 +529,7 @@ func ReconcileAndCleanup(pidFilePath string) error {
 	}
 
 	// Ownership verified: safely terminate process group
-	_ = syscall.Kill(-record.PID, syscall.SIGTERM)
-	time.Sleep(200 * time.Millisecond)
-	_ = syscall.Kill(-record.PID, syscall.SIGKILL)
+	terminateProcessGroup(record.PID)
 	_ = os.Remove(pidFilePath)
 
 	return nil

@@ -29,6 +29,7 @@ func TestFetchContentPagination(t *testing.T) {
 	// Page 1: lines 1-4
 	p1, err := FetchContent(FetchContentOptions{
 		Artifacts:  store,
+		ProjectID:  "test_proj",
 		ContentRef: ref,
 		Offset:     1,
 		Limit:      4,
@@ -47,6 +48,7 @@ func TestFetchContentPagination(t *testing.T) {
 	// Page 2: lines 5-8
 	p2, err := FetchContent(FetchContentOptions{
 		Artifacts:  store,
+		ProjectID:  "test_proj",
 		ContentRef: ref,
 		Offset:     p1.NextOffset,
 		Limit:      4,
@@ -65,6 +67,7 @@ func TestFetchContentPagination(t *testing.T) {
 	// Page 3: lines 9-10 (final page)
 	p3, err := FetchContent(FetchContentOptions{
 		Artifacts:  store,
+		ProjectID:  "test_proj",
 		ContentRef: ref,
 		Offset:     p2.NextOffset,
 		Limit:      4,
@@ -97,6 +100,7 @@ func TestFetchContentBytes(t *testing.T) {
 
 	res, err := FetchContent(FetchContentOptions{
 		Artifacts:  store,
+		ProjectID:  "test_proj",
 		ContentRef: ref,
 		Offset:     4,
 		Limit:      6,
@@ -122,9 +126,69 @@ func TestFetchContentMissingRef(t *testing.T) {
 
 	_, err = FetchContent(FetchContentOptions{
 		Artifacts:  store,
+		ProjectID:  "test_proj",
 		ContentRef: "artifact:test_proj:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
 	})
 	if err == nil {
 		t.Fatal("Expected error for nonexistent content_ref")
+	}
+}
+
+func TestFetchContentAuthorization(t *testing.T) {
+	tempDir := t.TempDir()
+	store, err := artifacts.NewStore(filepath.Join(tempDir, "artifacts"), nil)
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+
+	putRes, err := store.PutBytes(t.Context(), "secret_proj", "evidence", "text/plain", []byte("confidential"), 0)
+	if err != nil {
+		t.Fatalf("PutBytes: %v", err)
+	}
+
+	// Caller from attacker_proj attempts to read secret_proj artifact
+	_, err = FetchContent(FetchContentOptions{
+		Artifacts:  store,
+		ProjectID:  "attacker_proj",
+		ContentRef: putRes.Ref.Locator,
+	})
+	if err == nil {
+		t.Fatal("Expected authorization error when ProjectID does not match locator project")
+	}
+}
+
+func TestFetchContentLongLines(t *testing.T) {
+	tempDir := t.TempDir()
+	store, err := artifacts.NewStore(filepath.Join(tempDir, "artifacts"), nil)
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+
+	// Line of 80,000 bytes (exceeds default bufio.Scanner 64KB buffer)
+	longLine := strings.Repeat("A", 80000)
+	putRes, err := store.PutBytes(t.Context(), "test_proj", "evidence", "text/plain", []byte(longLine+"\nsecond line\n"), 0)
+	if err != nil {
+		t.Fatalf("PutBytes: %v", err)
+	}
+
+	res, err := FetchContent(FetchContentOptions{
+		Artifacts:  store,
+		ProjectID:  "test_proj",
+		ContentRef: putRes.Ref.Locator,
+		Offset:     1,
+		Limit:      2,
+		MaxBytes:   100000,
+	})
+	if err != nil {
+		t.Fatalf("FetchContent with long line: %v", err)
+	}
+	if res.TotalCount != 2 {
+		t.Errorf("Expected TotalCount 2, got %d", res.TotalCount)
+	}
+	if res.ReturnedCount != 2 {
+		t.Errorf("Expected ReturnedCount 2, got %d", res.ReturnedCount)
+	}
+	if !strings.HasPrefix(res.Content, "AAAA") {
+		t.Errorf("Expected content to start with AAAA, got %q", res.Content[:min(len(res.Content), 50)])
 	}
 }

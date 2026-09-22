@@ -57,59 +57,56 @@ func ReadFile(opts ReadFileOptions) (ReadFileResult, error) {
 	}
 	defer file.Close()
 
-	var lines []string
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		lines = append(lines, scanner.Text())
-	}
-	if err := scanner.Err(); err != nil && err != io.EOF {
-		return ReadFileResult{}, errs.Wrap(errs.CategoryInternal, err, "read_file: scan %q", opts.Path)
-	}
-
-	totalLines := len(lines)
+	reader := bufio.NewReader(file)
 	start := opts.StartLine
 	if start <= 0 {
 		start = 1
 	}
-	if start > totalLines && totalLines > 0 {
-		start = totalLines
-	}
-
 	end := opts.EndLine
-	if end <= 0 || end > totalLines {
-		end = totalLines
-	}
-	if end < start {
-		end = start
-	}
 
 	var sb strings.Builder
 	var currentBytes int64
 	truncated := false
 	actualEnd := start - 1
+	lineIdx := 0
 
-	for lineIdx := start; lineIdx <= end; lineIdx++ {
-		lineContent := ""
-		if lineIdx-1 < len(lines) {
-			lineContent = lines[lineIdx-1]
+	for {
+		line, err := reader.ReadString('\n')
+		if len(line) > 0 {
+			lineIdx++
+			trimmed := strings.TrimRight(line, "\r\n")
+
+			if lineIdx >= start && (end <= 0 || lineIdx <= end) {
+				if !truncated {
+					var formatted string
+					if opts.ShowLineNumbers {
+						formatted = fmt.Sprintf("%d: %s\n", lineIdx, trimmed)
+					} else {
+						formatted = trimmed + "\n"
+					}
+
+					lineBytes := int64(len(formatted))
+					if currentBytes+lineBytes > maxBytes {
+						truncated = true
+					} else {
+						sb.WriteString(formatted)
+						currentBytes += lineBytes
+						actualEnd = lineIdx
+					}
+				}
+			}
 		}
-
-		var formatted string
-		if opts.ShowLineNumbers {
-			formatted = fmt.Sprintf("%d: %s\n", lineIdx, lineContent)
-		} else {
-			formatted = lineContent + "\n"
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			return ReadFileResult{}, errs.Wrap(errs.CategoryInternal, err, "read_file: read %q", opts.Path)
 		}
+	}
 
-		lineBytes := int64(len(formatted))
-		if currentBytes+lineBytes > maxBytes {
-			truncated = true
-			break
-		}
-
-		sb.WriteString(formatted)
-		currentBytes += lineBytes
-		actualEnd = lineIdx
+	totalLines := lineIdx
+	if actualEnd < start && totalLines > 0 {
+		actualEnd = start - 1
 	}
 
 	return ReadFileResult{

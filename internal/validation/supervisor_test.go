@@ -189,9 +189,10 @@ func TestServicePrematureExit(t *testing.T) {
 		Name: "test-premature-exit",
 		Services: []ServiceSpec{
 			{
-				ID:             "srv-dying",
-				Argv:           []string{serverBin},
-				StartupTimeout: 5 * time.Second,
+				ID:              "srv-dying",
+				Argv:            []string{serverBin},
+				StartupTimeout:  5 * time.Second,
+				ShutdownTimeout: 2 * time.Second,
 				Env: map[string]string{
 					"PREMATURE_EXIT": "1",
 				},
@@ -223,9 +224,12 @@ func TestServicePrematureExit(t *testing.T) {
 		Artifacts: store,
 		ProjectID: "proj_dying",
 	})
-	// Should fail either during RunProfile check loop or service startup
-	if outcome == protocol.ValidationPass {
-		t.Fatalf("Expected validation failure due to premature exit, got pass: %+v, err: %v", checks, err)
+	// Should fail during RunProfile check loop with ValidationError
+	if outcome != protocol.ValidationError {
+		t.Fatalf("Expected validation error due to premature exit, got outcome=%s, err=%v", outcome, err)
+	}
+	if len(checks) > 1 {
+		t.Fatalf("Expected fail-fast after service death (check-2 skipped), got %d checks", len(checks))
 	}
 }
 

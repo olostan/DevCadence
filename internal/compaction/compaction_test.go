@@ -266,3 +266,184 @@ func TestStaleVerificationMarking(t *testing.T) {
 		t.Errorf("Expected evidence to be marked STALE after tree SHA changed")
 	}
 }
+
+func TestPruneToolResultsNilStorePreservesContent(t *testing.T) {
+	originalContent := "line 1 of very important log output that must not be deleted\nline 2 of output"
+	session := &ExecutionSession{
+		Policy: SessionPolicy{ProjectID: "proj_test"},
+		Messages: []Message{
+			{Role: RoleTool, Content: originalContent},
+			{Role: RoleUser, Content: "next turn"},
+			{Role: RoleAssistant, Content: "reply"},
+		},
+	}
+
+	// store is nil -> pruning must be skipped, leaving content intact
+	pruned, err := PruneToolResults(context.Background(), session, nil)
+	if err != nil {
+		t.Fatalf("PruneToolResults: %v", err)
+	}
+	if pruned != 0 {
+		t.Errorf("Expected 0 pruned messages with nil store, got %d", pruned)
+	}
+	if session.Messages[0].Content != originalContent {
+		t.Errorf("Expected original content preserved, got %q", session.Messages[0].Content)
+	}
+	if session.Messages[0].IsPruned {
+		t.Errorf("Expected is_pruned = false")
+	}
+}
+
+type fakeMockSummarizer struct {
+	digest TrajectoryDigest
+}
+
+func (f fakeMockSummarizer) Summarize(ctx context.Context, policy SessionPolicy, input DigestInput, maxTokens int) (TrajectoryDigest, error) {
+	return f.digest, nil
+}
+
+func TestTier2PreservesAtomicToolGroups(t *testing.T) {
+	session := &ExecutionSession{
+		SystemPrompt: "sys",
+		Policy:       SessionPolicy{ProjectID: "proj"},
+		Messages: []Message{
+			{Role: RoleUser, Content: "step 1: please search"},
+			{Role: RoleAssistant, Content: "searching...", ToolCalls: []ToolCall{{ID: "tc-1", Name: "grep"}}},
+			{Role: RoleTool, ToolCallID: "tc-1", Content: "grep results here..."},
+			{Role: RoleAssistant, Content: "step 1 complete. Now step 2.", ToolCalls: []ToolCall{{ID: "tc-2", Name: "read_file"}}},
+			{Role: RoleTool, ToolCallID: "tc-2", Content: "file content here..."},
+			{Role: RoleAssistant, Content: "step 2 complete"},
+		},
+	}
+
+	summarizer := fakeMockSummarizer{
+		digest: TrajectoryDigest{
+			ObservedFacts: []ObservedFact{{Statement: "step 1 done"}},
+		},
+	}
+
+	// Trigger Tier 2 by setting low budget
+	budget := TokenBudget{
+		MaxRequestTokens: 100,
+		MaxOutputTokens:  10,
+	}
+
+	err := AdmitOrCompact(context.Background(), session, budget, nil, nil, summarizer, nil)
+	if err != nil {
+		t.Fatalf("AdmitOrCompact: %v", err)
+	}
+
+	// Verify atomic tool group preservation on resulting messages
+	if err := ValidateAtomicToolGroups(session.Messages); err != nil {
+		t.Fatalf("Tier 2 produced broken tool group trajectory: %v", err)
+	}
+}
+
+func TestTier2SingleCanonicalDigest(t *testing.T) {
+	longText := strings.Repeat("detailed conversation turn about system architecture. ", 5)
+	session := &ExecutionSession{
+		SystemPrompt: "sys",
+		Policy:       SessionPolicy{ProjectID: "proj"},
+		Messages: []Message{
+			{Role: RoleUser, Content: "step 1 " + longText},
+			{Role: RoleAssistant, Content: "step 1 reply " + longText},
+			{Role: RoleUser, Content: "step 2 " + longText},
+			{Role: RoleAssistant, Content: "step 2 reply " + longText},
+		},
+	}
+
+	summarizer := fakeMockSummarizer{
+		digest: TrajectoryDigest{
+			ObservedFacts: []ObservedFact{{Statement: "compacted"}},
+		},
+	}
+
+	budget := TokenBudget{
+		MaxRequestTokens: 320,
+		MaxOutputTokens:  10,
+	}
+
+	// First pass
+	if err := AdmitOrCompact(context.Background(), session, budget, nil, nil, summarizer, nil); err != nil {
+		t.Fatalf("Pass 1: %v", err)
+	}
+
+	// Add more turns
+	session.Messages = append(session.Messages,
+		Message{Role: RoleUser, Content: "step 3 " + longText},
+		Message{Role: RoleAssistant, Content: "step 3 reply " + longText},
+	)
+
+	// Second pass
+	if err := AdmitOrCompact(context.Background(), session, budget, nil, nil, summarizer, nil); err != nil {
+		t.Fatalf("Pass 2: %v", err)
+	}
+
+	// Count digest messages
+	digestCount := 0
+	for _, m := range session.Messages {
+		if strings.HasPrefix(m.Content, "## Trajectory Digest") {
+			digestCount++
+		}
+	}
+
+	if digestCount != 1 {
+		t.Fatalf("Expected exactly 1 canonical digest message, found %d", digestCount)
+	}
+}
+
+func TestTier2DigestModelVerifiedFlagIsUntrusted(t *testing.T) {
+	longText := strings.Repeat("turn content ", 16)
+	session := &ExecutionSession{
+		SystemPrompt: "sys",
+		Policy:       SessionPolicy{ProjectID: "proj"},
+		Messages: []Message{
+			{Role: RoleUser, Content: "msg 1 " + longText},
+			{Role: RoleAssistant, Content: "msg 2 " + longText},
+			{Role: RoleUser, Content: "msg 3 " + longText},
+			{Role: RoleAssistant, Content: "msg 4 " + longText},
+		},
+		KnownDecisionIDs: map[string]bool{
+			"legit-dec": true,
+		},
+	}
+
+	// Model falsely claims Verified: true for bogus decision and bogus evidence
+	summarizer := fakeMockSummarizer{
+		digest: TrajectoryDigest{
+			ObservedFacts: []ObservedFact{
+				{Statement: "Bogus fact", EvidenceRef: "fake:ref", Verified: true},
+			},
+			Decisions: []Decision{
+				{Statement: "Bogus decision", AuthorizedBy: "bogus-dec", Verified: true},
+				{Statement: "Legit decision", AuthorizedBy: "legit-dec", Verified: true},
+			},
+		},
+	}
+
+	budget := TokenBudget{
+		MaxRequestTokens: 260,
+		MaxOutputTokens:  10,
+	}
+
+	if err := AdmitOrCompact(context.Background(), session, budget, nil, nil, summarizer, nil); err != nil {
+		t.Fatalf("AdmitOrCompact: %v", err)
+	}
+
+	if session.Digest == nil {
+		t.Fatalf("Expected digest to be set")
+	}
+
+	// Fact with fake ref must be stripped of verified
+	if session.Digest.ObservedFacts[0].Verified {
+		t.Errorf("Model-supplied verified flag on bogus fact was not reset to false")
+	}
+	// Decision with bogus ID must be stripped of verified
+	if session.Digest.Decisions[0].Verified {
+		t.Errorf("Model-supplied verified flag on bogus decision was not reset to false")
+	}
+	// Decision with legit ID should remain verified
+	if !session.Digest.Decisions[1].Verified {
+		t.Errorf("Legitimate decision should be verified")
+	}
+}

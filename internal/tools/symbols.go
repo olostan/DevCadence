@@ -2,6 +2,7 @@ package tools
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"go/ast"
 	"go/parser"
@@ -94,7 +95,7 @@ func FindSymbol(ctx context.Context, opts FindSymbolOptions) (SymbolResult, erro
 		return SymbolResult{
 			Symbol:          opts.Symbol,
 			ResolutionLevel: ResolutionUnsupported,
-			Backend:         "tree-sitter",
+			Backend:         "none",
 			Language:        lang,
 			SourceRevision:  opts.SourceRevision,
 			FallbackQuery:   opts.Symbol,
@@ -104,7 +105,7 @@ func FindSymbol(ctx context.Context, opts FindSymbolOptions) (SymbolResult, erro
 	result := SymbolResult{
 		Symbol:          opts.Symbol,
 		ResolutionLevel: ResolutionSyntactic,
-		Backend:         "tree-sitter",
+		Backend:         "",
 		Language:        lang,
 		SourceRevision:  opts.SourceRevision,
 		Definitions:     []SymbolDefinition{},
@@ -141,11 +142,13 @@ func FindSymbol(ctx context.Context, opts FindSymbolOptions) (SymbolResult, erro
 			if result.Language == "" {
 				result.Language = "go"
 			}
+			result.Backend = "go/ast"
 			parseGoFile(path, relPath, opts.Symbol, &result)
 		case "typescript", "javascript":
 			if result.Language == "" {
 				result.Language = fileLang
 			}
+			result.Backend = "syntactic-regex"
 			parseTSFile(path, relPath, opts.Symbol, &result)
 		default:
 			// Non-supported file in directory walk
@@ -283,13 +286,13 @@ var (
 )
 
 func parseTSFile(fullPath, relPath, targetSymbol string, result *SymbolResult) {
-	file, err := os.Open(fullPath)
+	data, err := os.ReadFile(fullPath)
 	if err != nil {
 		return
 	}
-	defer file.Close()
 
-	scanner := bufio.NewScanner(file)
+	masked := maskCommentsAndStrings(data)
+	scanner := bufio.NewScanner(bytes.NewReader(masked))
 	lineNum := 0
 
 	for scanner.Scan() {
@@ -378,4 +381,89 @@ func parseTSFile(fullPath, relPath, targetSymbol string, result *SymbolResult) {
 			}
 		}
 	}
+}
+
+// maskCommentsAndStrings masks single-line/multi-line comments and string literals
+// with spaces while preserving newlines and positions to avoid regex false positives.
+func maskCommentsAndStrings(src []byte) []byte {
+	out := make([]byte, len(src))
+	copy(out, src)
+
+	n := len(out)
+	i := 0
+	for i < n {
+		b := out[i]
+		if b == '/' && i+1 < n {
+			next := out[i+1]
+			if next == '/' {
+				// Single line comment
+				out[i] = ' '
+				out[i+1] = ' '
+				i += 2
+				for i < n && out[i] != '\n' {
+					out[i] = ' '
+					i++
+				}
+				continue
+			} else if next == '*' {
+				// Multi-line block comment
+				out[i] = ' '
+				out[i+1] = ' '
+				i += 2
+				for i < n {
+					if out[i] == '*' && i+1 < n && out[i+1] == '/' {
+						out[i] = ' '
+						out[i+1] = ' '
+						i += 2
+						break
+					}
+					if out[i] != '\n' {
+						out[i] = ' '
+					}
+					i++
+				}
+				continue
+			}
+		}
+
+		if b == '"' || b == '\'' || b == '`' {
+			quote := b
+			out[i] = ' '
+			i++
+			escaped := false
+			for i < n {
+				if escaped {
+					if out[i] != '\n' {
+						out[i] = ' '
+					}
+					escaped = false
+					i++
+					continue
+				}
+				if out[i] == '\\' {
+					escaped = true
+					out[i] = ' '
+					i++
+					continue
+				}
+				if out[i] == quote {
+					out[i] = ' '
+					i++
+					break
+				}
+				if quote != '`' && out[i] == '\n' {
+					// Single-line string terminated by newline
+					break
+				}
+				if out[i] != '\n' {
+					out[i] = ' '
+				}
+				i++
+			}
+			continue
+		}
+
+		i++
+	}
+	return out
 }
