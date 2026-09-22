@@ -3,7 +3,6 @@ package compaction
 import (
 	"context"
 	"math"
-	"strings"
 
 	"github.com/olostan/DevCadence/internal/artifacts"
 	"github.com/olostan/DevCadence/internal/errs"
@@ -178,13 +177,72 @@ func applyTier2Summarization(ctx context.Context, session *ExecutionSession, sum
 		return
 	}
 
+	// Build tool group membership and propagate Protected status across entire groups.
+	// Assistant message with ToolCalls and all corresponding RoleTool messages belong to the same group.
+	toolCallToGroup := make(map[string]int)
+	groupProtected := make(map[int]bool)
+	msgGroup := make([]int, len(session.Messages))
+	for i := range msgGroup {
+		msgGroup[i] = -1
+	}
+
+	nextGroupID := 0
+	for i, msg := range session.Messages {
+		if msg.Role == RoleAssistant && len(msg.ToolCalls) > 0 {
+			gid := nextGroupID
+			nextGroupID++
+			msgGroup[i] = gid
+			for _, tc := range msg.ToolCalls {
+				toolCallToGroup[tc.ID] = gid
+			}
+			if msg.Protected {
+				groupProtected[gid] = true
+			}
+		} else if msg.Role == RoleTool && msg.ToolCallID != "" {
+			if gid, ok := toolCallToGroup[msg.ToolCallID]; ok {
+				msgGroup[i] = gid
+				if msg.Protected {
+					groupProtected[gid] = true
+				}
+			}
+		}
+	}
+
+	// Propagate protection: if any member of a group is protected, all members are protected
+	messages := make([]Message, len(session.Messages))
+	copy(messages, session.Messages)
+	for i := range messages {
+		gid := msgGroup[i]
+		if gid >= 0 && groupProtected[gid] {
+			messages[i].Protected = true
+		}
+	}
+
+	// If any member of a tool group is retained in remaining (past cutoff or protected),
+	// the entire group must stay in remaining to avoid splitting.
+	groupInRemaining := make(map[int]bool)
+	for i, msg := range messages {
+		if msg.IsDigest {
+			continue
+		}
+		gid := msgGroup[i]
+		if gid >= 0 && (i >= cutoff || msg.Protected) {
+			groupInRemaining[gid] = true
+		}
+	}
+
 	// Collect older non-protected messages to summarize
 	var toSummarize []Message
 	var remaining []Message
 
-	for i, msg := range session.Messages {
-		if strings.HasPrefix(msg.Content, "## Trajectory Digest") {
-			// Replace earlier digests instead of duplicating
+	for i, msg := range messages {
+		if msg.IsDigest {
+			// Replace earlier generated digests instead of duplicating
+			continue
+		}
+		gid := msgGroup[i]
+		if gid >= 0 && groupInRemaining[gid] {
+			remaining = append(remaining, msg)
 			continue
 		}
 		if i < cutoff {
@@ -235,6 +293,31 @@ func applyTier2Summarization(ctx context.Context, session *ExecutionSession, sum
 
 	if err := ValidateAtomicToolGroups(newMessages); err != nil {
 		return
+	}
+
+	// Verify that every completed tool result present before compaction is still present
+	// for any retained assistant tool call
+	originalResults := make(map[string]bool)
+	for _, m := range session.Messages {
+		if m.Role == RoleTool && m.ToolCallID != "" {
+			originalResults[m.ToolCallID] = true
+		}
+	}
+	newCalls := make(map[string]bool)
+	newResults := make(map[string]bool)
+	for _, m := range newMessages {
+		if m.Role == RoleAssistant {
+			for _, tc := range m.ToolCalls {
+				newCalls[tc.ID] = true
+			}
+		} else if m.Role == RoleTool && m.ToolCallID != "" {
+			newResults[m.ToolCallID] = true
+		}
+	}
+	for callID := range newCalls {
+		if originalResults[callID] && !newResults[callID] {
+			return
+		}
 	}
 
 	session.Messages = newMessages

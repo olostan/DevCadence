@@ -24,9 +24,10 @@ type Hypothesis struct {
 
 // Decision records an engineering decision and its authoritative origin.
 type Decision struct {
-	Statement    string `json:"statement"`
-	AuthorizedBy string `json:"authorized_by"`
-	Verified     bool   `json:"verified"`
+	Statement      string `json:"statement"`
+	AuthorizedBy   string `json:"authorized_by"`
+	ReferenceValid bool   `json:"reference_valid,omitempty"`
+	Verified       bool   `json:"verified"`
 }
 
 // RejectedHypothesis records an approach tested and abandoned, with reason.
@@ -62,10 +63,14 @@ func (d *TrajectoryDigest) ValidateEvidenceAndAuthority(store *artifacts.Store, 
 		dec := &d.Decisions[i]
 		if dec.AuthorizedBy != "" && knownDecisionIDs != nil {
 			if knownDecisionIDs[dec.AuthorizedBy] {
-				dec.Verified = true
+				dec.ReferenceValid = true
+				// Reference existence is not verified authorization of arbitrary model-authored text.
+				// A model's paraphrase or arbitrary instruction is left unverified (DCI-041).
+				dec.Verified = false
 				continue
 			}
 		}
+		dec.ReferenceValid = false
 		dec.Verified = false
 	}
 }
@@ -79,6 +84,7 @@ func (d *TrajectoryDigest) FormatAsUserMessage() Message {
 		Role:      RoleUser,
 		Content:   content,
 		Protected: true,
+		IsDigest:  true,
 	}
 }
 

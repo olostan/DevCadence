@@ -79,6 +79,10 @@ func PruneToolResults(ctx context.Context, session *ExecutionSession, store *art
 
 // ValidateAtomicToolGroups verifies that an assistant message with tool calls has all
 // its matching tool results present, and that no tool result is orphaned without its assistant message.
+// It checks both directions:
+// 1. Every tool result must have a corresponding assistant tool call.
+// 2. Every assistant tool call must have its matching tool result, unless it is a legitimately
+//    pending call at the end of the message sequence (no subsequent user/assistant turns).
 func ValidateAtomicToolGroups(messages []Message) error {
 	assistantToolCalls := make(map[string]bool)
 	toolResults := make(map[string]bool)
@@ -95,10 +99,40 @@ func ValidateAtomicToolGroups(messages []Message) error {
 		}
 	}
 
-	// Every tool result must have an assistant tool call
+	// 1. Every tool result must have an assistant tool call
 	for resID := range toolResults {
 		if !assistantToolCalls[resID] {
 			return fmt.Errorf("orphaned tool result %q without matching assistant tool call", resID)
+		}
+	}
+
+	// 2. Every assistant tool call must have its matching result unless it is legitimately pending at the end
+	var lastAssistantWithCallsIdx = -1
+	for i := len(messages) - 1; i >= 0; i-- {
+		if messages[i].Role == RoleAssistant && len(messages[i].ToolCalls) > 0 {
+			lastAssistantWithCallsIdx = i
+			break
+		}
+	}
+
+	for i, msg := range messages {
+		if msg.Role == RoleAssistant {
+			for _, tc := range msg.ToolCalls {
+				if !toolResults[tc.ID] {
+					isPendingAtEnd := (i == lastAssistantWithCallsIdx)
+					if isPendingAtEnd {
+						for j := i + 1; j < len(messages); j++ {
+							if messages[j].Role == RoleUser || messages[j].Role == RoleAssistant {
+								isPendingAtEnd = false
+								break
+							}
+						}
+					}
+					if !isPendingAtEnd {
+						return fmt.Errorf("assistant tool call %q missing matching completed tool result", tc.ID)
+					}
+				}
+			}
 		}
 	}
 

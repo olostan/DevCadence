@@ -92,6 +92,33 @@ func FetchContent(opts FetchContentOptions) (PagedContentResult, error) {
 	return fetchLinesFromReader(opts.ContentRef, rc, opts.Offset, limit, maxBytes)
 }
 
+func readBoundedLine(r *bufio.Reader, maxBuf int) (string, error) {
+	var buf []byte
+	for {
+		chunk, isPrefix, err := r.ReadLine()
+		if len(chunk) > 0 {
+			if len(buf) < maxBuf {
+				needed := maxBuf - len(buf)
+				if len(chunk) > needed {
+					buf = append(buf, chunk[:needed]...)
+				} else {
+					buf = append(buf, chunk...)
+				}
+			}
+		}
+		if err != nil {
+			if len(buf) > 0 && err == io.EOF {
+				return string(buf), nil
+			}
+			return string(buf), err
+		}
+		if !isPrefix {
+			break
+		}
+	}
+	return string(buf), nil
+}
+
 func fetchLinesFromReader(ref string, rc io.Reader, offset, limit int, maxBytes int64) (PagedContentResult, error) {
 	start := offset
 	if start <= 0 {
@@ -103,20 +130,42 @@ func fetchLinesFromReader(ref string, rc io.Reader, offset, limit int, maxBytes 
 	var selected []string
 	var currentBytes int64
 	truncated := false
+	stoppedSelecting := false
+	firstOmittedLine := 0
 	lineIdx := 0
 
+	maxLineBuf := int(maxBytes) + 1024
+	if maxLineBuf < 65536 {
+		maxLineBuf = 65536
+	}
+
 	for {
-		line, err := reader.ReadString('\n')
-		if len(line) > 0 {
+		line, err := readBoundedLine(reader, maxLineBuf)
+		if len(line) > 0 || (err == nil && lineIdx < end) {
 			lineIdx++
 			// Trim trailing newline for line representation
 			trimmed := strings.TrimRight(line, "\r\n")
 
-			if lineIdx >= start && lineIdx <= end {
-				lineBytes := int64(len(trimmed) + 1)
-				if currentBytes+lineBytes > maxBytes && len(selected) > 0 {
+			if lineIdx >= start && lineIdx <= end && !stoppedSelecting {
+				lineBytes := int64(len(trimmed))
+				if len(selected) > 0 {
+					lineBytes += 1 // account for newline join
+				}
+
+				if currentBytes+lineBytes > maxBytes {
 					truncated = true
-					// Response cap reached
+					stoppedSelecting = true
+					if len(selected) == 0 {
+						// Oversized first line: enforce byte ceiling by truncating line
+						if int64(len(trimmed)) > maxBytes {
+							trimmed = trimmed[:maxBytes]
+						}
+						selected = append(selected, trimmed)
+						firstOmittedLine = lineIdx + 1
+					} else {
+						// Subsequent line exceeds cap: stop selecting immediately (no holes)
+						firstOmittedLine = lineIdx
+					}
 				} else {
 					selected = append(selected, trimmed)
 					currentBytes += lineBytes
@@ -134,11 +183,20 @@ func fetchLinesFromReader(ref string, rc io.Reader, offset, limit int, maxBytes 
 
 	total := lineIdx
 	returnedCount := len(selected)
-	actualEnd := start + returnedCount - 1
-	hasMore := actualEnd < total
-	nextOffset := 0
-	if hasMore {
-		nextOffset = actualEnd + 1
+	var hasMore bool
+	var nextOffset int
+
+	if stoppedSelecting {
+		hasMore = firstOmittedLine <= total
+		if hasMore {
+			nextOffset = firstOmittedLine
+		}
+	} else {
+		actualEnd := start + returnedCount - 1
+		hasMore = actualEnd < total
+		if hasMore {
+			nextOffset = actualEnd + 1
+		}
 	}
 
 	return PagedContentResult{

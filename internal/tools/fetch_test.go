@@ -192,3 +192,78 @@ func TestFetchContentLongLines(t *testing.T) {
 		t.Errorf("Expected content to start with AAAA, got %q", res.Content[:min(len(res.Content), 50)])
 	}
 }
+
+func TestClosureLinePageRespectsByteCap(t *testing.T) {
+	tempDir := t.TempDir()
+	store, err := artifacts.NewStore(filepath.Join(tempDir, "artifacts"), nil)
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+
+	longLine := strings.Repeat("A", 70000)
+	putRes, err := store.PutBytes(t.Context(), "test_proj", "evidence", "text/plain", []byte(longLine+"\n"), 0)
+	if err != nil {
+		t.Fatalf("PutBytes: %v", err)
+	}
+
+	res, err := FetchContent(FetchContentOptions{
+		Artifacts:  store,
+		ProjectID:  "test_proj",
+		ContentRef: putRes.Ref.Locator,
+		Offset:     1,
+		Limit:      10,
+		MaxBytes:   65536,
+	})
+	if err != nil {
+		t.Fatalf("FetchContent: %v", err)
+	}
+	if int64(len(res.Content)) > 65536 {
+		t.Errorf("Content length %d exceeds MaxBytes 65536", len(res.Content))
+	}
+	if !res.Truncated {
+		t.Errorf("Expected Truncated to be true for oversized first line")
+	}
+}
+
+func TestClosureLinePageHasNoHoles(t *testing.T) {
+	tempDir := t.TempDir()
+	store, err := artifacts.NewStore(filepath.Join(tempDir, "artifacts"), nil)
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+
+	// a\n, 100 b's\n, z\n
+	content := "a\n" + strings.Repeat("b", 100) + "\nz\n"
+	putRes, err := store.PutBytes(t.Context(), "test_proj", "evidence", "text/plain", []byte(content), 0)
+	if err != nil {
+		t.Fatalf("PutBytes: %v", err)
+	}
+
+	res, err := FetchContent(FetchContentOptions{
+		Artifacts:  store,
+		ProjectID:  "test_proj",
+		ContentRef: putRes.Ref.Locator,
+		Offset:     1,
+		Limit:      10,
+		MaxBytes:   4,
+	})
+	if err != nil {
+		t.Fatalf("FetchContent: %v", err)
+	}
+
+	if res.Content != "a" {
+		t.Errorf("Expected Content 'a', got %q (possible hole or skipped line)", res.Content)
+	}
+	if res.ReturnedCount != 1 {
+		t.Errorf("Expected ReturnedCount 1, got %d", res.ReturnedCount)
+	}
+	if res.NextOffset != 2 {
+		t.Errorf("Expected NextOffset 2 (pointing to first omitted line), got %d", res.NextOffset)
+	}
+	if !res.Truncated {
+		t.Errorf("Expected Truncated true")
+	}
+	if !res.HasMore {
+		t.Errorf("Expected HasMore true")
+	}
+}

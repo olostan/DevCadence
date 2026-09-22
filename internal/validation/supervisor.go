@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/olostan/DevCadence/internal/errs"
+	"github.com/olostan/DevCadence/internal/protocol"
 )
 
 const (
@@ -173,7 +174,7 @@ func (a *ActiveServices) Teardown(ctx context.Context) error {
 }
 
 // StartServices boots, probes, and supervises background services for a profile.
-func StartServices(ctx context.Context, specs []ServiceSpec, baseDir string, baseEnv []string, runID string) (*ActiveServices, error) {
+func StartServices(ctx context.Context, specs []ServiceSpec, baseDir string, baseEnv []string, runID string, modules ...[]protocol.ModuleDefinition) (*ActiveServices, error) {
 	if runID == "" {
 		runID = fmt.Sprintf("val_%d", time.Now().UnixNano())
 	}
@@ -183,8 +184,13 @@ func StartServices(ctx context.Context, specs []ServiceSpec, baseDir string, bas
 		env:   append([]string(nil), baseEnv...),
 	}
 
+	var mods []protocol.ModuleDefinition
+	if len(modules) > 0 {
+		mods = modules[0]
+	}
+
 	for _, spec := range specs {
-		svc, err := startSingleService(ctx, spec, baseDir, active.env, runID)
+		svc, err := startSingleService(ctx, spec, baseDir, active.env, runID, mods)
 		if err != nil {
 			// Teardown already started services
 			_ = active.Teardown(context.Background())
@@ -201,10 +207,27 @@ func StartServices(ctx context.Context, specs []ServiceSpec, baseDir string, bas
 	return active, nil
 }
 
-func startSingleService(ctx context.Context, spec ServiceSpec, baseDir string, currentEnv []string, runID string) (*ActiveService, error) {
+func startSingleService(ctx context.Context, spec ServiceSpec, baseDir string, currentEnv []string, runID string, modules []protocol.ModuleDefinition) (*ActiveService, error) {
 	workingDir := baseDir
+	if spec.ModuleID != "" {
+		var foundMod *protocol.ModuleDefinition
+		for i := range modules {
+			if modules[i].ID == spec.ModuleID {
+				foundMod = &modules[i]
+				break
+			}
+		}
+		if foundMod == nil {
+			return nil, errs.New(errs.CategoryInvalidArgument, "validation: service %q module %q not found in project modules catalog", spec.ID, spec.ModuleID)
+		}
+		modRoot, err := ValidateDirContainment(baseDir, foundMod.Path)
+		if err != nil {
+			return nil, err
+		}
+		workingDir = modRoot
+	}
 	if spec.Dir != "" {
-		contained, err := ValidateDirContainment(baseDir, spec.Dir)
+		contained, err := ValidateDirContainment(workingDir, spec.Dir)
 		if err != nil {
 			return nil, err
 		}

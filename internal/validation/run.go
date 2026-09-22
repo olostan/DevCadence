@@ -77,6 +77,44 @@ func RunProfile(ctx context.Context, profile Profile, opts RunOptions) (checks [
 		maxOutput = process.DefaultMaxOutputBytes
 	}
 
+	findModule := func(modID string) *protocol.ModuleDefinition {
+		for i := range opts.Modules {
+			if opts.Modules[i].ID == modID {
+				return &opts.Modules[i]
+			}
+		}
+		return nil
+	}
+
+	if profile.ModuleID != "" {
+		if findModule(profile.ModuleID) == nil {
+			return nil, protocol.ValidationError, errs.New(errs.CategoryInvalidArgument, "validation: profile %q specifies unknown module %q", profile.Name, profile.ModuleID)
+		}
+	}
+
+	effectiveServices := make([]ServiceSpec, len(profile.Services))
+	for i, spec := range profile.Services {
+		effectiveModID := spec.ModuleID
+		if effectiveModID == "" {
+			effectiveModID = profile.ModuleID
+		}
+		if effectiveModID != "" && findModule(effectiveModID) == nil {
+			return nil, protocol.ValidationError, errs.New(errs.CategoryInvalidArgument, "validation: service %q specifies unknown module %q", spec.ID, effectiveModID)
+		}
+		effectiveServices[i] = spec
+		effectiveServices[i].ModuleID = effectiveModID
+	}
+
+	for _, spec := range profile.Checks {
+		effectiveModID := spec.ModuleID
+		if effectiveModID == "" {
+			effectiveModID = profile.ModuleID
+		}
+		if effectiveModID != "" && findModule(effectiveModID) == nil {
+			return nil, protocol.ValidationError, errs.New(errs.CategoryInvalidArgument, "validation: check %q specifies unknown module %q", spec.ID, effectiveModID)
+		}
+	}
+
 	checks = make([]protocol.CheckResult, 0, len(profile.Checks))
 	sawFail, sawError, sawCancel := false, false, false
 
@@ -86,7 +124,7 @@ func RunProfile(ctx context.Context, profile Profile, opts RunOptions) (checks [
 		if runID == "" {
 			runID = fmt.Sprintf("val_%d", time.Now().UnixNano())
 		}
-		active, startErr := StartServices(ctx, profile.Services, opts.Dir, baseEnv, runID)
+		active, startErr := StartServices(ctx, effectiveServices, opts.Dir, baseEnv, runID, opts.Modules)
 		if startErr != nil {
 			return nil, protocol.ValidationError, startErr
 		}
@@ -154,49 +192,34 @@ func RunProfile(ctx context.Context, profile Profile, opts RunOptions) (checks [
 			env = process.MergeEnv(baseEnv, spec.Env)
 		}
 
+		effectiveModID := spec.ModuleID
+		if effectiveModID == "" {
+			effectiveModID = profile.ModuleID
+		}
+
 		workingDir := opts.Dir
-		if spec.ModuleID != "" {
-			var foundMod *protocol.ModuleDefinition
-			for i := range opts.Modules {
-				if opts.Modules[i].ID == spec.ModuleID {
-					foundMod = &opts.Modules[i]
-					break
+		if effectiveModID != "" {
+			foundMod := findModule(effectiveModID)
+			if foundMod != nil {
+				moduleBaseDir, err := ValidateDirContainment(opts.Dir, foundMod.Path)
+				if err != nil {
+					now := time.Now().UTC()
+					msg := err.Error()
+					checks = append(checks, protocol.CheckResult{
+						ID:               spec.ID,
+						Kind:             spec.Kind,
+						Command:          spec.Argv,
+						WorkingDirectory: &opts.Dir,
+						Status:           protocol.CheckError,
+						Summary:          &msg,
+						StartedAt:        protocol.NewTimestamp(now),
+						FinishedAt:       protocol.NewTimestamp(now),
+					})
+					sawError = true
+					continue
 				}
+				workingDir = moduleBaseDir
 			}
-			if foundMod == nil {
-				now := time.Now().UTC()
-				msg := fmt.Sprintf("module %q specified in check %q not found in project modules catalog", spec.ModuleID, spec.ID)
-				checks = append(checks, protocol.CheckResult{
-					ID:               spec.ID,
-					Kind:             spec.Kind,
-					Command:          spec.Argv,
-					WorkingDirectory: &opts.Dir,
-					Status:           protocol.CheckError,
-					Summary:          &msg,
-					StartedAt:        protocol.NewTimestamp(now),
-					FinishedAt:       protocol.NewTimestamp(now),
-				})
-				sawError = true
-				continue
-			}
-			moduleBaseDir, err := ValidateDirContainment(opts.Dir, foundMod.Path)
-			if err != nil {
-				now := time.Now().UTC()
-				msg := err.Error()
-				checks = append(checks, protocol.CheckResult{
-					ID:               spec.ID,
-					Kind:             spec.Kind,
-					Command:          spec.Argv,
-					WorkingDirectory: &opts.Dir,
-					Status:           protocol.CheckError,
-					Summary:          &msg,
-					StartedAt:        protocol.NewTimestamp(now),
-					FinishedAt:       protocol.NewTimestamp(now),
-				})
-				sawError = true
-				continue
-			}
-			workingDir = moduleBaseDir
 		}
 
 		if spec.Dir != "" {

@@ -99,6 +99,7 @@ type Message struct {
 	GroupID     string      `json:"group_id,omitempty"`     // Links assistant tool_calls with matching tool results
 	Authority   int         `json:"authority,omitempty"`    // Authority level
 	JournalSeq  uint64      `json:"journal_seq,omitempty"` // Monotonic sequence
+	IsDigest    bool        `json:"is_digest,omitempty"`   // Typed identifier for generated trajectory digests
 }
 
 // ExecutionSession holds the conversation history and active state.

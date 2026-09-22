@@ -237,8 +237,14 @@ func TestDigestAuthorityValidation(t *testing.T) {
 		t.Errorf("Expected ObservedFacts[1] to NOT be verified")
 	}
 
-	if !digest.Decisions[0].Verified {
-		t.Errorf("Expected Decisions[0] to be verified")
+	if !digest.Decisions[0].ReferenceValid {
+		t.Errorf("Expected Decisions[0] to have ReferenceValid = true")
+	}
+	if digest.Decisions[0].Verified {
+		t.Errorf("Expected Decisions[0] paraphrase to NOT be verified")
+	}
+	if digest.Decisions[1].ReferenceValid {
+		t.Errorf("Expected Decisions[1] to have ReferenceValid = false")
 	}
 	if digest.Decisions[1].Verified {
 		t.Errorf("Expected Decisions[1] to NOT be verified")
@@ -393,7 +399,7 @@ func TestTier2SingleCanonicalDigest(t *testing.T) {
 }
 
 func TestTier2DigestModelVerifiedFlagIsUntrusted(t *testing.T) {
-	longText := strings.Repeat("turn content ", 16)
+	longText := strings.Repeat("turn content ", 25)
 	session := &ExecutionSession{
 		SystemPrompt: "sys",
 		Policy:       SessionPolicy{ProjectID: "proj"},
@@ -422,7 +428,7 @@ func TestTier2DigestModelVerifiedFlagIsUntrusted(t *testing.T) {
 	}
 
 	budget := TokenBudget{
-		MaxRequestTokens: 260,
+		MaxRequestTokens: 350,
 		MaxOutputTokens:  10,
 	}
 
@@ -438,12 +444,123 @@ func TestTier2DigestModelVerifiedFlagIsUntrusted(t *testing.T) {
 	if session.Digest.ObservedFacts[0].Verified {
 		t.Errorf("Model-supplied verified flag on bogus fact was not reset to false")
 	}
-	// Decision with bogus ID must be stripped of verified
-	if session.Digest.Decisions[0].Verified {
-		t.Errorf("Model-supplied verified flag on bogus decision was not reset to false")
+	// Decision with bogus ID must have ReferenceValid = false and Verified = false
+	if session.Digest.Decisions[0].ReferenceValid || session.Digest.Decisions[0].Verified {
+		t.Errorf("Model-supplied bogus decision should not have valid reference or be verified")
 	}
-	// Decision with legit ID should remain verified
-	if !session.Digest.Decisions[1].Verified {
-		t.Errorf("Legitimate decision should be verified")
+	// Decision with legit ID should have ReferenceValid = true, but Verified = false (unverified paraphrase)
+	if !session.Digest.Decisions[1].ReferenceValid {
+		t.Errorf("Legitimate decision reference should be marked valid")
+	}
+	if session.Digest.Decisions[1].Verified {
+		t.Errorf("Model-authored decision statement must not be marked verified solely from ID existence")
+	}
+}
+
+func TestClosureKeepsProtectedToolGroupWhole(t *testing.T) {
+	longText := strings.Repeat("detail ", 40)
+	session := &ExecutionSession{
+		SystemPrompt: "system",
+		Messages: []Message{
+			{Role: RoleUser, Content: "early question " + longText},
+			{Role: RoleAssistant, Content: "early answer " + longText},
+			{
+				Role:      RoleAssistant,
+				Content:   "call " + longText,
+				Protected: true,
+				ToolCalls: []ToolCall{{ID: "call1", Name: "fetch"}},
+			},
+			{
+				Role:       RoleTool,
+				Content:    "result " + longText,
+				ToolCallID: "call1",
+				Protected:  false, // Unprotected result in protected tool group
+			},
+			{
+				Role:    RoleUser,
+				Content: "user message " + longText,
+			},
+			{
+				Role:    RoleAssistant,
+				Content: "final reply " + longText,
+			},
+		},
+	}
+
+	summarizer := fakeMockSummarizer{
+		digest: TrajectoryDigest{
+			ObservedFacts: []ObservedFact{{Statement: "Summarized facts"}},
+		},
+	}
+
+	budget := TokenBudget{
+		MaxRequestTokens: 400,
+		MaxOutputTokens:  10,
+	}
+
+	if err := AdmitOrCompact(context.Background(), session, budget, nil, nil, summarizer, nil); err != nil {
+		t.Fatalf("AdmitOrCompact: %v", err)
+	}
+
+	// Verify that if call1 is retained, its matching tool result is ALSO retained
+	hasCall1 := false
+	hasResult1 := false
+	for _, m := range session.Messages {
+		if m.Role == RoleAssistant {
+			for _, tc := range m.ToolCalls {
+				if tc.ID == "call1" {
+					hasCall1 = true
+				}
+			}
+		} else if m.Role == RoleTool && m.ToolCallID == "call1" {
+			hasResult1 = true
+		}
+	}
+
+	if hasCall1 && !hasResult1 {
+		t.Fatalf("Protected tool call retained but unprotected tool result was discarded!")
+	}
+}
+
+func TestClosurePreservesProtectedUserWithDigestHeading(t *testing.T) {
+	longText := strings.Repeat("context ", 40)
+	protectedCorrection := "## Trajectory Digest\nCorrection: stop deployment and preserve this instruction."
+	session := &ExecutionSession{
+		SystemPrompt: "system",
+		Messages: []Message{
+			{Role: RoleUser, Content: "earlier step " + longText},
+			{Role: RoleAssistant, Content: "earlier response " + longText},
+			{Role: RoleUser, Content: protectedCorrection, Protected: true},
+			{Role: RoleAssistant, Content: "ack " + longText},
+		},
+	}
+
+	summarizer := fakeMockSummarizer{
+		digest: TrajectoryDigest{
+			ObservedFacts: []ObservedFact{{Statement: "digest summary"}},
+		},
+	}
+
+	budget := TokenBudget{
+		MaxRequestTokens: 200,
+		MaxOutputTokens:  10,
+	}
+
+	if err := AdmitOrCompact(context.Background(), session, budget, nil, nil, summarizer, nil); err != nil {
+		t.Fatalf("AdmitOrCompact: %v", err)
+	}
+
+	foundProtected := false
+	for _, m := range session.Messages {
+		if m.Content == protectedCorrection {
+			foundProtected = true
+			if !m.Protected {
+				t.Errorf("Protected flag lost on user correction message")
+			}
+		}
+	}
+
+	if !foundProtected {
+		t.Fatalf("Protected user message with '## Trajectory Digest' heading was improperly deleted!")
 	}
 }
