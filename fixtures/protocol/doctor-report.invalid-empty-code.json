@@ -1,0 +1,13 @@
+{
+  "schema_version": "1.0",
+  "report_id": "doc_000000000000000000000001",
+  "machine_fingerprint": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "observed_at": "2026-09-22T12:00:00.000000Z",
+  "evaluation_scope": {
+    "target_profile": "local-heavy",
+    "required_roles": ["implementation"],
+    "evidence_status": "invalid_status"
+  },
+  "readiness": "READY",
+  "findings": []
+}

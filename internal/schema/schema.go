@@ -57,6 +57,14 @@ const (
 // (ADR-0011, ADR-0013).
 const NameMachineCapabilityProfile Name = "machine-capability-profile"
 
+// Names of the M3B setup and bootstrap schemas (ADR-0014).
+const (
+	NameDoctorReport         Name = "doctor-report"
+	NameSetupPlan            Name = "setup-plan"
+	NameSetupExecutionReport Name = "setup-execution-report"
+	NameSetupLedgerEvent     Name = "setup-ledger-event"
+)
+
 // Names of the review-convergence schemas published ahead of their M6 Go
 // implementation.
 const (
@@ -84,6 +92,10 @@ var RecordKindToSchema = map[string]Name{
 	"DiscoveryExperiment":       NameDiscoveryExperiment,
 	"SpecificationReadiness":    NameSpecificationReadiness,
 	"MachineCapabilityProfile":  NameMachineCapabilityProfile,
+	"DoctorReport":              NameDoctorReport,
+	"SetupPlan":                 NameSetupPlan,
+	"SetupExecutionReport":      NameSetupExecutionReport,
+	"SetupLedgerEvent":          NameSetupLedgerEvent,
 }
 
 // Set is a compiled collection of schemas.
@@ -227,6 +239,7 @@ func AllNames() []Name {
 		NameProductDecision, NameRequirement, NameDiscoveryExperiment,
 		NameSpecificationReadiness, NameReviewCampaign, NameFindingDisposition,
 		NameClosureDecision, NameMachineCapabilityProfile,
+		NameDoctorReport, NameSetupPlan, NameSetupExecutionReport, NameSetupLedgerEvent,
 	}
 	sort.Slice(names, func(i, j int) bool {
 		if len(names[i]) != len(names[j]) {

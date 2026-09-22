@@ -1,0 +1,337 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/olostan/DevCadence/schemas/setup-plan.schema.json",
+  "title": "DevCadence SetupPlan",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "plan_id",
+    "plan_digest",
+    "recipe_set_version",
+    "machine_fingerprint",
+    "created_at",
+    "target",
+    "actions",
+    "required_authority",
+    "total_effects"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "plan_id": { "type": "string" },
+    "plan_digest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "recipe_set_version": { "type": "string" },
+    "machine_fingerprint": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "created_at": { "type": "string", "format": "date-time" },
+    "target": { "enum": ["all", "hardware", "inference", "cognition", "auth"] },
+    "required_authority": {
+      "enum": ["read_only", "user_confirmation", "privileged_confirmation", "high_impact_manual"]
+    },
+    "total_effects": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/effect_category"
+      }
+    },
+    "actions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/setup_action"
+      }
+    }
+  },
+  "$defs": {
+    "effect_category": {
+      "enum": [
+        "filesystem_write",
+        "network_access",
+        "package_download",
+        "model_download",
+        "service_modification",
+        "authentication",
+        "credential_access",
+        "privilege_elevation",
+        "device_permission_change",
+        "repository_mutation"
+      ]
+    },
+    "condition": {
+      "type": "object",
+      "required": ["kind"],
+      "oneOf": [
+        {
+          "properties": {
+            "kind": { "const": "command_available" },
+            "command_available": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["command_name"],
+              "properties": { "command_name": { "type": "string" } }
+            }
+          },
+          "required": ["command_available"],
+          "additionalProperties": false
+        },
+        {
+          "properties": {
+            "kind": { "const": "executable_verified" },
+            "executable_verified": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["canonical_path", "expected_version"],
+              "properties": {
+                "canonical_path": { "type": "string", "pattern": "^/" },
+                "expected_version": { "type": "string" },
+                "expected_digest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" }
+              }
+            }
+          },
+          "required": ["executable_verified"],
+          "additionalProperties": false
+        },
+        {
+          "properties": {
+            "kind": { "const": "managed_dir_exists" },
+            "managed_dir_exists": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["location", "file_mode_oct"],
+              "properties": {
+                "location": { "enum": ["state", "artifacts_setup", "tmp"] },
+                "file_mode_oct": { "const": "0700" }
+              }
+            }
+          },
+          "required": ["managed_dir_exists"],
+          "additionalProperties": false
+        },
+        {
+          "properties": {
+            "kind": { "const": "port_listening" },
+            "port_listening": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["host", "port"],
+              "properties": {
+                "host": { "enum": ["localhost", "127.0.0.1", "::1"] },
+                "port": { "type": "integer", "minimum": 1, "maximum": 65535 }
+              }
+            }
+          },
+          "required": ["port_listening"],
+          "additionalProperties": false
+        },
+        {
+          "properties": {
+            "kind": { "const": "endpoint_healthy" },
+            "endpoint_healthy": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["endpoint_id"],
+              "properties": { "endpoint_id": { "type": "string" } }
+            }
+          },
+          "required": ["endpoint_healthy"],
+          "additionalProperties": false
+        },
+        {
+          "properties": {
+            "kind": { "const": "model_digest_present" },
+            "model_digest_present": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["runtime", "model_tag", "digest"],
+              "properties": {
+                "runtime": { "type": "string" },
+                "model_tag": { "type": "string" },
+                "digest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" }
+              }
+            }
+          },
+          "required": ["model_digest_present"],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "typed_operation": {
+      "type": "object",
+      "required": ["kind"],
+      "oneOf": [
+        {
+          "properties": {
+            "kind": { "const": "ollama_pull_model" },
+            "ollama_pull_model": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["model_tag", "resolved_digest", "expected_size_bytes", "allowed_registry_host", "license_reference"],
+              "properties": {
+                "model_tag": { "type": "string" },
+                "resolved_digest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+                "expected_size_bytes": { "type": "integer", "minimum": 1 },
+                "allowed_registry_host": { "type": "string" },
+                "license_reference": { "type": "string" }
+              }
+            }
+          },
+          "required": ["ollama_pull_model"],
+          "additionalProperties": false
+        },
+        {
+          "properties": {
+            "kind": { "const": "create_directory" },
+            "create_directory": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["location", "file_mode_oct"],
+              "properties": {
+                "location": { "enum": ["state", "artifacts_setup", "tmp"] },
+                "file_mode_oct": { "const": "0700" }
+              }
+            }
+          },
+          "required": ["create_directory"],
+          "additionalProperties": false
+        },
+        {
+          "properties": {
+            "kind": { "const": "write_managed_config" },
+            "write_managed_config": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["key", "value"],
+              "properties": {
+                "key": { "enum": ["default_profile", "max_concurrent_sessions", "log_verbosity"] },
+                "value": { "type": "string" }
+              }
+            }
+          },
+          "required": ["write_managed_config"],
+          "additionalProperties": false
+        },
+        {
+          "properties": {
+            "kind": { "const": "remove_stale_cache" },
+            "remove_stale_cache": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["target"],
+              "properties": {
+                "target": { "enum": ["machine_profile", "endpoint_probes"] }
+              }
+            }
+          },
+          "required": ["remove_stale_cache"],
+          "additionalProperties": false
+        },
+        {
+          "properties": {
+            "kind": { "const": "run_diagnostic_check" },
+            "run_diagnostic_check": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["check_name"],
+              "properties": {
+                "check_name": { "enum": ["git_available", "ollama_responding", "mlx_importable", "state_root_writable"] },
+                "target_id": { "type": "string" }
+              }
+            }
+          },
+          "required": ["run_diagnostic_check"],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "expected_mutation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "target", "detail"],
+      "properties": {
+        "kind": { "enum": ["directory_created", "config_key_set", "model_pulled", "cache_removed"] },
+        "target": { "type": "string" },
+        "detail": { "type": "string" }
+      }
+    },
+    "manual_guide": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["summary", "steps", "verification_check"],
+      "properties": {
+        "summary": { "type": "string" },
+        "steps": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string" }
+        },
+        "verification_check": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/condition" }
+        }
+      }
+    },
+    "setup_action": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "action_id",
+        "recipe_id",
+        "recipe_version",
+        "title",
+        "description",
+        "authority",
+        "effects",
+        "preconditions",
+        "postconditions",
+        "expected_mutations",
+        "idempotency_key"
+      ],
+      "properties": {
+        "action_id": { "type": "string" },
+        "recipe_id": { "type": "string" },
+        "recipe_version": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "authority": { "enum": ["read_only", "user_confirmation", "privileged_confirmation", "high_impact_manual"] },
+        "effects": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/effect_category" }
+        },
+        "preconditions": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/condition" }
+        },
+        "postconditions": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/condition" }
+        },
+        "expected_mutations": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/expected_mutation" }
+        },
+        "idempotency_key": { "type": "string" },
+        "depends_on": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "operation": { "$ref": "#/$defs/typed_operation" },
+        "manual_instructions": { "$ref": "#/$defs/manual_guide" }
+      },
+      "oneOf": [
+        {
+          "properties": {
+            "authority": { "const": "high_impact_manual" }
+          },
+          "required": ["manual_instructions"],
+          "not": { "required": ["operation"] }
+        },
+        {
+          "properties": {
+            "authority": { "enum": ["read_only", "user_confirmation", "privileged_confirmation"] }
+          },
+          "required": ["operation"],
+          "not": { "required": ["manual_instructions"] }
+        }
+      ]
+    }
+  }
+}

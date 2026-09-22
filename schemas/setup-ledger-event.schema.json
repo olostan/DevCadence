@@ -1,0 +1,226 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/olostan/DevCadence/schemas/setup-ledger-event.schema.json",
+  "title": "DevCadence SetupLedgerEvent",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "sequence",
+    "event_id",
+    "execution_id",
+    "plan_id",
+    "plan_digest",
+    "previous_event_digest",
+    "event_digest",
+    "timestamp",
+    "type",
+    "payload"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "sequence": { "type": "integer", "minimum": 1 },
+    "event_id": { "type": "string" },
+    "execution_id": { "type": "string" },
+    "plan_id": { "type": "string" },
+    "plan_digest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "action_id": { "type": "string" },
+    "previous_event_digest": { "type": "string" },
+    "event_digest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "timestamp": { "type": "string", "format": "date-time" },
+    "type": {
+      "enum": [
+        "execution_created",
+        "plan_approved",
+        "action_starting",
+        "action_process_completed",
+        "postcondition_verified",
+        "action_terminated",
+        "execution_finished"
+      ]
+    },
+    "payload": {
+      "type": "object",
+      "oneOf": [
+        {
+          "properties": {
+            "execution_created": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["initiated_by", "target"],
+              "properties": {
+                "initiated_by": { "type": "string" },
+                "target": { "enum": ["all", "hardware", "inference", "cognition", "auth"] }
+              }
+            }
+          },
+          "required": ["execution_created"],
+          "additionalProperties": false
+        },
+        {
+          "properties": {
+            "plan_approved": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["approved_authority", "approved_by"],
+              "properties": {
+                "approved_authority": {
+                  "enum": ["read_only", "user_confirmation", "privileged_confirmation", "high_impact_manual"]
+                },
+                "approved_by": { "type": "string" }
+              }
+            }
+          },
+          "required": ["plan_approved"],
+          "additionalProperties": false
+        },
+        {
+          "properties": {
+            "action_starting": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["action_id", "recipe_id", "recipe_version", "idempotency_key"],
+              "properties": {
+                "action_id": { "type": "string" },
+                "recipe_id": { "type": "string" },
+                "recipe_version": { "type": "string" },
+                "operation_kind": {
+                  "enum": [
+                    "ollama_pull_model",
+                    "create_directory",
+                    "write_managed_config",
+                    "remove_stale_cache",
+                    "run_diagnostic_check"
+                  ]
+                },
+                "idempotency_key": { "type": "string" }
+              }
+            }
+          },
+          "required": ["action_starting"],
+          "additionalProperties": false
+        },
+        {
+          "properties": {
+            "action_process_completed": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["action_id", "exit_code", "output_truncated"],
+              "properties": {
+                "action_id": { "type": "string" },
+                "exit_code": { "type": "integer" },
+                "signal": { "type": "string" },
+                "output_truncated": { "type": "boolean" },
+                "artifact_ref": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["id", "type", "locator"],
+                  "properties": {
+                    "id": { "type": "string" },
+                    "type": { "type": "string" },
+                    "locator": { "type": "string" },
+                    "digest": { "type": "string" }
+                  }
+                }
+              }
+            }
+          },
+          "required": ["action_process_completed"],
+          "additionalProperties": false
+        },
+        {
+          "properties": {
+            "postcondition_verified": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["action_id", "passed", "detail"],
+              "properties": {
+                "action_id": { "type": "string" },
+                "passed": { "type": "boolean" },
+                "detail": { "type": "string" }
+              }
+            }
+          },
+          "required": ["postcondition_verified"],
+          "additionalProperties": false
+        },
+        {
+          "properties": {
+            "action_terminated": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["action_id", "status"],
+              "properties": {
+                "action_id": { "type": "string" },
+                "status": {
+                  "enum": [
+                    "planned",
+                    "awaiting_approval",
+                    "running",
+                    "succeeded",
+                    "failed",
+                    "skipped",
+                    "manual_required",
+                    "blocked",
+                    "interrupted"
+                  ]
+                },
+                "failure_reason": { "type": "string" },
+                "error_category": { "type": "string" }
+              }
+            }
+          },
+          "required": ["action_terminated"],
+          "additionalProperties": false
+        },
+        {
+          "properties": {
+            "execution_finished": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["status"],
+              "properties": {
+                "status": {
+                  "enum": ["planned", "running", "succeeded", "failed", "blocked", "interrupted"]
+                },
+                "final_detail": { "type": "string" }
+              }
+            }
+          },
+          "required": ["execution_finished"],
+          "additionalProperties": false
+        }
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "type": { "const": "execution_created" } } },
+      "then": { "properties": { "payload": { "required": ["execution_created"] } } }
+    },
+    {
+      "if": { "properties": { "type": { "const": "plan_approved" } } },
+      "then": { "properties": { "payload": { "required": ["plan_approved"] } } }
+    },
+    {
+      "if": { "properties": { "type": { "const": "action_starting" } } },
+      "then": { "properties": { "payload": { "required": ["action_starting"] } } }
+    },
+    {
+      "if": { "properties": { "type": { "const": "action_process_completed" } } },
+      "then": { "properties": { "payload": { "required": ["action_process_completed"] } } }
+    },
+    {
+      "if": { "properties": { "type": { "const": "postcondition_verified" } } },
+      "then": { "properties": { "payload": { "required": ["postcondition_verified"] } } }
+    },
+    {
+      "if": { "properties": { "type": { "const": "action_terminated" } } },
+      "then": { "properties": { "payload": { "required": ["action_terminated"] } } }
+    },
+    {
+      "if": { "properties": { "type": { "const": "execution_finished" } } },
+      "then": { "properties": { "payload": { "required": ["execution_finished"] } } }
+    }
+  ]
+}

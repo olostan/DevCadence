@@ -1,0 +1,66 @@
+{
+  "schema_version": "1.0",
+  "plan_id": "plan_000000000000000000000001",
+  "plan_digest": "sha256:8a6c8dae5633e077b4782ff4b1eda143dda77ad4d6646b6ec90745c10a6c8fca",
+  "recipe_set_version": "1.0",
+  "machine_fingerprint": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "created_at": "2026-09-22T12:00:00.000000Z",
+  "target": "all",
+  "required_authority": "user_confirmation",
+  "total_effects": [
+    "filesystem_write",
+    "model_download",
+    "network_access"
+  ],
+  "actions": [
+    {
+      "action_id": "act-001",
+      "recipe_id": "recipe-ollama-pull",
+      "recipe_version": "1.0",
+      "title": "Pull diagnostic model",
+      "description": "Pull smollm:135m for empirical probe",
+      "authority": "user_confirmation",
+      "effects": [
+        "filesystem_write",
+        "model_download",
+        "network_access"
+      ],
+      "preconditions": [
+        {
+          "kind": "command_available",
+          "command_available": {
+            "command_name": "ollama"
+          }
+        }
+      ],
+      "postconditions": [
+        {
+          "kind": "model_digest_present",
+          "model_digest_present": {
+            "runtime": "ollama",
+            "model_tag": "smollm:135m",
+            "digest": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+          }
+        }
+      ],
+      "expected_mutations": [
+        {
+          "kind": "model_pulled",
+          "target": "smollm:135m",
+          "detail": "Diagnostic model pulled"
+        }
+      ],
+      "idempotency_key": "pull-smollm:135m",
+      "operation": {
+        "kind": "ollama_pull_model",
+        "ollama_pull_model": {
+          "model_tag": "smollm:135m",
+          "resolved_digest": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+          "expected_size_bytes": 145000000,
+          "allowed_registry_host": "registry.ollama.ai",
+          "license_reference": "apache-2.0"
+        }
+      }
+    }
+  ]
+}

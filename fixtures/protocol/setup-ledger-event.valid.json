@@ -1,0 +1,18 @@
+{
+  "schema_version": "1.0",
+  "sequence": 1,
+  "event_id": "ev_000000000000000000000001",
+  "execution_id": "exec_000000000000000000000001",
+  "plan_id": "plan_000000000000000000000001",
+  "plan_digest": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "previous_event_digest": "",
+  "event_digest": "sha256:b06c3987bb2a17305e29d1e160c573dbad5d811d45bf18fa32670748cf1211b5",
+  "timestamp": "2026-09-22T12:00:00.000000Z",
+  "type": "execution_created",
+  "payload": {
+    "execution_created": {
+      "initiated_by": "operator",
+      "target": "all"
+    }
+  }
+}

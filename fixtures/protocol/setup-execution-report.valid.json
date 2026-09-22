@@ -1,0 +1,21 @@
+{
+  "schema_version": "1.0",
+  "execution_id": "exec_000000000000000000000001",
+  "plan_id": "plan_000000000000000000000001",
+  "plan_digest": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "machine_fingerprint": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "started_at": "2026-09-22T12:00:00.000000Z",
+  "completed_at": "2026-09-22T12:01:00.000000Z",
+  "status": "succeeded",
+  "results": [
+    {
+      "action_id": "act-001",
+      "status": "succeeded",
+      "started_at": "2026-09-22T12:00:01.000000Z",
+      "finished_at": "2026-09-22T12:00:45.000000Z",
+      "exit_code": 0,
+      "output_summary": "Model smollm:135m pulled successfully",
+      "failure_detail": ""
+    }
+  ]
+}
