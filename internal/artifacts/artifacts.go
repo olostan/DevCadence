@@ -263,18 +263,37 @@ func (s *Store) PutBytes(ctx context.Context, projectID, kind, mediaType string,
 // resolves strictly through ref.Locator, which Put generated, so a caller
 // cannot pass an arbitrary path and reach outside the store root.
 func (s *Store) Open(ref protocol.ArtifactRef) (io.ReadCloser, error) {
-	path, err := s.resolveLocator(ref.Locator)
+	rc, err := s.OpenLocator(ref.Locator)
+	if err != nil && ref.ID != "" && errs.CategoryOf(err) == errs.CategoryNotFound {
+		return nil, errs.Wrap(errs.CategoryNotFound, err, "artifact %s not found", ref.ID)
+	}
+	return rc, err
+}
+
+// OpenLocator returns the artifact's bytes for a locator string.
+func (s *Store) OpenLocator(locator string) (io.ReadCloser, error) {
+	path, err := s.resolveLocator(locator)
 	if err != nil {
 		return nil, err
 	}
 	f, err := os.Open(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return nil, errs.Wrap(errs.CategoryNotFound, err, "artifact %s not found", ref.ID)
+			return nil, errs.Wrap(errs.CategoryNotFound, err, "artifact locator %q not found", locator)
 		}
-		return nil, errs.Wrap(errs.CategoryInternal, err, "artifacts: open %s", ref.ID)
+		return nil, errs.Wrap(errs.CategoryInternal, err, "artifacts: open locator %q", locator)
 	}
 	return f, nil
+}
+
+// Get reads the complete artifact bytes for a locator string.
+func (s *Store) Get(locator string) ([]byte, error) {
+	rc, err := s.OpenLocator(locator)
+	if err != nil {
+		return nil, err
+	}
+	defer rc.Close()
+	return io.ReadAll(rc)
 }
 
 // Verify reads the artifact back and checks its bytes against ref.Digest.
