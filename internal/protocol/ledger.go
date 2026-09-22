@@ -242,7 +242,21 @@ type SetupLedgerEvent struct {
 	PlanDigest          string         `json:"plan_digest"`
 	ActionID            string         `json:"action_id,omitempty"`
 	PreviousEventDigest string         `json:"previous_event_digest"`
-	EventDigest         string         `json:"event_digest,omitempty"`
+	EventDigest         string         `json:"event_digest"`
+	Timestamp           Timestamp      `json:"timestamp"`
+	Type                SetupEventType `json:"type"`
+	Payload             EventPayload   `json:"payload"`
+}
+
+type setupLedgerEventDigestView struct {
+	SchemaVersion       SchemaVersion  `json:"schema_version"`
+	Sequence            uint64         `json:"sequence"`
+	EventID             string         `json:"event_id"`
+	ExecutionID         string         `json:"execution_id"`
+	PlanID              string         `json:"plan_id"`
+	PlanDigest          string         `json:"plan_digest"`
+	ActionID            string         `json:"action_id,omitempty"`
+	PreviousEventDigest string         `json:"previous_event_digest"`
 	Timestamp           Timestamp      `json:"timestamp"`
 	Type                SetupEventType `json:"type"`
 	Payload             EventPayload   `json:"payload"`
@@ -291,14 +305,18 @@ func (e *SetupLedgerEvent) Validate() error {
 		return err
 	}
 
-	if e.EventDigest != "" {
-		expectedDigest, err := ComputeLedgerEventDigest(e)
-		if err != nil {
-			return err
-		}
-		if e.EventDigest != expectedDigest {
-			return errs.New(errs.CategoryInvalidArgument, "%s: event_digest mismatch: got %q, expected %q", kind, e.EventDigest, expectedDigest)
-		}
+	if err := requireNonEmpty(kind, "event_digest", e.EventDigest); err != nil {
+		return err
+	}
+	if !hexSha256Regex.MatchString(e.EventDigest) {
+		return errs.New(errs.CategoryInvalidArgument, "%s: event_digest must be sha256 hex, got %q", kind, e.EventDigest)
+	}
+	expectedDigest, err := ComputeLedgerEventDigest(e)
+	if err != nil {
+		return err
+	}
+	if e.EventDigest != expectedDigest {
+		return errs.New(errs.CategoryInvalidArgument, "%s: event_digest mismatch: got %q, expected %q", kind, e.EventDigest, expectedDigest)
 	}
 	return nil
 }
@@ -306,9 +324,20 @@ func (e *SetupLedgerEvent) Validate() error {
 // ComputeLedgerEventDigest calculates the SHA-256 digest of the canonical JSON encoding
 // of the complete event with only event_digest omitted (ADR-0014).
 func ComputeLedgerEventDigest(e *SetupLedgerEvent) (string, error) {
-	clone := *e
-	clone.EventDigest = ""
-	canonical, err := CanonicalJSON(&clone)
+	view := setupLedgerEventDigestView{
+		SchemaVersion:       e.SchemaVersion,
+		Sequence:            e.Sequence,
+		EventID:             e.EventID,
+		ExecutionID:         e.ExecutionID,
+		PlanID:              e.PlanID,
+		PlanDigest:          e.PlanDigest,
+		ActionID:            e.ActionID,
+		PreviousEventDigest: e.PreviousEventDigest,
+		Timestamp:           e.Timestamp,
+		Type:                e.Type,
+		Payload:             e.Payload,
+	}
+	canonical, err := CanonicalJSON(&view)
 	if err != nil {
 		return "", err
 	}

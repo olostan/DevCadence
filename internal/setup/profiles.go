@@ -38,57 +38,179 @@ func NewProfileRecommender() *ProfileRecommender {
 	return &ProfileRecommender{}
 }
 
+// summariesToEndpoints synthesizes CognitionEndpoints from CognitionEndpointSummaries.
+func summariesToEndpoints(summaries []protocol.CognitionEndpointSummary) []protocol.CognitionEndpoint {
+	var endpoints []protocol.CognitionEndpoint
+	for _, s := range summaries {
+		var acc *protocol.AccelerationEvidence
+		if s.AccelerationBackend != nil {
+			state := protocol.StateUnverified
+			if s.AccelerationVerified {
+				state = protocol.StateVerified
+			}
+			acc = &protocol.AccelerationEvidence{
+				Backend: *s.AccelerationBackend,
+				State:   state,
+			}
+		}
+
+		var caps []protocol.GradedCapability
+		if s.Kind == protocol.EndpointAuthenticatedCLI || s.Kind == protocol.EndpointRemoteAPI {
+			if s.Health == protocol.EndpointHealthReady && s.Auth == protocol.AuthAuthenticated {
+				caps = append(caps,
+					protocol.GradedCapability{
+						Dimension:  protocol.CapabilityImplementation,
+						Grade:      protocol.GradeStrong,
+						Provenance: protocol.ProvenanceConfigured,
+					},
+					protocol.GradedCapability{
+						Dimension:  protocol.CapabilityArchitecture,
+						Grade:      protocol.GradeStrong,
+						Provenance: protocol.ProvenanceConfigured,
+					},
+					protocol.GradedCapability{
+						Dimension:  protocol.CapabilityReview,
+						Grade:      protocol.GradeStrong,
+						Provenance: protocol.ProvenanceConfigured,
+					},
+					protocol.GradedCapability{
+						Dimension:  protocol.CapabilityRepositoryReasoning,
+						Grade:      protocol.GradeStrong,
+						Provenance: protocol.ProvenanceConfigured,
+					},
+				)
+			}
+		} else if s.Kind == protocol.EndpointLocalRuntime {
+			if s.Health == protocol.EndpointHealthReady {
+				caps = append(caps,
+					protocol.GradedCapability{
+						Dimension:  protocol.CapabilityRepositoryReasoning,
+						Grade:      protocol.GradeMedium,
+						Provenance: protocol.ProvenanceEvaluated,
+					},
+				)
+				if s.AccelerationVerified {
+					caps = append(caps,
+						protocol.GradedCapability{
+							Dimension:  protocol.CapabilityImplementation,
+							Grade:      protocol.GradeStrong,
+							Provenance: protocol.ProvenanceEvaluated,
+						},
+						protocol.GradedCapability{
+							Dimension:  protocol.CapabilityReview,
+							Grade:      protocol.GradeMedium,
+							Provenance: protocol.ProvenanceEvaluated,
+						},
+					)
+				}
+			}
+		}
+
+		so := protocol.FeatureUnsupported
+		tu := protocol.FeatureUnsupported
+		if s.Health == protocol.EndpointHealthReady {
+			so = protocol.FeatureProbePassed
+			tu = protocol.FeatureProbePassed
+		}
+
+		costClass := s.CostClass
+		sourceExposure := s.RequiredSourceExposure
+		locality := s.Locality
+		auth := s.Auth
+
+		if s.Kind == protocol.EndpointLocalRuntime {
+			if costClass == "" {
+				costClass = protocol.CostLocalCompute
+			}
+			if sourceExposure == "" {
+				sourceExposure = protocol.ExposureLocalOnly
+			}
+			if locality == "" {
+				locality = protocol.LocalityLocal
+			}
+			if auth == "" {
+				auth = protocol.AuthNotApplicable
+			}
+		} else {
+			if costClass == "" {
+				costClass = protocol.CostRemoteEconomy
+			}
+			if sourceExposure == "" {
+				sourceExposure = protocol.ExposureFocusedSnippets
+			}
+			if locality == "" {
+				locality = protocol.LocalityRemote
+			}
+			if auth == "" && s.Health == protocol.EndpointHealthReady {
+				auth = protocol.AuthAuthenticated
+			}
+		}
+
+		ep := protocol.CognitionEndpoint{
+			ID:                     s.ID,
+			Kind:                   s.Kind,
+			Locality:               locality,
+			Health:                 s.Health,
+			Auth:                   auth,
+			CostClass:              costClass,
+			RequiredSourceExposure: sourceExposure,
+			Acceleration:           acc,
+			Capabilities:           caps,
+			StructuredOutput:       so,
+			ToolUse:                tu,
+		}
+		endpoints = append(endpoints, ep)
+	}
+	return endpoints
+}
+
 // Recommend evaluates environment facts, endpoints, policy, and preferences against ADR-0011/ADR-0014 rules.
 func (r *ProfileRecommender) Recommend(input RecommendationInput) protocol.ProfileRecommendation {
 	facts := input.Facts
-	endpoints := input.Endpoints
 	policy := input.Policy
 
-	hasLocalRuntime := false
+	effPolicy := cognition.DefaultPolicy()
+	if policy != nil {
+		effPolicy = *policy
+	}
+
+	var fullEndpoints []protocol.CognitionEndpoint
+	if input.CognitionProfile != nil && len(input.CognitionProfile.Endpoints) > 0 {
+		fullEndpoints = input.CognitionProfile.Endpoints
+	} else {
+		fullEndpoints = summariesToEndpoints(input.Endpoints)
+	}
+
+	var localEndpoints []protocol.CognitionEndpoint
+	var remoteEndpoints []protocol.CognitionEndpoint
 	localRuntimeAccelerated := false
-	hasRemoteEndpoint := false
-	hasCodingCLI := false
 	var policyRejections []string
 
-	for _, ep := range endpoints {
-		switch ep.Kind {
-		case protocol.EndpointLocalRuntime:
-			if ep.Health == protocol.EndpointHealthReady || ep.Health == protocol.EndpointHealthInstalled || ep.Health == protocol.EndpointHealthUnverified {
-				hasLocalRuntime = true
-				if ep.AccelerationVerified {
-					localRuntimeAccelerated = true
-				}
+	for _, ep := range fullEndpoints {
+		if ep.Health != protocol.EndpointHealthReady {
+			// Unverified, installed, or unhealthy endpoints are not functional
+			continue
+		}
+		if ep.Locality == protocol.LocalityLocal || ep.Kind == protocol.EndpointLocalRuntime {
+			localEndpoints = append(localEndpoints, ep)
+			if ep.AccelerationVerified() {
+				localRuntimeAccelerated = true
 			}
-		case protocol.EndpointRemoteAPI:
-			if ep.Health == protocol.EndpointHealthReady && ep.Auth == protocol.AuthAuthenticated {
-				if policy != nil {
-					if ep.RequiredSourceExposure.ExposureRank() > policy.MaxSourceExposure.ExposureRank() {
-						policyRejections = append(policyRejections, fmt.Sprintf("Remote endpoint %s requires source exposure %s exceeding policy %s", ep.ID, ep.RequiredSourceExposure, policy.MaxSourceExposure))
-						continue
-					}
-					if ep.CostClass.CostRank() > policy.MaxCostClass.CostRank() {
-						policyRejections = append(policyRejections, fmt.Sprintf("Remote endpoint %s cost class %s exceeds policy %s", ep.ID, ep.CostClass, policy.MaxCostClass))
-						continue
-					}
-				}
-				hasRemoteEndpoint = true
+		} else {
+			if ep.RequiredSourceExposure.ExposureRank() > effPolicy.MaxSourceExposure.ExposureRank() {
+				policyRejections = append(policyRejections, fmt.Sprintf("Endpoint %s requires source exposure %s exceeding policy %s", ep.ID, ep.RequiredSourceExposure, effPolicy.MaxSourceExposure))
+				continue
 			}
-		case protocol.EndpointAuthenticatedCLI:
-			if ep.Health == protocol.EndpointHealthReady && ep.Auth == protocol.AuthAuthenticated {
-				if policy != nil {
-					if ep.RequiredSourceExposure.ExposureRank() > policy.MaxSourceExposure.ExposureRank() {
-						policyRejections = append(policyRejections, fmt.Sprintf("CLI endpoint %s requires source exposure %s exceeding policy %s", ep.ID, ep.RequiredSourceExposure, policy.MaxSourceExposure))
-						continue
-					}
-					if ep.CostClass.CostRank() > policy.MaxCostClass.CostRank() {
-						policyRejections = append(policyRejections, fmt.Sprintf("CLI endpoint %s cost class %s exceeds policy %s", ep.ID, ep.CostClass, policy.MaxCostClass))
-						continue
-					}
-				}
-				hasCodingCLI = true
+			if ep.CostClass.CostRank() > effPolicy.MaxCostClass.CostRank() {
+				policyRejections = append(policyRejections, fmt.Sprintf("Endpoint %s cost class %s exceeds policy %s", ep.ID, ep.CostClass, effPolicy.MaxCostClass))
+				continue
 			}
+			remoteEndpoints = append(remoteEndpoints, ep)
 		}
 	}
+
+	hasLocalRuntime := len(localEndpoints) > 0
+	hasRemoteEndpoint := len(remoteEndpoints) > 0
 
 	// Assess hardware accelerator backends
 	hasViableAccelerator := false
@@ -118,8 +240,22 @@ func (r *ProfileRecommender) Recommend(input RecommendationInput) protocol.Profi
 	meetsHeavyMem := hasViableAccelerator && ((isUnified && totalMem >= mem64GiB) || (maxVRAM >= mem24GiB))
 	meetsThinMem := (isUnified && totalMem >= mem16GiB) || (maxVRAM >= mem8GiB) || (totalMem >= mem16GiB)
 
-	// 1. local-heavy
-	heavyEligible := meetsHeavyMem && hasLocalRuntime && localRuntimeAccelerated
+	defaultReqs := cognition.DefaultRequirements()
+
+	// 1. local-heavy: requires unified memory >= 64GB or dedicated VRAM >= 24GB,
+	// verified local hardware acceleration, and successful routing for RoleImplementer locally.
+	canRouteLocalImplementer := false
+	var localImplReasons []string
+	if hasLocalRuntime && localRuntimeAccelerated {
+		dec := cognition.Route(defaultReqs[cognition.RoleImplementer], effPolicy, localEndpoints)
+		if dec.Outcome == cognition.OutcomeSelected {
+			canRouteLocalImplementer = true
+		} else {
+			localImplReasons = dec.Reasons
+		}
+	}
+
+	heavyEligible := meetsHeavyMem && hasLocalRuntime && localRuntimeAccelerated && canRouteLocalImplementer
 	var heavyReasons []string
 	var heavyMissing []string
 	if meetsHeavyMem {
@@ -129,19 +265,47 @@ func (r *ProfileRecommender) Recommend(input RecommendationInput) protocol.Profi
 	} else {
 		heavyMissing = append(heavyMissing, "Requires unified memory >= 64GB or dedicated VRAM >= 24GB")
 	}
-	if hasLocalRuntime && localRuntimeAccelerated {
-		heavyReasons = append(heavyReasons, "Local runtime with verified hardware acceleration is available")
+	if hasLocalRuntime && localRuntimeAccelerated && canRouteLocalImplementer {
+		heavyReasons = append(heavyReasons, "Local runtime with verified hardware acceleration and strong implementation capability is available")
+	} else if hasLocalRuntime && localRuntimeAccelerated {
+		heavyMissing = append(heavyMissing, "Local runtime lacks verified implementation capability grade required for autonomous execution")
+		if len(localImplReasons) > 0 {
+			heavyMissing = append(heavyMissing, localImplReasons...)
+		}
 	} else if hasLocalRuntime {
 		heavyMissing = append(heavyMissing, "Local runtime lacks verified hardware acceleration")
 	} else {
-		heavyMissing = append(heavyMissing, "No healthy local runtime endpoint discovered")
+		heavyMissing = append(heavyMissing, "No ready local runtime endpoint discovered")
 	}
 	if len(heavyReasons) == 0 {
 		heavyReasons = append(heavyReasons, "Machine memory and local runtime do not satisfy local-heavy requirements")
 	}
 
-	// 2. hybrid-thin
-	thinEligible := meetsThinMem && hasLocalRuntime && (hasRemoteEndpoint || hasCodingCLI)
+	// 2. hybrid-thin: requires memory >= 16GB, local runtime capable of RoleScout,
+	// and remote endpoint capable of RoleImplementer.
+	canRouteLocalScout := false
+	var scoutReasons []string
+	if hasLocalRuntime {
+		dec := cognition.Route(defaultReqs[cognition.RoleScout], effPolicy, localEndpoints)
+		if dec.Outcome == cognition.OutcomeSelected {
+			canRouteLocalScout = true
+		} else {
+			scoutReasons = dec.Reasons
+		}
+	}
+
+	canRouteRemoteImplementer := false
+	var remoteImplReasons []string
+	if hasRemoteEndpoint {
+		dec := cognition.Route(defaultReqs[cognition.RoleImplementer], effPolicy, remoteEndpoints)
+		if dec.Outcome == cognition.OutcomeSelected {
+			canRouteRemoteImplementer = true
+		} else {
+			remoteImplReasons = dec.Reasons
+		}
+	}
+
+	thinEligible := meetsThinMem && canRouteLocalScout && canRouteRemoteImplementer
 	var thinReasons []string
 	var thinMissing []string
 	if meetsThinMem {
@@ -149,13 +313,23 @@ func (r *ProfileRecommender) Recommend(input RecommendationInput) protocol.Profi
 	} else {
 		thinMissing = append(thinMissing, "Requires unified memory >= 16GB or dedicated VRAM >= 8GB")
 	}
-	if hasLocalRuntime {
-		thinReasons = append(thinReasons, "Local runtime available for scout and review roles")
+	if canRouteLocalScout {
+		thinReasons = append(thinReasons, "Local runtime available and routed for scout and reconnaissance roles")
+	} else if hasLocalRuntime {
+		thinMissing = append(thinMissing, "Local runtime cannot satisfy scout role requirements")
+		if len(scoutReasons) > 0 {
+			thinMissing = append(thinMissing, scoutReasons...)
+		}
 	} else {
-		thinMissing = append(thinMissing, "No local runtime available for local roles")
+		thinMissing = append(thinMissing, "No ready local runtime available for local roles")
 	}
-	if hasRemoteEndpoint || hasCodingCLI {
-		thinReasons = append(thinReasons, "Remote API or authenticated coding CLI available for complex roles")
+	if canRouteRemoteImplementer {
+		thinReasons = append(thinReasons, "Remote API or authenticated coding CLI available and routed for complex roles")
+	} else if hasRemoteEndpoint {
+		thinMissing = append(thinMissing, "Remote endpoints lack strong implementation capability or fail routing policy")
+		if len(remoteImplReasons) > 0 {
+			thinMissing = append(thinMissing, remoteImplReasons...)
+		}
 	} else {
 		thinMissing = append(thinMissing, "No authenticated remote API or coding CLI found satisfying routing policy")
 	}
@@ -163,26 +337,32 @@ func (r *ProfileRecommender) Recommend(input RecommendationInput) protocol.Profi
 		thinReasons = append(thinReasons, "Machine memory, local runtime, or remote endpoints do not satisfy hybrid-thin requirements")
 	}
 
-	// 3. cloud-cognition
-	cloudEligible := hasRemoteEndpoint || hasCodingCLI
+	// 3. cloud-cognition: requires remote endpoint capable of RoleImplementer
+	cloudEligible := canRouteRemoteImplementer
 	var cloudReasons []string
 	var cloudMissing []string
 	if cloudEligible {
-		cloudReasons = append(cloudReasons, "Authenticated remote endpoint or coding CLI is available and satisfies routing policy")
+		cloudReasons = append(cloudReasons, "Authenticated remote endpoint or coding CLI is available, routed for implementation, and satisfies routing policy")
+	} else if hasRemoteEndpoint {
+		cloudReasons = append(cloudReasons, "Remote endpoints detected but ineligible for implementation role under policy")
+		cloudMissing = append(cloudMissing, "Remote endpoints lack strong implementation capability or fail routing policy")
+		if len(remoteImplReasons) > 0 {
+			cloudMissing = append(cloudMissing, remoteImplReasons...)
+		}
 	} else {
 		cloudReasons = append(cloudReasons, "No authenticated remote endpoints or coding CLIs detected satisfying routing policy")
 		cloudMissing = append(cloudMissing, "No authenticated remote API or coding CLI found satisfying routing policy")
 	}
 
-	// 4. offline
-	offlineEligible := meetsThinMem && hasLocalRuntime
+	// 4. offline: requires memory >= 16GB and local runtime capable of RoleScout
+	offlineEligible := meetsThinMem && canRouteLocalScout
 	var offlineReasons []string
 	var offlineMissing []string
 	if offlineEligible {
-		offlineReasons = append(offlineReasons, "Local compute and local runtime available without external network requirements")
+		offlineReasons = append(offlineReasons, "Local compute and ready local runtime available without external network requirements")
 	} else {
 		offlineReasons = append(offlineReasons, "Local compute or local runtime do not satisfy offline execution requirements")
-		offlineMissing = append(offlineMissing, "Requires local compute (>= 16GB) and healthy local runtime")
+		offlineMissing = append(offlineMissing, "Requires local compute (>= 16GB) and ready local runtime capable of repository reasoning")
 	}
 
 	// 5. custom

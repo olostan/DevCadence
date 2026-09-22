@@ -153,7 +153,7 @@ func (d *Doctor) Run(ctx context.Context, scope protocol.ReadinessEvaluationScop
 	}
 
 	// 7. Evaluate Readiness
-	readiness := d.evaluateReadiness(scope, findings, endpoints, scope.TargetProfile)
+	readiness := d.evaluateReadiness(scope, findings, endpoints, cognProfile, scope.TargetProfile)
 
 	report := &protocol.DoctorReport{
 		SchemaVersion:       protocol.SchemaVersion1,
@@ -377,20 +377,14 @@ func (d *Doctor) discoverEndpoints(ctx context.Context, facts protocol.Environme
 	if d.verifyEndpointID != "" {
 		depth = protocol.DepthInference
 		inferenceTargets = []string{d.verifyEndpointID}
-	} else if d.cache != nil {
-		// Check if we have a valid cached profile matching the machine fingerprint
-		if cached, found, err := Read[protocol.MachineCapabilityProfile](ctx, d.cache, protocol.CacheTargetMachineProfile, fingerprint); err == nil && found {
-			evidenceStatus = "refreshed_health"
-			hasVerifiedAcc := false
-			for _, ep := range cached.Endpoints {
-				if ep.AccelerationVerified() {
-					hasVerifiedAcc = true
-					break
-				}
-			}
-			if !hasVerifiedAcc {
-				evidenceStatus = "stale_inference_retained"
-			}
+	}
+
+	var cachedProfile *protocol.MachineCapabilityProfile
+	cachedExpired := false
+	if d.cache != nil {
+		if cached, found, expired, err := ReadEntry[protocol.MachineCapabilityProfile](ctx, d.cache, protocol.CacheTargetMachineProfile, fingerprint); err == nil && found {
+			cachedProfile = &cached
+			cachedExpired = expired
 		}
 	}
 
@@ -401,6 +395,74 @@ func (d *Doctor) discoverEndpoints(ctx context.Context, facts protocol.Environme
 	})
 	if err != nil {
 		return nil, nil, nil, "", err
+	}
+
+	usedCachedInference := false
+	if cachedProfile != nil {
+		cachedMap := make(map[string]protocol.CognitionEndpoint, len(cachedProfile.Endpoints))
+		for _, cep := range cachedProfile.Endpoints {
+			cachedMap[cep.ID] = cep
+		}
+
+		for i := range profile.Endpoints {
+			ep := &profile.Endpoints[i]
+			cep, ok := cachedMap[ep.ID]
+			if !ok {
+				continue
+			}
+
+			// Merge verified acceleration: preserve verified acceleration and verified_at
+			if cep.AccelerationVerified() && !ep.AccelerationVerified() {
+				ep.Acceleration = cep.Acceleration
+				usedCachedInference = true
+			}
+
+			// Merge deeper capabilities from cached inference probe
+			for _, ccap := range cep.Capabilities {
+				found := false
+				for j, fcap := range ep.Capabilities {
+					if fcap.Dimension == ccap.Dimension {
+						found = true
+						if provenanceRank(fcap.Provenance) < provenanceRank(ccap.Provenance) {
+							ep.Capabilities[j] = ccap
+							usedCachedInference = true
+						}
+						break
+					}
+				}
+				if !found {
+					ep.Capabilities = append(ep.Capabilities, ccap)
+					if ccap.Provenance == protocol.ProvenanceEvaluated || ccap.Provenance == protocol.ProvenanceMeasured {
+						usedCachedInference = true
+					}
+				}
+			}
+
+			// Merge structured output / tool use if cached passed
+			if ep.StructuredOutput != protocol.FeatureProbePassed && cep.StructuredOutput == protocol.FeatureProbePassed {
+				ep.StructuredOutput = cep.StructuredOutput
+				usedCachedInference = true
+			}
+			if ep.ToolUse != protocol.FeatureProbePassed && cep.ToolUse == protocol.FeatureProbePassed {
+				ep.ToolUse = cep.ToolUse
+				usedCachedInference = true
+			}
+			if ep.ContextTokens == nil && cep.ContextTokens != nil {
+				ep.ContextTokens = cep.ContextTokens
+			}
+		}
+	}
+
+	if d.verifyEndpointID != "" {
+		evidenceStatus = "live"
+	} else if usedCachedInference {
+		if cachedExpired {
+			evidenceStatus = "stale_inference_retained"
+		} else {
+			evidenceStatus = "refreshed_health"
+		}
+	} else {
+		evidenceStatus = "live"
 	}
 
 	// Durably cache the discovered machine profile
@@ -474,7 +536,43 @@ func (d *Doctor) discoverEndpoints(ctx context.Context, facts protocol.Environme
 	return summaries, findings, &profile, evidenceStatus, nil
 }
 
-func (d *Doctor) evaluateReadiness(scope protocol.ReadinessEvaluationScope, findings []protocol.DiagnosticFinding, endpoints []protocol.CognitionEndpointSummary, targetProfile *protocol.DeploymentProfile) protocol.ReadinessStatus {
+func provenanceRank(p protocol.CapabilityProvenance) int {
+	switch p {
+	case protocol.ProvenanceEvaluated:
+		return 3
+	case protocol.ProvenanceMeasured:
+		return 2
+	case protocol.ProvenanceConfigured:
+		return 1
+	default:
+		return 0
+	}
+}
+
+func parseCognitionRole(role string) (cognition.Role, bool) {
+	switch strings.ToLower(role) {
+	case "scout":
+		return cognition.RoleScout, true
+	case "classifier":
+		return cognition.RoleClassifier, true
+	case "implementer", "implementation", "principal":
+		return cognition.RoleImplementer, true
+	case "correctness_reviewer", "reviewer":
+		return cognition.RoleCorrectnessReviewer, true
+	case "architecture_reviewer":
+		return cognition.RoleArchitectureReviewer, true
+	default:
+		return "", false
+	}
+}
+
+func (d *Doctor) evaluateReadiness(
+	scope protocol.ReadinessEvaluationScope,
+	findings []protocol.DiagnosticFinding,
+	endpoints []protocol.CognitionEndpointSummary,
+	cognProfile *protocol.MachineCapabilityProfile,
+	targetProfile *protocol.DeploymentProfile,
+) protocol.ReadinessStatus {
 	// 1. Mandatory base dependencies (Git, state root, disk space, errors)
 	for _, f := range findings {
 		if f.Severity == SeverityError {
@@ -487,22 +585,29 @@ func (d *Doctor) evaluateReadiness(scope protocol.ReadinessEvaluationScope, find
 		return protocol.ReadinessPartiallyReady
 	}
 
-	// 3. Classify ready endpoints
-	var localEndpoints []protocol.CognitionEndpointSummary
-	var acceleratedLocal []protocol.CognitionEndpointSummary
-	var remoteEndpoints []protocol.CognitionEndpointSummary
+	// 3. Classify candidate endpoints using full CognitionEndpoints
+	var fullEndpoints []protocol.CognitionEndpoint
+	if cognProfile != nil && len(cognProfile.Endpoints) > 0 {
+		fullEndpoints = cognProfile.Endpoints
+	} else {
+		fullEndpoints = summariesToEndpoints(endpoints)
+	}
 
-	for _, ep := range endpoints {
+	var localEndpoints []protocol.CognitionEndpoint
+	var acceleratedLocal []protocol.CognitionEndpoint
+	var remoteEndpoints []protocol.CognitionEndpoint
+
+	for _, ep := range fullEndpoints {
 		if ep.Health != protocol.EndpointHealthReady {
 			continue
 		}
 		if ep.Locality == protocol.LocalityLocal || ep.Kind == protocol.EndpointLocalRuntime {
 			localEndpoints = append(localEndpoints, ep)
-			if ep.AccelerationVerified {
+			if ep.AccelerationVerified() {
 				acceleratedLocal = append(acceleratedLocal, ep)
 			}
 		}
-		if (ep.Locality == protocol.LocalityRemote || ep.Kind == protocol.EndpointRemoteAPI || ep.Kind == protocol.EndpointAuthenticatedCLI) && ep.Auth == protocol.AuthAuthenticated {
+		if (ep.Locality == protocol.LocalityRemote || ep.Kind == protocol.EndpointRemoteAPI || ep.Kind == protocol.EndpointAuthenticatedCLI) && (ep.Auth == protocol.AuthAuthenticated || ep.Auth == protocol.AuthNotApplicable) {
 			remoteEndpoints = append(remoteEndpoints, ep)
 		}
 	}
@@ -522,8 +627,8 @@ func (d *Doctor) evaluateReadiness(scope protocol.ReadinessEvaluationScope, find
 			return protocol.ReadinessPartiallyReady
 		}
 		if len(acceleratedLocal) == 0 {
-			// Local-heavy requires verified hardware acceleration
-			return protocol.ReadinessReadyWithReducedCap
+			// Local-heavy requires verified hardware acceleration (ADR-0014: PARTIALLY_READY)
+			return protocol.ReadinessPartiallyReady
 		}
 	case protocol.ProfileHybridThin:
 		if len(localEndpoints) == 0 || len(remoteEndpoints) == 0 {
@@ -535,60 +640,48 @@ func (d *Doctor) evaluateReadiness(scope protocol.ReadinessEvaluationScope, find
 		}
 	}
 
-	// 5. Verify required roles under target profile
-	for _, role := range scope.RequiredRoles {
-		roleLower := strings.ToLower(role)
-		satisfied := false
+	// 5. Verify required roles under routing policy and capability evidence
+	defaultReqs := cognition.DefaultRequirements()
+	effPolicy := cognition.DefaultPolicy()
+	if d.policy != nil {
+		effPolicy = *d.policy
+	}
+
+	for _, roleStr := range scope.RequiredRoles {
+		cRole, ok := parseCognitionRole(roleStr)
+		if !ok {
+			// Unknown role string fails readiness
+			return protocol.ReadinessPartiallyReady
+		}
+
+		req, ok := defaultReqs[cRole]
+		if !ok {
+			return protocol.ReadinessPartiallyReady
+		}
+
+		var candidateEndpoints []protocol.CognitionEndpoint
 		switch *targetProfile {
 		case protocol.ProfileOffline:
-			// Offline: strictly local endpoints
-			for _, ep := range localEndpoints {
-				switch roleLower {
-				case "scout", "classifier":
-					satisfied = true
-				case "reviewer", "correctness_reviewer":
-					satisfied = true
-				case "principal", "implementer", "implementation", "architecture_reviewer":
-					if ep.AccelerationVerified {
-						satisfied = true
-					}
-				default:
-					satisfied = true
-				}
-				if satisfied {
-					break
-				}
-			}
-		case protocol.ProfileCloudCognition:
-			if len(remoteEndpoints) > 0 {
-				satisfied = true
-			}
-		case protocol.ProfileHybridThin:
-			switch roleLower {
-			case "scout", "classifier":
-				satisfied = len(localEndpoints) > 0
-			case "reviewer", "correctness_reviewer":
-				satisfied = len(localEndpoints) > 0 || len(remoteEndpoints) > 0
-			case "principal", "implementer", "implementation", "architecture_reviewer":
-				satisfied = len(remoteEndpoints) > 0
-			default:
-				satisfied = len(localEndpoints) > 0 || len(remoteEndpoints) > 0
-			}
+			candidateEndpoints = localEndpoints
 		case protocol.ProfileLocalHeavy:
-			for _, ep := range localEndpoints {
-				if ep.AccelerationVerified {
-					satisfied = true
-					break
-				}
-				if roleLower == "scout" || roleLower == "classifier" {
-					satisfied = true
-					break
-				}
+			candidateEndpoints = localEndpoints
+		case protocol.ProfileCloudCognition:
+			candidateEndpoints = remoteEndpoints
+		case protocol.ProfileHybridThin:
+			switch cRole {
+			case cognition.RoleScout, cognition.RoleClassifier:
+				candidateEndpoints = localEndpoints
+			case cognition.RoleImplementer, cognition.RoleArchitectureReviewer:
+				candidateEndpoints = remoteEndpoints
+			default:
+				candidateEndpoints = append(append([]protocol.CognitionEndpoint(nil), localEndpoints...), remoteEndpoints...)
 			}
 		case protocol.ProfileCustom:
-			satisfied = len(localEndpoints) > 0 || len(remoteEndpoints) > 0
+			candidateEndpoints = append(append([]protocol.CognitionEndpoint(nil), localEndpoints...), remoteEndpoints...)
 		}
-		if !satisfied {
+
+		decision := cognition.Route(req, effPolicy, candidateEndpoints)
+		if decision.Outcome != cognition.OutcomeSelected {
 			return protocol.ReadinessPartiallyReady
 		}
 	}

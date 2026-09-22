@@ -274,3 +274,116 @@ func TestProfileRecommenderUserPreferences(t *testing.T) {
 		t.Fatalf("expected preferred profile %q, got %v", protocol.ProfileHybridThin, res.SelectedProfile)
 	}
 }
+
+func TestProfileRecommenderUnverifiedLocalRuntimeExcluded(t *testing.T) {
+	rec := NewProfileRecommender()
+
+	facts := protocol.EnvironmentFacts{
+		Host: protocol.HostFacts{
+			Family: protocol.OSDarwin,
+			Arch:   "arm64",
+		},
+		Memory: protocol.MemoryFacts{
+			TotalBytes: int64Ptr(64 * 1024 * 1024 * 1024),
+		},
+		Accelerators: []protocol.AcceleratorDevice{
+			{
+				ID:     "apple:gpu",
+				Vendor: protocol.VendorApple,
+				Class:  protocol.AcceleratorUnified,
+			},
+		},
+	}
+
+	// Local runtime is installed/unverified, not probed ready
+	cognProfile := &protocol.MachineCapabilityProfile{
+		Endpoints: []protocol.CognitionEndpoint{
+			{
+				ID:       "ollama_local",
+				Kind:     protocol.EndpointLocalRuntime,
+				Locality: protocol.LocalityLocal,
+				Health:   protocol.EndpointHealthInstalled, // NOT READY
+				Acceleration: &protocol.AccelerationEvidence{
+					Backend: protocol.BackendMetal,
+					State:   protocol.StateVerified,
+				},
+				Capabilities: []protocol.GradedCapability{
+					{
+						Dimension:  protocol.CapabilityImplementation,
+						Grade:      protocol.GradeStrong,
+						Provenance: protocol.ProvenanceEvaluated,
+					},
+				},
+			},
+		},
+	}
+
+	res := rec.Recommend(RecommendationInput{
+		Facts:            facts,
+		CognitionProfile: cognProfile,
+	})
+
+	// Since local runtime is not ready, it must not be chosen for local-heavy
+	if res.SelectedProfile != nil && *res.SelectedProfile == protocol.ProfileLocalHeavy {
+		t.Fatalf("unverified local runtime must NOT be eligible for local-heavy")
+	}
+}
+
+func TestProfileRecommenderLocalLackingImplementationGradeExcluded(t *testing.T) {
+	rec := NewProfileRecommender()
+
+	facts := protocol.EnvironmentFacts{
+		Host: protocol.HostFacts{
+			Family: protocol.OSDarwin,
+			Arch:   "arm64",
+		},
+		Memory: protocol.MemoryFacts{
+			TotalBytes: int64Ptr(64 * 1024 * 1024 * 1024),
+		},
+		Accelerators: []protocol.AcceleratorDevice{
+			{
+				ID:     "apple:gpu",
+				Vendor: protocol.VendorApple,
+				Class:  protocol.AcceleratorUnified,
+			},
+		},
+	}
+
+	// Local runtime is ready and accelerated, but lacks implementation capability grade
+	cognProfile := &protocol.MachineCapabilityProfile{
+		Endpoints: []protocol.CognitionEndpoint{
+			{
+				ID:                     "ollama_local",
+				Kind:                   protocol.EndpointLocalRuntime,
+				Locality:               protocol.LocalityLocal,
+				Health:                 protocol.EndpointHealthReady,
+				CostClass:              protocol.CostLocalCompute,
+				RequiredSourceExposure: protocol.ExposureLocalOnly,
+				StructuredOutput:       protocol.FeatureProbePassed,
+				ToolUse:                protocol.FeatureProbePassed,
+				Acceleration: &protocol.AccelerationEvidence{
+					Backend: protocol.BackendMetal,
+					State:   protocol.StateVerified,
+				},
+				Capabilities: []protocol.GradedCapability{
+					{
+						Dimension:  protocol.CapabilityRepositoryReasoning,
+						Grade:      protocol.GradeMedium,
+						Provenance: protocol.ProvenanceEvaluated,
+					},
+					// Implementation capability is missing or GradeUnknown
+				},
+			},
+		},
+	}
+
+	res := rec.Recommend(RecommendationInput{
+		Facts:            facts,
+		CognitionProfile: cognProfile,
+	})
+
+	if res.SelectedProfile != nil && *res.SelectedProfile == protocol.ProfileLocalHeavy {
+		t.Fatalf("local runtime lacking implementation capability grade must NOT be selected for local-heavy")
+	}
+}
+

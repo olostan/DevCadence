@@ -2,6 +2,7 @@ package setup
 
 import (
 	"fmt"
+	"os/exec"
 	"sort"
 	"strings"
 
@@ -27,6 +28,7 @@ type PlannerOptions struct {
 	Clock            clock.Clock
 	IDs              ids.Source
 	RecipeSetVersion string
+	Facts            *protocol.EnvironmentFacts
 }
 
 // Planner generates an immutable SetupPlan from a DoctorReport and setup target.
@@ -34,6 +36,7 @@ type Planner struct {
 	clock            clock.Clock
 	ids              ids.Source
 	recipeSetVersion string
+	facts            *protocol.EnvironmentFacts
 }
 
 // NewPlanner returns a Planner.
@@ -51,6 +54,7 @@ func NewPlanner(opts PlannerOptions) (*Planner, error) {
 		clock:            opts.Clock,
 		ids:              opts.IDs,
 		recipeSetVersion: opts.RecipeSetVersion,
+		facts:            opts.Facts,
 	}, nil
 }
 
@@ -178,17 +182,35 @@ func (p *Planner) Plan(report *protocol.DoctorReport, target protocol.SetupTarge
 	if (profile == protocol.ProfileLocalHeavy || profile == protocol.ProfileHybridThin || profile == protocol.ProfileOffline) &&
 		(target == protocol.TargetAll || target == protocol.TargetCognition || target == protocol.TargetInference) {
 
-		hasReadyOllama := false
+		shouldPullOllama := false
 		for _, ep := range report.DiscoveredEndpoints {
-			if ep.Kind == protocol.EndpointLocalRuntime && ep.Health == protocol.EndpointHealthReady {
-				if strings.Contains(strings.ToLower(ep.ID), "ollama") {
-					hasReadyOllama = true
-					break
-				}
+			if ep.Kind == protocol.EndpointLocalRuntime &&
+				(ep.Health == protocol.EndpointHealthReady || ep.Health == protocol.EndpointHealthNotConfigured) &&
+				strings.Contains(strings.ToLower(ep.ID), "ollama") {
+				shouldPullOllama = true
+				break
 			}
 		}
 
-		if hasReadyOllama {
+		if shouldPullOllama {
+			ollamaPath := "/usr/local/bin/ollama"
+			ollamaVersion := "0.5"
+			if p.facts != nil {
+				for _, sw := range p.facts.Software {
+					if sw.ID == "ollama" {
+						if sw.Path != "" {
+							ollamaPath = sw.Path
+						}
+						if sw.Version != "" {
+							ollamaVersion = sw.Version
+						}
+						break
+					}
+				}
+			} else if lp, err := exec.LookPath("ollama"); err == nil && lp != "" {
+				ollamaPath = lp
+			}
+
 			actID := fmt.Sprintf("act_pull_model_%04d", actionIndex)
 			actionIndex++
 			op := protocol.TypedOperation{
@@ -222,8 +244,8 @@ func (p *Planner) Plan(report *protocol.DoctorReport, target protocol.SetupTarge
 					{
 						Kind: protocol.CondKindExecutableVerified,
 						ExecutableVerified: &protocol.ExecutableVerifiedOperand{
-							CanonicalPath:   "/usr/local/bin/ollama",
-							ExpectedVersion: "0.5",
+							CanonicalPath:   ollamaPath,
+							ExpectedVersion: ollamaVersion,
 						},
 					},
 					{
@@ -252,6 +274,61 @@ func (p *Planner) Plan(report *protocol.DoctorReport, target protocol.SetupTarge
 					},
 				},
 				IdempotencyKey: fmt.Sprintf("ollama_pull_%s", DefaultOllamaModelTag),
+			})
+		}
+
+		// Check MLX setup
+		hasMLX := false
+		for _, ep := range report.DiscoveredEndpoints {
+			if strings.Contains(strings.ToLower(ep.ID), "mlx") {
+				hasMLX = true
+				break
+			}
+		}
+		if !hasMLX && p.facts != nil {
+			for _, sw := range p.facts.Software {
+				if sw.ID == "mlx" || sw.ID == "mlx-lm" {
+					hasMLX = true
+					break
+				}
+			}
+		}
+		if hasMLX {
+			actID := fmt.Sprintf("act_setup_mlx_%04d", actionIndex)
+			actionIndex++
+			actions = append(actions, protocol.SetupAction{
+				ActionID:      actID,
+				RecipeID:      "recipe.manual.setup_mlx",
+				RecipeVersion: p.recipeSetVersion,
+				Title:         "Set up MLX local inference",
+				Description:   "Guides manual configuration and verification of MLX local inference on Apple Silicon",
+				Authority:     protocol.AuthorityHighImpactManual,
+				Effects:       []protocol.EffectCategory{protocol.EffectPackageDownload, protocol.EffectFilesystemWrite},
+				DependsOn:     dirActionIDs,
+				ManualInstructions: &protocol.ManualGuide{
+					Summary: "Configure MLX local runtime on Apple Silicon",
+					Steps: []string{
+						"Install mlx-lm in a dedicated Python environment (e.g., pip install mlx-lm)",
+						"Launch the MLX model server or configure DevCadence MLX adapter endpoint",
+					},
+					VerificationCheck: []protocol.Condition{
+						{
+							Kind: protocol.CondKindCommandAvailable,
+							CommandAvailable: &protocol.CommandAvailableOperand{
+								CommandName: "mlx_lm.server",
+							},
+						},
+					},
+				},
+				Postconditions: []protocol.Condition{
+					{
+						Kind: protocol.CondKindCommandAvailable,
+						CommandAvailable: &protocol.CommandAvailableOperand{
+							CommandName: "mlx_lm.server",
+						},
+					},
+				},
+				IdempotencyKey: "manual_setup_mlx",
 			})
 		}
 	}

@@ -202,10 +202,17 @@ func TestSetupPlanValidationAndDigest(t *testing.T) {
 		t.Fatal("tampered plan was accepted; expected digest mismatch")
 	}
 
+	// Empty PlanDigest must fail
+	emptyDigest := plan
+	emptyDigest.PlanDigest = ""
+	if err := emptyDigest.Validate(); err == nil {
+		t.Fatal("plan with empty PlanDigest was accepted; expected error")
+	}
+
 	// Duplicate action ID must fail
 	dup := plan
 	dup.Actions = []protocol.SetupAction{act1, act1}
-	dup.PlanDigest = ""
+	dup.PlanDigest, _ = protocol.ComputePlanDigest(&dup)
 	if err := dup.Validate(); err == nil {
 		t.Fatal("plan with duplicate action ID was accepted; expected error")
 	}
@@ -215,7 +222,7 @@ func TestSetupPlanValidationAndDigest(t *testing.T) {
 	act2DupKey := act2
 	act2DupKey.IdempotencyKey = act1.IdempotencyKey
 	dupKey.Actions = []protocol.SetupAction{act1, act2DupKey}
-	dupKey.PlanDigest = ""
+	dupKey.PlanDigest, _ = protocol.ComputePlanDigest(&dupKey)
 	if err := dupKey.Validate(); err == nil {
 		t.Fatal("plan with duplicate idempotency key was accepted; expected error")
 	}
@@ -225,7 +232,7 @@ func TestSetupPlanValidationAndDigest(t *testing.T) {
 	act1Fwd := act1
 	act1Fwd.DependsOn = []string{act2.ActionID} // act1 depends on act2 which appears later
 	forwardDep.Actions = []protocol.SetupAction{act1Fwd, act2}
-	forwardDep.PlanDigest = ""
+	forwardDep.PlanDigest, _ = protocol.ComputePlanDigest(&forwardDep)
 	if err := forwardDep.Validate(); err == nil {
 		t.Fatal("plan with forward dependency was accepted; expected error")
 	}
@@ -235,7 +242,7 @@ func TestSetupPlanValidationAndDigest(t *testing.T) {
 	act1Miss := act1
 	act1Miss.DependsOn = []string{"act-999"}
 	missingDep.Actions = []protocol.SetupAction{act1Miss}
-	missingDep.PlanDigest = ""
+	missingDep.PlanDigest, _ = protocol.ComputePlanDigest(&missingDep)
 	if err := missingDep.Validate(); err == nil {
 		t.Fatal("plan with missing dependency was accepted; expected error")
 	}

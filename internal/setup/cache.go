@@ -76,36 +76,41 @@ func (c *CacheManager) targetPath(target protocol.CacheTarget) (string, error) {
 	return filepath.Join(c.rootDir, filename), nil
 }
 
-// Read loads and validates a cached object. If the cache is missing, expired,
-// corrupted, or belongs to a different machine fingerprint, it returns (zero, false, nil).
-func Read[T any](ctx context.Context, c *CacheManager, target protocol.CacheTarget, expectedFingerprint string) (T, bool, error) {
+// ReadEntry loads and validates a cached object, returning whether it was found
+// and whether it is expired. Unlike Read, ReadEntry does NOT delete expired cache files,
+// allowing callers to inspect stale evidence when fresh probes are shallower.
+// If the cache is missing or corrupted, it returns (zero, false, false, nil).
+// If fingerprint does not match, it returns (zero, false, false, nil).
+// If expired, it returns (data, true, true, nil).
+// If fresh and valid, it returns (data, true, false, nil).
+func ReadEntry[T any](ctx context.Context, c *CacheManager, target protocol.CacheTarget, expectedFingerprint string) (T, bool, bool, error) {
 	var zero T
 	path, err := c.targetPath(target)
 	if err != nil {
-		return zero, false, err
+		return zero, false, false, err
 	}
 
 	lockPath := path + ".lock"
 	lockFile, err := os.OpenFile(lockPath, os.O_RDWR|os.O_CREATE, 0600)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
-			return zero, false, nil
+			return zero, false, false, nil
 		}
-		return zero, false, errs.Wrap(errs.CategoryInternal, err, "open cache lock file %s", lockPath)
+		return zero, false, false, errs.Wrap(errs.CategoryInternal, err, "open cache lock file %s", lockPath)
 	}
 	defer lockFile.Close()
 
 	if err := lockShared(lockFile); err != nil {
-		return zero, false, errs.Wrap(errs.CategoryInternal, err, "lock cache lock file %s", lockPath)
+		return zero, false, false, errs.Wrap(errs.CategoryInternal, err, "lock cache lock file %s", lockPath)
 	}
 	defer unlock(lockFile)
 
 	f, err := os.OpenFile(path, os.O_RDONLY, 0)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
-			return zero, false, nil
+			return zero, false, false, nil
 		}
-		return zero, false, errs.Wrap(errs.CategoryInternal, err, "open cache file %s", path)
+		return zero, false, false, errs.Wrap(errs.CategoryInternal, err, "open cache file %s", path)
 	}
 	defer f.Close()
 
@@ -114,27 +119,33 @@ func Read[T any](ctx context.Context, c *CacheManager, target protocol.CacheTarg
 	if err := dec.Decode(&env); err != nil {
 		// Corrupted cache file: drop it silently
 		_ = os.Remove(path)
-		return zero, false, nil
+		return zero, false, false, nil
 	}
 
 	if env.SchemaVersion != protocol.SchemaVersion1 {
 		_ = os.Remove(path)
-		return zero, false, nil
+		return zero, false, false, nil
 	}
 
 	if expectedFingerprint != "" && env.MachineFingerprint != expectedFingerprint {
-		_ = os.Remove(path)
-		return zero, false, nil
+		return zero, false, false, nil
 	}
 
 	now := c.clock.Now()
-	if !env.ExpiresAt.Time().IsZero() && !now.Before(env.ExpiresAt.Time()) {
-		// Expired
-		_ = os.Remove(path)
-		return zero, false, nil
-	}
+	expired := !env.ExpiresAt.Time().IsZero() && !now.Before(env.ExpiresAt.Time())
 
-	return env.Data, true, nil
+	return env.Data, true, expired, nil
+}
+
+// Read loads and validates a cached object. If the cache is missing, expired,
+// corrupted, or belongs to a different machine fingerprint, it returns (zero, false, nil).
+func Read[T any](ctx context.Context, c *CacheManager, target protocol.CacheTarget, expectedFingerprint string) (T, bool, error) {
+	data, found, expired, err := ReadEntry[T](ctx, c, target, expectedFingerprint)
+	if err != nil || !found || expired {
+		var zero T
+		return zero, false, err
+	}
+	return data, true, nil
 }
 
 // Write atomically serialises data into the target cache file under an exclusive file lock.

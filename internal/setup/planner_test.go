@@ -188,9 +188,148 @@ func TestPlannerDoesNotTreatMLXAsOllama(t *testing.T) {
 		t.Fatalf("planner.Plan: %v", err)
 	}
 
+	foundMLXGuide := false
 	for _, act := range plan.Actions {
 		if act.RecipeID == "recipe.ollama.pull_model" {
 			t.Fatalf("MLX endpoint must NOT trigger recipe.ollama.pull_model")
 		}
+		if act.RecipeID == "recipe.manual.setup_mlx" {
+			foundMLXGuide = true
+		}
+	}
+	if !foundMLXGuide {
+		t.Fatalf("expected recipe.manual.setup_mlx for MLX endpoint")
 	}
 }
+
+func TestPlannerOllamaPullOnNotConfigured(t *testing.T) {
+	clk := clock.NewFake(time.Date(2026, 9, 22, 12, 0, 0, 0, time.UTC), 0)
+	seq := ids.NewSequential()
+
+	planner, err := NewPlanner(PlannerOptions{
+		Clock: clk,
+		IDs:   seq,
+	})
+	if err != nil {
+		t.Fatalf("NewPlanner: %v", err)
+	}
+
+	profile := protocol.ProfileLocalHeavy
+	report := &protocol.DoctorReport{
+		SchemaVersion:      protocol.SchemaVersion1,
+		ReportID:           "doc_000000000000000000000003",
+		MachineFingerprint: "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+		ObservedAt:         protocol.NewTimestamp(clk.Now()),
+		Readiness:          protocol.ReadinessPartiallyReady,
+		EvaluationScope: protocol.ReadinessEvaluationScope{
+			TargetProfile:  &profile,
+			RequiredRoles:  []string{"implementation"},
+			EvidenceStatus: "live",
+		},
+		DiscoveredEndpoints: []protocol.CognitionEndpointSummary{
+			{
+				ID:                     "ollama_local",
+				Kind:                   protocol.EndpointLocalRuntime,
+				Locality:               protocol.LocalityLocal,
+				Health:                 protocol.EndpointHealthNotConfigured, // not_configured (no models)
+				Auth:                   protocol.AuthNotApplicable,
+				CostClass:              protocol.CostLocalCompute,
+				RequiredSourceExposure: protocol.ExposureLocalOnly,
+				AccelerationVerified:   true,
+			},
+		},
+	}
+
+	plan, err := planner.Plan(report, protocol.TargetAll, protocol.ProfileLocalHeavy)
+	if err != nil {
+		t.Fatalf("planner.Plan: %v", err)
+	}
+
+	foundPull := false
+	for _, act := range plan.Actions {
+		if act.RecipeID == "recipe.ollama.pull_model" {
+			foundPull = true
+			break
+		}
+	}
+	if !foundPull {
+		t.Fatalf("expected recipe.ollama.pull_model for Ollama with EndpointHealthNotConfigured")
+	}
+}
+
+func TestPlannerOllamaPathAndVersionFromFacts(t *testing.T) {
+	clk := clock.NewFake(time.Date(2026, 9, 22, 12, 0, 0, 0, time.UTC), 0)
+	seq := ids.NewSequential()
+
+	facts := protocol.EnvironmentFacts{
+		Software: []protocol.SoftwarePresence{
+			{
+				ID:        "ollama",
+				Installed: true,
+				Path:      "/opt/homebrew/bin/ollama",
+				Version:   "0.5.12",
+			},
+		},
+	}
+
+	planner, err := NewPlanner(PlannerOptions{
+		Clock: clk,
+		IDs:   seq,
+		Facts: &facts,
+	})
+	if err != nil {
+		t.Fatalf("NewPlanner: %v", err)
+	}
+
+	profile := protocol.ProfileLocalHeavy
+	report := &protocol.DoctorReport{
+		SchemaVersion:      protocol.SchemaVersion1,
+		ReportID:           "doc_000000000000000000000004",
+		MachineFingerprint: "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+		ObservedAt:         protocol.NewTimestamp(clk.Now()),
+		Readiness:          protocol.ReadinessReady,
+		EvaluationScope: protocol.ReadinessEvaluationScope{
+			TargetProfile:  &profile,
+			RequiredRoles:  []string{"implementation"},
+			EvidenceStatus: "live",
+		},
+		DiscoveredEndpoints: []protocol.CognitionEndpointSummary{
+			{
+				ID:                     "ollama_local",
+				Kind:                   protocol.EndpointLocalRuntime,
+				Locality:               protocol.LocalityLocal,
+				Health:                 protocol.EndpointHealthReady,
+				Auth:                   protocol.AuthNotApplicable,
+				CostClass:              protocol.CostLocalCompute,
+				RequiredSourceExposure: protocol.ExposureLocalOnly,
+				AccelerationVerified:   true,
+			},
+		},
+	}
+
+	plan, err := planner.Plan(report, protocol.TargetAll, protocol.ProfileLocalHeavy)
+	if err != nil {
+		t.Fatalf("planner.Plan: %v", err)
+	}
+
+	foundPull := false
+	for _, act := range plan.Actions {
+		if act.RecipeID == "recipe.ollama.pull_model" {
+			foundPull = true
+			for _, cond := range act.Preconditions {
+				if cond.Kind == protocol.CondKindExecutableVerified {
+					if cond.ExecutableVerified.CanonicalPath != "/opt/homebrew/bin/ollama" {
+						t.Errorf("expected canonical path /opt/homebrew/bin/ollama, got %s", cond.ExecutableVerified.CanonicalPath)
+					}
+					if cond.ExecutableVerified.ExpectedVersion != "0.5.12" {
+						t.Errorf("expected version 0.5.12, got %s", cond.ExecutableVerified.ExpectedVersion)
+					}
+				}
+			}
+		}
+	}
+	if !foundPull {
+		t.Fatalf("expected recipe.ollama.pull_model")
+	}
+}
+

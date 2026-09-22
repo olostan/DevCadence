@@ -7,6 +7,7 @@
   "required": [
     "schema_version",
     "plan_id",
+    "plan_digest",
     "recipe_set_version",
     "machine_fingerprint",
     "created_at",

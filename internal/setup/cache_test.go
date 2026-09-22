@@ -146,3 +146,48 @@ func TestCacheManagerInvalidTarget(t *testing.T) {
 		t.Fatalf("expected error for invalid target")
 	}
 }
+
+func TestCacheManagerReadEntryRetainsExpired(t *testing.T) {
+	ctx := context.Background()
+	tmpDir := t.TempDir()
+	now := time.Date(2026, 9, 22, 12, 0, 0, 0, time.UTC)
+	clk := clock.NewFake(now, 0)
+
+	cm, err := NewCacheManager(tmpDir, clk, 10*time.Minute)
+	if err != nil {
+		t.Fatalf("NewCacheManager: %v", err)
+	}
+
+	fingerprint := "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+	data := sampleData{Name: "data", Count: 42}
+
+	if err := Write(ctx, cm, protocol.CacheTargetMachineProfile, fingerprint, data, 10*time.Minute); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+
+	// Advance clock past expiration
+	laterClk := clock.NewFake(now.Add(15*time.Minute), 0)
+	laterCM, _ := NewCacheManager(tmpDir, laterClk, 10*time.Minute)
+
+	// ReadEntry must return found=true and expired=true, without removing the file
+	readData, found, expired, err := ReadEntry[sampleData](ctx, laterCM, protocol.CacheTargetMachineProfile, fingerprint)
+	if err != nil {
+		t.Fatalf("ReadEntry: %v", err)
+	}
+	if !found {
+		t.Fatalf("expected ReadEntry to find expired entry")
+	}
+	if !expired {
+		t.Fatalf("expected ReadEntry to report expired=true")
+	}
+	if readData.Count != 42 {
+		t.Fatalf("expected data count 42, got %d", readData.Count)
+	}
+
+	// Calling ReadEntry a second time must still find the file (not deleted)
+	_, found2, expired2, err2 := ReadEntry[sampleData](ctx, laterCM, protocol.CacheTargetMachineProfile, fingerprint)
+	if err2 != nil || !found2 || !expired2 {
+		t.Fatalf("expected file to be retained on disk, but found=%v, expired=%v, err=%v", found2, expired2, err2)
+	}
+}
+

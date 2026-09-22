@@ -676,7 +676,19 @@ func (a SetupAction) Validate() error {
 type SetupPlan struct {
 	SchemaVersion      SchemaVersion      `json:"schema_version"`
 	PlanID             string             `json:"plan_id"`
-	PlanDigest         string             `json:"plan_digest,omitempty"`
+	PlanDigest         string             `json:"plan_digest"`
+	RecipeSetVersion   string             `json:"recipe_set_version"`
+	MachineFingerprint string             `json:"machine_fingerprint"`
+	CreatedAt          Timestamp          `json:"created_at"`
+	Target             SetupTarget        `json:"target"`
+	Actions            []SetupAction      `json:"actions"`
+	RequiredAuthority  Authority          `json:"required_authority"`
+	TotalEffects       []EffectCategory   `json:"total_effects"`
+}
+
+type setupPlanDigestView struct {
+	SchemaVersion      SchemaVersion      `json:"schema_version"`
+	PlanID             string             `json:"plan_id"`
 	RecipeSetVersion   string             `json:"recipe_set_version"`
 	MachineFingerprint string             `json:"machine_fingerprint"`
 	CreatedAt          Timestamp          `json:"created_at"`
@@ -713,7 +725,13 @@ func (p *SetupPlan) Validate() error {
 	if !p.RequiredAuthority.Valid() {
 		return errs.New(errs.CategoryInvalidArgument, "%s: invalid required_authority %q", kind, string(p.RequiredAuthority))
 	}
+	for _, eff := range p.TotalEffects {
+		if !eff.Valid() {
+			return errs.New(errs.CategoryInvalidArgument, "%s: invalid effect %q in total_effects", kind, string(eff))
+		}
+	}
 
+	// Verify actions and aggregate authority/effects
 	seenActionIDs := make(map[string]bool, len(p.Actions))
 	seenIdempotencyKeys := make(map[string]bool, len(p.Actions))
 	actionIndex := make(map[string]int, len(p.Actions))
@@ -736,7 +754,7 @@ func (p *SetupPlan) Validate() error {
 		}
 		seenIdempotencyKeys[act.IdempotencyKey] = true
 
-		if act.Authority.rank() > maxAuthority.rank() {
+		if act.Authority.Rank() > maxAuthority.Rank() {
 			maxAuthority = act.Authority
 		}
 		for _, e := range act.Effects {
@@ -774,15 +792,19 @@ func (p *SetupPlan) Validate() error {
 		return errs.New(errs.CategoryInvalidArgument, "%s: total_effects count %d does not match aggregate effects count %d", kind, len(p.TotalEffects), len(effectsSet))
 	}
 
-	// Verify PlanDigest if set
-	if p.PlanDigest != "" {
-		expectedDigest, err := ComputePlanDigest(p)
-		if err != nil {
-			return err
-		}
-		if p.PlanDigest != expectedDigest {
-			return errs.New(errs.CategoryInvalidArgument, "%s: plan_digest mismatch: got %q, expected %q", kind, p.PlanDigest, expectedDigest)
-		}
+	// Verify PlanDigest is non-empty, hex sha256, and matches computed digest
+	if err := requireNonEmpty(kind, "plan_digest", p.PlanDigest); err != nil {
+		return err
+	}
+	if !hexSha256Regex.MatchString(p.PlanDigest) {
+		return errs.New(errs.CategoryInvalidArgument, "%s: plan_digest must be sha256 hex, got %q", kind, p.PlanDigest)
+	}
+	expectedDigest, err := ComputePlanDigest(p)
+	if err != nil {
+		return err
+	}
+	if p.PlanDigest != expectedDigest {
+		return errs.New(errs.CategoryInvalidArgument, "%s: plan_digest mismatch: got %q, expected %q", kind, p.PlanDigest, expectedDigest)
 	}
 
 	return nil
@@ -791,9 +813,18 @@ func (p *SetupPlan) Validate() error {
 // ComputePlanDigest calculates the SHA-256 digest of the canonical JSON encoding
 // of the complete saved SetupPlan with only the plan_digest field omitted (ADR-0014).
 func ComputePlanDigest(p *SetupPlan) (string, error) {
-	clone := *p
-	clone.PlanDigest = ""
-	canonical, err := CanonicalJSON(&clone)
+	view := setupPlanDigestView{
+		SchemaVersion:      p.SchemaVersion,
+		PlanID:             p.PlanID,
+		RecipeSetVersion:   p.RecipeSetVersion,
+		MachineFingerprint: p.MachineFingerprint,
+		CreatedAt:          p.CreatedAt,
+		Target:             p.Target,
+		Actions:            p.Actions,
+		RequiredAuthority:  p.RequiredAuthority,
+		TotalEffects:       p.TotalEffects,
+	}
+	canonical, err := CanonicalJSON(&view)
 	if err != nil {
 		return "", err
 	}
