@@ -1,0 +1,74 @@
+# ADR-0016: Supervised validation services, bounded execution tools, asynchronous operations, and multi-tier context compaction
+
+- **Status:** Accepted
+- **Date:** 2026-09-22
+- **Related:** ADR-0004 (canonical task state machine), ADR-0008 (controlled process execution), ADR-0009 (artifact storage and validation execution), ADR-0011 (adaptive environment and host-independent cognition), ADR-0013 (environment intelligence and cognition capability contracts), ADR-0014 (guided bootstrap and remediation), ADR-0015 (declarative modules and scoped worktrees), DCI-001, DCI-002, DCI-003, DCI-010, DCI-011, DCI-013, DCI-014, DCI-032, DCI-033, DCI-041, DCI-052
+- **Documents:** docs/ARCHITECTURE.md, docs/LOCAL_AGENTS.md, docs/MODEL_RUNTIME.md, docs/PROTOCOLS.md, docs/VERIFICATION.md
+
+## Context
+
+Integrating real-world execution and testing (such as Firebase emulators, Vite dev servers, or Flutter drivers) alongside constrained local cognition models requires resolving four architectural tensions:
+1. **Background Service Lifecycle & Resource Leaks:** Validation suites often require companion daemon processes. Without rigorous supervision, dynamic port handoff, and verifiable process ownership, services leak across runs, clash on static ports, or risk killing unrelated processes upon restart.
+2. **Context Bloat & Cognitive Traps in Repository Tools:** Unmediated command execution or text search can output thousands of lines, instantly exhausting local model context. Conversely, naive line numbering adds 20–30% token overhead and causes code generation errors.
+3. **Asynchronous Execution vs. Busy-Polling:** Commands exceeding typical interactive latencies (e.g. 10s) must not hang the caller or force models into token-wasting polling loops.
+4. **Context Compaction vs. Invariant Preservation:** When models approach context limits, naive sliding-window truncation drops the Engineering Work Package, invariants, or active amendments. Conversely, unchecked trajectory summarization risks turning speculative model claims into authoritative facts.
+
+## Decision
+
+### 1. Semantic Principal Boundary Preserved
+
+- Raw tools (`read_file`, `grep_search`, `find_symbol`, `run_command`) are **execution-agent capabilities** scoped to isolated worktrees for `Repository Scout` and `Implementer` roles.
+- The Principal's primary interface remains semantic engineering operations (`project_state`, `investigate`, `create_work_package`, `request_evidence`, `validate`, `review`).
+
+### 2. Supervised Validation Services
+
+- **Backward-Compatible Profile Schema:** `CheckSpec` and `Profile` in `internal/validation` are extended with `ServiceSpec`, supporting both legacy check lists and object-shaped profiles with duration strings.
+- **Port Allocation & Concrete Handoff:**
+  - `socket_inheritance`: Control plane binds `127.0.0.1:0` with `FD_CLOEXEC = false` and passes the file descriptor directly.
+  - `env_var` / `cli_flag`: Ephemeral candidate port probe on `127.0.0.1` with bounded bind-conflict retry (up to 3 distinct candidates) and readiness verification.
+  - Isolated temporary directory per run (`$DEVCADENCE_HOME/tmp/val_<run_id>/<service_id>`).
+  - Network boundary: Declared as host-network execution with mock endpoint injection (kernel sandbox limitation explicitly documented).
+- **Verified Teardown & Ownership:**
+  - Services enforce an absolute `MaxLifetime` (default 15m).
+  - Teardown executes unconditionally on success, failure, cancellation, and partial startup: graceful `SIGTERM` followed by forced `SIGKILL` and process reaping.
+  - Controller restart reconciliation: PID files alone never authorize termination. Process ownership is verified via start time and executable path. If ownership cannot be verified, DevCadence reports `StatusCleanupFailed` / `unresolved_reconciliation` without signaling the PID.
+
+### 3. Bounded Tools & Universal Artifact Pagination
+
+- **Decoupled Output Sink:** `internal/process.Runner` accepts an `OutputSink` interface. The validation/tooling layer streams up to `MaxArtifactBytes` (50 MiB) into `internal/artifacts` while returning an inline preview capped at `MaxInlinePreviewBytes` (4 KiB / 20 lines).
+- **Metadata Distinctions:** Responses explicitly indicate `has_more: bool`, `capture_truncated: bool`, and `in_progress: bool`.
+- **`fetch_content` Universal Pager:** Accepts `(content_ref, offset, limit, unit="lines"|"bytes")`, operating over immutable artifact snapshots.
+- **`read_file`:** `show_line_numbers` defaults to `false` to optimize tokens; set to `true` only for edit anchor targeting.
+- **`grep_search`:** Normalized `ripgrep` / `git grep` backend capped at 20 matches with `content_ref` generated.
+
+### 4. Asynchronous Controlled Operations
+
+- A long-running command execution is an **`Operation`** (`OperationID`), distinct from an engineering `Task`.
+- 10 seconds is a **response/yield threshold**, not a process timeout. After 10s, the operation returns `status: "running"` and continues uninterrupted under its original deadline.
+- **Reactive Wakeup:** Principal hosts capable of event notifications wake the session on `OperationCompleted`. Synchronous-only hosts receive bounded status queries without busy-polling. Paused cognition state (`PAUSED_BUDGET_EXCEEDED`) is strictly decoupled from process completion.
+
+### 5. Multi-Tier Context Compaction
+
+- **Admission-Safe Context Budgeting:**
+  - Denominator $C$ is the endpoint's verified/configured request token ceiling (`ContextTokens`). Unknown $C$ fails admission with an explicit error (`ErrContextLimitUnknown`); arbitrary defaults are forbidden.
+  - Total serialized load: $T_{\text{total}} = T_{\text{in}} + T_{\text{reserve}}$.
+  - Tier 1 (Deterministic Tool Pruning) triggers at $T_{\text{total}} > 75\% \cdot C$. Pruning replaces aged tool outputs with `content_ref` stubs while preserving atomic tool-call/result groups.
+  - Stateful rearming: if Tier 1 yields $< 5\%$ reduction, it is marked exhausted for that turn.
+  - Intermediate interval $(65\% \cdot C, 85\% \cdot C]$ proceeds to inference if it passes the final admission check.
+  - Tier 2 (Episodic Trajectory Summarization) triggers if $T_{\text{total}} > 85\% \cdot C$.
+  - **Universal Final Admission Guard:** On every path, $T_{\text{total}} \le C$ is asserted. If exceeded, the turn is halted with an admission escalation error; constraints are never dropped.
+- **Assignment & Epistemic Preservation:**
+  - Protected context preserves the original EWP and subsequent authorized amendments, user corrections, and stop instructions ordered by authority level and journal sequence.
+  - Trajectory Digests are lossy derived context placed in lower-trust user messages (never system instructions). Digest claims (`authorized_by`, `evidence_ref`) must be validated against journaled records.
+  - Workspace checkpoints replace static diffs, tying test evidence to exact source SHAs and marking earlier evidence **STALE** after subsequent edits.
+  - Summarizers inherit the parent session's exact privacy, locality, disclosure, and cost policies (`local_only` never routes remotely). Summarizer requests pass admission against their endpoint's limit without recursive compaction.
+
+### 6. Syntactic Symbol Inspection
+
+- `find_symbol` provides **syntactic pattern matching** via Tree-sitter for Go and TypeScript/JavaScript.
+- Output explicitly states `resolution_level: "syntactic"`. Compiler-level semantic resolution (LSP) is deferred.
+
+## Consequences
+
+- **Positive:** Supervised test services prevent port conflicts and daemon leaks; execution tools prevent context overflow; context compaction safely fits local models while preserving assignment integrity and privacy.
+- **Negative:** Services requiring non-standard port configuration require explicit `PortConfig` declarations.

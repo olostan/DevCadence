@@ -363,7 +363,8 @@ Each check includes:
 - check name/type;
 - exact command/tool;
 - tool version;
-- working directory;
+- working directory (scoped to module where applicable);
+- module id if module-scoped (ADR-0015);
 - exit code/status;
 - start/end;
 - stdout/stderr artifact refs;
@@ -371,7 +372,16 @@ Each check includes:
 - truncation indicator;
 - policy importance.
 
+When supervised validation services are used (ADR-0016), `ValidationResult` additionally records `config_digest` and the verified `service_identities` that ran alongside the checks.
+
 A model may summarize the result, but the raw check is retained.
+
+## 10A. Supervised Services and Asynchronous Operations
+
+Under ADR-0016:
+- **`OperationID`:** Identifies a controlled external process execution, separate from an architectural `TaskID`.
+- **Response Yield Threshold:** Commands taking longer than 10 seconds yield `status: "running"` with an `OperationID`. The operation proceeds uninterrupted; upon completion, hosts receive event-driven wakeups without token-wasting busy-loops.
+- **Universal Pagination (`fetch_content`):** Large stdout/stderr outputs stream to content-addressed artifact storage (up to 50 MiB). Models inspect results via bounded inline previews (20 lines / 4 KiB) and page through immutable artifacts using `fetch_content(content_ref, offset, limit)`.
 
 ## 11. ReviewResult
 

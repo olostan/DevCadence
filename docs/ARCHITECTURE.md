@@ -545,6 +545,14 @@ flowchart TB
 
 Parallel tasks cannot mutate one shared working directory.
 
+## 11A. Monorepo modules and scoped worktrees
+
+For repositories containing multiple components or languages (e.g. Go backend, TypeScript frontend, Flutter mobile), DevCadence models modules as first-class entities in project state (ADR-0015):
+
+- **Reproducible Catalog:** Discovered manifests (`go.mod`, `package.json`, etc.) serve as discovery evidence; the confirmed module catalog is journaled in project state (`ModuleCatalogRecorded`).
+- **Scoped Execution:** Validation profiles and commands execute with `process.Spec.Dir` bound to the module path within the isolated worktree, verifying containment and symlink boundaries.
+- **Context Protection:** Reconnaissance tools default to module-local scopes while allowing explicit repository-root escalation.
+
 ## 12. Cognition resource plane
 
 Local inference is managed infrastructure, but it is one endpoint class rather than the whole cognition architecture.
@@ -574,6 +582,14 @@ Routing accounts for:
 - historical evaluation outcomes.
 
 The absence of local inference is a supported capability state.
+
+## 12A. Supervised validation services and context compaction
+
+Real-world integration and execution requires robust service management and context discipline (ADR-0016):
+
+- **Supervised Services:** Auxiliary test services (Firebase emulators, dev preview servers) run under strict lifecycle supervision with dynamic port allocation, bounded lifetimes, and verified PID/process-group reaping.
+- **Bounded Tools & Universal Pagination:** Streaming output is captured into artifact storage up to 50 MiB, while inline previews are strictly bounded; `fetch_content` pages through immutable artifact snapshots.
+- **Admission-Safe Context Compaction:** Execution sessions apply multi-tier compaction (Tier 1 deterministic tool pruning, Tier 2 episodic trajectory summarization) based on endpoint token limits without arbitrary capacity guessing, preserving the authorized assignment, workspace checkpoints, and privacy boundaries.
 
 ## 13. Deployment topology: bootstrap
 
