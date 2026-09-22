@@ -104,11 +104,34 @@ func RunProfile(ctx context.Context, profile Profile, opts RunOptions) ([]protoc
 		if len(spec.Env) > 0 {
 			env = process.MergeEnv(baseEnv, spec.Env)
 		}
+
+		workingDir := opts.Dir
+		if spec.Dir != "" {
+			containedDir, err := ValidateDirContainment(opts.Dir, spec.Dir)
+			if err != nil {
+				now := time.Now().UTC()
+				msg := err.Error()
+				checks = append(checks, protocol.CheckResult{
+					ID:               spec.ID,
+					Kind:             spec.Kind,
+					Command:          spec.Argv,
+					WorkingDirectory: &opts.Dir,
+					Status:           protocol.CheckError,
+					Summary:          &msg,
+					StartedAt:        protocol.NewTimestamp(now),
+					FinishedAt:       protocol.NewTimestamp(now),
+				})
+				sawError = true
+				continue
+			}
+			workingDir = containedDir
+		}
+
 		started := time.Now().UTC()
 		res, runErr := runner.Run(ctx, process.Spec{
 			Executable:     spec.Argv[0],
 			Args:           spec.Argv[1:],
-			Dir:            opts.Dir,
+			Dir:            workingDir,
 			Env:            env,
 			Timeout:        spec.Timeout,
 			MaxStdoutBytes: maxOutput,
@@ -120,11 +143,11 @@ func RunProfile(ctx context.Context, profile Profile, opts RunOptions) ([]protoc
 			ID:               spec.ID,
 			Kind:             spec.Kind,
 			Command:          spec.Argv,
-			WorkingDirectory: &opts.Dir,
+			WorkingDirectory: &workingDir,
 			StartedAt:        protocol.NewTimestamp(started),
 			FinishedAt:       protocol.NewTimestamp(finished),
 		}
-		if v, err := gitVersion(ctx, runner, spec.Argv, env, opts.Dir); err == nil && v != "" {
+		if v, err := gitVersion(ctx, runner, spec.Argv, env, workingDir); err == nil && v != "" {
 			check.ToolVersion = &v
 		}
 

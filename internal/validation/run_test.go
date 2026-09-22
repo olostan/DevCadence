@@ -2,6 +2,7 @@ package validation_test
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -141,3 +142,56 @@ func TestRunProfileOutputCaptured(t *testing.T) {
 		t.Fatalf("artifacts not recorded: %+v", checks[0])
 	}
 }
+
+func TestRunProfileCheckDirExecution(t *testing.T) {
+	dir := t.TempDir()
+	subDir := filepath.Join(dir, "submodule")
+	if err := os.Mkdir(subDir, 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	profile := validation.Profile{
+		Name: "sub",
+		Checks: []validation.CheckSpec{
+			{ID: "check-pwd", Argv: []string{"pwd"}, Timeout: 5000000000, Dir: "submodule"},
+		},
+	}
+	checks, outcome, err := validation.RunProfile(context.Background(), profile, validation.RunOptions{
+		Dir: dir, ProjectID: "proj-a", Artifacts: newArtifactStore(t),
+	})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if outcome != protocol.ValidationPass {
+		t.Fatalf("outcome = %s, want pass", outcome)
+	}
+	resolvedSubDir, err := filepath.EvalSymlinks(subDir)
+	if err != nil {
+		t.Fatalf("eval symlinks: %v", err)
+	}
+	if checks[0].WorkingDirectory == nil || *checks[0].WorkingDirectory != resolvedSubDir {
+		t.Errorf("working dir = %v, want %s", *checks[0].WorkingDirectory, resolvedSubDir)
+	}
+}
+
+func TestRunProfileCheckDirEscapeRejected(t *testing.T) {
+	dir := t.TempDir()
+	profile := validation.Profile{
+		Name: "escape",
+		Checks: []validation.CheckSpec{
+			{ID: "bad-dir", Argv: []string{"true"}, Timeout: 5000000000, Dir: "../outside"},
+		},
+	}
+	checks, outcome, err := validation.RunProfile(context.Background(), profile, validation.RunOptions{
+		Dir: dir, ProjectID: "proj-a", Artifacts: newArtifactStore(t),
+	})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if outcome != protocol.ValidationError {
+		t.Fatalf("outcome = %s, want error", outcome)
+	}
+	if checks[0].Status != protocol.CheckError {
+		t.Fatalf("status = %s, want CheckError", checks[0].Status)
+	}
+}
+

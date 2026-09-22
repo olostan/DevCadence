@@ -17,6 +17,7 @@ const (
 	TypeRiskRecorded           Type = "RiskRecorded"
 	TypeRiskResolved           Type = "RiskResolved"
 	TypeHealthReportRecorded   Type = "HealthReportRecorded"
+	TypeModuleCatalogRecorded  Type = "ModuleCatalogRecorded"
 )
 
 // ProjectInitialized is the first event of every project. It establishes the
@@ -310,6 +311,37 @@ func (p *HealthReportRecorded) Validate() error {
 	return nil
 }
 
+// ModuleCatalogRecorded records the approved module catalog for a monorepo (ADR-0015).
+type ModuleCatalogRecorded struct {
+	ConfigDigest string                     `json:"config_digest"`
+	RootModuleID string                     `json:"root_module_id,omitempty"`
+	Modules      []protocol.ModuleDefinition `json:"modules"`
+}
+
+// Type implements Payload.
+func (p *ModuleCatalogRecorded) Type() Type { return TypeModuleCatalogRecorded }
+
+// Validate implements Payload.
+func (p *ModuleCatalogRecorded) Validate() error {
+	if p.ConfigDigest == "" {
+		return errs.New(errs.CategoryInvalidArgument, "ModuleCatalogRecorded: config_digest is required")
+	}
+	seen := make(map[string]bool, len(p.Modules))
+	for _, m := range p.Modules {
+		if err := m.Validate(); err != nil {
+			return err
+		}
+		if seen[m.ID] {
+			return errs.New(errs.CategoryInvalidArgument, "ModuleCatalogRecorded: duplicate module id %q", m.ID)
+		}
+		seen[m.ID] = true
+	}
+	if p.RootModuleID != "" && !seen[p.RootModuleID] {
+		return errs.New(errs.CategoryInvalidArgument, "ModuleCatalogRecorded: root_module_id %q is not in declared modules", p.RootModuleID)
+	}
+	return nil
+}
+
 func init() {
 	Register(TypeProjectInitialized, func() Payload { return &ProjectInitialized{} })
 	Register(TypeMilestoneStarted, func() Payload { return &MilestoneStarted{} })
@@ -321,4 +353,5 @@ func init() {
 	Register(TypeRiskRecorded, func() Payload { return &RiskRecorded{} })
 	Register(TypeRiskResolved, func() Payload { return &RiskResolved{} })
 	Register(TypeHealthReportRecorded, func() Payload { return &HealthReportRecorded{} })
+	Register(TypeModuleCatalogRecorded, func() Payload { return &ModuleCatalogRecorded{} })
 }
