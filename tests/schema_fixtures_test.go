@@ -162,6 +162,10 @@ func TestFixturesRoundTripWithoutSemanticLoss(t *testing.T) {
 		{"machine-capability-profile.valid.json", decodeInto[protocol.MachineCapabilityProfile]},
 		{"machine-capability-profile.valid-blank-machine.json", decodeInto[protocol.MachineCapabilityProfile]},
 		{"project-state.valid-cognition.json", decodeInto[protocol.ProjectState]},
+		{"doctor-report.valid.json", decodeInto[protocol.DoctorReport]},
+		{"setup-plan.valid.json", decodeInto[protocol.SetupPlan]},
+		{"setup-execution-report.valid.json", decodeInto[protocol.SetupExecutionReport]},
+		{"setup-ledger-event.valid.json", decodeInto[protocol.SetupLedgerEvent]},
 	}
 	for _, tc := range cases {
 		t.Run(tc.file, func(t *testing.T) {
@@ -340,6 +344,10 @@ func TestTheGoReaderRejectsWhatTheSchemaRejects(t *testing.T) {
 	for _, prefix := range []string{
 		"machine-capability-profile.invalid-",
 		"project-state.invalid-",
+		"doctor-report.invalid-",
+		"setup-plan.invalid-",
+		"setup-execution-report.invalid-",
+		"setup-ledger-event.invalid-",
 	} {
 		for _, file := range fixtures(t, prefix) {
 			t.Run(filepath.Base(file), func(t *testing.T) {
@@ -365,6 +373,14 @@ func recordKindFor(t *testing.T, file string) string {
 		return "MachineCapabilityProfile"
 	case strings.HasPrefix(base, "project-state."):
 		return "ProjectState"
+	case strings.HasPrefix(base, "doctor-report."):
+		return "DoctorReport"
+	case strings.HasPrefix(base, "setup-plan."):
+		return "SetupPlan"
+	case strings.HasPrefix(base, "setup-execution-report."):
+		return "SetupExecutionReport"
+	case strings.HasPrefix(base, "setup-ledger-event."):
+		return "SetupLedgerEvent"
 	}
 	t.Fatalf("no record kind is mapped for fixture %s", base)
 	return ""

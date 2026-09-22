@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/olostan/DevCadence/schemas/setup-execution-report.schema.json",
+  "title": "DevCadence SetupExecutionReport",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "execution_id",
+    "plan_id",
+    "plan_digest",
+    "machine_fingerprint",
+    "started_at",
+    "status",
+    "results"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "execution_id": { "type": "string" },
+    "plan_id": { "type": "string" },
+    "plan_digest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "machine_fingerprint": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "started_at": { "type": "string", "format": "date-time" },
+    "completed_at": { "type": ["string", "null"], "format": "date-time" },
+    "status": {
+      "enum": ["planned", "running", "succeeded", "failed", "blocked", "interrupted"]
+    },
+    "results": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["action_id", "status"],
+        "properties": {
+          "action_id": { "type": "string" },
+          "status": {
+            "enum": [
+              "planned",
+              "awaiting_approval",
+              "running",
+              "succeeded",
+              "failed",
+              "skipped",
+              "manual_required",
+              "blocked",
+              "interrupted"
+            ]
+          },
+          "started_at": { "type": ["string", "null"], "format": "date-time" },
+          "finished_at": { "type": ["string", "null"], "format": "date-time" },
+          "exit_code": { "type": ["integer", "null"] },
+          "output_summary": { "type": "string" },
+          "artifact_ref": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "type", "locator"],
+            "properties": {
+              "id": { "type": "string" },
+              "type": { "type": "string" },
+              "locator": { "type": "string" },
+              "digest": { "type": "string" }
+            }
+          },
+          "failure_detail": { "type": "string" }
+        }
+      }
+    }
+  }
+}

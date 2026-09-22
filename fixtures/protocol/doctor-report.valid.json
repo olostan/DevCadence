@@ -1,0 +1,61 @@
+{
+  "schema_version": "1.0",
+  "report_id": "doc_000000000000000000000001",
+  "machine_fingerprint": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "observed_at": "2026-09-22T12:00:00.000000Z",
+  "evaluation_scope": {
+    "target_profile": "local-heavy",
+    "required_roles": ["implementation", "review"],
+    "evidence_status": "live"
+  },
+  "readiness": "READY",
+  "findings": [
+    {
+      "category": "environment",
+      "severity": "info",
+      "code": "GIT_READY",
+      "title": "Git installed",
+      "detail": "Git 2.45.0 available on PATH",
+      "remediation": null
+    }
+  ],
+  "recommended_profile": {
+    "selected_profile": "local-heavy",
+    "rationale": ["Hardware acceleration verified", "Local coding endpoint ready"],
+    "alternatives": [
+      {
+        "profile": "local-heavy",
+        "eligible": true,
+        "reasons": ["Hardware meets memory and compute requirements"]
+      },
+      {
+        "profile": "cloud-cognition",
+        "eligible": true,
+        "reasons": ["Policy allows remote inference if desired"]
+      }
+    ],
+    "limitations": [],
+    "unknowns": []
+  },
+  "discovered_endpoints": [
+    {
+      "id": "ollama:qwen2.5-coder",
+      "kind": "local_runtime",
+      "locality": "local",
+      "health": "ready",
+      "auth_status": "not_applicable",
+      "cost_class": "local_compute",
+      "required_source_exposure": "local_only",
+      "acceleration_verified": true,
+      "acceleration_backend": "metal"
+    }
+  ],
+  "principal_hosts": [
+    {
+      "host_id": "antigravity",
+      "installed": true,
+      "path": "/Applications/Antigravity.app",
+      "version": "1.2.0"
+    }
+  ]
+}

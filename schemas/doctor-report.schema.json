@@ -1,0 +1,139 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/olostan/DevCadence/schemas/doctor-report.schema.json",
+  "title": "DevCadence DoctorReport",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "report_id",
+    "machine_fingerprint",
+    "observed_at",
+    "evaluation_scope",
+    "readiness",
+    "findings"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "report_id": { "type": "string" },
+    "machine_fingerprint": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "observed_at": { "type": "string", "format": "date-time" },
+    "readiness": {
+      "enum": ["READY", "READY_WITH_REDUCED_CAPABILITY", "PARTIALLY_READY", "ACTION_REQUIRED"]
+    },
+    "evaluation_scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["required_roles", "evidence_status"],
+      "properties": {
+        "target_profile": {
+          "enum": ["local-heavy", "hybrid-thin", "cloud-cognition", "offline", "custom"]
+        },
+        "required_roles": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "evidence_status": {
+          "enum": ["live", "refreshed_health", "stale_inference_retained"]
+        }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["category", "severity", "code", "title", "detail"],
+        "properties": {
+          "category": {
+            "enum": ["environment", "hardware", "runtime", "cognition", "auth", "state"]
+          },
+          "severity": { "enum": ["info", "warning", "error"] },
+          "code": { "type": "string" },
+          "title": { "type": "string" },
+          "detail": { "type": "string" },
+          "remediation": { "type": ["string", "null"] }
+        }
+      }
+    },
+    "recommended_profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rationale", "alternatives"],
+      "properties": {
+        "selected_profile": {
+          "enum": ["local-heavy", "hybrid-thin", "cloud-cognition", "offline", "custom"]
+        },
+        "rationale": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string" }
+        },
+        "alternatives": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["profile", "eligible", "reasons"],
+            "properties": {
+              "profile": {
+                "enum": ["local-heavy", "hybrid-thin", "cloud-cognition", "offline", "custom"]
+              },
+              "eligible": { "type": "boolean" },
+              "reasons": {
+                "type": "array",
+                "minItems": 1,
+                "items": { "type": "string" }
+              },
+              "missing_prerequisites": {
+                "type": "array",
+                "items": { "type": "string" }
+              }
+            }
+          }
+        },
+        "limitations": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "unknowns": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "discovered_endpoints": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "kind", "locality", "health", "auth_status", "cost_class", "required_source_exposure"],
+        "properties": {
+          "id": { "type": "string" },
+          "kind": { "enum": ["local_runtime", "authenticated_cli", "remote_api", "remote_worker"] },
+          "locality": { "enum": ["local", "remote_tools_local", "remote"] },
+          "health": { "enum": ["installed", "configured", "ready", "unhealthy", "auth_expired", "disabled"] },
+          "auth_status": { "enum": ["authenticated", "unauthenticated", "unknown", "not_applicable"] },
+          "cost_class": { "enum": ["free", "local_compute", "subscription_included", "remote_economy", "remote_premium", "unknown"] },
+          "required_source_exposure": { "enum": ["local_only", "focused_snippets", "file_context", "unrestricted"] },
+          "acceleration_verified": { "type": "boolean" },
+          "acceleration_backend": { "enum": ["metal", "cuda", "rocm", "vulkan", "cpu"] }
+        }
+      }
+    },
+    "principal_hosts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["host_id", "installed"],
+        "properties": {
+          "host_id": { "enum": ["antigravity", "cursor", "vscode"] },
+          "installed": { "type": "boolean" },
+          "path": { "type": "string" },
+          "version": { "type": "string" }
+        }
+      }
+    }
+  }
+}

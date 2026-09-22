@@ -429,6 +429,14 @@ func NewRecord(kind string) (Record, error) {
 		return &SpecificationReadiness{}, nil
 	case "MachineCapabilityProfile":
 		return &MachineCapabilityProfile{}, nil
+	case "DoctorReport":
+		return &DoctorReport{}, nil
+	case "SetupPlan":
+		return &SetupPlan{}, nil
+	case "SetupExecutionReport":
+		return &SetupExecutionReport{}, nil
+	case "SetupLedgerEvent":
+		return &SetupLedgerEvent{}, nil
 	}
 	return nil, errs.New(errs.CategoryInvalidArgument, "unknown record kind %q", kind)
 }
