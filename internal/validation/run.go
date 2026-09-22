@@ -3,6 +3,7 @@ package validation
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/olostan/DevCadence/internal/artifacts"
@@ -31,6 +32,8 @@ type RunOptions struct {
 	// MaxOutputBytes bounds each check's captured stdout/stderr. Zero
 	// selects process.DefaultMaxOutputBytes.
 	MaxOutputBytes int64
+	// RunID identifies this validation run, used for isolated service directories.
+	RunID string
 }
 
 // RunProfile executes every check in profile, in order, against opts.Dir.
@@ -75,6 +78,21 @@ func RunProfile(ctx context.Context, profile Profile, opts RunOptions) ([]protoc
 	checks := make([]protocol.CheckResult, 0, len(profile.Checks))
 	sawFail, sawError, sawCancel := false, false, false
 
+	var activeServices *ActiveServices
+	if len(profile.Services) > 0 {
+		runID := opts.RunID
+		if runID == "" {
+			runID = fmt.Sprintf("val_%d", time.Now().UnixNano())
+		}
+		active, err := StartServices(ctx, profile.Services, opts.Dir, baseEnv, runID)
+		if err != nil {
+			return nil, protocol.ValidationError, err
+		}
+		activeServices = active
+		defer activeServices.Teardown(context.Background())
+		baseEnv = activeServices.Env()
+	}
+
 	for _, spec := range profile.Checks {
 		if spec.ID == "" {
 			// Same default (and the same uniqueness guarantee, enforced by
@@ -100,6 +118,26 @@ func RunProfile(ctx context.Context, profile Profile, opts RunOptions) ([]protoc
 			sawCancel = true
 			continue
 		}
+
+		if activeServices != nil {
+			if err := activeServices.CheckHealth(); err != nil {
+				now := time.Now().UTC()
+				msg := err.Error()
+				checks = append(checks, protocol.CheckResult{
+					ID:               spec.ID,
+					Kind:             spec.Kind,
+					Command:          spec.Argv,
+					WorkingDirectory: &opts.Dir,
+					Status:           protocol.CheckError,
+					Summary:          &msg,
+					StartedAt:        protocol.NewTimestamp(now),
+					FinishedAt:       protocol.NewTimestamp(now),
+				})
+				sawError = true
+				break
+			}
+		}
+
 		env := baseEnv
 		if len(spec.Env) > 0 {
 			env = process.MergeEnv(baseEnv, spec.Env)
