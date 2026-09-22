@@ -42,6 +42,11 @@ func (a Authority) rank() int {
 	}
 }
 
+// Rank returns the numeric precedence rank for this authority.
+func (a Authority) Rank() int {
+	return a.rank()
+}
+
 // AtLeast reports whether a meets or exceeds want.
 func (a Authority) AtLeast(want Authority) bool {
 	return a.rank() >= want.rank()
@@ -793,6 +798,11 @@ func ComputePlanDigest(p *SetupPlan) (string, error) {
 		return "", err
 	}
 	return DigestBytes(canonical), nil
+}
+
+// ComputePlanDigest calculates the SHA-256 digest on the receiver.
+func (p *SetupPlan) ComputePlanDigest() (string, error) {
+	return ComputePlanDigest(p)
 }
 
 // CredentialRefKind specifies the storage/resolution mechanism for an opaque credential reference.
