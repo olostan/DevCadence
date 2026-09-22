@@ -107,17 +107,94 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["id", "kind", "locality", "health", "auth_status", "cost_class", "required_source_exposure"],
+        "required": [
+          "id",
+          "kind",
+          "locality",
+          "health",
+          "auth_status",
+          "cost_class",
+          "required_source_exposure"
+        ],
         "properties": {
-          "id": { "type": "string" },
-          "kind": { "enum": ["local_runtime", "authenticated_cli", "remote_api", "remote_worker"] },
-          "locality": { "enum": ["local", "remote_tools_local", "remote"] },
-          "health": { "enum": ["installed", "configured", "ready", "unhealthy", "auth_expired", "disabled"] },
-          "auth_status": { "enum": ["authenticated", "unauthenticated", "unknown", "not_applicable"] },
-          "cost_class": { "enum": ["free", "local_compute", "subscription_included", "remote_economy", "remote_premium", "unknown"] },
-          "required_source_exposure": { "enum": ["local_only", "focused_snippets", "file_context", "unrestricted"] },
-          "acceleration_verified": { "type": "boolean" },
-          "acceleration_backend": { "enum": ["metal", "cuda", "rocm", "vulkan", "cpu"] }
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "kind": {
+            "enum": [
+              "local_runtime",
+              "authenticated_cli",
+              "remote_api"
+            ]
+          },
+          "locality": {
+            "enum": [
+              "local",
+              "remote_inference_local_tools",
+              "remote"
+            ]
+          },
+          "health": {
+            "enum": [
+              "not_installed",
+              "installed",
+              "not_configured",
+              "unhealthy",
+              "unverified",
+              "ready",
+              "unsupported",
+              "unknown"
+            ]
+          },
+          "auth_status": {
+            "enum": [
+              "not_applicable",
+              "authenticated",
+              "unauthenticated",
+              "expired",
+              "unknown",
+              "error"
+            ]
+          },
+          "cost_class": {
+            "enum": [
+              "local_compute",
+              "subscription_included",
+              "remote_economy",
+              "remote_strong",
+              "frontier_expensive",
+              "unknown"
+            ]
+          },
+          "required_source_exposure": {
+            "enum": [
+              "local_only",
+              "semantic_evidence_only",
+              "focused_snippets",
+              "selected_files",
+              "tool_mediated_worktree",
+              "unrestricted_authorized"
+            ]
+          },
+          "acceleration_verified": {
+            "type": "boolean"
+          },
+          "acceleration_backend": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "cpu",
+              "metal",
+              "cuda",
+              "rocm",
+              "vulkan",
+              "unknown",
+              null
+            ]
+          }
         }
       }
     },

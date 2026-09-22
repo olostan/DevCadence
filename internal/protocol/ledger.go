@@ -242,7 +242,7 @@ type SetupLedgerEvent struct {
 	PlanDigest          string         `json:"plan_digest"`
 	ActionID            string         `json:"action_id,omitempty"`
 	PreviousEventDigest string         `json:"previous_event_digest"`
-	EventDigest         string         `json:"event_digest"`
+	EventDigest         string         `json:"event_digest,omitempty"`
 	Timestamp           Timestamp      `json:"timestamp"`
 	Type                SetupEventType `json:"type"`
 	Payload             EventPayload   `json:"payload"`

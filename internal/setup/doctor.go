@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"github.com/olostan/DevCadence/internal/clock"
 	"github.com/olostan/DevCadence/internal/cognition"
@@ -46,6 +47,8 @@ type DoctorOptions struct {
 	HomeDir          string
 	CognitionService *cognition.Service
 	VerifyEndpointID string // If non-empty, authorizes targeted inference probe for this endpoint only
+	Cache            *CacheManager
+	Policy           *cognition.Policy
 }
 
 // Doctor executes non-invasive diagnostic checks across the environment, state root,
@@ -57,6 +60,8 @@ type Doctor struct {
 	cognitionService *cognition.Service
 	recommender      *ProfileRecommender
 	verifyEndpointID string
+	cache            *CacheManager
+	policy           *cognition.Policy
 }
 
 // NewDoctor returns a Doctor engine.
@@ -74,6 +79,18 @@ func NewDoctor(opts DoctorOptions) (*Doctor, error) {
 		}
 		opts.HomeDir = filepath.Join(h, ".devcadence")
 	}
+	cache := opts.Cache
+	if cache == nil {
+		c, err := NewCacheManager(filepath.Join(opts.HomeDir, "state"), opts.Clock, DefaultCacheTTL)
+		if err == nil {
+			cache = c
+		}
+	}
+	policy := opts.Policy
+	if policy == nil {
+		defPolicy := cognition.DefaultPolicy()
+		policy = &defPolicy
+	}
 	return &Doctor{
 		clock:            opts.Clock,
 		ids:              opts.IDs,
@@ -81,12 +98,19 @@ func NewDoctor(opts DoctorOptions) (*Doctor, error) {
 		cognitionService: opts.CognitionService,
 		recommender:      NewProfileRecommender(),
 		verifyEndpointID: opts.VerifyEndpointID,
+		cache:            cache,
+		policy:           policy,
 	}, nil
 }
 
 // Run executes the diagnostics and synthesizes a DoctorReport.
 func (d *Doctor) Run(ctx context.Context, scope protocol.ReadinessEvaluationScope, facts protocol.EnvironmentFacts) (*protocol.DoctorReport, error) {
 	var findings []protocol.DiagnosticFinding
+
+	fingerprint, err := environment.Fingerprint(facts)
+	if err != nil {
+		fingerprint = "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+	}
 
 	// 1. State root checks
 	stateFindings := d.checkStateRoot()
@@ -105,14 +129,23 @@ func (d *Doctor) Run(ctx context.Context, scope protocol.ReadinessEvaluationScop
 	findings = append(findings, hostFindings...)
 
 	// 5. Cognition endpoints discovery
-	endpoints, endpointFindings, err := d.discoverEndpoints(ctx, facts)
+	endpoints, endpointFindings, cognProfile, evidenceStatus, err := d.discoverEndpoints(ctx, facts, fingerprint)
 	if err != nil {
 		return nil, err
 	}
 	findings = append(findings, endpointFindings...)
 
+	if scope.EvidenceStatus == "" {
+		scope.EvidenceStatus = evidenceStatus
+	}
+
 	// 6. Profile recommendation
-	recommendation := d.recommender.Recommend(facts, endpoints)
+	recommendation := d.recommender.Recommend(RecommendationInput{
+		Facts:            facts,
+		Endpoints:        endpoints,
+		CognitionProfile: cognProfile,
+		Policy:           d.policy,
+	})
 
 	// Ensure evaluated scope has a TargetProfile before checking READY (ADR-0014)
 	if scope.TargetProfile == nil && recommendation.SelectedProfile != nil {
@@ -120,16 +153,7 @@ func (d *Doctor) Run(ctx context.Context, scope protocol.ReadinessEvaluationScop
 	}
 
 	// 7. Evaluate Readiness
-	targetProfile := protocol.ProfileCloudCognition
-	if scope.TargetProfile != nil {
-		targetProfile = *scope.TargetProfile
-	}
-	readiness := d.evaluateReadiness(scope, findings, endpoints, targetProfile)
-
-	fingerprint, err := environment.Fingerprint(facts)
-	if err != nil {
-		fingerprint = "sha256:0000000000000000000000000000000000000000000000000000000000000000"
-	}
+	readiness := d.evaluateReadiness(scope, findings, endpoints, scope.TargetProfile)
 
 	report := &protocol.DoctorReport{
 		SchemaVersion:       protocol.SchemaVersion1,
@@ -188,9 +212,9 @@ func (d *Doctor) checkStateRoot() []protocol.DiagnosticFinding {
 		return findings
 	}
 
-	// Test write access
-	testFile := filepath.Join(d.homeDir, ".write_test")
-	if err := os.WriteFile(testFile, []byte("ok"), 0600); err != nil {
+	// Test write access via a temporary check file, removing it immediately
+	f, err := os.CreateTemp(d.homeDir, ".devcadence_write_check_*")
+	if err != nil {
 		findings = append(findings, protocol.DiagnosticFinding{
 			Category: "state",
 			Severity: SeverityError,
@@ -200,15 +224,30 @@ func (d *Doctor) checkStateRoot() []protocol.DiagnosticFinding {
 		})
 		return findings
 	}
-	_ = os.Remove(testFile)
+	tmpName := f.Name()
+	_ = f.Close()
+	_ = os.Remove(tmpName)
 
-	// Check required subdirectories
-	reqDirs := []string{"state", "artifacts_setup", "tmp"}
+	// Check required subdirectories (canonical: state, artifacts/setup, tmp)
+	type reqDir struct {
+		name string
+		path string
+	}
+	reqDirs := []reqDir{
+		{name: "state", path: filepath.Join(d.homeDir, "state")},
+		{name: "artifacts/setup", path: filepath.Join(d.homeDir, "artifacts", "setup")},
+		{name: "tmp", path: filepath.Join(d.homeDir, "tmp")},
+	}
 	var missing []string
-	for _, sub := range reqDirs {
-		p := filepath.Join(d.homeDir, sub)
-		if s, err := os.Stat(p); err != nil || !s.IsDir() {
-			missing = append(missing, sub)
+	for _, rd := range reqDirs {
+		s, err := os.Stat(rd.path)
+		if err != nil || !s.IsDir() {
+			if rd.name == "artifacts/setup" {
+				if s2, err2 := os.Stat(filepath.Join(d.homeDir, "artifacts_setup")); err2 == nil && s2.IsDir() {
+					continue
+				}
+			}
+			missing = append(missing, rd.name)
 		}
 	}
 	if len(missing) > 0 {
@@ -238,14 +277,18 @@ func (d *Doctor) checkGit(facts protocol.EnvironmentFacts) []protocol.Diagnostic
 	var findings []protocol.DiagnosticFinding
 	gitFound := false
 	var gitVer string
+	foundInFacts := false
 	for _, sw := range facts.Software {
-		if sw.ID == "git" && sw.Installed {
-			gitFound = true
-			gitVer = sw.Version
+		if sw.ID == "git" {
+			foundInFacts = true
+			if sw.Installed {
+				gitFound = true
+				gitVer = sw.Version
+			}
 			break
 		}
 	}
-	if !gitFound {
+	if !foundInFacts {
 		if p, err := exec.LookPath("git"); err == nil && p != "" {
 			gitFound = true
 			gitVer = "available on PATH"
@@ -320,19 +363,35 @@ func (d *Doctor) checkPrincipalHosts(facts protocol.EnvironmentFacts) ([]protoco
 	return summaries, findings
 }
 
-func (d *Doctor) discoverEndpoints(ctx context.Context, facts protocol.EnvironmentFacts) ([]protocol.CognitionEndpointSummary, []protocol.DiagnosticFinding, error) {
+func (d *Doctor) discoverEndpoints(ctx context.Context, facts protocol.EnvironmentFacts, fingerprint string) ([]protocol.CognitionEndpointSummary, []protocol.DiagnosticFinding, *protocol.MachineCapabilityProfile, string, error) {
 	var summaries []protocol.CognitionEndpointSummary
 	var findings []protocol.DiagnosticFinding
 
 	if d.cognitionService == nil {
-		return summaries, findings, nil
+		return summaries, findings, nil, "live", nil
 	}
 
+	evidenceStatus := "live"
 	depth := protocol.DepthHealth
 	var inferenceTargets []string
 	if d.verifyEndpointID != "" {
 		depth = protocol.DepthInference
 		inferenceTargets = []string{d.verifyEndpointID}
+	} else if d.cache != nil {
+		// Check if we have a valid cached profile matching the machine fingerprint
+		if cached, found, err := Read[protocol.MachineCapabilityProfile](ctx, d.cache, protocol.CacheTargetMachineProfile, fingerprint); err == nil && found {
+			evidenceStatus = "refreshed_health"
+			hasVerifiedAcc := false
+			for _, ep := range cached.Endpoints {
+				if ep.AccelerationVerified() {
+					hasVerifiedAcc = true
+					break
+				}
+			}
+			if !hasVerifiedAcc {
+				evidenceStatus = "stale_inference_retained"
+			}
+		}
 	}
 
 	profile, err := d.cognitionService.Profile(ctx, cognition.ProfileInput{
@@ -341,7 +400,12 @@ func (d *Doctor) discoverEndpoints(ctx context.Context, facts protocol.Environme
 		InferenceTargets: inferenceTargets,
 	})
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, "", err
+	}
+
+	// Durably cache the discovered machine profile
+	if d.cache != nil {
+		_ = Write(ctx, d.cache, protocol.CacheTargetMachineProfile, fingerprint, profile, DefaultCacheTTL)
 	}
 
 	hasCoding := false
@@ -407,39 +471,138 @@ func (d *Doctor) discoverEndpoints(ctx context.Context, facts protocol.Environme
 		})
 	}
 
-	return summaries, findings, nil
+	return summaries, findings, &profile, evidenceStatus, nil
 }
 
-func (d *Doctor) evaluateReadiness(scope protocol.ReadinessEvaluationScope, findings []protocol.DiagnosticFinding, endpoints []protocol.CognitionEndpointSummary, targetProfile protocol.DeploymentProfile) protocol.ReadinessStatus {
-	hasError := false
-	hasWarning := false
-
+func (d *Doctor) evaluateReadiness(scope protocol.ReadinessEvaluationScope, findings []protocol.DiagnosticFinding, endpoints []protocol.CognitionEndpointSummary, targetProfile *protocol.DeploymentProfile) protocol.ReadinessStatus {
+	// 1. Mandatory base dependencies (Git, state root, disk space, errors)
 	for _, f := range findings {
 		if f.Severity == SeverityError {
-			hasError = true
-		} else if f.Severity == SeverityWarning {
-			hasWarning = true
+			return protocol.ReadinessActionRequired
 		}
 	}
 
-	if hasError {
-		return protocol.ReadinessActionRequired
-	}
-
-	hasReadyEndpoint := false
-	for _, ep := range endpoints {
-		if ep.Health == protocol.EndpointHealthReady {
-			hasReadyEndpoint = true
-			break
-		}
-	}
-
-	if !hasReadyEndpoint {
+	// 2. If no target profile is specified or selected, we cannot be fully READY
+	if targetProfile == nil {
 		return protocol.ReadinessPartiallyReady
 	}
 
-	if hasWarning {
+	// 3. Classify ready endpoints
+	var localEndpoints []protocol.CognitionEndpointSummary
+	var acceleratedLocal []protocol.CognitionEndpointSummary
+	var remoteEndpoints []protocol.CognitionEndpointSummary
+
+	for _, ep := range endpoints {
+		if ep.Health != protocol.EndpointHealthReady {
+			continue
+		}
+		if ep.Locality == protocol.LocalityLocal || ep.Kind == protocol.EndpointLocalRuntime {
+			localEndpoints = append(localEndpoints, ep)
+			if ep.AccelerationVerified {
+				acceleratedLocal = append(acceleratedLocal, ep)
+			}
+		}
+		if (ep.Locality == protocol.LocalityRemote || ep.Kind == protocol.EndpointRemoteAPI || ep.Kind == protocol.EndpointAuthenticatedCLI) && ep.Auth == protocol.AuthAuthenticated {
+			remoteEndpoints = append(remoteEndpoints, ep)
+		}
+	}
+
+	// 4. Verify target profile constraints
+	switch *targetProfile {
+	case protocol.ProfileCloudCognition:
+		if len(remoteEndpoints) == 0 {
+			return protocol.ReadinessPartiallyReady
+		}
+	case protocol.ProfileOffline:
+		if len(localEndpoints) == 0 {
+			return protocol.ReadinessPartiallyReady
+		}
+	case protocol.ProfileLocalHeavy:
+		if len(localEndpoints) == 0 {
+			return protocol.ReadinessPartiallyReady
+		}
+		if len(acceleratedLocal) == 0 {
+			// Local-heavy requires verified hardware acceleration
+			return protocol.ReadinessReadyWithReducedCap
+		}
+	case protocol.ProfileHybridThin:
+		if len(localEndpoints) == 0 || len(remoteEndpoints) == 0 {
+			return protocol.ReadinessPartiallyReady
+		}
+	case protocol.ProfileCustom:
+		if len(localEndpoints) == 0 && len(remoteEndpoints) == 0 {
+			return protocol.ReadinessPartiallyReady
+		}
+	}
+
+	// 5. Verify required roles under target profile
+	for _, role := range scope.RequiredRoles {
+		roleLower := strings.ToLower(role)
+		satisfied := false
+		switch *targetProfile {
+		case protocol.ProfileOffline:
+			// Offline: strictly local endpoints
+			for _, ep := range localEndpoints {
+				switch roleLower {
+				case "scout", "classifier":
+					satisfied = true
+				case "reviewer", "correctness_reviewer":
+					satisfied = true
+				case "principal", "implementer", "implementation", "architecture_reviewer":
+					if ep.AccelerationVerified {
+						satisfied = true
+					}
+				default:
+					satisfied = true
+				}
+				if satisfied {
+					break
+				}
+			}
+		case protocol.ProfileCloudCognition:
+			if len(remoteEndpoints) > 0 {
+				satisfied = true
+			}
+		case protocol.ProfileHybridThin:
+			switch roleLower {
+			case "scout", "classifier":
+				satisfied = len(localEndpoints) > 0
+			case "reviewer", "correctness_reviewer":
+				satisfied = len(localEndpoints) > 0 || len(remoteEndpoints) > 0
+			case "principal", "implementer", "implementation", "architecture_reviewer":
+				satisfied = len(remoteEndpoints) > 0
+			default:
+				satisfied = len(localEndpoints) > 0 || len(remoteEndpoints) > 0
+			}
+		case protocol.ProfileLocalHeavy:
+			for _, ep := range localEndpoints {
+				if ep.AccelerationVerified {
+					satisfied = true
+					break
+				}
+				if roleLower == "scout" || roleLower == "classifier" {
+					satisfied = true
+					break
+				}
+			}
+		case protocol.ProfileCustom:
+			satisfied = len(localEndpoints) > 0 || len(remoteEndpoints) > 0
+		}
+		if !satisfied {
+			return protocol.ReadinessPartiallyReady
+		}
+	}
+
+	// 6. Evidence freshness: stale inference evidence limits readiness
+	if scope.EvidenceStatus == "stale_inference_retained" {
 		return protocol.ReadinessReadyWithReducedCap
+	}
+
+	// 7. Any warnings report reduced capability
+	for _, f := range findings {
+		if f.Severity == SeverityWarning {
+			return protocol.ReadinessReadyWithReducedCap
+		}
 	}
 
 	return protocol.ReadinessReady

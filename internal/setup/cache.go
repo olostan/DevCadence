@@ -85,6 +85,21 @@ func Read[T any](ctx context.Context, c *CacheManager, target protocol.CacheTarg
 		return zero, false, err
 	}
 
+	lockPath := path + ".lock"
+	lockFile, err := os.OpenFile(lockPath, os.O_RDWR|os.O_CREATE, 0600)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return zero, false, nil
+		}
+		return zero, false, errs.Wrap(errs.CategoryInternal, err, "open cache lock file %s", lockPath)
+	}
+	defer lockFile.Close()
+
+	if err := lockShared(lockFile); err != nil {
+		return zero, false, errs.Wrap(errs.CategoryInternal, err, "lock cache lock file %s", lockPath)
+	}
+	defer unlock(lockFile)
+
 	f, err := os.OpenFile(path, os.O_RDONLY, 0)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
@@ -93,11 +108,6 @@ func Read[T any](ctx context.Context, c *CacheManager, target protocol.CacheTarg
 		return zero, false, errs.Wrap(errs.CategoryInternal, err, "open cache file %s", path)
 	}
 	defer f.Close()
-
-	if err := lockShared(f); err != nil {
-		return zero, false, errs.Wrap(errs.CategoryInternal, err, "lock cache file %s", path)
-	}
-	defer unlock(f)
 
 	var env CacheEnvelope[T]
 	dec := json.NewDecoder(f)
@@ -142,6 +152,18 @@ func Write[T any](ctx context.Context, c *CacheManager, target protocol.CacheTar
 		return errs.Wrap(errs.CategoryInternal, err, "create cache root directory %s", c.rootDir)
 	}
 
+	lockPath := path + ".lock"
+	lockFile, err := os.OpenFile(lockPath, os.O_RDWR|os.O_CREATE, 0600)
+	if err != nil {
+		return errs.Wrap(errs.CategoryInternal, err, "open cache lock file %s", lockPath)
+	}
+	defer lockFile.Close()
+
+	if err := lockExclusive(lockFile); err != nil {
+		return errs.Wrap(errs.CategoryInternal, err, "lock cache lock file %s", lockPath)
+	}
+	defer unlock(lockFile)
+
 	now := c.clock.Now()
 	env := CacheEnvelope[T]{
 		SchemaVersion:      protocol.SchemaVersion1,
@@ -162,23 +184,17 @@ func Write[T any](ctx context.Context, c *CacheManager, target protocol.CacheTar
 		return errs.Wrap(errs.CategoryInternal, err, "create temp cache file %s", tmpPath)
 	}
 
-	if err := lockExclusive(tmpFile); err != nil {
-		tmpFile.Close()
-		_ = os.Remove(tmpPath)
-		return errs.Wrap(errs.CategoryInternal, err, "lock temp cache file")
-	}
-
 	_, writeErr := tmpFile.Write(bytes)
-	unlockErr := unlock(tmpFile)
+	syncErr := tmpFile.Sync()
 	closeErr := tmpFile.Close()
 
 	if writeErr != nil {
 		_ = os.Remove(tmpPath)
 		return errs.Wrap(errs.CategoryInternal, writeErr, "write temp cache file")
 	}
-	if unlockErr != nil {
+	if syncErr != nil {
 		_ = os.Remove(tmpPath)
-		return errs.Wrap(errs.CategoryInternal, unlockErr, "unlock temp cache file")
+		return errs.Wrap(errs.CategoryInternal, syncErr, "sync temp cache file")
 	}
 	if closeErr != nil {
 		_ = os.Remove(tmpPath)
@@ -190,17 +206,36 @@ func Write[T any](ctx context.Context, c *CacheManager, target protocol.CacheTar
 		return errs.Wrap(errs.CategoryInternal, err, "commit cache file %s", path)
 	}
 
+	// Durably sync directory entry
+	if dirFile, err := os.Open(c.rootDir); err == nil {
+		_ = dirFile.Sync()
+		_ = dirFile.Close()
+	}
+
 	return nil
 }
 
-// Remove evicts a cached target file.
+// Remove evicts a cached target file under an exclusive file lock.
 func (c *CacheManager) Remove(ctx context.Context, target protocol.CacheTarget) error {
 	path, err := c.targetPath(target)
 	if err != nil {
 		return err
 	}
+	lockPath := path + ".lock"
+	lockFile, err := os.OpenFile(lockPath, os.O_RDWR|os.O_CREATE, 0600)
+	if err == nil {
+		_ = lockExclusive(lockFile)
+		defer func() {
+			_ = unlock(lockFile)
+			_ = lockFile.Close()
+		}()
+	}
 	if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return errs.Wrap(errs.CategoryInternal, err, "remove cache file %s", path)
+	}
+	if dirFile, err := os.Open(c.rootDir); err == nil {
+		_ = dirFile.Sync()
+		_ = dirFile.Close()
 	}
 	return nil
 }

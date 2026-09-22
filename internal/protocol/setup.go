@@ -676,7 +676,7 @@ func (a SetupAction) Validate() error {
 type SetupPlan struct {
 	SchemaVersion      SchemaVersion      `json:"schema_version"`
 	PlanID             string             `json:"plan_id"`
-	PlanDigest         string             `json:"plan_digest"`
+	PlanDigest         string             `json:"plan_digest,omitempty"`
 	RecipeSetVersion   string             `json:"recipe_set_version"`
 	MachineFingerprint string             `json:"machine_fingerprint"`
 	CreatedAt          Timestamp          `json:"created_at"`

@@ -453,4 +453,3 @@ func TestComputeDigestForFixtures(t *testing.T) {
 	}
 	t.Logf("Computed event digest: %s", evDigest)
 }
-

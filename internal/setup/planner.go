@@ -3,6 +3,7 @@ package setup
 import (
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/olostan/DevCadence/internal/clock"
 	"github.com/olostan/DevCadence/internal/errs"
@@ -180,8 +181,10 @@ func (p *Planner) Plan(report *protocol.DoctorReport, target protocol.SetupTarge
 		hasReadyOllama := false
 		for _, ep := range report.DiscoveredEndpoints {
 			if ep.Kind == protocol.EndpointLocalRuntime && ep.Health == protocol.EndpointHealthReady {
-				hasReadyOllama = true
-				break
+				if strings.Contains(strings.ToLower(ep.ID), "ollama") {
+					hasReadyOllama = true
+					break
+				}
 			}
 		}
 
@@ -214,6 +217,13 @@ func (p *Planner) Plan(report *protocol.DoctorReport, target protocol.SetupTarge
 						Kind: protocol.CondKindCommandAvailable,
 						CommandAvailable: &protocol.CommandAvailableOperand{
 							CommandName: "ollama",
+						},
+					},
+					{
+						Kind: protocol.CondKindExecutableVerified,
+						ExecutableVerified: &protocol.ExecutableVerifiedOperand{
+							CanonicalPath:   "/usr/local/bin/ollama",
+							ExpectedVersion: "0.5",
 						},
 					},
 					{

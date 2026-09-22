@@ -69,8 +69,8 @@ func TestDoctorStateRootCheck(t *testing.T) {
 		t.Fatalf("expected finding %s for missing subdirs", FindingCodeStateDirsMissing)
 	}
 
-	// Create subdirectories
-	for _, sub := range []string{"state", "artifacts_setup", "tmp"} {
+	// Create subdirectories (canonical: state, artifacts/setup, tmp)
+	for _, sub := range []string{"state", filepath.Join("artifacts", "setup"), "tmp"} {
 		_ = os.MkdirAll(filepath.Join(tmpHome, sub), 0700)
 	}
 
@@ -136,5 +136,151 @@ func TestDoctorGitMissing(t *testing.T) {
 
 	if err := report.Validate(); err != nil {
 		t.Fatalf("report validation: %v", err)
+	}
+
+	if report.Readiness != protocol.ReadinessActionRequired {
+		t.Fatalf("expected readiness ACTION_REQUIRED when git is missing, got %s", report.Readiness)
+	}
+}
+
+func TestDoctorReadinessScopedToCloudCognitionWithOnlyLocalMLX(t *testing.T) {
+	doc, err := NewDoctor(DoctorOptions{
+		Clock: clock.NewFake(time.Date(2026, 9, 22, 12, 0, 0, 0, time.UTC), 0),
+		IDs:   ids.NewSequential(),
+	})
+	if err != nil {
+		t.Fatalf("NewDoctor: %v", err)
+	}
+
+	cloudProfile := protocol.ProfileCloudCognition
+	scope := protocol.ReadinessEvaluationScope{
+		TargetProfile:  &cloudProfile,
+		RequiredRoles:  []string{"implementation"},
+		EvidenceStatus: "live",
+	}
+
+	// Only local MLX endpoint discovered; no remote endpoints
+	endpoints := []protocol.CognitionEndpointSummary{
+		{
+			ID:                   "mlx_local",
+			Kind:                 protocol.EndpointLocalRuntime,
+			Locality:             protocol.LocalityLocal,
+			Health:               protocol.EndpointHealthReady,
+			AccelerationVerified: true,
+		},
+	}
+
+	readiness := doc.evaluateReadiness(scope, nil, endpoints, &cloudProfile)
+	if readiness == protocol.ReadinessReady {
+		t.Fatalf("cloud-cognition target with only local MLX must NOT be READY; got %s", readiness)
+	}
+	if readiness != protocol.ReadinessPartiallyReady {
+		t.Fatalf("expected PARTIALLY_READY, got %s", readiness)
+	}
+}
+
+func TestDoctorReadinessLocalHeavyUnverifiedAcceleration(t *testing.T) {
+	doc, err := NewDoctor(DoctorOptions{
+		Clock: clock.NewFake(time.Date(2026, 9, 22, 12, 0, 0, 0, time.UTC), 0),
+		IDs:   ids.NewSequential(),
+	})
+	if err != nil {
+		t.Fatalf("NewDoctor: %v", err)
+	}
+
+	heavyProfile := protocol.ProfileLocalHeavy
+	scope := protocol.ReadinessEvaluationScope{
+		TargetProfile:  &heavyProfile,
+		RequiredRoles:  []string{"scout"},
+		EvidenceStatus: "live",
+	}
+
+	// Local runtime present, but acceleration is unverified
+	endpoints := []protocol.CognitionEndpointSummary{
+		{
+			ID:                   "ollama_local",
+			Kind:                 protocol.EndpointLocalRuntime,
+			Locality:             protocol.LocalityLocal,
+			Health:               protocol.EndpointHealthReady,
+			AccelerationVerified: false,
+		},
+	}
+
+	readiness := doc.evaluateReadiness(scope, nil, endpoints, &heavyProfile)
+	if readiness == protocol.ReadinessReady {
+		t.Fatalf("local-heavy target with unverified acceleration must NOT be READY; got %s", readiness)
+	}
+	if readiness != protocol.ReadinessReadyWithReducedCap {
+		t.Fatalf("expected READY_WITH_REDUCED_CAPABILITY, got %s", readiness)
+	}
+}
+
+func TestDoctorReadinessOfflineRejectsRemoteEndpoints(t *testing.T) {
+	doc, err := NewDoctor(DoctorOptions{
+		Clock: clock.NewFake(time.Date(2026, 9, 22, 12, 0, 0, 0, time.UTC), 0),
+		IDs:   ids.NewSequential(),
+	})
+	if err != nil {
+		t.Fatalf("NewDoctor: %v", err)
+	}
+
+	offlineProfile := protocol.ProfileOffline
+	scope := protocol.ReadinessEvaluationScope{
+		TargetProfile:  &offlineProfile,
+		RequiredRoles:  []string{"implementation"},
+		EvidenceStatus: "live",
+	}
+
+	// Remote endpoints only, no local endpoints
+	endpoints := []protocol.CognitionEndpointSummary{
+		{
+			ID:        "remote_api",
+			Kind:      protocol.EndpointRemoteAPI,
+			Locality:  protocol.LocalityRemote,
+			Health:    protocol.EndpointHealthReady,
+			Auth:      protocol.AuthAuthenticated,
+			CostClass: protocol.CostRemoteEconomy,
+		},
+	}
+
+	readiness := doc.evaluateReadiness(scope, nil, endpoints, &offlineProfile)
+	if readiness == protocol.ReadinessReady {
+		t.Fatalf("offline target with only remote endpoints must NOT be READY; got %s", readiness)
+	}
+	if readiness != protocol.ReadinessPartiallyReady {
+		t.Fatalf("expected PARTIALLY_READY, got %s", readiness)
+	}
+}
+
+func TestDoctorReadinessMissingRequiredRoles(t *testing.T) {
+	doc, err := NewDoctor(DoctorOptions{
+		Clock: clock.NewFake(time.Date(2026, 9, 22, 12, 0, 0, 0, time.UTC), 0),
+		IDs:   ids.NewSequential(),
+	})
+	if err != nil {
+		t.Fatalf("NewDoctor: %v", err)
+	}
+
+	hybridProfile := protocol.ProfileHybridThin
+	scope := protocol.ReadinessEvaluationScope{
+		TargetProfile:  &hybridProfile,
+		RequiredRoles:  []string{"principal"}, // requires remote endpoint in hybrid-thin
+		EvidenceStatus: "live",
+	}
+
+	// Only local endpoint is ready, no remote endpoint available to fulfill principal
+	endpoints := []protocol.CognitionEndpointSummary{
+		{
+			ID:                   "ollama_local",
+			Kind:                 protocol.EndpointLocalRuntime,
+			Locality:             protocol.LocalityLocal,
+			Health:               protocol.EndpointHealthReady,
+			AccelerationVerified: true,
+		},
+	}
+
+	readiness := doc.evaluateReadiness(scope, nil, endpoints, &hybridProfile)
+	if readiness != protocol.ReadinessPartiallyReady {
+		t.Fatalf("expected PARTIALLY_READY when required role cannot be satisfied, got %s", readiness)
 	}
 }
