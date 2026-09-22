@@ -158,11 +158,10 @@ func Read[T any](ctx context.Context, c *CacheManager, target protocol.CacheTarg
 
 // Write atomically serialises data into the target cache file with a given TTL.
 func Write[T any](ctx context.Context, c *CacheManager, target protocol.CacheTarget, fingerprint string, data T, ttl time.Duration) error {
-	now := c.clock.Now()
-	var expiresAt time.Time
-	if ttl > 0 {
-		expiresAt = now.Add(ttl)
+	if ttl <= 0 {
+		ttl = c.defaultTTL
 	}
+	expiresAt := c.clock.Now().Add(ttl)
 	return WriteWithExpiresAt(ctx, c, target, fingerprint, data, expiresAt)
 }
 

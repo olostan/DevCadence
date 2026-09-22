@@ -190,3 +190,48 @@ func TestCacheManagerReadEntryRetainsExpired(t *testing.T) {
 		t.Fatalf("expected file to be retained on disk, but found=%v, expired=%v, err=%v", found2, expired2, err2)
 	}
 }
+
+func TestCacheManagerWriteDefaultTTLExpired(t *testing.T) {
+	ctx := context.Background()
+	tmpDir := t.TempDir()
+	now := time.Date(2026, 9, 22, 12, 0, 0, 0, time.UTC)
+	clk := clock.NewFake(now, 0)
+
+	cm, err := NewCacheManager(tmpDir, clk, 1*time.Hour)
+	if err != nil {
+		t.Fatalf("NewCacheManager: %v", err)
+	}
+
+	fingerprint := "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+	data := sampleData{Name: "default_ttl", Count: 100}
+
+	// Call Write with ttl <= 0 (0) so defaultTTL (1 hour) is used
+	if err := Write(ctx, cm, protocol.CacheTargetMachineProfile, fingerprint, data, 0); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+
+	// Advance clock beyond 1 hour (75 minutes)
+	laterClk := clock.NewFake(now.Add(75*time.Minute), 0)
+	laterCM, err := NewCacheManager(tmpDir, laterClk, 1*time.Hour)
+	if err != nil {
+		t.Fatalf("NewCacheManager: %v", err)
+	}
+
+	// Read should return found=false because it filters expired entries
+	_, found, err := Read[sampleData](ctx, laterCM, protocol.CacheTargetMachineProfile, fingerprint)
+	if err != nil {
+		t.Fatalf("Read: %v", err)
+	}
+	if found {
+		t.Fatalf("expected entry written with ttl=0 to have expired after 75 minutes with 1h default TTL")
+	}
+
+	// ReadEntry should return found=true and expired=true
+	_, foundEntry, expired, err := ReadEntry[sampleData](ctx, laterCM, protocol.CacheTargetMachineProfile, fingerprint)
+	if err != nil {
+		t.Fatalf("ReadEntry: %v", err)
+	}
+	if !foundEntry || !expired {
+		t.Fatalf("expected found=true and expired=true for expired entry, got found=%v, expired=%v", foundEntry, expired)
+	}
+}
