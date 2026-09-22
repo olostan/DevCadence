@@ -28,8 +28,9 @@ func TestCoreDomainHasNoExternalDependencies(t *testing.T) {
 	for _, pkg := range coreDomainPackages {
 		t.Run(pkg, func(t *testing.T) {
 			for _, dep := range dependenciesOf(t, pkg) {
-				if !strings.Contains(dep, ".") {
-					continue // standard library paths have no dotted domain
+				firstSegment, _, _ := strings.Cut(dep, "/")
+				if !strings.Contains(firstSegment, ".") {
+					continue // standard library paths have no dotted domain in the first path segment
 				}
 				if strings.HasPrefix(dep, "github.com/olostan/DevCadience/") {
 					continue
@@ -59,7 +60,8 @@ func TestNoPackageDependsOnAModelProviderSDK(t *testing.T) {
 		"langchain", "huggingface", "modelcontextprotocol", "tiktoken",
 	}
 	for _, dep := range dependenciesOf(t, "./...") {
-		if !strings.Contains(dep, ".") {
+		firstSegment, _, _ := strings.Cut(dep, "/")
+		if !strings.Contains(firstSegment, ".") {
 			continue // standard library
 		}
 		if strings.HasPrefix(dep, "github.com/olostan/DevCadience/") {
