@@ -1,0 +1,30 @@
+{
+  "schema_version": "1.0",
+  "profile_id": "mcp_bad_6",
+  "machine_fingerprint": "sha256:ff",
+  "observed_at": "2026-09-21T10:20:00.000000Z",
+  "knowledge_revision": "r1",
+  "probe_depth": "health",
+  "environment": {
+    "observed_at": "2026-09-21T10:20:00.000000Z",
+    "host": {"family": "linux", "arch": "amd64"},
+    "cpu": {},
+    "memory": {},
+    "virtualization": {"container": "none"}
+  },
+  "accelerator_candidates": [],
+  "endpoints": [
+    {
+      "id": "ollama:local",
+      "kind": "local_runtime",
+      "locality": "local",
+      "health": "ready",
+      "auth_status": "not_applicable",
+      "structured_output": "unknown",
+      "tool_use": "unknown",
+      "cost_class": "local_compute",
+      "required_source_exposure": "local_only"
+    }
+  ],
+  "assessment": "ready"
+}

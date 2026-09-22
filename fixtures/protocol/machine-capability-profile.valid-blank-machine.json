@@ -1,0 +1,38 @@
+{
+  "schema_version": "1.0",
+  "profile_id": "mcp_01HZX000000000000000000002",
+  "machine_fingerprint": "sha256:0e1d2c3b4a59687776655443322110ffeeddccbbaa99887766554433221100ff",
+  "observed_at": "2026-09-21T10:20:00.000000Z",
+  "knowledge_revision": "backend-compatibility/2026-09-21",
+  "probe_depth": "health",
+  "environment": {
+    "observed_at": "2026-09-21T10:20:00.000000Z",
+    "host": {"family": "linux", "arch": "amd64", "distribution": "debian", "distribution_version": "13"},
+    "cpu": {"logical_cores": 4},
+    "memory": {"total_bytes": 8589934592},
+    "virtualization": {"container": "docker"},
+    "software": [
+      {"id": "git", "category": "engineering", "installed": false},
+      {"id": "ollama", "category": "cognition_runtime", "installed": false}
+    ],
+    "findings": [
+      {"component": "hardware.accelerators", "status": "absent", "detail": "no pci device with an accelerator class", "source": "/sys/bus/pci/devices"},
+      {"component": "software.git", "status": "absent", "source": "PATH"}
+    ]
+  },
+  "accelerator_candidates": [
+    {
+      "backend": "cpu",
+      "support": "supported",
+      "state": "runtime_available",
+      "reasons": ["cpu fallback is always available"],
+      "knowledge_revision": "backend-compatibility/2026-09-21"
+    }
+  ],
+  "endpoints": [],
+  "assessment": "partially_ready",
+  "limitations": [
+    "git is not installed, so deterministic repository capability is unavailable",
+    "no cognition endpoint is usable"
+  ]
+}

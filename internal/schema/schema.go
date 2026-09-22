@@ -53,6 +53,10 @@ const (
 	NameSpecificationReadiness Name = "specification-readiness"
 )
 
+// NameMachineCapabilityProfile is the M3A environment/cognition contract
+// (ADR-0011, ADR-0013).
+const NameMachineCapabilityProfile Name = "machine-capability-profile"
+
 // Names of the review-convergence schemas published ahead of their M6 Go
 // implementation.
 const (
@@ -79,6 +83,7 @@ var RecordKindToSchema = map[string]Name{
 	"Requirement":               NameRequirement,
 	"DiscoveryExperiment":       NameDiscoveryExperiment,
 	"SpecificationReadiness":    NameSpecificationReadiness,
+	"MachineCapabilityProfile":  NameMachineCapabilityProfile,
 }
 
 // Set is a compiled collection of schemas.
@@ -221,7 +226,7 @@ func AllNames() []Name {
 		NameLessonCandidate, NameProblemModel, NameAmbiguityLedger,
 		NameProductDecision, NameRequirement, NameDiscoveryExperiment,
 		NameSpecificationReadiness, NameReviewCampaign, NameFindingDisposition,
-		NameClosureDecision,
+		NameClosureDecision, NameMachineCapabilityProfile,
 	}
 	sort.Slice(names, func(i, j int) bool {
 		if len(names[i]) != len(names[j]) {

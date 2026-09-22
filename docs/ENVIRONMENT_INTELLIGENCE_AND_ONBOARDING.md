@@ -86,6 +86,37 @@ Useful evidence may include:
 
 One signal alone should not be treated as infallible when better evidence is available.
 
+### 3A. Implemented evidence model (M3A)
+
+Signals carry an explicit trust level, and only the strongest verifies:
+
+| Trust | Meaning | Can verify alone? |
+| --- | --- | --- |
+| `authoritative` | the runtime that performed the inference reported the backend it used | **yes** |
+| `corroborating` | an independent observer (OS or vendor telemetry) agrees | no |
+| `indicative` | consistent with acceleration but does not establish it — a loaded driver, an installed package | **never** |
+
+An authoritative signal is sufficient on purpose. Requiring corroboration from
+weaker observers would make the answer worse rather than safer: vendor telemetry
+read after a probe completes cannot distinguish "never offloaded" from "already
+unloaded", so demanding it would fail correct verifications and invite a
+tie-breaking heuristic.
+
+Three outcomes matter:
+
+- **verified** — authoritative offload, a verification instant, no conflicts.
+  Record validation refuses a `verified` claim missing any of these, and refuses
+  one recorded at a probe depth that never ran inference.
+- **failed** — the runtime reported that the work ran on the CPU. This is the
+  silent-fallback case, surfaced rather than hidden.
+- **unverified** — anything else, including signals that disagree. A contradiction
+  is recorded alongside it; choosing whom to believe would manufacture exactly the
+  false positive DCI-106 forbids.
+
+For Ollama the authoritative signal is `/api/ps`, which reports a resident
+model's `size` and `size_vram`. For MLX-LM it is the generating process's own
+device, read in the same process immediately after generation.
+
 ## 4. Backend candidates
 
 Backend selection is compatibility/policy data, not a hard-coded product assumption.
@@ -169,9 +200,17 @@ execution:
   health: ready
 
 policy:
-  cost_class: subscription
+  cost_class: unknown        # until an operator declares it; see below
   source_exposure: focused_or_tool_mediated
 ```
+
+Cost class is never inferred from a CLI being installed or authenticated. The same
+executable may be billed by subscription, by a metered API key, by an enterprise
+agreement or from a credit balance, and distinguishing those would require reading
+credentials that discovery must not touch. A discovered endpoint is therefore
+`cost_class: unknown`, which routing treats as more expensive than every known
+class; an operator declaration is the only path to a known class, and it is
+recorded with `configured` provenance.
 
 Roles bind to capabilities, not permanent model names.
 
@@ -402,18 +441,34 @@ The interactive UI is an adapter over typed setup/capability services. Business 
 
 This subsystem is implemented progressively.
 
-### M3A — Environment intelligence + cognition runtime
+### M3A — Environment intelligence + cognition runtime — **implemented**
 
-- hardware/software discovery;
-- accelerator/backend candidates;
-- actual acceleration verification;
-- local and remote cognition endpoint abstraction;
-- capability profiles;
-- endpoint health;
-- lightweight benchmarks;
-- capability-based routing.
+- hardware/software discovery (`internal/environment`);
+- accelerator/backend candidates, as a pure function of observed facts;
+- actual acceleration verification from an authoritative runtime signal
+  (`internal/cognition`);
+- local and remote cognition endpoint abstraction
+  (`protocol.CognitionEndpoint`, `cognition.Adapter`);
+- capability profiles (`protocol.MachineCapabilityProfile`);
+- endpoint health, as the explicit installed → configured → ready chain;
+- lightweight operational measurements;
+- capability-based routing with an explainable decision.
 
-### M3B — Guided bootstrap
+Implementation notes that qualify the prose above:
+
+- The **remote-API** kind ships as an adapter boundary plus a deterministic
+  client, not a provider implementation. No provider SDK enters the module.
+- **Measured capability** means operational properties — answers, emits valid
+  JSON once, timing, runtime-reported tokens and memory. Reasoning and coding
+  quality need evaluation history, so those grades are either declared by the
+  operator (recorded as `configured`) or stay `unknown`.
+- Coding-CLI **authentication** is `unknown` unless a probe's output says the
+  user is signed out. No supported CLI publishes a safe, non-mutating way to ask,
+  and DevCadience will not read credential files to find out.
+- Everything is **read-only**. Contracts are settled in
+  [adr/0013-environment-intelligence-and-cognition-contracts.md](adr/0013-environment-intelligence-and-cognition-contracts.md).
+
+### M3B — Guided bootstrap — **not implemented**
 
 - `setup` / `doctor`;
 - dry-run remediation plans;

@@ -1,5 +1,9 @@
 # Illustrative DevCadience project configuration.
 # This file is a design example until the configuration loader is implemented.
+#
+# The `cognition` block below is shaped to the M3A types it will load into
+# (cognition.Declaration and cognition.Policy); the rest still describes intent
+# for later milestones.
 
 schema_version: "0.1"
 
@@ -21,41 +25,46 @@ principal:
   allow_raw_source_escalation: true
 
 cognition:
-  endpoints:
-    local_small:
-      kind: local_runtime
-      runtime: ollama
-      model: "<configured-after-capability-probe>"
-      acceleration_required: false
-      preferred_context_tokens: 16384
-      max_concurrency: 1
-      cost_class: local_compute
+  # Endpoints are *discovered*, not declared: `devcadience cognition list` reports
+  # what exists, its health, its cost class and whether its acceleration was
+  # verified. The block below declares only what discovery cannot observe.
+  #
+  # Endpoint ids are "<adapter>:<instance>" as discovery reports them, for example
+  # "ollama:qwen3:4b", "mlx:mlx-community/Qwen3-4B-4bit" or "cli:codex-cli".
+  declarations:
+    - endpoint: "ollama:<model-as-discovered>"
+      # Capability grades are recorded with provenance "configured", never
+      # "measured": an operator may legitimately assert what DevCadience cannot
+      # measure, and the assertion stays traceable to whoever made it. A measured
+      # or evaluated grade is never overwritten by a declaration.
+      capabilities:
+        repository_reasoning: medium
+      context_tokens: 16384
+      max_concurrent_sessions: 1
 
-    local_strong:
-      kind: local_runtime
-      runtime: mlx
-      model: "<optional-strong-local-model>"
-      acceleration_required: true
-      preferred_context_tokens: 65536
-      max_concurrency: 1
-      cost_class: local_compute
-
-    remote_economy:
-      kind: authenticated_cli
-      provider: "<discovered-supported-endpoint>"
+    - endpoint: "cli:<coding-cli-as-discovered>"
+      capabilities:
+        implementation: strong
+        review: strong
+      # Opaque reference only. A raw key here is refused at load time rather
+      # than redacted afterwards.
       credential_ref: "<credential-reference>"
-      cost_class: subscription_or_economy
-      source_exposure: focused_or_tool_mediated
+      cost_class: subscription_included
+      source_exposure: tool_mediated_worktree
 
   routing:
-    scout:
-      prefer: [local_small, remote_economy]
-    implementer:
-      prefer: [local_strong, remote_economy]
-    correctness_reviewer:
-      prefer: [local_strong, remote_economy]
-    architecture_reviewer:
-      prefer: [remote_economy]
+    # The maximum classes this project permits. Both are hard constraints, and an
+    # unset policy fails closed to local_only / local_compute.
+    max_source_exposure: focused_snippets
+    max_cost_class: remote_economy
+
+    # Preference orders *eligible* endpoints. It cannot make an ineligible
+    # endpoint eligible, so it can never route around the privacy policy.
+    prefer:
+      scout: ["ollama:<model-as-discovered>", "cli:<coding-cli-as-discovered>"]
+      implementer: ["cli:<coding-cli-as-discovered>"]
+      correctness_reviewer: ["cli:<coding-cli-as-discovered>"]
+      architecture_reviewer: ["cli:<coding-cli-as-discovered>"]
 
 setup:
   allow_privileged_auto_apply: false

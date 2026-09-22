@@ -45,6 +45,7 @@ func TestSchemaTopLevelFieldsMatchTheGoTwin(t *testing.T) {
 		{"requirement.schema.json", &protocol.Requirement{}},
 		{"discovery-experiment.schema.json", &protocol.DiscoveryExperiment{}},
 		{"specification-readiness.schema.json", &protocol.SpecificationReadiness{}},
+		{"machine-capability-profile.schema.json", &protocol.MachineCapabilityProfile{}},
 	} {
 		t.Run(tc.schema, func(t *testing.T) {
 			published := topLevelProperties(t, tc.schema)

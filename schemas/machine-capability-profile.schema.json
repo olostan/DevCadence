@@ -1,0 +1,386 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/olostan/DevCadience/schemas/machine-capability-profile.schema.json",
+  "title": "DevCadience MachineCapabilityProfile",
+  "description": "Machine-scoped assessment of observed hardware, installed software and usable cognition endpoints. Facts, assessment and evidence are separate: `environment` is observed fact, `accelerator_candidates` and `endpoints` are assessment, and every capability or acceleration claim carries the provenance it rests on (ADR-0011, ADR-0013, DCI-106). The profile carries no project_id: hardware and installed runtimes are the same for every project on the host, and per-project differences are policy, not capability.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "profile_id",
+    "machine_fingerprint",
+    "observed_at",
+    "knowledge_revision",
+    "probe_depth",
+    "environment",
+    "accelerator_candidates",
+    "endpoints",
+    "assessment"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "profile_id": {"type": "string", "minLength": 1},
+    "machine_fingerprint": {
+      "description": "Digest over the stable facts of the machine. Volatile observations such as available memory are excluded so that the fingerprint identifies the machine rather than the moment.",
+      "type": "string",
+      "minLength": 1
+    },
+    "observed_at": {"type": "string", "format": "date-time"},
+    "knowledge_revision": {
+      "description": "Revision of the backend-compatibility knowledge that produced the assessment, so a later revision's different answer is explainable.",
+      "type": "string",
+      "minLength": 1
+    },
+    "probe_depth": {
+      "description": "How much work discovery was authorised to do. A profile at inventory or health depth cannot contain a verified backend, because verification requires an inference probe.",
+      "enum": ["inventory", "health", "inference"]
+    },
+    "environment": {"$ref": "#/$defs/environmentFacts"},
+    "accelerator_candidates": {"type": "array", "items": {"$ref": "#/$defs/acceleratorCandidate"}},
+    "endpoints": {"type": "array", "items": {"$ref": "#/$defs/cognitionEndpoint"}},
+    "assessment": {
+      "enum": [
+        "ready",
+        "ready_with_reduced_capability",
+        "model_cognition_unavailable",
+        "partially_ready",
+        "unknown"
+      ]
+    },
+    "limitations": {"type": "array", "items": {"type": "string"}}
+  },
+  "$defs": {
+    "finding": {
+      "description": "Outcome of one discovery probe, including failure. Recording failure per component is what keeps a missing vendor tool from failing unrelated discovery (DCI-104).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["component", "status"],
+      "properties": {
+        "component": {"type": "string", "minLength": 1},
+        "status": {
+          "enum": ["observed", "absent", "permission_denied", "malformed", "timeout", "unsupported", "error"]
+        },
+        "detail": {"type": "string", "maxLength": 2048},
+        "source": {"type": "string", "maxLength": 1024}
+      }
+    },
+    "environmentFacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["observed_at", "host", "cpu", "memory", "virtualization"],
+      "properties": {
+        "observed_at": {"type": "string", "format": "date-time"},
+        "host": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["family", "arch"],
+          "properties": {
+            "family": {"enum": ["linux", "darwin", "windows", "unknown"]},
+            "arch": {"type": "string", "minLength": 1},
+            "version": {"type": "string", "maxLength": 256},
+            "distribution": {"type": "string", "maxLength": 256},
+            "distribution_version": {"type": "string", "maxLength": 256},
+            "kernel": {"type": "string", "maxLength": 256}
+          }
+        },
+        "cpu": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "model": {"type": "string", "maxLength": 256},
+            "vendor": {"type": "string", "maxLength": 256},
+            "logical_cores": {"type": "integer", "minimum": 1},
+            "physical_cores": {"type": "integer", "minimum": 1},
+            "features": {"type": "array", "items": {"type": "string", "maxLength": 64}}
+          }
+        },
+        "memory": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "total_bytes": {"type": "integer", "minimum": 0},
+            "available_bytes": {"type": "integer", "minimum": 0},
+            "swap_total_bytes": {"type": "integer", "minimum": 0}
+          }
+        },
+        "storage": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["path"],
+            "properties": {
+              "path": {"type": "string", "minLength": 1},
+              "total_bytes": {"type": "integer", "minimum": 0},
+              "available_bytes": {"type": "integer", "minimum": 0}
+            }
+          }
+        },
+        "virtualization": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["container"],
+          "properties": {
+            "container": {"enum": ["none", "docker", "podman", "lxc", "other", "unknown"]},
+            "wsl": {"type": "boolean"},
+            "virtual_machine": {"type": ["boolean", "null"]},
+            "native_architecture": {"type": ["boolean", "null"]},
+            "detail": {"type": "string", "maxLength": 1024}
+          }
+        },
+        "accelerators": {
+          "type": "array",
+          "items": {
+            "description": "A discovered device. Device presence says nothing about whether any runtime can use it.",
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "vendor", "class"],
+            "properties": {
+              "id": {"type": "string", "minLength": 1},
+              "vendor": {"enum": ["apple", "nvidia", "amd", "intel", "other", "unknown"]},
+              "class": {"enum": ["discrete", "integrated", "unified", "unknown"]},
+              "name": {"type": "string", "maxLength": 256},
+              "vendor_id": {"type": "string", "maxLength": 32},
+              "device_id": {"type": "string", "maxLength": 32},
+              "driver_in_use": {"type": "string", "maxLength": 128},
+              "architecture": {"type": "string", "maxLength": 64},
+              "memory_bytes": {"type": "integer", "minimum": 0},
+              "sources": {"type": "array", "items": {"type": "string", "maxLength": 512}}
+            }
+          }
+        },
+        "device_nodes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["path", "present"],
+            "properties": {
+              "path": {"type": "string", "minLength": 1},
+              "present": {"type": "boolean"},
+              "readable": {"type": ["boolean", "null"]},
+              "writable": {"type": ["boolean", "null"]}
+            }
+          }
+        },
+        "software": {
+          "type": "array",
+          "items": {
+            "description": "Installed is not usable: a binary on PATH says nothing about server readiness, model availability or authentication.",
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "category", "installed"],
+            "properties": {
+              "id": {"type": "string", "minLength": 1},
+              "category": {
+                "enum": ["engineering", "cognition_runtime", "cognition_cli", "principal_host", "acceleration"]
+              },
+              "installed": {"type": "boolean"},
+              "path": {"type": "string", "maxLength": 4096},
+              "version": {"type": "string", "maxLength": 256},
+              "version_status": {"enum": ["compatible", "incompatible", "unknown"]},
+              "detail": {"type": "string", "maxLength": 1024}
+            }
+          }
+        },
+        "findings": {"type": "array", "items": {"$ref": "#/$defs/finding"}}
+      }
+    },
+    "acceleratorCandidate": {
+      "description": "An assessed possibility. `state` never exceeds the evidence: only an inference probe can raise it to verified (DCI-106).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["backend", "support", "state"],
+      "properties": {
+        "backend": {"$ref": "#/$defs/backend"},
+        "device_id": {"type": "string", "maxLength": 256},
+        "support": {"enum": ["supported", "uncertain", "unsupported", "unknown"]},
+        "state": {"$ref": "#/$defs/accelerationState"},
+        "reasons": {"type": "array", "items": {"type": "string", "maxLength": 1024}},
+        "required_software": {"type": "array", "items": {"type": "string", "maxLength": 128}},
+        "knowledge_revision": {"type": "string", "maxLength": 128}
+      }
+    },
+    "backend": {"enum": ["cpu", "metal", "cuda", "rocm", "vulkan", "unknown"]},
+    "accelerationState": {
+      "enum": [
+        "not_detected",
+        "candidate",
+        "runtime_available",
+        "unverified",
+        "verified",
+        "failed",
+        "unsupported",
+        "unknown"
+      ]
+    },
+    "accelerationEvidence": {
+      "description": "The acceleration claim for one endpoint plus everything it rests on. A verified state requires an authoritative offload signal, a verification instant and no recorded conflicts.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["backend", "state"],
+      "properties": {
+        "backend": {"$ref": "#/$defs/backend"},
+        "state": {"$ref": "#/$defs/accelerationState"},
+        "signals": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["source", "trust", "backend", "offloaded"],
+            "properties": {
+              "source": {"type": "string", "minLength": 1, "maxLength": 512},
+              "trust": {"enum": ["authoritative", "corroborating", "indicative"]},
+              "backend": {"$ref": "#/$defs/backend"},
+              "offloaded": {"type": "boolean"},
+              "statement": {"type": "string", "maxLength": 2048}
+            }
+          }
+        },
+        "conflicts": {"type": "array", "items": {"type": "string", "maxLength": 1024}},
+        "verified_at": {"type": ["string", "null"], "format": "date-time"},
+        "runtime_version": {"type": "string", "maxLength": 256},
+        "device_id": {"type": "string", "maxLength": 256},
+        "probe_refs": {"type": "array", "items": {"type": "string", "maxLength": 512}}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"state": {"const": "verified"}}, "required": ["state"]},
+          "then": {"required": ["verified_at", "signals"]}
+        }
+      ]
+    },
+    "cognitionEndpoint": {
+      "description": "One discovered source of model cognition. No field may be inferred from another: in particular an authenticated CLI implies nothing about which commercial plan backs it, so no subscription field exists.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "kind",
+        "locality",
+        "health",
+        "auth_status",
+        "structured_output",
+        "tool_use",
+        "cost_class",
+        "required_source_exposure",
+        "observed_at"
+      ],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "kind": {"enum": ["local_runtime", "authenticated_cli", "remote_api"]},
+        "provider": {"type": "string", "maxLength": 128},
+        "runtime": {"type": "string", "maxLength": 128},
+        "version": {"type": "string", "maxLength": 256},
+        "model_id": {"type": "string", "maxLength": 256},
+        "model_family": {"type": "string", "maxLength": 128},
+        "account_ref": {
+          "description": "Opaque non-secret handle for the account in use. Never a token, key or email address.",
+          "type": "string",
+          "maxLength": 256
+        },
+        "credential_ref": {
+          "description": "Opaque reference to a credential held elsewhere. Never a secret value.",
+          "type": "string",
+          "maxLength": 256
+        },
+        "locality": {"enum": ["local", "remote_inference_local_tools", "remote"]},
+        "health": {
+          "enum": [
+            "not_installed",
+            "installed",
+            "not_configured",
+            "unhealthy",
+            "unverified",
+            "ready",
+            "unsupported",
+            "unknown"
+          ]
+        },
+        "auth_status": {
+          "enum": ["not_applicable", "authenticated", "unauthenticated", "expired", "unknown", "error"]
+        },
+        "capabilities": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["dimension", "grade", "provenance"],
+            "properties": {
+              "dimension": {
+                "enum": ["repository_reasoning", "implementation", "review", "architecture"]
+              },
+              "grade": {"enum": ["unknown", "unsupported", "low", "medium", "strong"]},
+              "provenance": {"enum": ["unknown", "configured", "measured", "evaluated"]},
+              "source": {"type": "string", "maxLength": 512}
+            },
+            "not": {
+              "description": "A graded capability requires provenance; a grade resting on nothing would read as evidence (DCI-012).",
+              "properties": {
+                "grade": {"enum": ["unsupported", "low", "medium", "strong"]},
+                "provenance": {"const": "unknown"}
+              },
+              "required": ["grade", "provenance"]
+            }
+          }
+        },
+        "structured_output": {"$ref": "#/$defs/featureSupport"},
+        "tool_use": {"$ref": "#/$defs/featureSupport"},
+        "context_tokens": {"type": "integer", "minimum": 1},
+        "max_concurrent_sessions": {"type": "integer", "minimum": 1},
+        "cost_class": {
+          "enum": [
+            "local_compute",
+            "subscription_included",
+            "remote_economy",
+            "remote_strong",
+            "frontier_expensive",
+            "unknown"
+          ]
+        },
+        "required_source_exposure": {
+          "enum": [
+            "local_only",
+            "semantic_evidence_only",
+            "focused_snippets",
+            "selected_files",
+            "tool_mediated_worktree",
+            "unrestricted_authorized"
+          ]
+        },
+        "acceleration": {"$ref": "#/$defs/accelerationEvidence"},
+        "measurements": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "value", "unit"],
+            "properties": {
+              "name": {"type": "string", "minLength": 1, "maxLength": 128},
+              "value": {"type": "number"},
+              "unit": {"type": "string", "minLength": 1, "maxLength": 64},
+              "source": {"type": "string", "maxLength": 512}
+            }
+          }
+        },
+        "observed_at": {"type": "string", "format": "date-time"},
+        "verified_at": {"type": ["string", "null"], "format": "date-time"},
+        "probe_refs": {"type": "array", "items": {"type": "string", "maxLength": 512}},
+        "findings": {"type": "array", "items": {"$ref": "#/$defs/finding"}}
+      },
+      "allOf": [
+        {
+          "description": "Acceleration describes local execution; a remote endpoint must not carry it.",
+          "if": {"required": ["acceleration"]},
+          "then": {"properties": {"locality": {"const": "local"}}}
+        },
+        {
+          "description": "A local runtime has no account to authenticate.",
+          "if": {"properties": {"kind": {"const": "local_runtime"}}, "required": ["kind"]},
+          "then": {"properties": {"auth_status": {"enum": ["not_applicable", "unknown"]}}}
+        }
+      ]
+    },
+    "featureSupport": {"enum": ["unknown", "unsupported", "declared", "probe_passed", "probe_failed"]}
+  }
+}

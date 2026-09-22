@@ -345,7 +345,171 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "cognition": {
+          "description": "Compact projection of discovered cognition capability (ADR-0011, ADR-0013). It carries endpoint identity, usability, cost and exposure plus the freshness metadata needed to tell whether it still describes the machine in front of the reader. Capability grades, probe signals, measurements and machine inventory stay in the MachineCapabilityProfile, retrievable by profile_ref.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "assessment"
+          ],
+          "properties": {
+            "assessment": {
+              "enum": [
+                "ready",
+                "ready_with_reduced_capability",
+                "model_cognition_unavailable",
+                "partially_ready",
+                "unknown"
+              ]
+            },
+            "observed_at": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "date-time"
+            },
+            "machine_fingerprint": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "profile_ref": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "endpoints": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "id",
+                  "kind",
+                  "locality",
+                  "health",
+                  "auth_status",
+                  "cost_class",
+                  "required_source_exposure"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "kind": {
+                    "enum": [
+                      "local_runtime",
+                      "authenticated_cli",
+                      "remote_api"
+                    ]
+                  },
+                  "locality": {
+                    "enum": [
+                      "local",
+                      "remote_inference_local_tools",
+                      "remote"
+                    ]
+                  },
+                  "health": {
+                    "enum": [
+                      "not_installed",
+                      "installed",
+                      "not_configured",
+                      "unhealthy",
+                      "unverified",
+                      "ready",
+                      "unsupported",
+                      "unknown"
+                    ]
+                  },
+                  "auth_status": {
+                    "enum": [
+                      "not_applicable",
+                      "authenticated",
+                      "unauthenticated",
+                      "expired",
+                      "unknown",
+                      "error"
+                    ]
+                  },
+                  "cost_class": {
+                    "enum": [
+                      "local_compute",
+                      "subscription_included",
+                      "remote_economy",
+                      "remote_strong",
+                      "frontier_expensive",
+                      "unknown"
+                    ]
+                  },
+                  "required_source_exposure": {
+                    "enum": [
+                      "local_only",
+                      "semantic_evidence_only",
+                      "focused_snippets",
+                      "selected_files",
+                      "tool_mediated_worktree",
+                      "unrestricted_authorized"
+                    ]
+                  },
+                  "acceleration_verified": {
+                    "type": "boolean"
+                  },
+                  "acceleration_backend": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "enum": [
+                      "cpu",
+                      "metal",
+                      "cuda",
+                      "rocm",
+                      "vulkan",
+                      "unknown",
+                      null
+                    ]
+                  }
+                },
+                "allOf": [
+                  {
+                    "description": "Verified local acceleration is impossible for an endpoint whose inference is not local.",
+                    "if": {
+                      "properties": {
+                        "acceleration_verified": {
+                          "const": true
+                        }
+                      },
+                      "required": [
+                        "acceleration_verified"
+                      ]
+                    },
+                    "then": {
+                      "properties": {
+                        "locality": {
+                          "const": "local"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "limitations": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        },
         "local_models": {
+          "deprecated": true,
+          "description": "Deprecated M1 representation, superseded by `cognition` (ADR-0013 §4). Retained so ProjectState documents written before M3A remain readable under strict decoding (DCI-092, DCI-093). Never written by current builds.",
           "type": "array",
           "items": {
             "type": "object",
@@ -368,6 +532,8 @@
           }
         },
         "consultants": {
+          "deprecated": true,
+          "description": "Deprecated M1 representation, superseded by `cognition` (ADR-0013 §4). Consultant selection is an M6 policy over discovered endpoints, not a separate capability list. Never written by current builds.",
           "type": "array",
           "items": {
             "type": "object",

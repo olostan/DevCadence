@@ -261,6 +261,25 @@ be local or remote according to capability, privacy, cost and policy.
 
 ### M3A — Environment intelligence + cognition runtime
 
+**Status: implemented.** See
+[adr/0013-environment-intelligence-and-cognition-contracts.md](adr/0013-environment-intelligence-and-cognition-contracts.md)
+for the durable contracts it settled, and `internal/environment`,
+`internal/cognition`, `internal/principalhosts` for the implementation.
+
+Two deliverables below are narrower than the heading suggests, deliberately:
+
+- The **remote-API** kind ships as the adapter boundary plus a deterministic
+  client rather than a provider implementation. The domain question — can a
+  remote API be discovered, described, health-checked, cost-classed,
+  privacy-constrained and routed like any other endpoint? — is answered by the
+  boundary, and implementing one vendor's HTTP surface would have added a
+  dependency and a credential path without proving anything further.
+- **Measured capability profiles** cover *operational* properties: does the
+  endpoint answer, does it emit valid JSON once, how long did it take, what did
+  the runtime report about tokens and memory. Reasoning and coding quality
+  require evaluation history, which no milestone has built yet, so those grades
+  come from explicit operator declaration or stay `unknown`.
+
 #### Deliverables
 - hardware/environment discovery:
   - OS/distribution/architecture;
@@ -302,7 +321,22 @@ DevCadience can describe the machine and available cognition endpoints from
 observed evidence, verify local acceleration where configured, and route roles
 without assuming a strong local coder exists.
 
+**Met.** Every verification case above is covered by a deterministic test against
+fixture machines in `internal/environment/fixtures.go`; the suite needs no GPU, no
+runtime, no Python, no credentials and no network. The read-only proof surface is
+`devcadience environment inspect`, `cognition list`, `cognition probe` and
+`cognition route`.
+
 ### M3B — Guided bootstrap and onboarding
+
+**Status: not implemented.** M3A deliberately stops at facts, assessment and
+routing: it mutates nothing, installs nothing, downloads nothing and
+authenticates nothing. `setup` and `doctor` do not exist.
+
+M3B inherits from M3A the pieces it needs: `MachineFingerprint` for cache
+invalidation, `ProbeDepth` for progressive cost, `cognition.Declaration` for
+operator-supplied capability and policy, `AcceleratorCandidate.RequiredSoftware`
+for what to remediate, and the versioned compatibility tables to extend.
 
 #### Deliverables
 - `devcadience doctor`;

@@ -1,0 +1,61 @@
+{
+  "schema_version": "1.0",
+  "project_id": "hybrid-thin",
+  "state_revision": "ps_000000042",
+  "generated_at": "2026-09-21T11:00:00.000000Z",
+  "event_high_watermark": "42",
+  "git": {
+    "accepted_commit": "e3ff48c8ef39e10b38b3b4dddec5f51fc2b5f949",
+    "branch": "main"
+  },
+  "milestone": {
+    "id": "M3A",
+    "title": "Environment intelligence and cognition runtime",
+    "completed_tasks": 0,
+    "total_tasks": 1
+  },
+  "tasks": {
+    "ready": [],
+    "running": [],
+    "blocked": [],
+    "awaiting_principal": []
+  },
+  "validation": {
+    "status": "unknown"
+  },
+  "risks": [],
+  "decisions_required": [],
+  "capabilities": {
+    "cognition": {
+      "assessment": "ready_with_reduced_capability",
+      "observed_at": "2026-09-21T10:59:00.000000Z",
+      "machine_fingerprint": "sha256:0e1d2c3b4a59687776655443322110ffeeddccbbaa99887766554433221100ff",
+      "profile_ref": "artifact:machine-capability-profile:sha256:9f1c",
+      "endpoints": [
+        {
+          "id": "cli:example-coding-cli",
+          "kind": "authenticated_cli",
+          "locality": "remote_inference_local_tools",
+          "health": "ready",
+          "auth_status": "authenticated",
+          "cost_class": "subscription_included",
+          "required_source_exposure": "tool_mediated_worktree"
+        },
+        {
+          "id": "ollama:local-small",
+          "kind": "local_runtime",
+          "locality": "local",
+          "health": "ready",
+          "auth_status": "not_applicable",
+          "cost_class": "local_compute",
+          "required_source_exposure": "local_only",
+          "acceleration_verified": true,
+          "acceleration_backend": "vulkan"
+        }
+      ],
+      "limitations": [
+        "no local endpoint has a graded implementation capability"
+      ]
+    }
+  }
+}

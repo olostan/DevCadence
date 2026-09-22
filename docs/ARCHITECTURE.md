@@ -287,6 +287,30 @@ Stores structured claims and references to raw artifacts without forcing raw art
 ### 6.7 Cognition runtime and capability router
 Executes role-specific workers through replaceable cognition endpoints and harness adapters. Endpoints may be local runtimes, authenticated CLIs or remote APIs. Role requirements, privacy policy, cost and measured capability drive routing; a strong local LLM is not required for control-plane validity.
 
+As implemented in M3A, this component decomposes into three boundaries with a
+one-directional dependency, so that no layer can quietly assume what the one below
+it merely made plausible:
+
+```text
+internal/environment    observed facts  +  pure backend assessment
+        │               (SysProbe / CommandProbe; no os/exec, no runtime.GOOS)
+        ▼
+internal/cognition      Adapter contract, acceleration evidence, capability
+        │               routing, profile assembly, ProjectState projection
+        ▼
+  ollama/ mlx/          the only packages that know a runtime, CLI or provider;
+  codingcli/ remoteapi/ selected at the edge in cmd/devcadience
+```
+
+`internal/principalhosts` sits beside rather than inside this: a principal host is
+a frontend a human drives, not a source of cognition (DCI-107).
+
+Assessment is a pure function of facts and may never claim more than
+`runtime_available`; only an inference probe can verify a backend. Machine
+profiles are computed on demand rather than persisted, with large raw probe
+evidence in the M2 artifact store and a compact projection in ProjectState. See
+[adr/0013-environment-intelligence-and-cognition-contracts.md](adr/0013-environment-intelligence-and-cognition-contracts.md).
+
 Environment discovery, acceleration verification and guided onboarding are defined in [ENVIRONMENT_INTELLIGENCE_AND_ONBOARDING.md](ENVIRONMENT_INTELLIGENCE_AND_ONBOARDING.md).
 
 ### 6.8 Repository/worktree manager

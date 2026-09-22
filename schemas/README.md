@@ -17,6 +17,29 @@ This directory contains versioned machine-readable contracts for durable DevCadi
 - `finding-disposition.schema.json`
 - `closure-decision.schema.json`
 
+### Environment and cognition capability
+
+- `machine-capability-profile.schema.json`
+
+This one contract is **machine-scoped rather than project-scoped**, so it carries
+no `project_id`: the hardware and installed runtimes are identical for every
+project on a host, and what differs per project is policy, not capability. It
+holds observed environment facts, assessed backend candidates, discovered
+cognition endpoints and a readiness verdict.
+
+Two of its constraints are enforced in the schema rather than only in Go, because
+they are the ones a careless writer would violate:
+
+- a graded capability with `provenance: unknown` is rejected — a grade resting on
+  nothing would read as evidence (DCI-012);
+- `acceleration.state: verified` requires `signals` and `verified_at`, and an
+  endpoint carrying acceleration evidence must be `locality: local` (DCI-106).
+
+The Go validation adds what JSON Schema cannot express: a verified state must
+carry an *authoritative* offload signal for the same backend, must have no
+recorded conflicts, and cannot appear in a profile whose `probe_depth` never ran
+inference.
+
 ### Engineering and delivery
 
 - `project-state.schema.json`
@@ -51,6 +74,15 @@ Settled by [ADR-0003](../docs/adr/0003-durable-record-compatibility.md).
 4. **Absent, `null` and zero are the same statement** for an *optional* field: all three mean "nothing is asserted here". Writers emit the shortest form, so `"dirty": false`, `"migration": null` and an omitted key are interchangeable on the wire. Required fields are always emitted, including zero values — `completed_tasks: 0` is an assertion.
 5. **Required arrays are `[]`, never `null`.**
 6. **Migration produces new records**, never rewrites historical evidence. A durable record keeps the `schema_version` it was created under.
+7. **A superseded field is deprecated, not removed.** `project-state`'s
+   `capabilities.local_models` and `capabilities.consultants` were superseded by
+   `capabilities.cognition` in M3A ([ADR-0013](../docs/adr/0013-environment-intelligence-and-cognition-contracts.md) §4).
+   They remain published and marked `deprecated`, and current builds never write
+   them: because readers are strict, deleting them would make every ProjectState
+   document written before M3A unreadable, which rules 1 and 4 of the
+   compatibility policy exist to prevent. Adding `cognition` is
+   additive-optional, so no version bump was required and pre-M3A fixtures still
+   validate.
 
 ## Canonical form and digests
 

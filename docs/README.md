@@ -89,6 +89,7 @@ flowchart TB
 3. [SETUP.md](SETUP.md)
 4. [SECURITY.md](SECURITY.md)
 5. [adr/0011-adaptive-environment-and-host-independent-cognition.md](adr/0011-adaptive-environment-and-host-independent-cognition.md)
+6. [adr/0013-environment-intelligence-and-cognition-contracts.md](adr/0013-environment-intelligence-and-cognition-contracts.md)
 
 ### Working on frontier/principal behavior
 1. [PRINCIPAL_ENGINEER.md](PRINCIPAL_ENGINEER.md)
@@ -149,6 +150,7 @@ hierarchy below.
 | [0010](adr/0010-bounded-review-convergence.md) | Bounded review campaigns, adjudication, rising reopen thresholds and closure/freeze |
 | [0011](adr/0011-adaptive-environment-and-host-independent-cognition.md) | Adaptive environment intelligence, capability-routed cognition, blank-machine onboarding and host independence |
 | [0012](adr/0012-mandatory-brownfield-adoption-baseline.md) | Mandatory version-controlled canonical baseline before brownfield managed work |
+| [0013](adr/0013-environment-intelligence-and-cognition-contracts.md) | Environment facts vs assessment, evidenced acceleration, capability provenance, cognition persistence boundaries and explainable routing |
 
 ## Normative hierarchy
 

@@ -58,6 +58,8 @@ func commands() []command {
 		{"run", "run one controlled command in a working directory", runRun},
 		{"validate", "execute a validation profile and record its ValidationResult", runValidate},
 		{"candidate", "show deterministic candidate/diff/integration metadata", runCandidate},
+		{"environment", "inspect observed hardware, software and backend candidates", runEnvironment},
+		{"cognition", "list, probe and route discovered cognition endpoints", runCognition},
 	}
 }
 

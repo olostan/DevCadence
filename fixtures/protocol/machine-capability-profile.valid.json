@@ -1,0 +1,139 @@
+{
+  "schema_version": "1.0",
+  "profile_id": "mcp_01HZX000000000000000000001",
+  "machine_fingerprint": "sha256:6b4c5d2e1f0a9b8c7d6e5f4a3b2c1d0e9f8a7b6c5d4e3f2a1b0c9d8e7f6a5b4c",
+  "observed_at": "2026-09-21T10:15:00.000000Z",
+  "knowledge_revision": "backend-compatibility/2026-09-21",
+  "probe_depth": "inference",
+  "environment": {
+    "observed_at": "2026-09-21T10:15:00.000000Z",
+    "host": {
+      "family": "darwin",
+      "arch": "arm64",
+      "version": "15.6",
+      "kernel": "24.6.0"
+    },
+    "cpu": {
+      "model": "Apple M3 Max",
+      "vendor": "apple",
+      "logical_cores": 14,
+      "physical_cores": 14,
+      "features": ["neon"]
+    },
+    "memory": {
+      "total_bytes": 51539607552,
+      "available_bytes": 30064771072,
+      "swap_total_bytes": 0
+    },
+    "storage": [
+      {"path": "/", "total_bytes": 994662584320, "available_bytes": 412316860416}
+    ],
+    "virtualization": {
+      "container": "none",
+      "virtual_machine": false,
+      "native_architecture": true
+    },
+    "accelerators": [
+      {
+        "id": "apple:gpu",
+        "vendor": "apple",
+        "class": "unified",
+        "name": "Apple M3 Max GPU",
+        "sources": ["darwin:sysctl"]
+      }
+    ],
+    "software": [
+      {"id": "git", "category": "engineering", "installed": true, "path": "/usr/bin/git", "version": "2.51.0", "version_status": "compatible"},
+      {"id": "ollama", "category": "cognition_runtime", "installed": true, "path": "/usr/local/bin/ollama", "version": "0.12.3", "version_status": "compatible"},
+      {"id": "mlx-lm", "category": "cognition_runtime", "installed": false, "detail": "python import of mlx_lm failed"}
+    ],
+    "findings": [
+      {"component": "software.mlx-lm", "status": "absent", "detail": "no module named mlx_lm", "source": "python3 -c"}
+    ]
+  },
+  "accelerator_candidates": [
+    {
+      "backend": "metal",
+      "device_id": "apple:gpu",
+      "support": "supported",
+      "state": "verified",
+      "reasons": ["apple silicon device present", "native architecture confirmed"],
+      "knowledge_revision": "backend-compatibility/2026-09-21"
+    },
+    {
+      "backend": "cpu",
+      "support": "supported",
+      "state": "runtime_available",
+      "reasons": ["cpu fallback is always available"],
+      "knowledge_revision": "backend-compatibility/2026-09-21"
+    }
+  ],
+  "endpoints": [
+    {
+      "id": "ollama:local-small",
+      "kind": "local_runtime",
+      "provider": "ollama",
+      "runtime": "ollama",
+      "version": "0.12.3",
+      "model_id": "qwen3:4b",
+      "model_family": "qwen3",
+      "locality": "local",
+      "health": "ready",
+      "auth_status": "not_applicable",
+      "capabilities": [
+        {"dimension": "repository_reasoning", "grade": "medium", "provenance": "configured", "source": "cognition.endpoints.local_small"}
+      ],
+      "structured_output": "probe_passed",
+      "tool_use": "unknown",
+      "context_tokens": 16384,
+      "max_concurrent_sessions": 1,
+      "cost_class": "local_compute",
+      "required_source_exposure": "local_only",
+      "acceleration": {
+        "backend": "metal",
+        "state": "verified",
+        "signals": [
+          {
+            "source": "ollama:/api/ps",
+            "trust": "authoritative",
+            "backend": "metal",
+            "offloaded": true,
+            "statement": "resident model reports size_vram=3220000000 of size=3220000000"
+          }
+        ],
+        "verified_at": "2026-09-21T10:15:04.000000Z",
+        "runtime_version": "0.12.3",
+        "device_id": "apple:gpu"
+      },
+      "measurements": [
+        {"name": "load_duration_ms", "value": 412.5, "unit": "ms", "source": "ollama:/api/generate"},
+        {"name": "generation_tokens_per_second", "value": 61.4, "unit": "tokens/s", "source": "ollama:/api/generate"}
+      ],
+      "observed_at": "2026-09-21T10:15:02.000000Z",
+      "verified_at": "2026-09-21T10:15:04.000000Z"
+    },
+    {
+      "id": "cli:example-coding-cli",
+      "kind": "authenticated_cli",
+      "provider": "example",
+      "runtime": "example-cli",
+      "version": "1.4.0",
+      "account_ref": "acct_ref_7f3a",
+      "locality": "remote_inference_local_tools",
+      "health": "ready",
+      "auth_status": "unknown",
+      "structured_output": "declared",
+      "tool_use": "declared",
+      "cost_class": "subscription_included",
+      "required_source_exposure": "tool_mediated_worktree",
+      "observed_at": "2026-09-21T10:15:06.000000Z",
+      "findings": [
+        {"component": "endpoint.cli:example-coding-cli.auth", "status": "unsupported", "detail": "no non-mutating auth status command is published for this CLI"}
+      ]
+    }
+  ],
+  "assessment": "ready_with_reduced_capability",
+  "limitations": [
+    "no endpoint has an evaluated implementation capability grade"
+  ]
+}

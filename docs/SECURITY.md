@@ -194,6 +194,32 @@ Security controls:
 
 Environment discovery is read-only.
 
+As implemented in M3A, that means concretely:
+
+- every external probe goes through the M2 controlled runner with explicit argv,
+  no shell, a controlled environment, a hard timeout and bounded captured output;
+- probe command tables are **typed Go values**, never configuration, so nothing in
+  a repository file, a YAML document or a model response can become an executed
+  command;
+- probe commands run in a temporary directory, not a repository, so a version or
+  health check cannot see project source;
+- version strings, model names and error text are sanitised — control characters
+  stripped, length bounded — before reaching a durable record or an operator's
+  terminal (DCI-083);
+- capability probes send only a fixed synthetic prompt containing no repository
+  content, no path and no project vocabulary;
+- the only model execution is against a model that already exists locally, only at
+  an explicitly requested probe depth. No download, no install, no service start,
+  no configuration write, no authentication;
+- a local runtime endpoint must be a loopback address, so a "local" endpoint
+  cannot become an undeclared network egress path;
+- credential and account references must be opaque. A secret-shaped value is
+  refused at the configuration and adapter boundary rather than redacted after the
+  fact, because a redaction running after the value was copied into a record is
+  too late (DCI-081);
+- an adapter may report an authentication *downgrade* from probe output but never
+  a promotion: provider text claiming a valid session is data, not authority.
+
 Setup/remediation actions are classified by authority and impact. The operator must see the plan before mutations occur.
 
 Explicit approval is required for actions such as:

@@ -37,6 +37,31 @@ const (
 	// CategoryWorktreeConflict reports a Git worktree or base-divergence
 	// conflict. Reserved for M2.
 	CategoryWorktreeConflict Category = "worktree_conflict"
+	// CategoryUnsupported reports that a discovered integration exists but at
+	// a version or in a configuration this build cannot use. It is distinct
+	// from CategoryNotFound ("absent"): absence may be remediated by
+	// installing something, an unsupported version may not.
+	CategoryUnsupported Category = "unsupported"
+	// CategoryUnauthenticated reports that an endpoint exists and is healthy
+	// but has no usable authenticated session. It is deliberately not
+	// CategoryPolicyDenied: nothing forbade the action, the caller simply has
+	// no credentials for it, and the two lead to different remediation.
+	CategoryUnauthenticated Category = "unauthenticated"
+	// CategoryProbeFailed reports that a capability probe ran and did not
+	// establish its fact. It is not an internal error: a runtime that answers
+	// incorrectly, or malformed output from an external tool, is an observed
+	// fact about the environment (DCI-104).
+	CategoryProbeFailed Category = "probe_failed"
+	// CategoryProbeTimeout reports that a probe exceeded its bound. It is
+	// separate from CategoryProbeFailed because a timeout says nothing about
+	// whether the capability works — only that it did not answer in time.
+	CategoryProbeTimeout Category = "probe_timeout"
+	// CategoryNoEligibleEndpoint reports that capability routing found no
+	// endpoint satisfying the role's hard constraints. This is a normal,
+	// explainable outcome — for example when project privacy policy forbids
+	// every remote endpoint — and must not be reported as an internal failure
+	// (DCI-104).
+	CategoryNoEligibleEndpoint Category = "no_eligible_endpoint"
 	// CategorySchemaVersionUnsupported reports a durable record whose
 	// schema_version this build cannot interpret (DCI-092, DCI-093).
 	CategorySchemaVersionUnsupported Category = "schema_version_unsupported"
@@ -67,6 +92,11 @@ var (
 	ErrConsultantUnavailable    = &Error{Category: CategoryConsultantUnavailable, Message: "consultant unavailable"}
 	ErrModelUnavailable         = &Error{Category: CategoryModelUnavailable, Message: "model unavailable"}
 	ErrWorktreeConflict         = &Error{Category: CategoryWorktreeConflict, Message: "worktree conflict"}
+	ErrUnsupported              = &Error{Category: CategoryUnsupported, Message: "unsupported"}
+	ErrUnauthenticated          = &Error{Category: CategoryUnauthenticated, Message: "unauthenticated"}
+	ErrProbeFailed              = &Error{Category: CategoryProbeFailed, Message: "probe failed"}
+	ErrProbeTimeout             = &Error{Category: CategoryProbeTimeout, Message: "probe timed out"}
+	ErrNoEligibleEndpoint       = &Error{Category: CategoryNoEligibleEndpoint, Message: "no eligible cognition endpoint"}
 	ErrSchemaVersionUnsupported = &Error{Category: CategorySchemaVersionUnsupported, Message: "schema version unsupported"}
 	ErrInvalidTransition        = &Error{Category: CategoryInvalidTransition, Message: "invalid transition"}
 	ErrInvalidArgument          = &Error{Category: CategoryInvalidArgument, Message: "invalid argument"}
