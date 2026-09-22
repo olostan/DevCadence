@@ -61,54 +61,65 @@ func discoverFacts(ctx context.Context, depth protocol.ProbeDepth) (protocol.Env
 	return discoverer.Discover(ctx)
 }
 
-// buildProfile discovers the machine and its cognition endpoints.
+// newCognitionService wires the adapters this build ships.
 //
 // This function is the one place a provider is chosen. The core packages know
 // only the Adapter contract, so adding or removing a runtime is an edit here
 // (DCI-055).
-func buildProfile(ctx context.Context, depth protocol.ProbeDepth) (protocol.MachineCapabilityProfile, error) {
-	facts, err := discoverFacts(ctx, depth)
-	if err != nil {
-		return protocol.MachineCapabilityProfile{}, err
-	}
+func newCognitionService() (*cognition.Service, error) {
 	commands, err := environment.NewCommandProbe("")
 	if err != nil {
-		return protocol.MachineCapabilityProfile{}, err
+		return nil, err
 	}
 	transport, err := ollama.NewHTTPTransport("")
 	if err != nil {
-		return protocol.MachineCapabilityProfile{}, err
+		return nil, err
 	}
 	ollamaAdapter, err := ollama.New(ollama.Options{Transport: transport})
 	if err != nil {
-		return protocol.MachineCapabilityProfile{}, err
+		return nil, err
 	}
 	home, _ := os.UserHomeDir()
 	mlxAdapter, err := mlx.New(mlx.Options{
 		Commands: commands, Sys: environment.NewSysProbe(), HomeDir: home,
 	})
 	if err != nil {
-		return protocol.MachineCapabilityProfile{}, err
+		return nil, err
 	}
 	cliAdapter, err := codingcli.New(codingcli.Options{Commands: commands})
 	if err != nil {
-		return protocol.MachineCapabilityProfile{}, err
+		return nil, err
 	}
 	// The remote-API adapter is not wired in: M3A ships the boundary and a
 	// deterministic client, not a provider, and constructing one would need
 	// credentials this command must not go looking for.
-	service, err := cognition.NewService(cognition.Options{
+	return cognition.NewService(cognition.Options{
 		Adapters: []cognition.Adapter{ollamaAdapter, mlxAdapter, cliAdapter},
 		Clock:    clock.System(),
 		IDs:      ids.NewULIDSource(),
 	})
+}
+
+// buildProfile discovers the machine and its cognition endpoints.
+//
+// It never runs inference: depth is bounded to health here, and the service
+// refuses inference depth without a named endpoint anyway. Verification is
+// `cognition probe`, which is a different code path for a reason — it spends a
+// model call.
+func buildProfile(ctx context.Context, depth protocol.ProbeDepth) (protocol.MachineCapabilityProfile, error) {
+	if depth.AtLeast(protocol.DepthInference) {
+		return protocol.MachineCapabilityProfile{}, errs.New(errs.CategoryInvalidArgument,
+			"this command does not run inference; use `cognition probe <endpoint-id>` to verify one endpoint")
+	}
+	facts, err := discoverFacts(ctx, depth)
 	if err != nil {
 		return protocol.MachineCapabilityProfile{}, err
 	}
-	return service.Profile(ctx, cognition.ProfileInput{
-		Facts: facts, Depth: depth,
-		Probe: cognition.ProbeRequest{RequireStructuredOutput: true},
-	})
+	service, err := newCognitionService()
+	if err != nil {
+		return protocol.MachineCapabilityProfile{}, err
+	}
+	return service.Profile(ctx, cognition.ProfileInput{Facts: facts, Depth: depth})
 }
 
 func runEnvironment(ctx context.Context, e *env, args []string) error {
@@ -174,13 +185,24 @@ func runCognitionList(ctx context.Context, e *env, args []string) error {
 	fs := flag.NewFlagSet("cognition list", flag.ContinueOnError)
 	asJSON := fs.Bool("json", false, "emit the machine capability profile as JSON")
 	depthFlag := fs.String("depth", string(protocol.DepthHealth),
-		"probe depth: inventory, health, or inference (runs a small synthetic inference on existing models)")
+		"probe depth: inventory (filesystem only) or health (also run version/health commands)")
 	if err := parseFlags(fs, e, args); err != nil {
 		return err
 	}
 	depth, err := parseDepth(*depthFlag)
 	if err != nil {
 		return err
+	}
+	// Inference depth is refused rather than quietly ignored. `cognition list` is
+	// an inventory command run casually and often, and inference across every
+	// discovered endpoint would load models and spend the user's coding-CLI quota
+	// as a side effect of asking what exists. A caller who wants verification must
+	// name the endpoint they are willing to pay for.
+	if depth == protocol.DepthInference {
+		return errs.New(errs.CategoryInvalidArgument,
+			"cognition list does not run inference: it would have to invoke every discovered endpoint, "+
+				"including authenticated coding CLIs that bill the user's quota; "+
+				"use `cognition probe <endpoint-id>` to verify one endpoint")
 	}
 	profile, err := buildProfile(ctx, depth)
 	if err != nil {
@@ -204,28 +226,30 @@ func runCognitionProbe(ctx context.Context, e *env, args []string) error {
 			"usage: devcadience cognition probe <endpoint-id>; run `cognition list` to see the ids")
 	}
 	wanted := fs.Arg(0)
-	// Probing is inference depth by definition: this is the command that asks
-	// for the expensive verification, using only models that already exist.
-	profile, err := buildProfile(ctx, protocol.DepthInference)
+	// Discovery is cheap and covers the whole machine; inference runs for this one
+	// endpoint and no other. Probing `ollama:small` must not invoke Claude Code,
+	// and probing Claude Code must not load a local model.
+	facts, err := discoverFacts(ctx, protocol.DepthHealth)
 	if err != nil {
 		return err
 	}
-	for _, endpoint := range profile.Endpoints {
-		if endpoint.ID != wanted {
-			continue
-		}
-		if *asJSON {
-			return writeJSON(e.stdout, endpoint)
-		}
-		renderEndpoint(e.stdout, endpoint, true)
-		return nil
+	service, err := newCognitionService()
+	if err != nil {
+		return err
 	}
-	available := make([]string, 0, len(profile.Endpoints))
-	for _, endpoint := range profile.Endpoints {
-		available = append(available, endpoint.ID)
+	_, endpoint, err := service.ProbeEndpoint(ctx, cognition.ProbeEndpointInput{
+		Facts:      facts,
+		EndpointID: wanted,
+		Probe:      cognition.ProbeRequest{RequireStructuredOutput: true},
+	})
+	if err != nil {
+		return err
 	}
-	return errs.New(errs.CategoryNotFound,
-		"no endpoint %q was discovered; available: %s", wanted, strings.Join(available, ", "))
+	if *asJSON {
+		return writeJSON(e.stdout, endpoint)
+	}
+	renderEndpoint(e.stdout, endpoint, true)
+	return nil
 }
 
 func runCognitionRoute(ctx context.Context, e *env, args []string) error {

@@ -100,6 +100,17 @@ only a model that already exists locally.
 Depth is recorded on the profile, so a shallow result cannot be read as a deep
 one, and `environment inspect` refuses `inference` outright.
 
+Depth authorises *how deep* a probe may go, and never *how many* endpoints it may
+reach. `inference` depth additionally requires the caller to name the endpoints it
+may invoke, one at a time; a request for `inference` with no endpoint named is
+refused rather than interpreted as "all of them". Inventory surfaces — `cognition
+list`, `cognition route` — therefore cannot reach `inference` at all, and
+`cognition probe <endpoint-id>` discovers the machine at `health` and invokes only
+the endpoint it was given. Fan-out would be the expensive failure this contract
+exists to prevent: several of the endpoints on a normal machine are authenticated
+coding CLIs, and probing them all would bill three providers to answer a question
+about what is installed.
+
 ### 4. ProjectState carries a compact cognition projection; the M1 shape is deprecated, not deleted
 
 `ProjectState.capabilities` gains `cognition`:
@@ -257,7 +268,16 @@ shell engine by another name.
   `installed`) rather than producing a false claim, which is the correct failure
   direction.
 - The coding-CLI health probe consumes a small amount of the user's quota, so it
-  runs only at `inference` depth, only when explicitly requested.
+  runs only at `inference` depth, only for an endpoint the caller named, and only
+  when explicitly requested.
+- Cost class is not inferred from software presence or authentication. An
+  installed coding CLI may be billed by subscription, by a metered API key, by an
+  enterprise agreement or from a credit balance, and discovery cannot distinguish
+  those without reading credentials it must not touch. A discovered endpoint is
+  `cost_class: unknown`, which the router already orders above every known class,
+  and an operator declaration is the only path to a known one. The cost is a lost
+  routing preference for a genuinely subscription-backed CLI; the alternative is
+  spending a user's money on an assumption.
 
 ### Scope
 

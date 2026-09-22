@@ -95,8 +95,8 @@ func TestDiscoveredCLIStopsAtInstalledWithUnknownAuth(t *testing.T) {
 	if endpoint.RequiredSourceExposure != protocol.ExposureToolMediatedWorktree {
 		t.Errorf("exposure = %q", endpoint.RequiredSourceExposure)
 	}
-	if endpoint.CostClass != protocol.CostSubscriptionIncluded {
-		t.Errorf("cost = %q", endpoint.CostClass)
+	if endpoint.CostClass != protocol.CostUnknown {
+		t.Errorf("cost = %q, want unknown; presence cannot establish a billing mode", endpoint.CostClass)
 	}
 	// No capability is graded from presence, and no subscription is invented.
 	if len(endpoint.Capabilities) != 0 {
@@ -356,6 +356,113 @@ func TestNoCredentialPathIsEverTouched(t *testing.T) {
 	for _, endpoint := range endpoints {
 		if endpoint.CredentialRef != "" {
 			t.Errorf("a credential reference was invented: %q", endpoint.CredentialRef)
+		}
+	}
+}
+
+// TestNoCodingCLIGetsACostClassFromItsIdentity is the evidence-discipline rule
+// for money.
+//
+// Finding `claude`, `codex` or `gemini` on PATH establishes that a binary exists.
+// It does not establish that a subscription pays for it: the same executable is
+// driven by a personal plan, by an API key on metered per-token billing, by an
+// enterprise account or by a prepaid credit balance, and telling those apart
+// would require reading the credentials this adapter must never touch. So every
+// discovered CLI is cost_class unknown, whatever its name, provider or version.
+func TestNoCodingCLIGetsACostClassFromItsIdentity(t *testing.T) {
+	fixture := environment.LinuxCPUOnly()
+	for executable, version := range map[string]string{
+		"codex": "codex-cli 1.4.0", "claude": "1.2.3", "gemini": "0.9.0",
+	} {
+		fixture = withCLI(fixture, executable, version)
+	}
+	adapter := newAdapter(t, fixture.Commands)
+	endpoints, err := adapter.Discover(context.Background(),
+		discoveryInput(t, fixture, protocol.DepthHealth))
+	if err != nil {
+		t.Fatalf("discover: %v", err)
+	}
+	if len(endpoints) != 3 {
+		t.Fatalf("endpoints = %+v", endpoints)
+	}
+	for _, endpoint := range endpoints {
+		if endpoint.CostClass != protocol.CostUnknown {
+			t.Errorf("%s cost = %q; a provider name is not billing evidence",
+				endpoint.ID, endpoint.CostClass)
+		}
+		var explained bool
+		for _, finding := range endpoint.Findings {
+			if strings.Contains(finding.Detail, "cost class is unknown until an operator declares it") {
+				explained = true
+			}
+		}
+		if !explained {
+			t.Errorf("%s does not explain why its cost class is unknown: %+v", endpoint.ID, endpoint.Findings)
+		}
+	}
+}
+
+// TestASuccessfulProbeDoesNotEstablishACostClass closes the other door: a CLI
+// answering a prompt proves it is usable, and still says nothing about who pays.
+func TestASuccessfulProbeDoesNotEstablishACostClass(t *testing.T) {
+	fixture := withCLI(environment.LinuxCPUOnly(), "codex", "1.4.0")
+	fixture.Commands.Outputs[environment.Key("codex", "exec", cognition.SyntheticProbePrompt)] =
+		environment.Observed(`{"ok": true}`)
+	adapter := newAdapter(t, fixture.Commands)
+	endpoint := cognition.CLIEndpoint("cli:codex-cli", "openai")
+	result, err := adapter.Probe(context.Background(), endpoint, cognition.ProbeRequest{})
+	if err != nil {
+		t.Fatalf("probe: %v", err)
+	}
+	if result.Status != protocol.FindingObserved {
+		t.Fatalf("status = %q", result.Status)
+	}
+	// A ProbeResult carries no cost field at all — there is nowhere for a probe to
+	// record a billing guess — so what must hold is that a probed endpoint keeps
+	// the unknown class discovery gave it.
+	if endpoint.CostClass != protocol.CostUnknown {
+		t.Errorf("the discovered endpoint's cost class = %q, want unknown", endpoint.CostClass)
+	}
+}
+
+// TestDiscoveryDoesNotInvokeACLIItWasNotAskedAbout keeps the quota guarantee at
+// the adapter boundary, including at inference depth.
+func TestDiscoveryDoesNotInvokeACLIItWasNotAskedAbout(t *testing.T) {
+	fixture := withCLI(withCLI(environment.LinuxCPUOnly(), "codex", "1.4.0"), "claude", "1.2.3")
+	adapter := newAdapter(t, fixture.Commands)
+	in := discoveryInput(t, fixture, protocol.DepthInference)
+	in.InferenceTargets = []string{"cli:codex-cli"}
+	endpoints, err := adapter.Discover(context.Background(), in)
+	if err != nil {
+		t.Fatalf("discover: %v", err)
+	}
+	other, found := endpointByID(endpoints, "cli:claude-code")
+	if !found {
+		t.Fatal("the untargeted CLI was not reported")
+	}
+	var explained bool
+	for _, finding := range other.Findings {
+		if strings.Contains(finding.Detail, "was not named as a probe target") {
+			explained = true
+		}
+	}
+	if !explained {
+		t.Errorf("the untargeted CLI does not say why it was not invoked: %+v", other.Findings)
+	}
+	// Discovery runs no inference at any depth, so neither CLI was executed with
+	// a prompt.
+	for _, call := range fixture.Commands.Calls {
+		if strings.Contains(call, cognition.SyntheticProbePrompt) {
+			t.Errorf("discovery invoked a coding CLI: %q", call)
+		}
+	}
+	// The privacy and authentication invariants are untouched by the cost change.
+	for _, endpoint := range endpoints {
+		if endpoint.Auth != protocol.AuthUnknown {
+			t.Errorf("%s auth = %q, want unknown", endpoint.ID, endpoint.Auth)
+		}
+		if endpoint.RequiredSourceExposure != protocol.ExposureToolMediatedWorktree {
+			t.Errorf("%s exposure = %q", endpoint.ID, endpoint.RequiredSourceExposure)
 		}
 	}
 }

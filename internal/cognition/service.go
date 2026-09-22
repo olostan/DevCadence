@@ -119,6 +119,18 @@ type ProfileInput struct {
 	Declarations []Declaration
 	// Probe requests, applied at inference depth. Zero values are normalised.
 	Probe ProbeRequest
+	// InferenceTargets names the endpoints the caller authorises an inference
+	// probe against. It is the whole authorisation for spending a model call.
+	//
+	// Inference is never implicit and never fans out. An inference probe loads a
+	// model, occupies a GPU, and on an authenticated coding CLI spends the user's
+	// real subscription quota, so "discover the machine" must never be able to
+	// turn into "call every provider the user has installed". The field is
+	// therefore mandatory at DepthInference and forbidden below it: a caller that
+	// wants inference has to name, one id at a time, what it is willing to pay
+	// for. An endpoint not named here is discovered and health-checked exactly as
+	// it would be at DepthHealth, and never invoked.
+	InferenceTargets []string
 }
 
 // Profile discovers endpoints and assesses the machine.
@@ -128,6 +140,9 @@ type ProfileInput struct {
 // which can make both fall back to CPU and produce a *worse* acceleration
 // answer than running them one at a time. Discovery is fast enough that
 // concurrency would buy nothing while costing deterministic ordering.
+//
+// At DepthInference the caller must name InferenceTargets; see that field. Most
+// callers want ProbeEndpoint, which is the single-endpoint form.
 func (s *Service) Profile(ctx context.Context, in ProfileInput) (protocol.MachineCapabilityProfile, error) {
 	if in.Depth == "" {
 		in.Depth = protocol.DepthHealth
@@ -135,6 +150,9 @@ func (s *Service) Profile(ctx context.Context, in ProfileInput) (protocol.Machin
 	if !in.Depth.Valid() {
 		return protocol.MachineCapabilityProfile{},
 			errs.New(errs.CategoryInvalidArgument, "cognition: unknown probe depth %q", in.Depth)
+	}
+	if err := s.validateInferenceTargets(in); err != nil {
+		return protocol.MachineCapabilityProfile{}, err
 	}
 	if err := s.validateDeclarations(in.Declarations); err != nil {
 		return protocol.MachineCapabilityProfile{}, err
@@ -152,6 +170,7 @@ func (s *Service) Profile(ctx context.Context, in ProfileInput) (protocol.Machin
 	for _, adapter := range s.adapters {
 		discovered, err := adapter.Discover(ctx, DiscoveryInput{
 			Facts: in.Facts, Candidates: candidates, Depth: in.Depth, ObservedAt: observedAt,
+			InferenceTargets: in.InferenceTargets,
 		})
 		if err != nil {
 			// An adapter that could not run is a finding about that adapter.
@@ -175,7 +194,7 @@ func (s *Service) Profile(ctx context.Context, in ProfileInput) (protocol.Machin
 	}
 
 	if in.Depth.AtLeast(protocol.DepthInference) {
-		endpoints = s.probeEndpoints(ctx, endpoints, candidates, in.Probe)
+		endpoints = s.probeEndpoints(ctx, endpoints, candidates, in.Probe, in.InferenceTargets)
 	}
 
 	sort.Slice(endpoints, func(i, j int) bool { return endpoints[i].ID < endpoints[j].ID })
@@ -208,6 +227,92 @@ func (s *Service) Profile(ctx context.Context, in ProfileInput) (protocol.Machin
 			"cognition: assembled a profile that violates the contract")
 	}
 	return profile, nil
+}
+
+// ProbeEndpointInput asks for one endpoint to be verified by inference.
+type ProbeEndpointInput struct {
+	Facts protocol.EnvironmentFacts
+	// EndpointID is the single endpoint that may be invoked. It is required.
+	EndpointID string
+	// Declarations are operator configuration, keyed by endpoint id.
+	Declarations []Declaration
+	// Probe requests. Zero values are normalised.
+	Probe ProbeRequest
+}
+
+// ProbeEndpoint discovers the machine cheaply and runs an inference probe
+// against exactly one endpoint.
+//
+// This is the only path in M3A that spends a model call, and it exists as its
+// own operation rather than as a depth flag because the two halves of the work
+// have completely different costs. Discovery and health are cheap, local and
+// safe to run on everything; inference is expensive, occupies a device and can
+// spend a paid quota, so it happens once, against an endpoint the caller named.
+//
+// Every other endpoint is still discovered and health-checked — that is what
+// makes the returned profile a usable answer and lets a mistyped id be reported
+// with the available ones — but none of them is invoked.
+func (s *Service) ProbeEndpoint(
+	ctx context.Context,
+	in ProbeEndpointInput,
+) (protocol.MachineCapabilityProfile, protocol.CognitionEndpoint, error) {
+	if in.EndpointID == "" {
+		return protocol.MachineCapabilityProfile{}, protocol.CognitionEndpoint{},
+			errs.New(errs.CategoryInvalidArgument, "cognition: an endpoint id is required to probe")
+	}
+	profile, err := s.Profile(ctx, ProfileInput{
+		Facts:            in.Facts,
+		Depth:            protocol.DepthInference,
+		Declarations:     in.Declarations,
+		Probe:            in.Probe,
+		InferenceTargets: []string{in.EndpointID},
+	})
+	if err != nil {
+		return protocol.MachineCapabilityProfile{}, protocol.CognitionEndpoint{}, err
+	}
+	available := make([]string, 0, len(profile.Endpoints))
+	for _, endpoint := range profile.Endpoints {
+		if endpoint.ID == in.EndpointID {
+			return profile, endpoint, nil
+		}
+		available = append(available, endpoint.ID)
+	}
+	detail := "none were discovered"
+	if len(available) > 0 {
+		detail = "available: " + strings.Join(available, ", ")
+	}
+	return protocol.MachineCapabilityProfile{}, protocol.CognitionEndpoint{},
+		errs.New(errs.CategoryNotFound, "cognition: no endpoint %q was discovered; %s", in.EndpointID, detail)
+}
+
+// validateInferenceTargets keeps inference authorisation explicit in both
+// directions.
+//
+// A missing target at inference depth is the fan-out bug: it would mean "probe
+// everything". A target named below inference depth is the opposite mistake — a
+// caller that believes it asked for verification and silently did not get it. Both
+// are refused rather than interpreted.
+func (s *Service) validateInferenceTargets(in ProfileInput) error {
+	if in.Depth.AtLeast(protocol.DepthInference) {
+		if len(in.InferenceTargets) == 0 {
+			return errs.New(errs.CategoryInvalidArgument,
+				"cognition: probe depth %q requires naming the endpoints it may invoke; "+
+					"inference is never run across every discovered endpoint", in.Depth)
+		}
+		for _, target := range in.InferenceTargets {
+			if target == "" {
+				return errs.New(errs.CategoryInvalidArgument,
+					"cognition: an empty endpoint id cannot authorise an inference probe")
+			}
+		}
+		return nil
+	}
+	if len(in.InferenceTargets) > 0 {
+		return errs.New(errs.CategoryInvalidArgument,
+			"cognition: probe depth %q does not run inference, so inference targets cannot be honoured",
+			in.Depth)
+	}
+	return nil
 }
 
 // validateDeclarations refuses configuration that would corrupt the record.
@@ -315,20 +420,37 @@ func provenanceRank(provenance protocol.CapabilityProvenance) int {
 	}
 }
 
-// probeEndpoints exercises each local or remote endpoint in turn.
+// probeEndpoints exercises the authorised endpoints in turn.
+//
+// Only an endpoint named in targets is invoked. Every other endpoint is left
+// exactly as discovery and health left it: not probed is not a failure, and an
+// unprobed endpoint keeps its honest unverified state rather than acquiring a
+// finding about work nobody asked for.
+//
+// Execution stays sequential for the reason given on Profile: concurrent probes
+// contend for the same device and can each report a CPU fallback that neither
+// would report alone.
 func (s *Service) probeEndpoints(
 	ctx context.Context,
 	endpoints []protocol.CognitionEndpoint,
 	candidates []protocol.AcceleratorCandidate,
 	request ProbeRequest,
+	targets []string,
 ) []protocol.CognitionEndpoint {
 	request = request.Normalise()
+	authorised := make(map[string]struct{}, len(targets))
+	for _, target := range targets {
+		authorised[target] = struct{}{}
+	}
 	byAdapter := map[string]Adapter{}
 	for _, adapter := range s.adapters {
 		byAdapter[adapter.ID()] = adapter
 	}
 	for i := range endpoints {
 		endpoint := &endpoints[i]
+		if _, ok := authorised[endpoint.ID]; !ok {
+			continue
+		}
 		adapter, ok := byAdapter[adapterIDOf(endpoint.ID)]
 		if !ok {
 			endpoint.Findings = append(endpoint.Findings, protocol.DiscoveryFinding{

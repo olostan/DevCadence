@@ -200,9 +200,17 @@ execution:
   health: ready
 
 policy:
-  cost_class: subscription
+  cost_class: unknown        # until an operator declares it; see below
   source_exposure: focused_or_tool_mediated
 ```
+
+Cost class is never inferred from a CLI being installed or authenticated. The same
+executable may be billed by subscription, by a metered API key, by an enterprise
+agreement or from a credit balance, and distinguishing those would require reading
+credentials that discovery must not touch. A discovered endpoint is therefore
+`cost_class: unknown`, which routing treats as more expensive than every known
+class; an operator declaration is the only path to a known class, and it is
+recorded with `configured` provenance.
 
 Roles bind to capabilities, not permanent model names.
 

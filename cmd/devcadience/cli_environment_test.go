@@ -245,6 +245,57 @@ func TestCognitionProbeRequiresAnEndpointID(t *testing.T) {
 	if _, _, err := c.run("cognition", "probe"); err == nil {
 		t.Fatal("cognition probe ran with no endpoint")
 	}
+	if _, _, err := c.run("cognition", "probe", "a", "b"); err == nil {
+		t.Fatal("cognition probe accepted two endpoints; inference is authorised one at a time")
+	}
+}
+
+// TestCognitionProbeRejectsAnUnknownEndpointWithoutInvokingAnything is the
+// cheap-typo property: naming an endpoint that does not exist must cost nothing.
+//
+// This is the one probe-path test that can run in a suite, because it fails
+// before any endpoint is invoked. On a machine with a runtime installed the
+// error names the available ids; on a bare machine it says none were found.
+func TestCognitionProbeRejectsAnUnknownEndpointWithoutInvokingAnything(t *testing.T) {
+	c := newCLI(t)
+	_, _, err := c.run("cognition", "probe", "nonexistent:endpoint")
+	if err == nil {
+		t.Fatal("an endpoint that does not exist was probed")
+	}
+	if !strings.Contains(err.Error(), "nonexistent:endpoint") {
+		t.Errorf("the error does not name what was asked for: %v", err)
+	}
+}
+
+// TestCognitionListRefusesInferenceDepth is the fan-out guarantee at the surface
+// an operator uses.
+//
+// `cognition list` is an inventory command. At inference depth it would have to
+// invoke every endpoint it discovered — including authenticated coding CLIs that
+// bill the user's subscription — to answer a question about what exists. It is
+// refused outright rather than silently reinterpreted, so a caller who wanted
+// verification learns where to get it.
+func TestCognitionListRefusesInferenceDepth(t *testing.T) {
+	c := newCLI(t)
+	_, _, err := c.run("cognition", "list", "--depth", "inference")
+	if err == nil {
+		t.Fatal("cognition list accepted inference depth")
+	}
+	if !strings.Contains(err.Error(), "cognition probe") {
+		t.Errorf("the refusal does not point at the command that does verify: %v", err)
+	}
+	if !strings.Contains(err.Error(), "quota") {
+		t.Errorf("the refusal does not say why it matters: %v", err)
+	}
+}
+
+// TestCognitionRouteRefusesInferenceDepth closes the other door into fan-out:
+// routing explains a decision from discovered endpoints and never verifies them.
+func TestCognitionRouteRefusesInferenceDepth(t *testing.T) {
+	c := newCLI(t)
+	if _, _, err := c.run("cognition", "route", "--depth", "inference"); err == nil {
+		t.Fatal("cognition route accepted inference depth")
+	}
 }
 
 // TestUnknownSubcommandsAreRejected keeps the surface from silently accepting

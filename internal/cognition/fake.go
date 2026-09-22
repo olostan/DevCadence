@@ -29,6 +29,15 @@ type FakeAdapter struct {
 	// Prompts records every prompt sent, so a test can assert that no
 	// repository content was transmitted.
 	Prompts []string
+	// Probed records the id of every endpoint Probe was called for, in order.
+	//
+	// It is the evidence for the fan-out guarantee: a test asserts not merely
+	// that the right endpoint was verified but that no other endpoint was
+	// invoked at all, which is the difference between reporting one result and
+	// spending five quotas to report one result.
+	Probed []string
+	// DiscoveredAtDepth records the depth of every Discover call.
+	DiscoveredAtDepth []protocol.ProbeDepth
 }
 
 // ID implements Adapter.
@@ -41,6 +50,7 @@ func (f *FakeAdapter) ID() string {
 
 // Discover implements Adapter.
 func (f *FakeAdapter) Discover(_ context.Context, in DiscoveryInput) ([]protocol.CognitionEndpoint, error) {
+	f.DiscoveredAtDepth = append(f.DiscoveredAtDepth, in.Depth)
 	if f.DiscoverErr != nil {
 		return nil, f.DiscoverErr
 	}
@@ -56,6 +66,7 @@ func (f *FakeAdapter) Discover(_ context.Context, in DiscoveryInput) ([]protocol
 func (f *FakeAdapter) Probe(ctx context.Context, endpoint protocol.CognitionEndpoint, req ProbeRequest) (ProbeResult, error) {
 	req = req.Normalise()
 	f.Prompts = append(f.Prompts, req.Prompt)
+	f.Probed = append(f.Probed, endpoint.ID)
 	if err := ctx.Err(); err != nil {
 		return ProbeResult{}, errs.Wrap(errs.CategoryProbeTimeout, err, "probe cancelled")
 	}
@@ -104,11 +115,14 @@ func LocalEndpoint(id, runtime, model string) protocol.CognitionEndpoint {
 	}
 }
 
-// CLIEndpoint builds an authenticated-CLI endpoint for tests.
+// CLIEndpoint builds an authenticated-CLI endpoint.
 //
 // Auth is unknown by default because that is the honest default: no supported
 // CLI publishes a safe, non-mutating way to ask, and DevCadience will not read
-// credential files to find out.
+// credential files to find out. Cost class is unknown for the same reason — the
+// same binary may be billed by subscription, by metered API key or by an
+// enterprise account, and discovery cannot tell. Only an operator Declaration
+// may name a class.
 func CLIEndpoint(id, provider string) protocol.CognitionEndpoint {
 	return protocol.CognitionEndpoint{
 		ObservedAt:             fixtureObservedAt,
@@ -121,7 +135,7 @@ func CLIEndpoint(id, provider string) protocol.CognitionEndpoint {
 		Auth:                   protocol.AuthUnknown,
 		StructuredOutput:       protocol.FeatureUnknown,
 		ToolUse:                protocol.FeatureDeclared,
-		CostClass:              protocol.CostSubscriptionIncluded,
+		CostClass:              protocol.CostUnknown,
 		RequiredSourceExposure: protocol.ExposureToolMediatedWorktree,
 	}
 }

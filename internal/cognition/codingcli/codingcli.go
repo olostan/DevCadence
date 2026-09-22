@@ -12,8 +12,21 @@
 // configuration, launch an interactive login, write any configuration, or send
 // repository source to establish health. It does not infer a commercial plan
 // from an executable being present: "codex is installed and answered" says
-// nothing about which subscription backs it, and there is no field to record a
-// guess in.
+// nothing about which subscription backs it, and there is no field in a
+// Descriptor to record a guess in.
+//
+// Cost class follows from that, and it is the one place this adapter previously
+// cheated. Discovering `claude` or `codex` on PATH establishes that a binary
+// exists, and nothing whatsoever about billing: the same executable is driven by
+// a personal subscription, an API key on metered per-token billing, an
+// enterprise account, or a credit balance, and the four are not distinguishable
+// without reading secrets — which is forbidden here and stays forbidden. So a
+// discovered CLI endpoint is `cost_class: unknown`, which routing already treats
+// as more expensive than every known class, and the only way to a real class is
+// an operator declaration (cognition.Declaration.CostClass) recorded with
+// configured provenance. Being pessimistic about a subscription-backed CLI costs
+// a routing preference; being optimistic about a metered one spends the user's
+// money on an assumption.
 //
 // Authentication is therefore `unknown` by default, and that is the correct
 // answer rather than a gap. No supported CLI publishes a non-mutating,
@@ -66,10 +79,6 @@ type Descriptor struct {
 	// marking where the synthetic prompt goes. Nil means this build knows no
 	// safe non-interactive invocation, and health stops at "installed".
 	PromptArgs []string
-	// CostClass is the class this endpoint bills under. An authenticated CLI is
-	// normally covered by a subscription the user already pays for, which is
-	// why it is cheaper than a metered API without being free.
-	CostClass protocol.CostClass
 }
 
 // PromptPlaceholder marks the prompt position in PromptArgs.
@@ -84,17 +93,14 @@ func DefaultDescriptors() []Descriptor {
 		{
 			SoftwareID: "codex-cli", Executable: "codex", Provider: "openai",
 			PromptArgs: []string{"exec", PromptPlaceholder},
-			CostClass:  protocol.CostSubscriptionIncluded,
 		},
 		{
 			SoftwareID: "claude-code", Executable: "claude", Provider: "anthropic",
 			PromptArgs: []string{"-p", PromptPlaceholder},
-			CostClass:  protocol.CostSubscriptionIncluded,
 		},
 		{
 			SoftwareID: "gemini-cli", Executable: "gemini", Provider: "google",
 			PromptArgs: []string{"-p", PromptPlaceholder},
-			CostClass:  protocol.CostSubscriptionIncluded,
 		},
 	}
 }
@@ -151,7 +157,10 @@ func (a *Adapter) Discover(_ context.Context, in cognition.DiscoveryInput) ([]pr
 		endpoint := cognition.CLIEndpoint(AdapterID+":"+descriptor.SoftwareID, descriptor.Provider)
 		endpoint.Runtime = descriptor.SoftwareID
 		endpoint.Version = presence.Version
-		endpoint.CostClass = descriptor.CostClass
+		// Unknown, always, from discovery. See the package comment: presence and
+		// even a successful probe say nothing about which billing mode backs this
+		// CLI. An operator declaration is the only thing that may set a class.
+		endpoint.CostClass = protocol.CostUnknown
 		endpoint.ObservedAt = in.ObservedAt
 		// Installed is where discovery stops. A binary on PATH is not a usable
 		// endpoint (docs/ENVIRONMENT_INTELLIGENCE_AND_ONBOARDING.md §7).
@@ -161,6 +170,11 @@ func (a *Adapter) Discover(_ context.Context, in cognition.DiscoveryInput) ([]pr
 			protocol.FindingUnsupported,
 			"no non-mutating, non-secret-reading way to read this CLI's authentication state is published, "+
 				"so the authentication state is unknown"))
+		endpoint.Findings = append(endpoint.Findings, finding(endpoint.ID, "cost",
+			protocol.FindingUnsupported,
+			"an installed CLI may be billed by subscription, per-token API key, enterprise account or "+
+				"credit balance, and discovery cannot tell which without reading secrets, "+
+				"so the cost class is unknown until an operator declares it"))
 		if presence.Version == "" {
 			endpoint.Findings = append(endpoint.Findings, finding(endpoint.ID, "version",
 				protocol.FindingAbsent, "the CLI reported no recognisable version"))
@@ -183,11 +197,19 @@ func (a *Adapter) Discover(_ context.Context, in cognition.DiscoveryInput) ([]pr
 			endpoint.Findings = append(endpoint.Findings, finding(endpoint.ID, "health",
 				protocol.FindingUnsupported,
 				"this build knows no safe non-interactive invocation for this CLI, so callability cannot be probed"))
-		} else if !in.Depth.AtLeast(protocol.DepthInference) {
+		} else if !in.AuthorisedForInference(endpoint.ID) {
+			// Two distinct reasons, kept distinct: the depth did not ask for
+			// inference at all, or inference was asked for against a *different*
+			// endpoint. Collapsing them would hide the fan-out guarantee that
+			// matters most here — calling a coding agent spends the user's quota,
+			// so it happens only for the endpoint they named.
+			reason := "probe depth " + string(in.Depth) + " does not permit invoking the CLI"
+			if in.Depth.AtLeast(protocol.DepthInference) {
+				reason = "this endpoint was not named as a probe target"
+			}
 			endpoint.Findings = append(endpoint.Findings, finding(endpoint.ID, "health",
 				protocol.FindingUnsupported,
-				"probe depth "+string(in.Depth)+" does not permit invoking the CLI; "+
-					"calling a coding agent consumes the user's quota and is never implicit"))
+				reason+"; calling a coding agent consumes the user's quota and is never implicit"))
 		}
 		endpoints = append(endpoints, endpoint)
 	}

@@ -122,16 +122,28 @@ devcadience environment inspect                   # observed hardware/software f
 devcadience environment inspect --depth inventory # filesystem only; runs no command
 devcadience environment inspect --json
 devcadience cognition list                        # endpoints, health, assessment
-devcadience cognition list --depth inference      # also runs synthetic inference probes
+devcadience cognition list --depth inventory      # filesystem only; runs no command
 devcadience cognition probe <endpoint-id>         # verify one endpoint explicitly
 devcadience cognition route --role implementer    # explainable routing decision
 devcadience cognition route --source-exposure local_only --max-cost local_compute
 ```
 
-`environment inspect` refuses `--depth inference`: an ordinary environment query
-must never load a model as a side effect. Verification is requested explicitly
-through `cognition probe`, which uses only models that already exist locally and
-never downloads one.
+`environment inspect`, `cognition list` and `cognition route` all refuse
+`--depth inference`: an ordinary environment query must never load a model as a
+side effect, and an inventory command must never fan inference out across every
+endpoint it finds — several of those endpoints are authenticated coding CLIs that
+bill the operator's subscription.
+
+Inference is authorised one endpoint at a time, through
+`cognition probe <endpoint-id>`. That command discovers and health-checks the
+whole machine cheaply, then invokes exactly the endpoint named and no other. It
+uses only models that already exist locally and never downloads one.
+
+A discovered coding CLI is reported with `cost_class: unknown`. Finding `claude`
+or `codex` on PATH says nothing about whether a subscription, a metered API key or
+an enterprise account is being billed, and DevCadience will not read credentials
+to guess. Routing treats `unknown` as dearer than every known class, so an
+operator who wants a CLI preferred on cost declares its class explicitly.
 
 ### Intended in M3B: guided mutation
 

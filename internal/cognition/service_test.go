@@ -115,8 +115,9 @@ func TestNoLocalModelButRemoteAvailableIsReady(t *testing.T) {
 	}
 	service := newService(t, remote)
 	out := profile(t, service, cognition.ProfileInput{
-		Facts: facts(t, environment.LinuxCPUOnly(), protocol.DepthInference),
-		Depth: protocol.DepthInference,
+		Facts:            facts(t, environment.LinuxCPUOnly(), protocol.DepthInference),
+		Depth:            protocol.DepthInference,
+		InferenceTargets: []string{"cli:codex-cli"},
 		Declarations: []cognition.Declaration{{
 			EndpointID: "cli:codex-cli",
 			Capabilities: []protocol.GradedCapability{{
@@ -166,8 +167,9 @@ func TestOneBrokenAdapterDoesNotAffectAnother(t *testing.T) {
 	}
 	service := newService(t, broken, working)
 	out := profile(t, service, cognition.ProfileInput{
-		Facts: facts(t, environment.LinuxAMDIntegrated(), protocol.DepthInference),
-		Depth: protocol.DepthInference,
+		Facts:            facts(t, environment.LinuxAMDIntegrated(), protocol.DepthInference),
+		Depth:            protocol.DepthInference,
+		InferenceTargets: []string{"ollama:small"},
 	})
 	if _, found := endpointByID(out, "ollama:small"); !found {
 		t.Fatal("a broken adapter cost an unrelated adapter its endpoint")
@@ -206,9 +208,10 @@ func TestVerifiedAccelerationFlowsFromProbeToCandidateAndProjection(t *testing.T
 	}
 	service := newService(t, adapter)
 	out := profile(t, service, cognition.ProfileInput{
-		Facts: facts(t, environment.LinuxAMDIntegrated(), protocol.DepthInference),
-		Depth: protocol.DepthInference,
-		Probe: cognition.ProbeRequest{RequireStructuredOutput: true},
+		Facts:            facts(t, environment.LinuxAMDIntegrated(), protocol.DepthInference),
+		Depth:            protocol.DepthInference,
+		InferenceTargets: []string{"ollama:small"},
+		Probe:            cognition.ProbeRequest{RequireStructuredOutput: true},
 	})
 
 	endpoint, _ := endpointByID(out, "ollama:small")
@@ -291,8 +294,9 @@ func TestAnUnnamedOffloadIsNamedOnlyWhenUnambiguous(t *testing.T) {
 	}
 	service := newService(t, adapter)
 	out := profile(t, service, cognition.ProfileInput{
-		Facts: facts(t, environment.LinuxAMDIntegrated(), protocol.DepthInference),
-		Depth: protocol.DepthInference,
+		Facts:            facts(t, environment.LinuxAMDIntegrated(), protocol.DepthInference),
+		Depth:            protocol.DepthInference,
+		InferenceTargets: []string{"ollama:small"},
 	})
 	endpoint, _ := endpointByID(out, "ollama:small")
 	if endpoint.Acceleration.Backend != protocol.BackendVulkan {
@@ -318,8 +322,9 @@ func TestAnUnnamedOffloadIsNamedOnlyWhenUnambiguous(t *testing.T) {
 	// ROCm-supported architecture with a writable /dev/kfd, and a writable render
 	// node with a Vulkan loader installed.
 	out = profile(t, service, cognition.ProfileInput{
-		Facts: facts(t, environment.LinuxAMDDiscreteROCm(), protocol.DepthInference),
-		Depth: protocol.DepthInference,
+		Facts:            facts(t, environment.LinuxAMDDiscreteROCm(), protocol.DepthInference),
+		Depth:            protocol.DepthInference,
+		InferenceTargets: []string{"ollama:small"},
 	})
 	endpoint, _ = endpointByID(out, "ollama:small")
 	if endpoint.Acceleration.Backend != protocol.BackendUnknown {
@@ -348,8 +353,9 @@ func TestCPUFallbackProfileReportsFailedNotVerified(t *testing.T) {
 	}
 	service := newService(t, adapter)
 	out := profile(t, service, cognition.ProfileInput{
-		Facts: facts(t, environment.LinuxNVIDIAReady(), protocol.DepthInference),
-		Depth: protocol.DepthInference,
+		Facts:            facts(t, environment.LinuxNVIDIAReady(), protocol.DepthInference),
+		Depth:            protocol.DepthInference,
+		InferenceTargets: []string{"ollama:small"},
 	})
 	endpoint, _ := endpointByID(out, "ollama:small")
 	if endpoint.Acceleration.State != protocol.StateFailed {
@@ -419,8 +425,9 @@ func TestProbeEvidenceGoesToTheArtifactStore(t *testing.T) {
 		t.Fatalf("new service: %v", err)
 	}
 	out := profile(t, service, cognition.ProfileInput{
-		Facts: facts(t, environment.LinuxAMDIntegrated(), protocol.DepthInference),
-		Depth: protocol.DepthInference,
+		Facts:            facts(t, environment.LinuxAMDIntegrated(), protocol.DepthInference),
+		Depth:            protocol.DepthInference,
+		InferenceTargets: []string{"ollama:small"},
 	})
 	endpoint, _ := endpointByID(out, "ollama:small")
 	if len(endpoint.ProbeRefs) != 1 {
@@ -454,8 +461,9 @@ func TestWithoutAnArtifactStoreTheOmissionIsRecorded(t *testing.T) {
 	}
 	service := newService(t, adapter)
 	out := profile(t, service, cognition.ProfileInput{
-		Facts: facts(t, environment.LinuxAMDIntegrated(), protocol.DepthInference),
-		Depth: protocol.DepthInference,
+		Facts:            facts(t, environment.LinuxAMDIntegrated(), protocol.DepthInference),
+		Depth:            protocol.DepthInference,
+		InferenceTargets: []string{"ollama:small"},
 	})
 	endpoint, _ := endpointByID(out, "ollama:small")
 	var recorded bool
@@ -506,8 +514,9 @@ func TestNoSecretAppearsInAProfile(t *testing.T) {
 	}
 	service := newService(t, adapter)
 	out := profile(t, service, cognition.ProfileInput{
-		Facts: facts(t, environment.LinuxCPUOnly(), protocol.DepthInference),
-		Depth: protocol.DepthInference,
+		Facts:            facts(t, environment.LinuxCPUOnly(), protocol.DepthInference),
+		Depth:            protocol.DepthInference,
+		InferenceTargets: []string{"cli:codex-cli"},
 		Declarations: []cognition.Declaration{{
 			EndpointID: "cli:codex-cli", CredentialRef: "cred_openai_default", AccountRef: "acct_ref_7f3a",
 		}},
@@ -541,8 +550,9 @@ func TestTheProbePromptCarriesNoRepositoryContent(t *testing.T) {
 	}
 	service := newService(t, adapter)
 	profile(t, service, cognition.ProfileInput{
-		Facts: facts(t, environment.LinuxCPUOnly(), protocol.DepthInference),
-		Depth: protocol.DepthInference,
+		Facts:            facts(t, environment.LinuxCPUOnly(), protocol.DepthInference),
+		Depth:            protocol.DepthInference,
+		InferenceTargets: []string{"cli:codex-cli"},
 	})
 	if len(adapter.Prompts) == 0 {
 		t.Fatal("no prompt was sent, so nothing was verified")
@@ -582,8 +592,9 @@ func TestProfileAssemblyIsDeterministic(t *testing.T) {
 		}
 		service := newService(t, adapter)
 		return profile(t, service, cognition.ProfileInput{
-			Facts: facts(t, environment.LinuxAMDIntegrated(), protocol.DepthInference),
-			Depth: protocol.DepthInference,
+			Facts:            facts(t, environment.LinuxAMDIntegrated(), protocol.DepthInference),
+			Depth:            protocol.DepthInference,
+			InferenceTargets: []string{"ollama:alpha", "ollama:zeta"},
 		})
 	}
 	first, second := build(), build()
@@ -620,8 +631,9 @@ func TestCancellationDuringProbingIsRecorded(t *testing.T) {
 	}
 	service := newService(t, adapter)
 	out, err := service.Profile(ctx, cognition.ProfileInput{
-		Facts: facts(t, environment.LinuxAMDIntegrated(), protocol.DepthInference),
-		Depth: protocol.DepthInference,
+		Facts:            facts(t, environment.LinuxAMDIntegrated(), protocol.DepthInference),
+		Depth:            protocol.DepthInference,
+		InferenceTargets: []string{"ollama:small"},
 	})
 	if err != nil {
 		t.Fatalf("cancellation must not fail profile assembly: %v", err)

@@ -72,6 +72,28 @@ type DiscoveryInput struct {
 	// ObservedAt is the injected observation instant, so that two endpoints
 	// discovered in one pass agree on when they were seen.
 	ObservedAt protocol.Timestamp
+	// InferenceTargets are the endpoint ids the caller authorised an inference
+	// probe against (see cognition.ProfileInput). It is empty below inference
+	// depth.
+	//
+	// Discovery must not use it to decide whether to *do* anything — Discover runs
+	// no inference at any depth — but an adapter may use it to explain accurately
+	// why an endpoint was not invoked, which is the difference between "the depth
+	// forbade it" and "you asked about a different endpoint".
+	InferenceTargets []string
+}
+
+// AuthorisedForInference reports whether this endpoint is one the caller named.
+func (in DiscoveryInput) AuthorisedForInference(endpointID string) bool {
+	if !in.Depth.AtLeast(protocol.DepthInference) {
+		return false
+	}
+	for _, target := range in.InferenceTargets {
+		if target == endpointID {
+			return true
+		}
+	}
+	return false
 }
 
 // ProbeRequest asks an adapter to exercise one endpoint.

@@ -13,6 +13,20 @@ import (
 // The five end-to-end routing scenarios M3A must support are each a test here:
 // strong-local, hybrid-thin, no-local-model, offline and privacy-restricted.
 
+// declaredSubscription is an operator declaration that this CLI endpoint is
+// covered by a subscription.
+//
+// Discovery cannot establish that — an installed `codex` may be billed by
+// subscription, by metered API key or by an enterprise account — so a discovered
+// CLI endpoint is cost_class unknown, and routing deliberately treats unknown as
+// dearer than every known class. A test that wants an affordable CLI must
+// therefore say so here, exactly as an operator would through
+// cognition.Declaration.CostClass.
+func declaredSubscription(endpoint protocol.CognitionEndpoint) protocol.CognitionEndpoint {
+	endpoint.CostClass = protocol.CostSubscriptionIncluded
+	return endpoint
+}
+
 // strongLocal is a machine with a verified, accelerated local model the operator
 // has declared a strong implementer, plus an optional remote CLI.
 func strongLocal() []protocol.CognitionEndpoint {
@@ -24,7 +38,7 @@ func strongLocal() []protocol.CognitionEndpoint {
 	local = cognition.WithVerifiedAcceleration(local, protocol.BackendMetal, at())
 	local.StructuredOutput = protocol.FeatureProbePassed
 
-	remote := cognition.Ready(cognition.CLIEndpoint("cli:codex-cli", "openai"))
+	remote := declaredSubscription(cognition.Ready(cognition.CLIEndpoint("cli:codex-cli", "openai")))
 	remote = cognition.WithCapability(remote, protocol.CapabilityImplementation,
 		protocol.GradeStrong, protocol.ProvenanceConfigured)
 	return []protocol.CognitionEndpoint{local, remote}
@@ -38,7 +52,7 @@ func hybridThin() []protocol.CognitionEndpoint {
 		protocol.GradeMedium, protocol.ProvenanceConfigured)
 	small.StructuredOutput = protocol.FeatureProbePassed
 
-	remote := cognition.Ready(cognition.CLIEndpoint("cli:codex-cli", "openai"))
+	remote := declaredSubscription(cognition.Ready(cognition.CLIEndpoint("cli:codex-cli", "openai")))
 	remote = cognition.WithCapability(remote, protocol.CapabilityImplementation,
 		protocol.GradeStrong, protocol.ProvenanceConfigured)
 	remote = cognition.WithCapability(remote, protocol.CapabilityRepositoryReasoning,
@@ -136,7 +150,7 @@ func TestHybridThinRoutesImplementationRemotelyAndScoutingLocally(t *testing.T) 
 
 // Scenario C: no local model at all, remote implementation available.
 func TestNoLocalModelStillRoutesImplementation(t *testing.T) {
-	remote := cognition.Ready(cognition.CLIEndpoint("cli:codex-cli", "openai"))
+	remote := declaredSubscription(cognition.Ready(cognition.CLIEndpoint("cli:codex-cli", "openai")))
 	remote = cognition.WithCapability(remote, protocol.CapabilityImplementation,
 		protocol.GradeStrong, protocol.ProvenanceConfigured)
 	decision := cognition.Route(requirement(cognition.RoleImplementer), permissivePolicy(),
@@ -299,7 +313,7 @@ func TestUnhealthyAndUnauthenticatedEndpointsAreRejected(t *testing.T) {
 // supported CLI publishes a safe way to ask, and a probe that answered is
 // stronger evidence than a status command.
 func TestUnknownAuthenticationIsNotARejection(t *testing.T) {
-	endpoint := cognition.Ready(cognition.CLIEndpoint("cli:codex-cli", "openai"))
+	endpoint := declaredSubscription(cognition.Ready(cognition.CLIEndpoint("cli:codex-cli", "openai")))
 	endpoint = cognition.WithCapability(endpoint, protocol.CapabilityImplementation,
 		protocol.GradeStrong, protocol.ProvenanceConfigured)
 	if endpoint.Auth != protocol.AuthUnknown {
