@@ -583,7 +583,13 @@ Add cognitive diversity where it has leverage.
 - disagreement reports;
 - risk-based review policy;
 - consultant abstraction;
-- at least one external consultant adapter;
+- at least one external consultant adapter — see
+  [adr/0017-external-search-consultants.md](adr/0017-external-search-consultants.md)
+  (status: Proposed) for a candidate design: bounded, license-aware external
+  code-sample and general web search for execution-cognition roles, routed
+  local-first through the existing capability routing, with per-project
+  license/cache/retention policy. Optional; not required for M6's other
+  deliverables;
 - anti-anchoring independent-consultation mode;
 - Design Readiness Gate;
 - independent specification-review dimensions and consultant-assisted ambiguity discovery;
