@@ -73,6 +73,11 @@ type Spec struct {
 	// DefaultMaxOutputBytes; a negative value is rejected.
 	MaxStdoutBytes int64
 	MaxStderrBytes int64
+	// StdoutSink and StderrSink receive streaming output concurrently with
+	// bounded inline capture, enabling decoupling of artifact storage or
+	// live log streaming without making the runner depend on artifacts (ADR-0016).
+	StdoutSink io.Writer
+	StderrSink io.Writer
 }
 
 // Result is the captured outcome of one run.
@@ -153,8 +158,16 @@ func (r *Runner) Run(ctx context.Context, spec Spec) (Result, error) {
 	}
 	stdout := newBoundedWriter(maxStdout)
 	stderr := newBoundedWriter(maxStderr)
-	cmd.Stdout = stdout
-	cmd.Stderr = stderr
+	if spec.StdoutSink != nil {
+		cmd.Stdout = io.MultiWriter(stdout, spec.StdoutSink)
+	} else {
+		cmd.Stdout = stdout
+	}
+	if spec.StderrSink != nil {
+		cmd.Stderr = io.MultiWriter(stderr, spec.StderrSink)
+	} else {
+		cmd.Stderr = stderr
+	}
 
 	setProcAttrs(&cmd)
 

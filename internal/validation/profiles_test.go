@@ -194,3 +194,86 @@ func TestLoadProfilesExampleFastProfileChecksHaveDistinctIDs(t *testing.T) {
 		t.Fatalf("expected the shipped fast profile to have more than one check, got %+v", fast.Checks)
 	}
 }
+
+func TestLoadProfilesObjectShapedWithServices(t *testing.T) {
+	doc := `
+validation:
+  profiles:
+    integration:
+      module_id: "backend"
+      services:
+        - id: "emulator"
+          dir: "backend"
+          argv: ["firebase", "emulators:start"]
+          startup_timeout: "45s"
+          shutdown_timeout: "5s"
+          max_lifetime: "10m"
+          port_config:
+            mode: "env_var"
+            env_var_name: "FIRESTORE_PORT"
+          readiness:
+            kind: "http_get"
+            path: "/"
+            expected_status: 200
+            interval: "200ms"
+      checks:
+        - id: "integration-tests"
+          argv: ["go", "test", "-tags=integration", "./..."]
+          timeout: "15m"
+          dir: "backend"
+`
+	profiles, err := validation.LoadProfiles([]byte(doc))
+	if err != nil {
+		t.Fatalf("LoadProfiles object-shaped failed: %v", err)
+	}
+	integ, ok := profiles["integration"]
+	if !ok {
+		t.Fatal("missing integration profile")
+	}
+	if integ.ModuleID != "backend" {
+		t.Errorf("module_id = %q, want backend", integ.ModuleID)
+	}
+	if len(integ.Services) != 1 {
+		t.Fatalf("services count = %d, want 1", len(integ.Services))
+	}
+	srv := integ.Services[0]
+	if srv.ID != "emulator" || srv.StartupTimeout.String() != "45s" || srv.ShutdownTimeout.String() != "5s" || srv.MaxLifetime.String() != "10m0s" {
+		t.Errorf("unexpected service spec: %+v", srv)
+	}
+	if srv.PortConfig.Mode != validation.PortHandoffEnvVar || srv.PortConfig.EnvVarName != "FIRESTORE_PORT" {
+		t.Errorf("unexpected port config: %+v", srv.PortConfig)
+	}
+	if srv.ReadinessProbe.Interval.String() != "200ms" || srv.ReadinessProbe.ExpectedStatus != 200 {
+		t.Errorf("unexpected readiness probe: %+v", srv.ReadinessProbe)
+	}
+	if len(integ.Checks) != 1 || integ.Checks[0].ID != "integration-tests" || integ.Checks[0].Dir != "backend" {
+		t.Errorf("unexpected check: %+v", integ.Checks[0])
+	}
+}
+
+func TestValidateDirContainment(t *testing.T) {
+	tempDir := t.TempDir()
+	subDir := tempDir + "/backend"
+	if err := os.Mkdir(subDir, 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+
+	// Valid sub directory
+	contained, err := validation.ValidateDirContainment(tempDir, "backend")
+	if err != nil {
+		t.Fatalf("expected valid containment, got: %v", err)
+	}
+	if contained == "" {
+		t.Fatal("expected non-empty resolved path")
+	}
+
+	// Escape via ..
+	_, err = validation.ValidateDirContainment(tempDir, "../something")
+	if err == nil {
+		t.Fatal("expected escape to be rejected")
+	}
+	if errs.CategoryOf(err) != errs.CategoryPolicyDenied {
+		t.Errorf("expected CategoryPolicyDenied, got %v", errs.CategoryOf(err))
+	}
+}
+

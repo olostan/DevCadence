@@ -63,23 +63,37 @@ The model may explain a failure but cannot rewrite the underlying result.
 
 ## 3. Validation profiles
 
-Projects define reusable validation profiles, e.g.:
+Projects define reusable validation profiles, supporting both module-scoped checks and supervised background test services (ADR-0015, ADR-0016):
 
 ```yaml
-profiles:
-  fast:
-    - go test ./internal/...
-    - go vet ./...
-  full:
-    - go test ./...
-    - go vet ./...
-    - staticcheck ./...
-  concurrency:
-    - go test -race ./...
-  protocol:
-    - go test ./...
-    - ./scripts/validate-schemas
+validation:
+  profiles:
+    fast:
+      checks:
+        - argv: ["go", "test", "./internal/..."]
+          timeout: 10m
+        - argv: ["go", "vet", "./..."]
+          timeout: 5m
+    integration:
+      services:
+        - id: "emulator"
+          argv: ["firebase", "emulators:start", "--only", "firestore"]
+          startup_timeout: 30s
+          shutdown_timeout: 5s
+          max_lifetime: 15m
+          port_config:
+            mode: "env_var"
+            env_var_name: "FIRESTORE_EMULATOR_HOST"
+          readiness:
+            kind: "http_get"
+            path: "/"
+            expected_status: 200
+      checks:
+        - argv: ["go", "test", "-tags=integration", "./..."]
+          timeout: 10m
 ```
+
+Validation checks must be strictly non-mutating (e.g. `prettier --check` or `eslint`, never formatting or code modification commands). Clean worktree integrity is verified before and after execution.
 
 A Work Package selects required profiles and may add task-specific checks.
 

@@ -3,6 +3,7 @@ package validation
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/olostan/DevCadence/internal/artifacts"
@@ -31,6 +32,10 @@ type RunOptions struct {
 	// MaxOutputBytes bounds each check's captured stdout/stderr. Zero
 	// selects process.DefaultMaxOutputBytes.
 	MaxOutputBytes int64
+	// RunID identifies this validation run, used for isolated service directories.
+	RunID string
+	// Modules provides the project's authoritative module catalog for resolving CheckSpec.ModuleID.
+	Modules []protocol.ModuleDefinition
 }
 
 // RunProfile executes every check in profile, in order, against opts.Dir.
@@ -46,7 +51,7 @@ type RunOptions struct {
 // protocol.ValidationResult; RunProfile does not build or persist one itself
 // so that callers validating a baseline, an attempt or an integration can
 // supply the right Subject.
-func RunProfile(ctx context.Context, profile Profile, opts RunOptions) ([]protocol.CheckResult, protocol.ValidationOutcome, error) {
+func RunProfile(ctx context.Context, profile Profile, opts RunOptions) (checks []protocol.CheckResult, outcome protocol.ValidationOutcome, err error) {
 	if opts.Dir == "" {
 		return nil, "", errs.New(errs.CategoryInvalidArgument, "validation: dir is required")
 	}
@@ -72,8 +77,70 @@ func RunProfile(ctx context.Context, profile Profile, opts RunOptions) ([]protoc
 		maxOutput = process.DefaultMaxOutputBytes
 	}
 
-	checks := make([]protocol.CheckResult, 0, len(profile.Checks))
+	findModule := func(modID string) *protocol.ModuleDefinition {
+		for i := range opts.Modules {
+			if opts.Modules[i].ID == modID {
+				return &opts.Modules[i]
+			}
+		}
+		return nil
+	}
+
+	if profile.ModuleID != "" {
+		if findModule(profile.ModuleID) == nil {
+			return nil, protocol.ValidationError, errs.New(errs.CategoryInvalidArgument, "validation: profile %q specifies unknown module %q", profile.Name, profile.ModuleID)
+		}
+	}
+
+	effectiveServices := make([]ServiceSpec, len(profile.Services))
+	for i, spec := range profile.Services {
+		effectiveModID := spec.ModuleID
+		if effectiveModID == "" {
+			effectiveModID = profile.ModuleID
+		}
+		if effectiveModID != "" && findModule(effectiveModID) == nil {
+			return nil, protocol.ValidationError, errs.New(errs.CategoryInvalidArgument, "validation: service %q specifies unknown module %q", spec.ID, effectiveModID)
+		}
+		effectiveServices[i] = spec
+		effectiveServices[i].ModuleID = effectiveModID
+	}
+
+	for _, spec := range profile.Checks {
+		effectiveModID := spec.ModuleID
+		if effectiveModID == "" {
+			effectiveModID = profile.ModuleID
+		}
+		if effectiveModID != "" && findModule(effectiveModID) == nil {
+			return nil, protocol.ValidationError, errs.New(errs.CategoryInvalidArgument, "validation: check %q specifies unknown module %q", spec.ID, effectiveModID)
+		}
+	}
+
+	checks = make([]protocol.CheckResult, 0, len(profile.Checks))
 	sawFail, sawError, sawCancel := false, false, false
+
+	var activeServices *ActiveServices
+	if len(profile.Services) > 0 {
+		runID := opts.RunID
+		if runID == "" {
+			runID = fmt.Sprintf("val_%d", time.Now().UnixNano())
+		}
+		active, startErr := StartServices(ctx, effectiveServices, opts.Dir, baseEnv, runID, opts.Modules)
+		if startErr != nil {
+			return nil, protocol.ValidationError, startErr
+		}
+		activeServices = active
+		defer func() {
+			if tErr := activeServices.Teardown(context.Background()); tErr != nil {
+				if err == nil {
+					err = tErr
+				} else {
+					err = fmt.Errorf("%w; teardown error: %v", err, tErr)
+				}
+				outcome = protocol.ValidationError
+			}
+		}()
+		baseEnv = activeServices.Env()
+	}
 
 	for _, spec := range profile.Checks {
 		if spec.ID == "" {
@@ -100,31 +167,131 @@ func RunProfile(ctx context.Context, profile Profile, opts RunOptions) ([]protoc
 			sawCancel = true
 			continue
 		}
+
+		if activeServices != nil {
+			if err := activeServices.CheckHealth(); err != nil {
+				now := time.Now().UTC()
+				msg := err.Error()
+				checks = append(checks, protocol.CheckResult{
+					ID:               spec.ID,
+					Kind:             spec.Kind,
+					Command:          spec.Argv,
+					WorkingDirectory: &opts.Dir,
+					Status:           protocol.CheckError,
+					Summary:          &msg,
+					StartedAt:        protocol.NewTimestamp(now),
+					FinishedAt:       protocol.NewTimestamp(now),
+				})
+				sawError = true
+				break
+			}
+		}
+
 		env := baseEnv
 		if len(spec.Env) > 0 {
 			env = process.MergeEnv(baseEnv, spec.Env)
 		}
+
+		effectiveModID := spec.ModuleID
+		if effectiveModID == "" {
+			effectiveModID = profile.ModuleID
+		}
+
+		workingDir := opts.Dir
+		if effectiveModID != "" {
+			foundMod := findModule(effectiveModID)
+			if foundMod != nil {
+				moduleBaseDir, err := ValidateDirContainment(opts.Dir, foundMod.Path)
+				if err != nil {
+					now := time.Now().UTC()
+					msg := err.Error()
+					checks = append(checks, protocol.CheckResult{
+						ID:               spec.ID,
+						Kind:             spec.Kind,
+						Command:          spec.Argv,
+						WorkingDirectory: &opts.Dir,
+						Status:           protocol.CheckError,
+						Summary:          &msg,
+						StartedAt:        protocol.NewTimestamp(now),
+						FinishedAt:       protocol.NewTimestamp(now),
+					})
+					sawError = true
+					continue
+				}
+				workingDir = moduleBaseDir
+			}
+		}
+
+		if spec.Dir != "" {
+			containedDir, err := ValidateDirContainment(workingDir, spec.Dir)
+			if err != nil {
+				now := time.Now().UTC()
+				msg := err.Error()
+				checks = append(checks, protocol.CheckResult{
+					ID:               spec.ID,
+					Kind:             spec.Kind,
+					Command:          spec.Argv,
+					WorkingDirectory: &opts.Dir,
+					Status:           protocol.CheckError,
+					Summary:          &msg,
+					StartedAt:        protocol.NewTimestamp(now),
+					FinishedAt:       protocol.NewTimestamp(now),
+				})
+				sawError = true
+				continue
+			}
+			workingDir = containedDir
+		}
+
+		checkCtx, cancel := context.WithCancelCause(ctx)
+		var stopMonitor func()
+		if activeServices != nil {
+			stopMonitor = activeServices.Monitor(checkCtx, cancel)
+		}
+
 		started := time.Now().UTC()
-		res, runErr := runner.Run(ctx, process.Spec{
+		res, runErr := runner.Run(checkCtx, process.Spec{
 			Executable:     spec.Argv[0],
 			Args:           spec.Argv[1:],
-			Dir:            opts.Dir,
+			Dir:            workingDir,
 			Env:            env,
 			Timeout:        spec.Timeout,
 			MaxStdoutBytes: maxOutput,
 			MaxStderrBytes: maxOutput,
 		})
 		finished := time.Now().UTC()
+		if stopMonitor != nil {
+			stopMonitor()
+		}
+		cancel(nil)
+
+		// If execution aborted due to a background service crash, record immediately
+		if cause := context.Cause(checkCtx); cause != nil && cause != context.Canceled {
+			check := protocol.CheckResult{
+				ID:               spec.ID,
+				Kind:             spec.Kind,
+				Command:          spec.Argv,
+				WorkingDirectory: &workingDir,
+				StartedAt:        protocol.NewTimestamp(started),
+				FinishedAt:       protocol.NewTimestamp(finished),
+				Status:           protocol.CheckError,
+			}
+			summary := fmt.Sprintf("service failure during check execution: %v", cause)
+			check.Summary = &summary
+			sawError = true
+			checks = append(checks, check)
+			break
+		}
 
 		check := protocol.CheckResult{
 			ID:               spec.ID,
 			Kind:             spec.Kind,
 			Command:          spec.Argv,
-			WorkingDirectory: &opts.Dir,
+			WorkingDirectory: &workingDir,
 			StartedAt:        protocol.NewTimestamp(started),
 			FinishedAt:       protocol.NewTimestamp(finished),
 		}
-		if v, err := gitVersion(ctx, runner, spec.Argv, env, opts.Dir); err == nil && v != "" {
+		if v, err := gitVersion(ctx, runner, spec.Argv, env, workingDir); err == nil && v != "" {
 			check.ToolVersion = &v
 		}
 
@@ -171,7 +338,14 @@ func RunProfile(ctx context.Context, profile Profile, opts RunOptions) ([]protoc
 		checks = append(checks, check)
 	}
 
-	outcome := protocol.ValidationPass
+	// Verify services remained healthy after the final check
+	if activeServices != nil && !sawError {
+		if err := activeServices.CheckHealth(); err != nil {
+			sawError = true
+		}
+	}
+
+	outcome = protocol.ValidationPass
 	switch {
 	case sawCancel:
 		outcome = protocol.ValidationCancelled

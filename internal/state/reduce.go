@@ -78,6 +78,8 @@ func (p *Projection) applyPayload(e *events.Event) error {
 			KnownDebt:    append([]string(nil), payload.KnownDebt...),
 		}
 		return nil
+	case *events.ModuleCatalogRecorded:
+		return p.applyModuleCatalogRecorded(payload)
 
 	case *events.TaskCreated:
 		return p.applyTaskCreated(e, payload)
@@ -175,6 +177,11 @@ func (p *Projection) applyComponentDeclared(payload *events.ComponentDeclared) e
 		p.componentIDs = append(p.componentIDs, payload.ComponentID)
 	}
 	p.components[payload.ComponentID] = component
+	return nil
+}
+
+func (p *Projection) applyModuleCatalogRecorded(payload *events.ModuleCatalogRecorded) error {
+	p.modules = append([]protocol.ModuleDefinition(nil), payload.Modules...)
 	return nil
 }
 

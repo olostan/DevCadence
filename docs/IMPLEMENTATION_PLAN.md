@@ -30,6 +30,12 @@ M3 is internally split into M3A (environment/cognition capability) and M3B
 (brownfield project adoption). These are milestone sub-phases, not new
 top-level numbering that shifts M5-M9.
 
+An additional sub-phase, M2.5, sits between M2 and M3: it extends M2's
+repository/worktree/process/validation foundation with the module, tool,
+service-supervision and context-compaction infrastructure that M3's cognition
+runtime and M4A's execution-agent roles need. See "M2.5 — Declarative modules,
+bounded execution tools, supervised services, and context compaction" below.
+
 ## M0 — Normative architecture baseline
 
 ### Goal
@@ -247,6 +253,104 @@ still passes).
   operator/demo commands, not the eventual M3/M4 agent-facing execution
   surface; a future milestone's agent runtime calls
   `internal/validation`/`internal/process` directly, not the CLI.
+
+## M2.5 — Declarative modules, bounded execution tools, supervised services, and context compaction
+
+### Goal
+
+Give execution-cognition roles (`Repository Scout`, `Implementer`) safe, bounded,
+monorepo-aware ways to read, search, and validate a repository — and give
+long-running execution sessions a way to stay within context budgets — without
+enlarging the Principal's own interface. This is infrastructure M3's cognition
+runtime and M4A's execution-agent roles need; it is not part of M3B (guided
+bootstrap), which is unrelated onboarding/setup work.
+
+### Status
+
+Implemented on branch `feat/modules-tools-services` (PR #7), reviewed and
+repaired through several rounds; not yet merged to `main`.
+
+### Deliverables
+- **Declarative modules & scoped worktrees** (ADR-0015): `ModuleDefinition`/
+  `ModuleCatalogRecorded` in `internal/protocol`/`internal/state`; module
+  inheritance and precedence across profile/check/service, with unknown
+  module IDs rejected before process startup; directory containment checks
+  against parent traversal and symlink escapes, including ancestor-directory
+  symlinks — `internal/tools/scope.go`, `internal/validation`.
+- **Bounded execution tools** (ADR-0016 §1, §3): `read_file` (opt-in line
+  numbers, byte caps), `fetch_content` (universal paginator over immutable
+  content-addressed artifacts, `lines`/`bytes` units, contiguous cursors),
+  `grep_search` (ripgrep/git-grep/pure-Go fallback, 20-result cutoff,
+  automatic pagination) — `internal/tools`.
+- **Supervised validation services** (ADR-0016 §2): `ServiceSupervisor` in
+  `internal/validation` with port allocation modes (`env_var`, `cli_flag`,
+  `socket_inheritance`), isolated temp dirs, readiness probing, `MaxLifetime`
+  bounds, process-group reaping, and start-time-based restart reconciliation
+  against PID recycling.
+- **Asynchronous operations** (ADR-0016 §2): `OperationManager` in
+  `internal/process` — 10s response-yield threshold, background continuation
+  under original timeouts, idempotent cancellation.
+- **Multi-tier context compaction** (ADR-0016 §4): admission-safe budgeting
+  against an endpoint's `MaxRequestTokens`; Tier 1 deterministic tool-result
+  pruning (soft watermark); Tier 2 episodic trajectory summarization (hard
+  watermark) with atomic tool-call/result groups preserved across the split
+  and a final admission guard on every path — `internal/compaction`.
+- **Syntactic symbol inspection** (ADR-0016, WP6): `find_symbol` over native
+  Go AST, and regex-based syntactic matching for TypeScript/JavaScript with
+  honest `backend` reporting (`go/ast` vs `syntactic-regex`, never
+  `tree-sitter`) and comment/string-literal masking — `internal/tools`.
+
+### Verification
+
+No structured `ValidationResult`/evidence-bundle tooling is expected here —
+this is pre-M1-adoption infra work on DevCadence's own repository, verified
+the ordinary way:
+- `go test -count=1 ./...` and `go test -race ./...` — pass;
+- `go vet ./...` — pass;
+- `GOOS=windows GOARCH=amd64 go build ./...` and `go vet ./internal/validation/...`
+  — pass (the latter required isolating `syscall` usage, including in test
+  code, behind `//go:build unix` / `!unix` files);
+- targeted regression tests per finding, e.g. `TestReadFileWorktreeContainment`,
+  `TestServicePrematureExit`, `TestRunProfileModuleInheritanceAndOverride`,
+  `TestClosureKeepsProtectedToolGroupWhole`, `TestTier2DigestModelVerifiedFlagIsUntrusted`,
+  `TestClosureBlankLinesPreservedInTotals`.
+
+### Explicitly deferred (see ADR-0016's delivered-vs-deferred table)
+- artifact-backed live validation streaming with 4 KiB previews (sinks are
+  decoupled now; the daemon/task-runner milestone wires them to
+  `internal/artifacts`);
+- durable, SQLite-backed asynchronous-operation events across daemon
+  restarts (current `OperationManager` is in-memory, same-process only);
+- BPE tokenizers and independent summarizer-input admission for compaction
+  (current admission uses a selected-field/byte heuristic against the
+  endpoint ceiling);
+- Cgo Tree-sitter grammar parsing for symbol inspection (TypeScript/JavaScript
+  stays on the honestly-labeled regex backend);
+- full cross-platform executable-path verification for service/process
+  restart ownership (current check is start-time matching, which is
+  fail-closed against PID recycling but not identity-verified).
+
+### Architectural decisions taken during M2.5
+- [adr/0015-declarative-modules-and-scoped-worktrees.md](adr/0015-declarative-modules-and-scoped-worktrees.md)
+- [adr/0016-validation-services-bounded-tools-and-context-compaction.md](adr/0016-validation-services-bounded-tools-and-context-compaction.md)
+
+### Note on principal exposure
+
+Per ADR-0016 §1, `read_file`, `grep_search`, `find_symbol` and `run_command`
+are execution-agent capabilities scoped to isolated worktrees for the
+`Repository Scout`/`Implementer` roles, not part of the Principal's own
+interface — the Principal still only sees the semantic operations listed in
+AGENTS.md §3 and M4A's deliverables. No MCP server exists yet to expose any
+tool externally (that is M4A work), so this boundary is currently structural
+(nothing outside `internal/tools`'s own tests calls these functions) rather
+than enforced by a wire-level contract.
+
+ADR-0016's 2026-09-23 amendment (see the ADR) splits this further into two
+evidence tiers M4A must carry forward: `grep_search`/`find_symbol` results are
+compact, citable evidence `request_evidence` may fetch for the Principal
+directly; `read_file`/`fetch_content` remain execution-agent-only, reachable
+by the Principal only through a bounded, execution-agent-mediated snippet
+request — never as an open-ended file-reading tool.
 
 ## M3 — Environment intelligence, cognition runtime, and guided bootstrap
 
