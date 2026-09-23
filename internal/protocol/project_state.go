@@ -35,6 +35,7 @@ type ProjectState struct {
 	Product    *ProductState    `json:"product,omitempty"`
 	Milestone  MilestoneState   `json:"milestone"`
 	Components []ComponentState `json:"components,omitempty"`
+	Modules    []ModuleDefinition `json:"modules,omitempty"`
 	Tasks      TaskBuckets      `json:"tasks"`
 
 	ActiveInvariants []string `json:"active_invariants,omitempty"`

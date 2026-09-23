@@ -2,6 +2,7 @@ package validation_test
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -141,3 +142,179 @@ func TestRunProfileOutputCaptured(t *testing.T) {
 		t.Fatalf("artifacts not recorded: %+v", checks[0])
 	}
 }
+
+func TestRunProfileCheckDirExecution(t *testing.T) {
+	dir := t.TempDir()
+	subDir := filepath.Join(dir, "submodule")
+	if err := os.Mkdir(subDir, 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	profile := validation.Profile{
+		Name: "sub",
+		Checks: []validation.CheckSpec{
+			{ID: "check-pwd", Argv: []string{"pwd"}, Timeout: 5000000000, Dir: "submodule"},
+		},
+	}
+	checks, outcome, err := validation.RunProfile(context.Background(), profile, validation.RunOptions{
+		Dir: dir, ProjectID: "proj-a", Artifacts: newArtifactStore(t),
+	})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if outcome != protocol.ValidationPass {
+		t.Fatalf("outcome = %s, want pass", outcome)
+	}
+	resolvedSubDir, err := filepath.EvalSymlinks(subDir)
+	if err != nil {
+		t.Fatalf("eval symlinks: %v", err)
+	}
+	if checks[0].WorkingDirectory == nil || *checks[0].WorkingDirectory != resolvedSubDir {
+		t.Errorf("working dir = %v, want %s", *checks[0].WorkingDirectory, resolvedSubDir)
+	}
+}
+
+func TestRunProfileCheckDirEscapeRejected(t *testing.T) {
+	dir := t.TempDir()
+	profile := validation.Profile{
+		Name: "escape",
+		Checks: []validation.CheckSpec{
+			{ID: "bad-dir", Argv: []string{"true"}, Timeout: 5000000000, Dir: "../outside"},
+		},
+	}
+	checks, outcome, err := validation.RunProfile(context.Background(), profile, validation.RunOptions{
+		Dir: dir, ProjectID: "proj-a", Artifacts: newArtifactStore(t),
+	})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if outcome != protocol.ValidationError {
+		t.Fatalf("outcome = %s, want error", outcome)
+	}
+	if checks[0].Status != protocol.CheckError {
+		t.Fatalf("status = %s, want CheckError", checks[0].Status)
+	}
+}
+
+func TestRunProfileModuleResolution(t *testing.T) {
+	dir := t.TempDir()
+	modDir := filepath.Join(dir, "packages", "core")
+	if err := os.MkdirAll(modDir, 0755); err != nil {
+		t.Fatalf("mkdir core: %v", err)
+	}
+
+	modules := []protocol.ModuleDefinition{
+		{
+			ID:       "pkg-core",
+			Path:     "packages/core",
+			Language: "go",
+		},
+	}
+
+	profile := validation.Profile{
+		Name: "mod-test",
+		Checks: []validation.CheckSpec{
+			{ID: "check-mod", ModuleID: "pkg-core", Argv: []string{"pwd"}, Timeout: 5000000000},
+		},
+	}
+
+	checks, outcome, err := validation.RunProfile(context.Background(), profile, validation.RunOptions{
+		Dir:       dir,
+		ProjectID: "proj-a",
+		Artifacts: newArtifactStore(t),
+		Modules:   modules,
+	})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if outcome != protocol.ValidationPass {
+		t.Fatalf("outcome = %s, want pass", outcome)
+	}
+
+	resolvedModDir, err := filepath.EvalSymlinks(modDir)
+	if err != nil {
+		t.Fatalf("eval symlinks: %v", err)
+	}
+	if checks[0].WorkingDirectory == nil || *checks[0].WorkingDirectory != resolvedModDir {
+		t.Errorf("working dir = %v, want %s", *checks[0].WorkingDirectory, resolvedModDir)
+	}
+}
+
+func TestRunProfileUnknownModuleRejected(t *testing.T) {
+	dir := t.TempDir()
+	profile := validation.Profile{
+		Name:     "mod-reject",
+		ModuleID: "nonexistent-profile-module",
+		Checks: []validation.CheckSpec{
+			{ID: "check-mod", Argv: []string{"pwd"}, Timeout: 5000000000},
+		},
+	}
+
+	_, outcome, err := validation.RunProfile(context.Background(), profile, validation.RunOptions{
+		Dir:       dir,
+		ProjectID: "proj-a",
+		Artifacts: newArtifactStore(t),
+		Modules: []protocol.ModuleDefinition{
+			{ID: "pkg-core", Path: "packages/core", Language: "go"},
+		},
+	})
+	if err == nil {
+		t.Fatalf("expected error for unknown module, got nil")
+	}
+	if outcome != protocol.ValidationError {
+		t.Fatalf("outcome = %s, want ValidationError", outcome)
+	}
+}
+
+func TestRunProfileModuleInheritanceAndOverride(t *testing.T) {
+	dir := t.TempDir()
+	modCore := filepath.Join(dir, "packages", "core")
+	modWeb := filepath.Join(dir, "packages", "web")
+	if err := os.MkdirAll(modCore, 0755); err != nil {
+		t.Fatalf("mkdir core: %v", err)
+	}
+	if err := os.MkdirAll(modWeb, 0755); err != nil {
+		t.Fatalf("mkdir web: %v", err)
+	}
+
+	modules := []protocol.ModuleDefinition{
+		{ID: "pkg-core", Path: "packages/core", Language: "go"},
+		{ID: "pkg-web", Path: "packages/web", Language: "ts"},
+	}
+
+	// Profile defaults to pkg-core. check1 inherits pkg-core; check2 overrides with pkg-web.
+	profile := validation.Profile{
+		Name:     "profile-inheritance",
+		ModuleID: "pkg-core",
+		Checks: []validation.CheckSpec{
+			{ID: "check-inherited", Argv: []string{"pwd"}, Timeout: 5000000000},
+			{ID: "check-override", ModuleID: "pkg-web", Argv: []string{"pwd"}, Timeout: 5000000000},
+		},
+	}
+
+	checks, outcome, err := validation.RunProfile(context.Background(), profile, validation.RunOptions{
+		Dir:       dir,
+		ProjectID: "proj-a",
+		Artifacts: newArtifactStore(t),
+		Modules:   modules,
+	})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if outcome != protocol.ValidationPass {
+		t.Fatalf("outcome = %s, want pass", outcome)
+	}
+	if len(checks) != 2 {
+		t.Fatalf("expected 2 checks, got %d", len(checks))
+	}
+
+	resolvedCore, _ := filepath.EvalSymlinks(modCore)
+	resolvedWeb, _ := filepath.EvalSymlinks(modWeb)
+
+	if checks[0].WorkingDirectory == nil || *checks[0].WorkingDirectory != resolvedCore {
+		t.Errorf("check 0 working dir = %v, want %s", checks[0].WorkingDirectory, resolvedCore)
+	}
+	if checks[1].WorkingDirectory == nil || *checks[1].WorkingDirectory != resolvedWeb {
+		t.Errorf("check 1 working dir = %v, want %s", checks[1].WorkingDirectory, resolvedWeb)
+	}
+}
+

@@ -1,6 +1,7 @@
 package process
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"path/filepath"
@@ -327,3 +328,31 @@ func exeLookup(name string) (string, error) {
 	}
 	return "", os.ErrNotExist
 }
+
+func TestRunStreamingSinks(t *testing.T) {
+	r := NewRunner()
+	dir := testDir(t)
+	var stdoutBuf, stderrBuf bytes.Buffer
+	res, err := r.Run(context.Background(), Spec{
+		Executable: "sh",
+		Args:       []string{"-c", "echo hello-stdout; echo hello-stderr >&2"},
+		Dir:        dir,
+		Env:        BaseEnv(),
+		Timeout:    time.Second,
+		StdoutSink: &stdoutBuf,
+		StderrSink: &stderrBuf,
+	})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if !res.Success() {
+		t.Fatalf("run failed: %+v", res)
+	}
+	if !strings.Contains(stdoutBuf.String(), "hello-stdout") {
+		t.Errorf("stdout sink = %q, want hello-stdout", stdoutBuf.String())
+	}
+	if !strings.Contains(stderrBuf.String(), "hello-stderr") {
+		t.Errorf("stderr sink = %q, want hello-stderr", stderrBuf.String())
+	}
+}
+

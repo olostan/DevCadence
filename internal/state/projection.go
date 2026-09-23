@@ -58,6 +58,7 @@ type Projection struct {
 	// where it is not.
 	components   map[string]protocol.ComponentState
 	componentIDs []string
+	modules      []protocol.ModuleDefinition
 
 	risks   map[string]protocol.Risk
 	riskIDs []string
@@ -268,6 +269,9 @@ func (p *Projection) ProjectState() (*protocol.ProjectState, error) {
 	}
 	for _, id := range p.componentIDs {
 		state.Components = append(state.Components, p.components[id])
+	}
+	if len(p.modules) > 0 {
+		state.Modules = append([]protocol.ModuleDefinition(nil), p.modules...)
 	}
 	for _, id := range p.riskIDs {
 		state.Risks = append(state.Risks, p.risks[id])

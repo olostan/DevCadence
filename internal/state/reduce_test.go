@@ -522,3 +522,48 @@ func TestRejectedEventLeavesTheProjectionUntouched(t *testing.T) {
 		})
 	}
 }
+
+func TestReduceModuleCatalogRecorded(t *testing.T) {
+	stream := testsupport.NewScenario(t, "example").
+		Add(&events.ProjectInitialized{Name: "monorepo", MilestoneID: "M1", MilestoneTitle: "Modules"}).
+		Add(&events.ModuleCatalogRecorded{
+			ConfigDigest: "sha256:abcd1234ef",
+			RootModuleID: "backend",
+			Modules: []protocol.ModuleDefinition{
+				{
+					ID:       "backend",
+					Path:     "backend",
+					Language: "go",
+				},
+				{
+					ID:           "web",
+					Path:         "frontend/web",
+					ManifestPath: "frontend/web/package.json",
+					Language:     "typescript",
+					Dependencies: []string{"backend"},
+				},
+			},
+		}).
+		Stream()
+
+	p, err := state.Reduce(stream)
+	if err != nil {
+		t.Fatalf("Reduce failed: %v", err)
+	}
+
+	state, err := p.ProjectState()
+	if err != nil {
+		t.Fatalf("ProjectState failed: %v", err)
+	}
+
+	if len(state.Modules) != 2 {
+		t.Fatalf("expected 2 modules, got %d", len(state.Modules))
+	}
+	if state.Modules[0].ID != "backend" || state.Modules[0].Path != "backend" {
+		t.Errorf("unexpected module 0: %+v", state.Modules[0])
+	}
+	if state.Modules[1].ID != "web" || state.Modules[1].Language != "typescript" {
+		t.Errorf("unexpected module 1: %+v", state.Modules[1])
+	}
+}
+

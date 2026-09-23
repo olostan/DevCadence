@@ -230,6 +230,8 @@ Useful inventory includes:
 - important repository topology;
 - current accepted HEAD/branch.
 
+Discovered package manifests (`go.mod`, `package.json`, `pubspec.yaml`, `Cargo.toml`, etc.) serve as **discovery evidence** (`ObservedManifest`). They do not unilaterally define independent module boundaries. Adoption proposes module candidates for human confirmation, recording the approved catalog in `.devcadence/project.yaml` and journaling `ModuleCatalogRecorded` into canonical project state (ADR-0015).
+
 The inventory is evidence for reconstruction, not itself the architecture document.
 
 ## 8. Behavior and contract discovery
