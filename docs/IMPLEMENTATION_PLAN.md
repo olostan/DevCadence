@@ -343,13 +343,14 @@ interface — the Principal still only sees the semantic operations listed in
 AGENTS.md §3 and M4A's deliverables. No MCP server exists yet to expose any
 tool externally (that is M4A work), so this boundary is currently structural
 (nothing outside `internal/tools`'s own tests calls these functions) rather
-than enforced by a wire-level contract. M4A should carry this boundary
-forward deliberately: `grep_search`/`find_symbol` results are compact,
-citable evidence a principal may reasonably request directly through
-`request_evidence`; `read_file` and `fetch_content` are not, since routing
-raw file contents to a frontier principal is the token-bloat failure mode
-ADR-0015/0016 were written to avoid for execution agents in the first place,
-and applies at least as strongly to the principal.
+than enforced by a wire-level contract.
+
+ADR-0016's 2026-09-23 amendment (see the ADR) splits this further into two
+evidence tiers M4A must carry forward: `grep_search`/`find_symbol` results are
+compact, citable evidence `request_evidence` may fetch for the Principal
+directly; `read_file`/`fetch_content` remain execution-agent-only, reachable
+by the Principal only through a bounded, execution-agent-mediated snippet
+request — never as an open-ended file-reading tool.
 
 ## M3 — Environment intelligence, cognition runtime, and guided bootstrap
 

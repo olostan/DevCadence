@@ -83,3 +83,86 @@ Integrating real-world execution and testing (such as Firebase emulators, Vite d
 | **Symbols** | Native Go AST + TypeScript syntactic-regex with backend reporting | Cgo Tree-sitter parser (Language Service Enhancement) |
 | **Reconciliation** | Start-time verification against PID recycling | Full cross-platform executable binary path validation |
 
+## Amendment (2026-09-23): Evidence tiers within the bounded-tools boundary
+
+- **Status:** Accepted
+- **Decision owner:** Human (product owner)
+- **Trigger:** M2.5 implementation review (PR #7) confirmed §1's boundary is
+  currently structural (no MCP server exists to expose these tools at all),
+  not a designed contract for when M4A wires one. §1 also treats
+  `read_file`/`grep_search`/`find_symbol`/`run_command` as one undifferentiated
+  "execution-agent" bucket, which understates a real difference between them.
+
+### Problem
+
+§1 says raw tools are execution-agent-only and the Principal's interface is
+semantic operations. Taken literally and without refinement, that risks two
+failure modes once M4A gives the Principal a real MCP surface:
+
+1. **Silent scope creep:** nothing stops a future change from wiring
+   `read_file`/`fetch_content` directly into the Principal's tool list,
+   reintroducing the context-bloat failure mode ADR-0015/0016 exist to
+   prevent — for the same reason it's wrong for execution agents, only worse
+   at frontier-model prices and context sizes.
+2. **Principal hesitation or false uncertainty:** if the Principal has *no*
+   path to ground a specific factual claim ("does this function already
+   handle nil?", "what does this error type look like?") except delegating
+   an entire investigation task, it may hedge, qualify decisions with
+   unverifiable assumptions, or decline to commit a Work Package rather than
+   asking a small, answerable question. An architecture that makes "get one
+   fact" and "read a file" the same cost produces exactly this behavior:
+   models default to over-caution when their only escalation path is
+   heavyweight, or they quietly read more than they need to once handed the
+   capability. Neither is acceptable; the fix is a cheap, narrow, honest
+   escalation path, not a hard wall.
+
+### Decision
+
+Split the bounded-tools boundary in §1 into two evidence tiers, not one:
+
+1. **Search/locate tier — `grep_search`, `find_symbol` — Principal-eligible
+   via `request_evidence`.** These return compact, bounded, inherently
+   citable facts (a match list with line numbers; a symbol's resolved
+   location and signature): they answer "does X exist / where / how many"
+   without transmitting file contents. `request_evidence` (already listed as
+   a Principal semantic operation in AGENTS.md §3 and M4A's deliverables) MAY
+   invoke these directly and return their structured result to the Principal.
+   This is not a raw-tool exposure: the Principal still cannot run an
+   arbitrary command or open a file; it can only ask a scoped question with a
+   bounded answer shape.
+2. **Content tier — `read_file`, `fetch_content`, `run_command` output —
+   execution-agent-only, no exception.** The Principal never calls these
+   directly, in M4A or after. When a Principal decision genuinely needs to
+   see code, the correct path is `request_evidence(kind="snippet", ...)`:
+   the Principal names a hit from tier 1 (or a file path plus a reason) and a
+   *bounded* line range (hard cap, e.g. ≤200 lines / a few KB, enforced
+   server-side, not model-side); an execution agent performs the actual
+   `read_file`/`fetch_content` call in its own worktree context and returns
+   only the requested excerpt, with a `content_ref` for provenance. The
+   Principal is never handed an open-ended file-reading tool, but it is never
+   more than one bounded, cheap call away from grounding a specific claim —
+   there is always an answerable next step short of delegating a full
+   investigation task.
+
+This is additive to §1 and §3 above and constrains how M4A's `request_evidence`
+must be implemented; it changes no delivered code in this milestone (no MCP
+server exists yet), and it does not authorize exposing `read_file`/
+`fetch_content` to any principal host before this snippet-mediation path
+exists.
+
+### Consequences
+
+- **Positive:** the Principal has a strictly bounded, always-available way to
+  verify a specific factual claim, which should reduce both false-uncertainty
+  hedging and the temptation to over-provision raw file access "just in
+  case." Search/symbol evidence stays cheap enough to request liberally;
+  content excerpts stay expensive/bounded enough to request deliberately.
+- **Negative:** `request_evidence` now has two distinct fulfillment paths
+  (direct tier-1 call vs. mediated tier-2 delegation) instead of one, adding
+  implementation surface to M4A that a single undifferentiated boundary would
+  not have needed.
+- **Follow-up:** M4A's Engineering Work Package for `request_evidence` MUST
+  cite this amendment and specify the snippet size cap, the citation/reason
+  requirement, and the routing between the two tiers before it is considered
+  complete.
+
