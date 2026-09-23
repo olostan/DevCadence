@@ -100,6 +100,14 @@ Use descriptive commits. Prefer one conceptual change per commit where practical
 
 Never rewrite shared history to hide failed experiments that are relevant to a design decision. Experiments may live on branches; durable lessons belong in ADRs/evaluation artifacts.
 
+## Multi-session / multi-provider handoff
+
+Milestone-sized work commonly outlasts one agent session's quota. See
+[AGENT_HANDOFF_PROTOCOL.md](AGENT_HANDOFF_PROTOCOL.md) for the branch,
+commit, and handoff-file discipline this requires, and
+[docs/WORK_PACKAGES.md](docs/WORK_PACKAGES.md) for how a milestone gets
+split into checkpoints small enough that a quota cutoff costs little.
+
 ## Documentation
 
 If behavior changes, documentation changes in the same PR.

@@ -437,6 +437,11 @@ runtime, no Python, no credentials and no network. The read-only proof surface i
 routing: it mutates nothing, installs nothing, downloads nothing and
 authenticates nothing. `setup` and `doctor` do not exist.
 
+See [WORK_PACKAGES.md#m3b](WORK_PACKAGES.md#m3b--guided-bootstrap-and-onboarding)
+for this milestone's Work Package breakdown, and
+[AGENT_HANDOFF_PROTOCOL.md](../AGENT_HANDOFF_PROTOCOL.md) for the branch/
+commit/handoff discipline development follows across sessions.
+
 M3B inherits from M3A the pieces it needs: `MachineFingerprint` for cache
 invalidation, `ProbeDepth` for progressive cost, `cognition.Declaration` for
 operator-supplied capability and policy, `AcceleratorCandidate.RequiredSoftware`
