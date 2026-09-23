@@ -687,13 +687,19 @@ Add cognitive diversity where it has leverage.
 - disagreement reports;
 - risk-based review policy;
 - consultant abstraction;
-- at least one external consultant adapter — see
+- at least one external consultant adapter — a real independent-reasoning
+  adapter under `ConsultationRequest`/`ConsultationResult`
+  (docs/CONSULTANTS.md), not evidence acquisition;
+- optional external research / evidence-acquisition service — see
   [adr/0017-external-search-consultants.md](adr/0017-external-search-consultants.md)
-  (status: Proposed) for a candidate design: bounded, license-aware external
-  code-sample and general web search for execution-cognition roles, routed
-  local-first through the existing capability routing, with per-project
-  license/cache/retention policy. Optional; not required for M6's other
-  deliverables;
+  (status: Proposed) for a candidate design: a bounded, license-aware,
+  fail-closed-by-default service (distinct from the Consultant abstraction
+  above) letting execution-cognition roles look up external code/API/
+  documentation facts through `ExternalResearchRequest`/
+  `ExternalEvidencePacket`, with a safe remote-acquisition boundary, local-
+  first cognition routing for reranking/digesting, and per-project egress/
+  license/cache policy. Optional; not required for M6's other deliverables,
+  and not a substitute for the external consultant adapter above;
 - anti-anchoring independent-consultation mode;
 - Design Readiness Gate;
 - independent specification-review dimensions and consultant-assisted ambiguity discovery;
