@@ -41,8 +41,11 @@ was found to resolve the blocking issues, but a follow-up review identified
 one further architectural gap — durable `SourceSnapshot` retention was
 implied to happen unconditionally, before policy had decided retention was
 even permitted — plus a credential-handling gap, a network-hardening gap,
-and stale PR narrative. This draft (commit pending) incorporates that
-follow-up. The funnel mechanics, license-branch logic, local-first cognition
+and stale PR narrative. This draft incorporates that follow-up, plus one
+further normalization from a second follow-up review: durable records
+(`PolicyAssessment`, `DerivedDigest`) must carry durable source provenance
+even on the derive-only path, where no `SourceSnapshot` exists to
+reference. The funnel mechanics, license-branch logic, local-first cognition
 routing, and per-project policy from the first draft are largely preserved
 throughout; the abstraction boundaries, security posture, retention model,
 and evidence/provenance model changed across these revisions.
@@ -252,8 +255,19 @@ plus three smaller issues, incorporated into this draft:
    implementation status for a Proposed ADR) — fixed throughout this
    revision.
 
-The full text of both reviews is preserved verbatim as the cited PR #8
-comments rather than reproduced here.
+A third review of that revision
+([PR #8 comment](https://github.com/olostan/DevCadence/pull/8#issuecomment-5804750137))
+confirmed all five items above resolved and found one further
+normalization: `PolicyAssessment` and `DerivedDigest` were written as if
+they always reference a `SourceSnapshot`, but the derive-only path
+intentionally creates none, leaving durable records with no durable
+lineage on that path. Fixed by introducing the shared `SourceProvenance`
+structure (§6) — captured from the `TransientSource` at assessment time,
+before it is discarded, and carried by value in both records regardless of
+whether a `SourceSnapshot` also exists.
+
+The full text of all three reviews is preserved verbatim as the cited
+PR #8 comments rather than reproduced here.
 
 ## Decision
 
@@ -303,8 +317,13 @@ Each stage has exactly one job:
 New records, not reuse of `ConsultationRequest`/`ConsultationResult`:
 `ExternalResearchRequest`, `ExternalSourceRef`, `TransientSource`,
 `SourceSnapshot`, `PolicyAssessment`, `DerivedDigest`,
-`ExternalEvidencePacket` — seven, not five or six as earlier drafts of this
-ADR miscounted; `TransientSource` (§4) was added in this revision. A real M6
+`ExternalEvidencePacket` — seven top-level records, not five or six as
+earlier drafts of this ADR miscounted; `TransientSource` (§4) was added in
+the prior revision. This revision adds one further piece, `SourceProvenance`
+(§6) — a shared embedded structure, not an eighth top-level record —
+carried by both `PolicyAssessment` and `DerivedDigest` so durable evidence
+stays auditable even on the derive-only path where no `SourceSnapshot`
+exists. A real M6
 Consultant may *consume* an `ExternalEvidencePacket` as input evidence; it
 does not *emit* one, and the External Research service never emits a
 `ConsultationResult`. `docs/IMPLEMENTATION_PLAN.md`'s M6 section must not
@@ -380,18 +399,23 @@ satisfy the prose with a "resolve once, validate, then plain
 around — the exact algorithm is implementation guidance (below), not this
 ADR's job to specify.
 
-Only *after* metadata/license/provider-policy assessment (§5) runs against
-the `TransientSource` and determines retention is authorized does a
-durable, content-addressed `SourceSnapshot` get written to the artifact
-store; ADR-0016's `fetch_content` pagination then applies to it, unchanged,
-exactly as the first draft proposed — `fetch_content` remains a pager over
-durable artifacts only, never over transient bytes. If policy authorizes
-extraction/digest but not raw retention, a `DerivedDigest` is produced from
-the `TransientSource` and the raw bytes are discarded without ever becoming
-a `SourceSnapshot`. If neither is authorized, the `TransientSource` is
-discarded and the request is denied. `SourceSnapshot` therefore means
-"durable source copy whose retention is policy-authorized," not merely
-"bytes that were fetched."
+The assessment step (§5) captures the durable `SourceProvenance` structure
+(§6) from the `TransientSource` — canonical ref, provider, retrieval time,
+revision, content hash, license evidence — regardless of what happens next,
+since that capture must happen before the transient bytes are gone either
+way. *After* that, if retention is authorized, a durable, content-addressed
+`SourceSnapshot` is additionally written to the artifact store; ADR-0016's
+`fetch_content` pagination then applies to it, unchanged, exactly as the
+first draft proposed — `fetch_content` remains a pager over durable
+artifacts only, never over transient bytes. If policy authorizes
+extraction/digest but not raw retention, a `DerivedDigest` is produced
+(carrying the already-captured `SourceProvenance`) and the raw bytes are
+discarded without ever becoming a `SourceSnapshot`. If neither is
+authorized, the `TransientSource` is discarded and the request is denied
+— no durable record is created at all in that case. `SourceSnapshot`
+therefore means "durable *raw-content* copy whose retention is
+policy-authorized," distinct from `SourceProvenance`, which durable
+records always carry regardless of whether raw retention was authorized.
 
 ### 5. Three independent policy layers, not one
 
@@ -426,20 +450,36 @@ than before it — access authorization (can we even fetch this) is a
 different, earlier question than incorporation policy (what can we do with
 it once fetched).
 
-### 6. Digests are derived artifacts, not facts
+### 6. Digests are derived artifacts, not facts — and durable provenance survives even without a snapshot
 
 A `DerivedDigest` is model-generated interpretation, not observed fact —
 consistent with ADR-0016's existing observed/derived distinction for
-trajectory digests, which this ADR must not contradict. Every digest carries
-full lineage: provider, canonical source ref, retrieval date, source
-revision/commit where available, source content hash, a reference to
-whichever of `TransientSource` or `SourceSnapshot` it was derived from (per
-§4, a digest may exist without a durable snapshot when policy authorizes
-extraction but not raw retention), license expression plus evidence for it,
-the provider-policy revision in effect, derivation method, digest schema
+trajectory digests, which this ADR must not contradict.
+
+Raw-source retention (§4) and durable source *provenance* are separate
+concerns: `TransientSource` is explicitly non-durable and is discarded once
+its policy assessment and any derivation complete, so a durable
+`DerivedDigest` cannot depend on referencing it afterward. Instead, both
+`PolicyAssessment` and `DerivedDigest` carry a shared embedded
+`SourceProvenance` structure — captured from the `TransientSource` at
+assessment time, before it is discarded — containing: canonical source ref/
+URL, provider, retrieval timestamp, revision/commit where available,
+content hash, source metadata, license expression plus evidence for it,
+and the provider-policy revision in effect. `SourceProvenance` is durable
+and carried by value; it does not require a live reference to anything
+that may have been discarded. `PolicyAssessment` and `DerivedDigest` each
+additionally carry an *optional* reference to a `SourceSnapshot`, present
+only on the retain path (§4/§8).
+
+`DerivedDigest` additionally records: derivation method, digest schema
 revision, the cognition endpoint/model used, and the overlap-check result.
 Claims inside a digest retain `observed`/`derived`/`inferred` epistemic
 tags; nothing gets promoted to fact merely by surviving the overlap check.
+
+This means an `ExternalEvidencePacket` remains fully auditable — source
+identity, retrieval time, license basis — whether its evidence came from
+retained raw content or from a derive-only transient path where the raw
+bytes were never durably stored.
 
 Provenance is preserved **universally**, independent of whether the source
 license legally requires attribution — the engineering reason (can the
@@ -469,15 +509,21 @@ passage as uncopyrightable solely because it explains a procedure.
 
 Replace the first draft's single `(content_hash, license)` cache key with
 three independently content-addressed record types — `SourceSnapshot`
-(content hash, source identity, retrieval time, revision, metadata),
-`PolicyAssessment` (references a snapshot; license expression/evidence,
-provider constraints, policy revision, disposition), and `DerivedDigest`
-(references snapshot(s); schema revision, cognition endpoint, derivation
-revision, overlap-check result). This fits the existing artifact/evidence
-architecture (content-addressed, immutable, independently versionable)
-better than a single blob, and lets a license reassessment or a digest
-schema change happen without invalidating an otherwise-valid source
-snapshot.
+(content hash, source identity, retrieval time, revision, metadata;
+created only on the retain path, §4), `PolicyAssessment` (is keyed to the
+durable `SourceProvenance` structure described in §6, plus license
+expression/evidence, provider constraints, policy revision, disposition,
+and *may* reference a `SourceSnapshot` when raw retention was authorized —
+a `SourceSnapshot` is not required for a derive-only disposition), and
+`DerivedDigest` (records the same durable `SourceProvenance` plus
+derivation metadata — schema revision, cognition endpoint, derivation
+revision, overlap-check result — and likewise *may* reference a
+`SourceSnapshot` without requiring one). This fits the existing
+artifact/evidence architecture (content-addressed, immutable, independently
+versionable) better than a single blob, and lets a license reassessment or
+a digest schema change happen without invalidating an otherwise-valid
+source snapshot — while keeping every durable record auditable back to its
+source even when no snapshot exists at all.
 
 `cache_scope` for v1 is **project-private only**, with a bounded default
 TTL. `org_shared`/`public_shared` are removed from this decision — DevCadence
@@ -589,7 +635,9 @@ reasonable simplification.
 - Introduce `ExternalResearchRequest`, `ExternalSourceRef`,
   `TransientSource`, `SourceSnapshot`, `PolicyAssessment`, `DerivedDigest`,
   `ExternalEvidencePacket` in `internal/protocol`, distinct from
-  `ConsultationRequest`/`Result`.
+  `ConsultationRequest`/`Result`, plus a `SourceProvenance` embedded struct
+  (§6) shared by `PolicyAssessment` and `DerivedDigest` — not a top-level
+  record in its own right.
 - Build the Safe Source Fetcher as its own package (e.g.
   `internal/research/fetch`), with the threat-model controls listed in
   Decision §4 as unit-testable behavior, not prose — including a test
@@ -644,6 +692,10 @@ deterministic fixtures for:
   by the overlap gate;
 - the same source under a changed `policy_revision` does not silently reuse
   the old `PolicyAssessment` disposition;
+- a derive-only `DerivedDigest` (no `SourceSnapshot` created) still carries
+  a complete, queryable `SourceProvenance` — source ref, provider, retrieval
+  time, license evidence are all present even though the raw bytes were
+  never durably stored;
 - a project's cached `SourceSnapshot`/`PolicyAssessment`/`DerivedDigest` is
   not reachable from a different project's namespace;
 - no provider configured results in an explicit reduced-capability signal,
