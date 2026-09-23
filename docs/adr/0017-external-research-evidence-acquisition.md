@@ -29,17 +29,23 @@ query terms**, and **safe acquisition of untrusted remote content**.
 
 ### Revision history
 
-This is the second substantive draft. The first draft (reviewed at commit
+This is the third substantive draft. The first draft (reviewed at commit
 `4d899b6`) modeled external search as a **Consultant** and proposed
 `external_search: enabled` as the default. An independent holistic review
 against the full documentation corpus (`DISCOVERY_AND_SPECIFICATION.md`,
 `CONSULTANTS.md`, ADR-0001, ADR-0013, ADR-0014, `CONTRIBUTING.md`, and the
 merged `internal/tools/fetch.go`) found five blocking issues, all upheld on
-verification against those documents (see Independent critique below). This
-draft restructures the design around that feedback. The funnel mechanics,
-license-branch logic, local-first cognition routing, and per-project policy
-from the first draft are largely preserved; the abstraction boundaries,
-security posture, and evidence/provenance model are not.
+verification against those documents (see Independent critique below). The
+second draft (`a7f8c24`) restructured the design around that feedback and
+was found to resolve the blocking issues, but a follow-up review identified
+one further architectural gap — durable `SourceSnapshot` retention was
+implied to happen unconditionally, before policy had decided retention was
+even permitted — plus a credential-handling gap, a network-hardening gap,
+and stale PR narrative. This draft (commit pending) incorporates that
+follow-up. The funnel mechanics, license-branch logic, local-first cognition
+routing, and per-project policy from the first draft are largely preserved
+throughout; the abstraction boundaries, security posture, retention model,
+and evidence/provenance model changed across these revisions.
 
 ## Verified facts
 
@@ -218,9 +224,36 @@ Verified facts):
 
 Thirteen further, non-blocking findings (license provenance granularity,
 cache-key insufficiency, deferring shared cache, explicit egress-quota
-policy, and others) are incorporated into this draft's Decision and
-Implementation guidance sections below. The full review is preserved
-verbatim as the PR #8 comment cited above rather than reproduced here.
+policy, and others) were incorporated into the second draft's Decision and
+Implementation guidance sections.
+
+A follow-up review of the second draft
+([PR #8 comment](https://github.com/olostan/DevCadence/pull/8#issuecomment-5804654219))
+confirmed all five blocking findings and all thirteen non-blocking findings
+above were satisfactorily resolved, and found one further architectural gap
+plus three smaller issues, incorporated into this draft:
+
+1. Acquisition implied durable `SourceSnapshot` retention before
+   provider/source policy had actually authorized retention — fixed by
+   separating `TransientSource` (bounded, non-durable) from `SourceSnapshot`
+   (durable, retention-authorized) in Decision §4.
+2. Credential guidance ("simple project-config keys" as a starting point)
+   risked a parallel path around the project's existing
+   `CredentialRef`-must-be-opaque pattern in `internal/cognition/service.go`
+   — fixed by Decision §9.
+3. The Safe Source Fetcher's threat model didn't address ambient
+   proxy inheritance or DNS-rebinding/connected-peer-address validation —
+   fixed by the expanded threat model in Decision §4.
+4. This PR's title/description still described the first (Consultant-based)
+   design after the code/doc content had moved on — corrected in the same
+   push as this revision.
+5. Minor consistency issues (record-count mismatch, `external_search` vs.
+   `external_research` naming residue, "mechanically enforced" overstating
+   implementation status for a Proposed ADR) — fixed throughout this
+   revision.
+
+The full text of both reviews is preserved verbatim as the cited PR #8
+comments rather than reproduced here.
 
 ## Decision
 
@@ -231,9 +264,11 @@ adjacent to but not a member of the Consultant abstraction:
 ```text
 Scout / Implementer / Principal / Consultant
                  │
-                 │ bounded ExternalResearchRequest
+                 │ ExternalResearchRequest
                  ▼
         External Research Service
+                 │
+          provider / egress policy
                  │
         ┌────────┴─────────┐
         ▼                  ▼
@@ -243,16 +278,20 @@ Scout / Implementer / Principal / Consultant
                  │
           Safe Source Fetcher   (new primitive — see below)
                  │
-       immutable SourceSnapshot   (new artifact-store record type)
+        bounded TransientSource   (non-durable — see below)
                  │
-     provider + source policy gate
+     metadata / license / provider-policy assessment
                  │
-        deterministic extraction
-                 │
-         optional cognition
-       rerank / DerivedDigest
-                 │
-       ExternalEvidencePacket   (new protocol record)
+   provider ∩ source ∩ project policy (§5)
+        ┌────────┼────────────┐
+        ▼        ▼             ▼
+    retain    derive-only    deny
+      │           │
+      ▼           ▼
+SourceSnapshot  DerivedDigest      (raw bytes discarded)
+        \          /
+         \        /
+     ExternalEvidencePacket   (new protocol record)
                  ▼
           requesting role
 ```
@@ -262,8 +301,10 @@ Each stage has exactly one job:
 ### 1. Not a Consultant — a new protocol boundary
 
 New records, not reuse of `ConsultationRequest`/`ConsultationResult`:
-`ExternalResearchRequest`, `ExternalSourceRef`, `SourceSnapshot`,
-`PolicyAssessment`, `DerivedDigest`, `ExternalEvidencePacket`. A real M6
+`ExternalResearchRequest`, `ExternalSourceRef`, `TransientSource`,
+`SourceSnapshot`, `PolicyAssessment`, `DerivedDigest`,
+`ExternalEvidencePacket` — seven, not five or six as earlier drafts of this
+ADR miscounted; `TransientSource` (§4) was added in this revision. A real M6
 Consultant may *consume* an `ExternalEvidencePacket` as input evidence; it
 does not *emit* one, and the External Research service never emits a
 `ConsultationResult`. `docs/IMPLEMENTATION_PLAN.md`'s M6 section must not
@@ -274,17 +315,19 @@ edit).
 
 ### 2. Fail-closed egress, mediated by the control plane
 
-`external_search` defaults to **disabled**, consistent with
-`security.worker_network: deny_by_default`. A project explicitly opts in.
-Execution roles never get direct network authority for this; they send an
-`ExternalResearchRequest` to the control-plane service, which decides
-whether the query is permitted to leave the machine at all. The
-per-project policy surface (§ below) covers this explicitly rather than
-folding it into cognition-routing's existing `local_only`/privacy policy,
-because this governs **egress** (does anything leave the machine),
-not **model selection** (which the existing policy already governs for the
-rerank/digest cognition steps — that part of the first draft's routing
-design is preserved unchanged).
+`external_research.enabled` defaults to **disabled** (this ADR uses
+`external_research` as the canonical config namespace throughout; an
+earlier draft used `external_search` in one place, which was residue, not a
+naming decision), consistent with `security.worker_network:
+deny_by_default`. A project explicitly opts in. Execution roles never get
+direct network authority for this; they send an `ExternalResearchRequest`
+to the control-plane service, which decides whether the query is permitted
+to leave the machine at all. The per-project policy surface (§ below)
+covers this explicitly rather than folding it into cognition-routing's
+existing `local_only`/privacy policy, because this governs **egress** (does
+anything leave the machine), not **model selection** (which the existing
+policy already governs for the rerank/digest cognition steps — that part of
+the first draft's routing design is preserved unchanged).
 
 ### 3. External content is untrusted data, never instruction authority
 
@@ -297,26 +340,58 @@ mandatory source attribution on every claim. This must be exercised by
 fixtures at implementation time (see Verification plan) — a page containing
 "ignore prior instructions and..." must be treated as inert data.
 
-### 4. Safe remote acquisition as its own primitive, before `fetch_content`
+### 4. Safe remote acquisition as its own primitive, and retention is a separate, later decision
 
-This is the missing piece the first draft assumed away. A new
-**Safe Source Fetcher** sits between "here is a candidate URL" and "here is
-an immutable `SourceSnapshot`," with its own threat model:
+This is the missing piece the first draft assumed away, and the second
+draft only partially fixed: acquiring a byte stream and *durably storing*
+it are two different decisions, and the second draft's pipeline let
+acquisition imply durable storage before policy had actually authorized
+retention. A provider or source may permit viewing/transient processing or
+producing a digest while specifically forbidding caching, retention, or
+reproduction — the three-layer policy model (§5) already recognizes this
+distinction; the acquisition/storage lifecycle now reflects it too.
+
+A new **Safe Source Fetcher** sits between "here is a candidate URL" and a
+**bounded, non-durable `TransientSource`** — not directly an immutable
+`SourceSnapshot`. Its threat model:
 
 - scheme allowlist (`https` only, by default);
 - DNS/IP validation rejecting loopback, private, link-local and multicast
-  ranges, re-validated on every redirect hop (not just the initial request);
+  ranges — validated against the **actual connected peer address**, not
+  only a preflight hostname lookup, since ambient proxy configuration
+  (`HTTP_PROXY`/`HTTPS_PROXY`), DNS rebinding, or a resolver/connection race
+  can make the real destination differ from what preflight validation saw;
+- the fetcher MUST NOT silently inherit ambient proxy settings unless a
+  project explicitly allows it;
+- every redirect hop repeats the complete validation process against the
+  new target, including the connected-peer-address check above — not just
+  the initial request;
+- connection reuse must not bypass the host/address policy check;
 - bounded response body size and decompression ratio;
 - timeout and cancellation, consistent with ADR-0008's controlled-process
   execution philosophy applied to network calls instead of subprocesses;
 - TLS verification, no ambient cookies, no ambient authorization headers;
 - content-type restriction and parser resource limits;
-- HTML/document sanitization to plain text/structured data before storage.
+- HTML/document sanitization to plain text/structured data.
 
-Only after this step produces a content-addressed `SourceSnapshot` in the
-artifact store does ADR-0016's `fetch_content` pagination apply — unchanged,
-exactly as the first draft proposed. The first draft's reuse of
-`fetch_content` was correct; it was missing the step that has to run first.
+These security invariants are stated explicitly so an implementation cannot
+satisfy the prose with a "resolve once, validate, then plain
+`http.Client.Get`" fetcher that a proxy or redirect can silently route
+around — the exact algorithm is implementation guidance (below), not this
+ADR's job to specify.
+
+Only *after* metadata/license/provider-policy assessment (§5) runs against
+the `TransientSource` and determines retention is authorized does a
+durable, content-addressed `SourceSnapshot` get written to the artifact
+store; ADR-0016's `fetch_content` pagination then applies to it, unchanged,
+exactly as the first draft proposed — `fetch_content` remains a pager over
+durable artifacts only, never over transient bytes. If policy authorizes
+extraction/digest but not raw retention, a `DerivedDigest` is produced from
+the `TransientSource` and the raw bytes are discarded without ever becoming
+a `SourceSnapshot`. If neither is authorized, the `TransientSource` is
+discarded and the request is denied. `SourceSnapshot` therefore means
+"durable source copy whose retention is policy-authorized," not merely
+"bytes that were fetched."
 
 ### 5. Three independent policy layers, not one
 
@@ -357,12 +432,14 @@ A `DerivedDigest` is model-generated interpretation, not observed fact —
 consistent with ADR-0016's existing observed/derived distinction for
 trajectory digests, which this ADR must not contradict. Every digest carries
 full lineage: provider, canonical source ref, retrieval date, source
-revision/commit where available, source content hash, the `SourceSnapshot`
-artifact ref, license expression plus evidence for it, the provider-policy
-revision in effect, derivation method, digest schema revision, the
-cognition endpoint/model used, and the overlap-check result. Claims inside
-a digest retain `observed`/`derived`/`inferred` epistemic tags; nothing
-gets promoted to fact merely by surviving the overlap check.
+revision/commit where available, source content hash, a reference to
+whichever of `TransientSource` or `SourceSnapshot` it was derived from (per
+§4, a digest may exist without a durable snapshot when policy authorizes
+extraction but not raw retention), license expression plus evidence for it,
+the provider-policy revision in effect, derivation method, digest schema
+revision, the cognition endpoint/model used, and the overlap-check result.
+Claims inside a digest retain `observed`/`derived`/`inferred` epistemic
+tags; nothing gets promoted to fact merely by surviving the overlap check.
 
 Provenance is preserved **universally**, independent of whether the source
 license legally requires attribution — the engineering reason (can the
@@ -408,9 +485,30 @@ has no mature cross-project trust/authorization/erasure-propagation model
 yet, and a shared cache is a real redistribution surface, not just a cost
 optimization. Revisit behind a separate ADR if a concrete case emerges,
 consistent with the project's "don't build abstractions before the
-milestone that needs them" posture.
+milestone that needs them" posture. A `TransientSource` (§4) is never
+cached at all — by definition it exists only for the duration of a single
+policy assessment, and it becomes a `SourceSnapshot` or a `DerivedDigest`
+(each independently cacheable per the above) or is discarded.
 
-### 9. Explicit research quota/egress policy, distinct from cognition routing
+### 9. Provider credentials are never raw secrets in durable state
+
+`internal/cognition/service.go` already establishes this pattern for
+cognition endpoints: `CredentialRef` is documented as "an opaque reference
+— a raw secret here would be a durable credential leak," and the service
+actively rejects any `CredentialRef`/`AccountRef` value that looks like a
+secret. This ADR's provider adapters follow the identical rule: **raw
+provider credentials MUST NOT be stored in `.devcadence/project.yaml`,
+protocol records, event records, or artifact metadata.** Before M3B's full
+credential-reference UX exists, provider configuration may reference a
+credential only through a bounded, non-secret locator — an environment
+variable *name* (`credential_ref: env:BRAVE_SEARCH_API_KEY`, never the key
+value itself), an OS keychain/credential-manager reference, an
+authenticated CLI/session handle, or another opaque reference. The exact
+resolver mechanism is an implementation detail this ADR does not need to
+settle; what it settles now is that a raw secret never becomes durable
+project configuration.
+
+### 10. Explicit research quota/egress policy, distinct from cognition routing
 
 Reranking and digesting correctly reuse ADR-0013's existing capability
 routing and ADR-0016 §5's summarizer privacy/locality/cost inheritance — no
@@ -427,14 +525,18 @@ authoritative-config pattern)
 
 - `external_research.enabled`: **false by default**; explicit opt-in.
 - `external_research.providers`: allowlisted provider adapters, each
-  carrying its own hard-constraint declaration (§5).
+  carrying its own hard-constraint declaration (§5) and referencing
+  credentials only through a non-secret `credential_ref` (§9), never a raw
+  key.
 - `external_research.egress`: query-sensitivity handling, max
   queries/results/fetches/bytes per session, timeout.
 - `license_policy`: per-project allowlist (SPDX-expression-aware, not a flat
   license-name list); permissive-only is the suggested default. Being an
   open-source project does not by itself widen this — the project's own
   license still determines compatibility.
-- `cache_scope`: `private` only in v1, with bounded default `retention`.
+- `cache_scope`: `private` only in v1, with bounded default `retention`,
+  applying to `SourceSnapshot`/`DerivedDigest`/`PolicyAssessment` records —
+  never to a `TransientSource` (§8), which is not cacheable by definition.
 
 ## Rationale
 
@@ -454,17 +556,20 @@ reasonable simplification.
 ### Positive
 - Execution agents gain grounded, current knowledge of public APIs without
   spending Principal context or accepting unverified guesses.
-- Security and provenance guarantees are mechanically enforced (egress
-  gate, safe fetcher, overlap check, lineage records) rather than left to
-  model discretion or prompt instructions.
+- Security and provenance guarantees are **designed to be** mechanically
+  enforced (egress gate, safe fetcher, transient-vs-durable retention gate,
+  overlap check, lineage records) rather than left to model discretion or
+  prompt instructions — this is a design property of the proposal; nothing
+  in this ADR is implemented yet (§ Follow-up).
 - The design reuses ADR-0011/0013/0014/0015/0016 machinery for everything
-  except the two genuinely new primitives (safe remote acquisition,
-  research egress policy) it identifies.
+  except the genuinely new primitives (safe remote acquisition with
+  transient/durable retention gating, research egress policy) it
+  identifies.
 - Matches, rather than strains, the project's existing fact-vs-reasoning
   and observed-vs-derived distinctions.
 
 ### Negative
-- Real new implementation surface: a new service, five new protocol record
+- Real new implementation surface: a new service, seven new protocol record
   types, and a safe-fetch primitive with its own threat model — larger than
   the first draft's "mostly reuse existing machinery" framing suggested.
 - Three-layer policy composition (provider/source/project) and file-level
@@ -481,24 +586,31 @@ reasonable simplification.
 
 ## Implementation guidance
 
-- Introduce `ExternalResearchRequest`, `ExternalSourceRef`, `SourceSnapshot`,
-  `PolicyAssessment`, `DerivedDigest`, `ExternalEvidencePacket` in
-  `internal/protocol`, distinct from `ConsultationRequest`/`Result`.
+- Introduce `ExternalResearchRequest`, `ExternalSourceRef`,
+  `TransientSource`, `SourceSnapshot`, `PolicyAssessment`, `DerivedDigest`,
+  `ExternalEvidencePacket` in `internal/protocol`, distinct from
+  `ConsultationRequest`/`Result`.
 - Build the Safe Source Fetcher as its own package (e.g.
   `internal/research/fetch`), with the threat-model controls listed in
-  Decision §4 as unit-testable behavior, not prose.
-- `SourceSnapshot` creation writes to the existing artifact store
-  (`internal/artifacts`), reusing its content-addressing — no new storage
-  layer.
+  Decision §4 as unit-testable behavior, not prose — including a test
+  double/harness that can simulate a redirect-to-private-IP and a
+  proxy-routed connection, since these are exactly the cases a naive
+  `net/http` client would get wrong.
+- `TransientSource` is an in-memory/bounded-temp-storage value with no
+  artifact-store presence; only `SourceSnapshot` creation writes to the
+  existing artifact store (`internal/artifacts`), reusing its
+  content-addressing — no new storage layer for either.
 - Provider adapters (code search, web search) live behind a common
   interface per ADR-0013's adapter-boundary pattern, each declaring its
-  `IntrinsicPolicy`-style hard constraints per Decision §5.
+  `IntrinsicPolicy`-style hard constraints per Decision §5 and referencing
+  credentials only via `credential_ref` (Decision §9) — adapter
+  construction should reject a value that looks like a raw secret, the
+  same way `internal/cognition/service.go`'s `looksLikeSecret` check
+  already does for cognition endpoints; reuse that helper rather than
+  reimplementing it.
 - Rerank/digest cognition calls route through existing
   `internal/cognition` capability routing, adding `SearchRelevance` and
   `SnippetDigest` roles — no new routing mechanism.
-- Credential acquisition for provider adapters can start with simple
-  project-config keys; M3B's credential-reference abstraction is a natural
-  later home, not a hard prerequisite.
 
 ## Verification plan
 
@@ -510,10 +622,20 @@ deterministic fixtures for:
 
 - an internal symbol/identifier in a query is blocked from leaving the
   machine when policy requires it;
-- a redirect to `127.0.0.1` or a private IP range is blocked;
+- a redirect to `127.0.0.1` or a private/link-local IP range is blocked,
+  including when the redirect target only resolves to a private address
+  through the connected-peer-address check (not just the preflight DNS
+  lookup);
+- a request routed through an ambient `HTTP_PROXY`/`HTTPS_PROXY` is
+  rejected or requires explicit policy opt-in, not silently honored;
 - an oversized or highly-compressed response body is bounded/refused;
 - a provider whose hard constraints forbid caching cannot be overridden by
-  project `cache_scope`/`retention` config;
+  project `cache_scope`/`retention` config, and content is still usable
+  transiently (via `TransientSource`/`DerivedDigest`) without ever becoming
+  a `SourceSnapshot`;
+- a config value that looks like a raw API key/secret in
+  `external_research.providers[].credential_ref` is rejected at load time,
+  mirroring `internal/cognition/service.go`'s existing secret-shape check;
 - content with unknown/unassessed license is never exposed as raw content;
 - fetched content containing an embedded instruction ("ignore previous
   instructions and...") is treated as inert data by the digest/rerank
@@ -532,7 +654,7 @@ deterministic fixtures for:
 `external_research.enabled: false` fully disables the capability at the
 policy gate before any network call is made — no partial-disable state
 exists. Because the design isolates the new primitives (Safe Source
-Fetcher, the three new record types) from existing subsystems rather than
+Fetcher, the new record types) from existing subsystems rather than
 modifying them in place, removing this capability later does not require
 unwinding changes to `internal/tools`, `internal/compaction`, or
 `internal/validation`.
@@ -540,11 +662,14 @@ unwinding changes to `internal/tools`, `internal/compaction`, or
 ## Follow-up
 
 - [ ] Work Package: `ExternalResearchRequest`/`ExternalSourceRef`/
-      `SourceSnapshot`/`PolicyAssessment`/`DerivedDigest`/
+      `TransientSource`/`SourceSnapshot`/`PolicyAssessment`/`DerivedDigest`/
       `ExternalEvidencePacket` protocol types + schemas.
-- [ ] Work Package: Safe Source Fetcher, with independent security review.
+- [ ] Work Package: Safe Source Fetcher, with independent security review
+      covering connected-peer-address validation, proxy/DNS-rebinding
+      resistance, and redirect-hop revalidation (Decision §4).
 - [ ] Work Package: code-search and web-search provider adapters
-      (`IntrinsicPolicy`-style hard constraints per adapter).
+      (`IntrinsicPolicy`-style hard constraints per adapter; credentials via
+      `credential_ref` only, Decision §9).
 - [ ] Work Package: `SearchRelevance`/`SnippetDigest` cognition-routing
       roles.
 - [ ] Legal review of the license-policy/SPDX-provenance approach.

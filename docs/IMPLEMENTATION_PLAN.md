@@ -691,7 +691,7 @@ Add cognitive diversity where it has leverage.
   adapter under `ConsultationRequest`/`ConsultationResult`
   (docs/CONSULTANTS.md), not evidence acquisition;
 - optional external research / evidence-acquisition service — see
-  [adr/0017-external-search-consultants.md](adr/0017-external-search-consultants.md)
+  [adr/0017-external-research-evidence-acquisition.md](adr/0017-external-research-evidence-acquisition.md)
   (status: Proposed) for a candidate design: a bounded, license-aware,
   fail-closed-by-default service (distinct from the Consultant abstraction
   above) letting execution-cognition roles look up external code/API/
