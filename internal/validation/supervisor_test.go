@@ -8,7 +8,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sync"
-	"syscall"
 	"testing"
 	"time"
 
@@ -267,8 +266,8 @@ func TestServiceVerifiedTeardown(t *testing.T) {
 	pidFile := filepath.Join(tempDir, "service.pid")
 
 	// Verify PID is running
-	if err := syscall.Kill(pid, 0); err != nil {
-		t.Fatalf("Service process %d is not running: %v", pid, err)
+	if !isPIDAlive(pid) {
+		t.Fatalf("Service process %d is not running", pid)
 	}
 
 	// Read PID record
@@ -312,7 +311,7 @@ func TestServiceVerifiedTeardown(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// Verify process is killed
-	if err := syscall.Kill(pid, 0); err == nil {
+	if isPIDAlive(pid) {
 		t.Errorf("Expected process %d to be dead after Teardown, but it is still running", pid)
 	}
 }
