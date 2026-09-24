@@ -98,14 +98,14 @@ The gate requires enough evidence that:
 - Some projects will require human decisions before becoming READY.
 - Canonical docs create an ongoing maintenance obligation.
 - Adoption needs explicit provenance and contradiction handling.
-- M4/M5 gain additional implementation/evaluation scope.
+- Brownfield adoption is large enough to own M6; the earlier M4 adaptive-cognition evidence gate intentionally does not wait for this subsystem.
 
 ## Milestone mapping
 
 - **M2:** repository/worktree/deterministic substrate; unchanged.
-- **M3:** environment intelligence and cognition routing; unchanged.
-- **M4A:** semantic MCP + principal-host connectivity.
-- **M4B:** project adoption and retrospective reconstruction.
-- **M5:** end-to-end proof includes both greenfield and brownfield paths.
+- **M3A-M3D:** environment/bootstrap/cognition substrate and adaptive planning; adoption-independent.
+- **M4:** adaptive-cognition evidence gate on controlled projects/fixtures; does not claim brownfield readiness.
+- **M5:** semantic MCP + principal-host connectivity.
+- **M6:** project adoption and retrospective reconstruction, including the brownfield readiness proof.
 
 This ADR does not require M2 or M3 implementation changes.

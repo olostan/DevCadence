@@ -321,7 +321,7 @@ The M1 fields `local_models` and `consultants` are **deprecated** and never
 written by current builds. They remain in the Go type and the schema so that
 ProjectState documents written before M3A stay readable under strict decoding
 (DCI-092, DCI-093); deleting them would break historical records for the sake of
-two optional fields. Consultant selection is an M6 policy over discovered
+two optional fields. Consultant selection is an M7 policy over discovered
 endpoints rather than a separate capability list.
 
 ### 7.3a Evidence lineage is checked, not carried
@@ -619,7 +619,7 @@ Once a campaign is frozen, current ProjectState should retain the closure refere
 
 See [REVIEW_AND_CONVERGENCE.md](REVIEW_AND_CONVERGENCE.md).
 
-### 18.1 Shape in M1, behaviour in M6
+### 18.1 Shape in M1, behaviour in M7
 
 `review` is published in `schemas/project-state.schema.json` and has a typed
 counterpart, `protocol.ReviewConvergenceState`. Both exist in M1 so that the
@@ -629,10 +629,10 @@ refuses a document the schema calls valid.
 
 What M1 does **not** provide is any behaviour behind it. No event reduces into
 `review`, the control plane never populates it, and no campaign, finding
-disposition or closure decision is created — that is M6 (ADR-0010). A
+disposition or closure decision is created — that is M7 (ADR-0010). A
 `ProjectState` rendered by this build therefore omits the block entirely.
 
-M6 fills it in by adding the events and the reduction; the shape it fills is
+M7 fills it in by adding the events and the reduction; the shape it fills is
 already fixed here, which is the point. Only counts and references belong in
 it: reviewer transcripts, consultant conversations and repair histories stay
 evidence artifacts retrievable by reference, exactly as §1 requires for every
@@ -640,7 +640,7 @@ other part of this state.
 
 The three campaign record schemas — `review-campaign`, `finding-disposition`
 and `closure-decision` — have no Go twin at all, and so cannot diverge from
-one. They are listed in `tests/schema_fixtures_test.go` as awaiting their M6
+one. They are listed in `tests/schema_fixtures_test.go` as awaiting their M7
 implementation; an unlisted schema without a Go type still fails that test.
 
 
@@ -648,7 +648,7 @@ implementation; an unlisted schema without a Go type still fails that test.
 
 Brownfield adoption introduces a project-readiness dimension separate from ordinary task state.
 
-A future M4B projection may expose a compact shape such as:
+A future M6 projection may expose a compact shape such as:
 
 ```yaml
 adoption:
@@ -668,7 +668,7 @@ adoption:
     latest_ref: adoption_ready_...
 ```
 
-This is a **future conceptual projection**, not part of the current M1 ProjectState schema. M4B must add the durable records/events/schema changes deliberately rather than smuggling adoption state into an untyped map.
+This is a **future conceptual projection**, not part of the current M1 ProjectState schema. M6 must add the durable records/events/schema changes deliberately rather than smuggling adoption state into an untyped map.
 
 Once READY, ProjectState should retain only the compact adoption baseline identity/provenance necessary to establish:
 - which source revision was retrospectively reconstructed;

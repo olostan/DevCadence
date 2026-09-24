@@ -1,33 +1,59 @@
 # Handoff — M3B guided bootstrap (feat/m3b-guided-bootstrap)
 
-Last updated: 2026-09-24T08:02:00Z by ChatGPT / GPT-5.6 Sol (PR #11 architecture synchronization)
+Last updated: 2026-09-24T08:56:12Z by Codex (PR #12 roadmap synchronization)
 
-Session takeover HEAD: `80b3edd` (remote milestone-branch HEAD at the PR #11 synchronization boundary)
-Expected remote HEAD before next push: `80b3edd` (baseline before this synchronization merge; the next session must fetch and adopt the actual post-merge HEAD before pushing).
+Session takeover HEAD: `f6bdc6494a2f7a8d2b8fbc8902ab5fb209dd39f7`.
+Expected remote HEAD before next push: `f6bdc6494a2f7a8d2b8fbc8902ab5fb209dd39f7`
+(pre-push baseline for this checkpoint; after a successful push, advance the
+session guard to the pushed SHA and record it at the next durable checkpoint).
 
-## Architecture synchronization after PR #11
+## Roadmap synchronization after PR #12
 
-PR #11 (adaptive cognition portfolio architecture) was merged to `main` at
-`e9645fe` after WP-M3B-3 reached its accepted checkpoint. Per
-`AGENT_HANDOFF_PROTOCOL.md`, this branch is synchronized at the WP boundary
-by **merging `main` into `feat/m3b-guided-bootstrap`**, never rebasing or
-force-pushing.
+New main base: `bc1816549cc4c10b4ec49add7390a58b1ada890c` (merged PR #12).
+Merged into the milestone branch at the accepted WP1–WP3 boundary per
+`AGENT_HANDOFF_PROTOCOL.md`; no rebase or force-push. The merge had **no
+conflicts**. All implementation, tests, schemas, fixtures, accepted EWPs,
+and ADR-0014 amendments remain unchanged from the takeover HEAD.
 
-The overlap was resolved intentionally:
+The canonical roadmap from `docs/IMPLEMENTATION_PLAN.md` and
+`docs/WORK_PACKAGES.md` is now:
 
-- PR #10's accepted runtime-neutral setup protocol remains canonical:
-  `ensure_local_model` / `model_present`, `LocalModelRuntimeAdapter`,
-  closed `VersionProbeKind`, MLX/Ollama peer adapters, and the hardened
-  ADR-0014 supply-chain/recovery semantics.
-- PR #11's architecture is canonical for unstarted work: M3B remains
-  deterministic bootstrap and produces `ResourceInventory`; static
-  `SelectedProfile` optimization is not the final routing model; adaptive
-  CognitionPortfolio/workflow synthesis belongs to M3C/ADR-0018.
-- WP-M3B-5 is therefore doctor readiness + deterministic ResourceInventory,
-  not the old static deployment-profile recommendation engine.
+- **M3B: 8 WPs**, deterministic bootstrap, ResourceInventory/readiness and
+  plain/JSON/basic-terminal interaction. WP1–WP3 remain accepted; WP4 is next.
+- The old rich-TUI WP-M3B-8 is removed from M3B; rich adaptive setup/explain
+  UX belongs to M3D. The old WP-M3B-9 closure is now **WP-M3B-8**.
+- **M3C:** deterministic cognition resource/session/economic substrate,
+  portfolio protocol shapes and deterministic validation/activation.
+- **M3D:** AI-assisted portfolio/workflow synthesis and richer setup UX.
+- **M4:** adaptive vertical-slice evidence gate before broader productization.
 
-WP-M3B-4 remains compatible with both architectures and is the next
-recommended implementation package.
+The accepted runtime-neutral `ensure_local_model` / `model_present`,
+`LocalModelRuntimeAdapter`, closed `VersionProbeKind`, MLX/Ollama peer
+adapters, and ADR-0014 supply-chain/recovery semantics are preserved.
+The automatic merge retained the WP1 runtime-neutral amendment in the scope
+card. One stale incoming WP5 sentence was corrected from M3C to M3D for
+AI-assisted synthesis, consistent with PR #12's canonical split.
+Historical EWPs are retained as accepted checkpoint evidence; their old
+future milestone/WP numbering is superseded by the current scope cards.
+
+## Post-merge verification
+
+Verified on the merged tree (parents: takeover HEAD above and new main base),
+with only Markdown changes relative to the takeover HEAD. Toolchain:
+`go version go1.27.1 darwin/arm64`. All commands exited **0**:
+
+| Command | Result |
+|---------|--------|
+| `go build ./...` | PASS, no diagnostics |
+| `go test -count=1 ./...` | PASS, 28 tested packages; 2 packages have no test files |
+| `go vet ./...` | PASS, no diagnostics |
+| `go test -race -count=1 ./...` | PASS, all 28 tested packages; no race reports |
+| `GOOS=windows GOARCH=amd64 go build ./...` | PASS, cross-build only; Windows execution not tested |
+| `git diff --check` | PASS |
+
+The full race suite includes setup, MLX cognition and environment packages.
+These are local verification results, not GitHub CI results. WP4 has not
+been started by this synchronization.
 
 ## WP-M3B-3 is accepted
 
@@ -72,12 +98,13 @@ across every review round) — this evidence is session-reported, as it has
 been for the whole milestone.
 
 PR #10 itself stays **draft/open** — it tracks the whole M3B milestone, and
-WP-M3B-4 through WP-M3B-9 are not started.
+WP-M3B-4 through WP-M3B-8 remain unaccepted; see the table below for
+pre-existing WP5/6 code that still requires assessment.
 
 ## Milestone
 
-M3B — Guided bootstrap and onboarding. See
-[docs/WORK_PACKAGES.md#m3b](docs/WORK_PACKAGES.md#m3b--guided-bootstrap-and-onboarding)
+M3B — Guided deterministic bootstrap and onboarding (8 WPs). See
+[docs/WORK_PACKAGES.md#m3b](docs/WORK_PACKAGES.md#m3b--guided-deterministic-bootstrap-and-onboarding)
 for the full Work Package breakdown, and `AGENT_HANDOFF_PROTOCOL.md` for the
 branch/commit/handoff discipline.
 
@@ -120,8 +147,7 @@ implementing on top of it or rewriting it.
 | WP-M3B-5 | unknown — likely partially pre-existing, unverified; scope rebaselined by PR #11 | — | — | assess `internal/setup/doctor.go`, `profiles.go` against deterministic ResourceInventory/readiness scope first |
 | WP-M3B-6 | unknown — likely partially pre-existing, unverified | — | — | assess `internal/setup/planner.go`, `cache.go` first |
 | WP-M3B-7 | not started | — | — | blocked on WP-3/4/5/6 |
-| WP-M3B-8 | not started | — | — | blocked on WP-7 |
-| WP-M3B-9 | not started | — | — | blocked on all prior |
+| WP-M3B-8 | not started — verification suite and docs sync (formerly WP9) | — | — | blocked on all prior |
 
 (Never write "merged" for a WP checkpoint — nothing is merged to `main`
 until the whole milestone closes.)
@@ -200,7 +226,7 @@ until the whole milestone closes.)
 ## Next concrete action
 
 WP-M3B-3 is accepted and this milestone branch is synchronized with the
-merged PR #11 architecture baseline. Start **WP-M3B-4 — Credential-reference
+merged PR #12 roadmap baseline. Start **WP-M3B-4 — Credential-reference
 abstraction** next.
 
 Before implementation, follow the normal protocol: fetch the branch, adopt
@@ -209,6 +235,8 @@ ADR-0014 §6 / `docs/SECURITY.md` / the WP4 scope card, inspect existing
 credential/auth abstractions (especially `internal/cognition/service.go`
 and `internal/process`), then expand WP-M3B-4 into its committed EWP and
 perform the required security/threat-model review before implementation.
+Keep credential references distinct from cognition endpoints, access channels,
+sessions, accounts, and economic regimes; WP4 does not choose a portfolio.
 
 Do **not** start WP-M3B-5 from its old static-profile assumptions. PR #11
 rebaselined WP5 to deterministic readiness + ResourceInventory; when WP5

@@ -309,4 +309,4 @@ would require a migration that stops treating `projection_*` as disposable.
 
 - [ ] Measure replay cost and, if warranted, add snapshotting (M2 or later).
 - [ ] Define artifact-store layout and retention policy (M2).
-- [ ] Revisit the connection cap if a second writer ever exists (M9).
+- [ ] Revisit the connection cap if a second writer ever exists (M10).

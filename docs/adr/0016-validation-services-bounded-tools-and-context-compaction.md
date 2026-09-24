@@ -89,7 +89,7 @@ Integrating real-world execution and testing (such as Firebase emulators, Vite d
 - **Decision owner:** Human (product owner)
 - **Trigger:** M2.5 implementation review (PR #7) confirmed §1's boundary is
   currently structural (no MCP server exists to expose these tools at all),
-  not a designed contract for when M4A wires one. §1 also treats
+  not a designed contract for when M5 wires one. §1 also treats
   `read_file`/`grep_search`/`find_symbol`/`run_command` as one undifferentiated
   "execution-agent" bucket, which understates a real difference between them.
 
@@ -97,7 +97,7 @@ Integrating real-world execution and testing (such as Firebase emulators, Vite d
 
 §1 says raw tools are execution-agent-only and the Principal's interface is
 semantic operations. Taken literally and without refinement, that risks two
-failure modes once M4A gives the Principal a real MCP surface:
+failure modes once M5 gives the Principal a real MCP surface:
 
 1. **Silent scope creep:** nothing stops a future change from wiring
    `read_file`/`fetch_content` directly into the Principal's tool list,
@@ -125,14 +125,14 @@ Split the bounded-tools boundary in §1 into two evidence tiers, not one:
    citable facts (a match list with line numbers; a symbol's resolved
    location and signature): they answer "does X exist / where / how many"
    without transmitting file contents. `request_evidence` (already listed as
-   a Principal semantic operation in AGENTS.md §3 and M4A's deliverables) MAY
+   a Principal semantic operation in AGENTS.md §3 and M5's deliverables) MAY
    invoke these directly and return their structured result to the Principal.
    This is not a raw-tool exposure: the Principal still cannot run an
    arbitrary command or open a file; it can only ask a scoped question with a
    bounded answer shape.
 2. **Content tier — `read_file`, `fetch_content`, `run_command` output —
    execution-agent-only, no exception.** The Principal never calls these
-   directly, in M4A or after. When a Principal decision genuinely needs to
+   directly, in M5 or after. When a Principal decision genuinely needs to
    see code, the correct path is `request_evidence(kind="snippet", ...)`:
    the Principal names a hit from tier 1 (or a file path plus a reason) and a
    *bounded* line range (hard cap, e.g. ≤200 lines / a few KB, enforced
@@ -144,7 +144,7 @@ Split the bounded-tools boundary in §1 into two evidence tiers, not one:
    there is always an answerable next step short of delegating a full
    investigation task.
 
-This is additive to §1 and §3 above and constrains how M4A's `request_evidence`
+This is additive to §1 and §3 above and constrains how M5's `request_evidence`
 must be implemented; it changes no delivered code in this milestone (no MCP
 server exists yet), and it does not authorize exposing `read_file`/
 `fetch_content` to any principal host before this snippet-mediation path
@@ -159,9 +159,9 @@ exists.
   content excerpts stay expensive/bounded enough to request deliberately.
 - **Negative:** `request_evidence` now has two distinct fulfillment paths
   (direct tier-1 call vs. mediated tier-2 delegation) instead of one, adding
-  implementation surface to M4A that a single undifferentiated boundary would
+  implementation surface to M5 that a single undifferentiated boundary would
   not have needed.
-- **Follow-up:** M4A's Engineering Work Package for `request_evidence` MUST
+- **Follow-up:** M5's Engineering Work Package for `request_evidence` MUST
   cite this amendment and specify the snippet size cap, the citation/reason
   requirement, and the routing between the two tiers before it is considered
   complete.

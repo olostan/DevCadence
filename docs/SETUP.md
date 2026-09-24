@@ -9,9 +9,10 @@ Sections below describing hardware, runtime, coding-CLI and principal-host
 **discovery** are therefore implemented behaviour, observable through
 `devcadence environment inspect` and `devcadence cognition list`.
 
-Sections describing guided **setup, remediation, installation, credential
-creation and the terminal UX** remain intended M3B behaviour; principal-host
-**integration** remains intended M4A behaviour. No model integration is required
+Sections describing guided **setup, remediation, installation and credential
+references** remain intended M3B behaviour. M3B requires safe plain/JSON/basic-
+terminal operation; the richer adaptive setup/explanation UX belongs to M3D
+after portfolio semantics exist. Principal-host **integration** belongs to M5. No model integration is required
 to build or test the control plane, and none of the implemented commands mutates
 the machine.
 
@@ -107,7 +108,7 @@ The build needs no C toolchain: the SQLite driver is pure Go
 
 Binaries:
 - `devcadence` — CLI/daemon (implemented in M1);
-- `devcadence-mcp` — stdio semantic MCP adapter (M4, not yet present).
+- `devcadence-mcp` — stdio semantic MCP adapter (M5, not yet present).
 
 ## 7A. Guided bootstrap (M3)
 
@@ -164,47 +165,59 @@ It then:
 1. assesses accelerator/runtime candidates;
 2. discovers supported cognition CLIs/providers and authentication readiness;
 3. discovers supported principal hosts;
-4. recommends a deployment profile;
-5. presents a structured remediation/install plan;
+4. produces deterministic ResourceInventory/readiness evidence;
+5. presents a structured remediation/install plan for concrete missing facts;
 6. requests approval for mutating or privileged actions;
 7. verifies actual inference acceleration/endpoint health;
 8. performs lightweight capability benchmarks where useful.
+
+M3B does not choose an "optimal" provider/model/role organization. That
+multidimensional recommendation problem is intentionally deferred to M3D over
+the M3C substrate.
 
 No local model, principal host or consultant subscription is assumed.
 
 See [ENVIRONMENT_INTELLIGENCE_AND_ONBOARDING.md](ENVIRONMENT_INTELLIGENCE_AND_ONBOARDING.md).
 
-### Terminal experience
+### M3B terminal contract
 
-Interactive setup should use a restrained text UI suitable for local terminals and SSH:
-- selections and confirmations;
-- color/status marks with plain fallbacks;
-- short progress/spinner feedback for genuinely long operations;
-- accessible/basic prompt mode;
-- `--no-tui` / machine-readable operation for automation.
+M3B should remain usable from local terminals, SSH and automation:
+- plain text status and explicit confirmations where approval is required;
+- `--json` for machine-readable output;
+- basic-terminal/SSH fallbacks;
+- no control sequences in non-interactive mode.
 
-The intended Go UI stack is Huh v2, using Bubble Tea v2/Lip Gloss v2 underneath when richer dynamic behavior is needed.
+A richer Huh/Bubble Tea/Lip Gloss experience is deliberately deferred to M3D,
+where it can explain real portfolio alternatives, budgets, privacy exposure,
+fallbacks and workflow consequences instead of being built around incomplete
+semantics.
 
-## 7B. Adaptive cognition portfolio (M3C)
+## 7B. Cognition substrate and adaptive portfolio (M3C/M3D)
 
-M3B gets the machine safely to a factual, usable state. M3C decides how to organize the cognition resources that actually exist.
+M3B gets the machine safely to a factual, usable state.
 
-The intended user experience remains a single simple setup flow:
+**M3C** defines how cognition resources are represented and invoked:
+access/session capabilities, economic/budget state, policy, versioned portfolio
+protocols, session drivers, and deterministic validation/activation.
+
+**M3D** decides how to organize those resources: AI-assisted portfolio
+alternatives, adaptive task topology, resource-change proposals, rollback, and
+the richer explain/setup experience.
+
+The intended user experience may still look like one simple setup flow:
 
 ```text
 devcadence setup
-  -> discover hardware/runtimes/agent CLIs/hosts
-  -> verify auth and local acceleration where possible
-  -> collect privacy/spending/preferences
-  -> establish at least one viable cognition endpoint when desired
-  -> synthesize portfolio recommendations with a capable endpoint
-  -> deterministically validate the recommendation
-  -> present an explainable configuration/diff for activation
+  -> M3B: discover and safely remediate concrete resources
+  -> M3C: represent sessions/economics/policy and validate candidate portfolios
+  -> M3D: synthesize explainable alternatives with an eligible endpoint
+  -> deterministically validate before activation
+  -> present a diff, implications and rollback path
 ```
 
-Adding a subscription, API authorization, GPU or local model later should support incremental portfolio recommendation rather than reinstalling DevCadence.
-
-No user is required to own local AI hardware or any particular commercial subscription.
+Adding a subscription, API authorization, GPU or local model later should
+support incremental recommendation rather than reinstalling DevCadence. No user
+is required to own local AI hardware or any particular commercial subscription.
 
 ## 8. Local data directories
 

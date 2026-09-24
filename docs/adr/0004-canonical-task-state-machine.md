@@ -180,7 +180,7 @@ rather than stored as a decision that merely looks justified. Specifically:
   which would make the state ceremonial. *Which* review dimensions and how
   many are required — correctness alone for a local change, correctness plus
   architecture for a systemic one, further vectors for security-sensitive or
-  architectural work — is an M6 policy decision keyed on change class and
+  architectural work — is an M7 policy decision keyed on change class and
   risk, expressed as a ReviewCampaign's required dimensions and closure
   threshold (ADR-0010). The domain floor is one; policy raises it.
 
@@ -211,7 +211,7 @@ attempt that surfaced it, and the state the task blocked from. A blocked task
 without a reason, or a non-blocked task carrying one, is an integrity error.
 `EscalationRaised` is the only event that blocks a task.
 
-**3a. Retry bounds are recorded in M1 and enforced in M6.** `TaskDelegated`
+**3a. Retry bounds are recorded in M1 and enforced in M7.** `TaskDelegated`
 carries `max_attempts` and every attempt carries an `Ordinal`, so the journal
 holds both the bound and the count. The reducer does not yet refuse an attempt
 that exceeds the bound, because the projected task does not carry the limit and

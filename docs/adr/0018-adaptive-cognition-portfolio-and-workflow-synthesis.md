@@ -71,17 +71,19 @@ New hardware, subscriptions, APIs, models, policy or evaluated outcomes may prod
 - **Vendor bias:** no built-in provider-role ranking.
 - **Runaway cloud use:** no silent metered fallback and bounded workflow/retry policy.
 - **Planner self-preference:** planning endpoint has no special authority.
-- **Scope explosion:** M3B remains deterministic bootstrap; M3C owns adaptive synthesis.
+- **Scope explosion:** M3B remains deterministic bootstrap; M3C owns deterministic cognition/session/economic substrate; M3D owns adaptive synthesis and rich adaptive setup UX.
 
 ## Milestone impact
 - **M3A:** retained discovery/capability substrate.
-- **M3B:** safe bootstrap, readiness and ResourceInventory.
-- **M3C:** economics/budgets, session drivers, portfolio synthesis/validation and workflow topology.
-- **M4:** host integration consumes portfolio/session abstractions.
-- **M5:** validates adaptive heterogeneous cognition allocation.
-- **M6:** consultants/reviewers become role/independence constraints over the portfolio.
-- **M8:** evaluates endpoint/access/role/task/topology outcomes.
-- **M9:** dashboard/long-running scheduler consumes the same protocols.
+- **M3B:** safe deterministic bootstrap, readiness and ResourceInventory with a plain/JSON/basic-terminal surface.
+- **M3C:** economics/budgets, session drivers, portfolio protocol shapes and deterministic validation/activation.
+- **M3D:** AI-assisted portfolio synthesis, adaptive workflow topology, explicit adaptation/rollback and richer setup/explanation UX.
+- **M4:** validates the adaptive heterogeneous-cognition hypothesis early against simpler baselines before broad productization.
+- **M5:** semantic principal/host integration consumes the M3 substrate after the evidence gate.
+- **M6:** brownfield Project Adoption remains a separate product subsystem and is not required to learn whether adaptive cognition works.
+- **M7:** consultants/reviewers become role/independence constraints over the active portfolio.
+- **M9:** evaluates endpoint/access/role/task/topology outcomes and governs learned promotion/rollback.
+- **M10:** dashboard/long-running scheduler consumes the same protocols.
 
 ## Alternatives considered
 

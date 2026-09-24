@@ -4,7 +4,7 @@
 - **Date:** 2026-09-21
 - **Decision owner:** Principal + Human
 - **Related invariants:** DCI-040–DCI-049
-- **Related milestone:** M6, with normative rules effective immediately
+- **Related milestone:** M7, with normative rules effective immediately
 
 ## Context
 
@@ -71,4 +71,4 @@ Durable contracts:
 - FindingDisposition;
 - ClosureDecision.
 
-M6 implements orchestration/policy enforcement; M1–M5 agents follow the normative stopping/reopen rules immediately.
+M7 implements orchestration/policy enforcement; earlier milestone agents follow the normative stopping/reopen rules immediately.
