@@ -691,6 +691,36 @@ func (a SetupAction) Validate() error {
 			return err
 		}
 
+		// Structural identity binding: an ensure_local_model action's
+		// approved model identity must be exactly what its own
+		// model_present postcondition asks for. Without this, a plan could
+		// approve pulling model A in the operation while declaring success
+		// against model B's postcondition — the postcondition would then
+		// either never hold (masking the real failure behind a generic
+		// "postcondition failed" error) or, worse, a future adapter could
+		// satisfy it by coincidence. Requiring at least one matching
+		// model_present postcondition makes the binding structural rather
+		// than dependent on the adapter's own internal checks (which do
+		// still independently verify the pulled model, per-adapter).
+		if a.Operation.Kind == OpKindEnsureLocalModel && a.Operation.EnsureLocalModel != nil {
+			op := a.Operation.EnsureLocalModel
+			found := false
+			for _, c := range a.Postconditions {
+				if c.Kind != CondKindModelPresent || c.ModelPresent == nil {
+					continue
+				}
+				if c.ModelPresent.Runtime == op.Runtime && c.ModelPresent.ModelRef == op.ModelRef && c.ModelPresent.ResolvedRevision == op.ResolvedRevision {
+					found = true
+					break
+				}
+			}
+			if !found {
+				return errs.New(errs.CategoryInvalidArgument,
+					"%s: ensure_local_model action requires a model_present postcondition with the identical identity (runtime=%q, model_ref=%q, resolved_revision=%q)",
+					kind, op.Runtime, op.ModelRef, op.ResolvedRevision)
+			}
+		}
+
 		// Intrinsic policy check:
 		intrinsicEffects, minAuth := IntrinsicPolicy(*a.Operation)
 		if !a.Authority.AtLeast(minAuth) {

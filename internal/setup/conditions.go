@@ -28,10 +28,10 @@ const evaluatorNetworkTimeout = 5 * time.Second
 // preconditions (see WP-M3B-3 EWP §3 for the verified cross-reference).
 const ollamaLocalPort = 11434
 
-// defaultOllamaBaseURL is the production Ollama API base; EvaluatorDeps/
-// applierDeps.OllamaBaseURL overrides it, which is what lets tests point
-// model_digest_present / ollama_pull_model's supply-chain verification at
-// an httptest.Server instead of a real local Ollama daemon.
+// defaultOllamaBaseURL is the production Ollama API base that
+// OllamaAdapter.baseURL() falls back to when its own BaseURL field is
+// unset — a runtime-owned default, not a generic executor dependency (see
+// OllamaAdapter's doc comment in ollama_adapter.go).
 var defaultOllamaBaseURL = fmt.Sprintf("http://127.0.0.1:%d", ollamaLocalPort)
 
 // EndpointHealthChecker evaluates cognition endpoint health. It is not
@@ -52,22 +52,14 @@ type EvaluatorDeps struct {
 	// EndpointHealth is optional; nil means endpoint_healthy conditions
 	// fail closed.
 	EndpointHealth EndpointHealthChecker
-	// OllamaBaseURL overrides the default local Ollama API base
-	// ("http://127.0.0.1:11434") — empty means use the default. Tests set
-	// this to an httptest.Server URL.
-	OllamaBaseURL string
 	// ModelRuntimes dispatches model_present conditions to the adapter
 	// named by the condition's Runtime field — see modelruntime.go. nil
 	// means model_present conditions fail closed with an error, the same
-	// as any other unconfigured dependency in this struct.
+	// as any other unconfigured dependency in this struct. Each adapter
+	// carries its own runtime-specific configuration (e.g.
+	// OllamaAdapter.BaseURL) rather than this struct — see
+	// modelruntime.go/ollama_adapter.go.
 	ModelRuntimes *ModelRuntimeRegistry
-}
-
-func (d EvaluatorDeps) ollamaBaseURL() string {
-	if d.OllamaBaseURL != "" {
-		return d.OllamaBaseURL
-	}
-	return defaultOllamaBaseURL
 }
 
 // EvaluateCondition checks whether cond currently holds against the live

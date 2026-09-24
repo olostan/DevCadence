@@ -22,10 +22,29 @@ const ollamaDefaultRegistryHost = "registry.ollama.ai"
 // runtime. It has no special status relative to other adapters (e.g.
 // MLXAdapter): ModelRuntimeRegistry dispatches to it purely by matching
 // Runtime() == "ollama", the same mechanism used for every other runtime.
-type OllamaAdapter struct{}
+//
+// BaseURL holds this adapter's own configuration (the local Ollama API
+// base) rather than the executor/dependency structs carrying an
+// Ollama-specific field — the generic executor boundary (ExecutorOptions,
+// EvaluatorDeps, applierDeps) must not need to know what any one runtime's
+// adapter requires to configure itself; a second HTTP-backed runtime
+// should never need executor-level changes to add its own base URL.
+type OllamaAdapter struct {
+	// BaseURL overrides the default local Ollama API base
+	// ("http://127.0.0.1:11434"); empty means use the default. Tests set
+	// this to an httptest.Server URL.
+	BaseURL string
+}
 
 // Runtime implements LocalModelRuntimeAdapter.
 func (OllamaAdapter) Runtime() string { return "ollama" }
+
+func (a OllamaAdapter) baseURL() string {
+	if a.BaseURL != "" {
+		return a.BaseURL
+	}
+	return defaultOllamaBaseURL
+}
 
 // ollamaModelEntry mirrors just the fields this file needs from one entry of
 // Ollama's GET /api/tags response.
@@ -83,8 +102,8 @@ func findOllamaModel(tags ollamaTagsResponse, modelRef string) (ollamaModelEntry
 func normalizeDigest(d string) string { return strings.TrimPrefix(d, "sha256:") }
 
 // ModelPresent implements LocalModelRuntimeAdapter.
-func (OllamaAdapter) ModelPresent(ctx context.Context, deps EvaluatorDeps, op *protocol.ModelPresentOperand) (bool, string, error) {
-	tags, err := fetchOllamaTags(ctx, deps.ollamaBaseURL())
+func (a OllamaAdapter) ModelPresent(ctx context.Context, deps EvaluatorDeps, op *protocol.ModelPresentOperand) (bool, string, error) {
+	tags, err := fetchOllamaTags(ctx, a.baseURL())
 	if err != nil {
 		// Unreachable/unhealthy Ollama means the condition does not
 		// currently hold, not that evaluation itself failed — the caller
@@ -119,7 +138,7 @@ func ollamaPullRef(p *protocol.EnsureLocalModelParams) string {
 }
 
 // EnsureModel implements LocalModelRuntimeAdapter.
-func (OllamaAdapter) EnsureModel(ctx context.Context, deps applierDeps, p *protocol.EnsureLocalModelParams, captureOutput bool, verifiedExecutablePath string) (bool, string, *process.Result, *protocol.ArtifactRef, error) {
+func (a OllamaAdapter) EnsureModel(ctx context.Context, deps applierDeps, p *protocol.EnsureLocalModelParams, captureOutput bool, verifiedExecutablePath string) (bool, string, *process.Result, *protocol.ArtifactRef, error) {
 	if deps.runner == nil {
 		return false, "", nil, nil, errs.New(errs.CategoryInvalidArgument, "OllamaAdapter.EnsureModel: requires a CommandRunner")
 	}
@@ -157,7 +176,7 @@ func (OllamaAdapter) EnsureModel(ctx context.Context, deps applierDeps, p *proto
 	// operation a mutation, so a digest/size mismatch is caught by the
 	// operation itself, not only (after the fact, if at all) by a separate
 	// postcondition the plan happens to also declare.
-	tags, tagsErr := fetchOllamaTags(ctx, deps.ollamaBase())
+	tags, tagsErr := fetchOllamaTags(ctx, a.baseURL())
 	if tagsErr != nil {
 		return false, "", &result, artifact, errs.Wrap(errs.CategoryConflict, tagsErr, "ollama pull %s reported success but the resulting model could not be verified", p.ModelRef)
 	}

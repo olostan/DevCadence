@@ -585,7 +585,7 @@ func TestExecutorEnsureLocalModelOllamaUsesTheVerifiedExecutablePath(t *testing.
 	exec.runner.(*fakeCommandRunner).results[ollamaPath] = process.Result{Status: process.StatusCompleted, ExitCode: 0, Stdout: []byte("ollama version 1.0.0")}
 
 	srv := newOllamaTagsServer(t, []ollamaModelEntry{{Name: "smollm:135m", Digest: resolvedDigest, Size: 145000000}})
-	exec.ollamaBaseURL = srv.URL
+	exec.modelRuntimes = NewModelRuntimeRegistry(OllamaAdapter{BaseURL: srv.URL}, MLXAdapter{})
 
 	op := protocol.TypedOperation{
 		Kind: protocol.OpKindEnsureLocalModel,
@@ -603,6 +603,12 @@ func TestExecutorEnsureLocalModelOllamaUsesTheVerifiedExecutablePath(t *testing.
 			Kind: protocol.CondKindExecutableVerified,
 			ExecutableVerified: &protocol.ExecutableVerifiedOperand{
 				CanonicalPath: ollamaPath, ExpectedVersion: "1.0.0",
+			},
+		}},
+		Postconditions: []protocol.Condition{{
+			Kind: protocol.CondKindModelPresent,
+			ModelPresent: &protocol.ModelPresentOperand{
+				Runtime: "ollama", ModelRef: "smollm:135m", ResolvedRevision: resolvedDigest,
 			},
 		}},
 		IdempotencyKey: "ollama_pull_smollm",

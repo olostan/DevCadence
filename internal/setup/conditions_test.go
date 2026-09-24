@@ -191,29 +191,47 @@ func TestEvaluateConditionEndpointHealthyUsesConfiguredChecker(t *testing.T) {
 }
 
 func TestEvaluateConditionModelPresentMLX(t *testing.T) {
-	runner := &fakeCommandRunner{results: map[string]process.Result{
-		"huggingface-cli": {Status: process.StatusCompleted, ExitCode: 0},
-	}}
-	deps := EvaluatorDeps{Runner: runner, ModelRuntimes: NewModelRuntimeRegistry(DefaultModelRuntimeAdapters()...)}
+	cacheDir := t.TempDir()
+	modelRef := "mlx-community/Qwen2.5-Coder-7B-Instruct-4bit"
+	revision := "019cc73c45c770444708a6dd8690c66243cc5c80"
+	writeFakeHFSnapshot(t, cacheDir, modelRef, revision, 1024)
+
+	// MLXAdapter.ModelPresent is filesystem-only — it must not touch a
+	// CommandRunner at all, unlike the earlier subprocess-based design
+	// (see mlx_adapter.go's doc comment for why: a postcondition/recovery
+	// check must not depend on ambient PATH resolution).
+	deps := EvaluatorDeps{ModelRuntimes: NewModelRuntimeRegistry(OllamaAdapter{}, MLXAdapter{CacheDir: cacheDir})}
 	passed, _, err := EvaluateCondition(context.Background(), deps, protocol.Condition{
 		Kind: protocol.CondKindModelPresent,
 		ModelPresent: &protocol.ModelPresentOperand{
 			Runtime:          "mlx",
-			ModelRef:         "mlx-community/Qwen2.5-Coder-7B-Instruct-4bit",
-			ResolvedRevision: "main",
+			ModelRef:         modelRef,
+			ResolvedRevision: revision,
 		},
 	})
 	if err != nil {
 		t.Fatalf("EvaluateCondition: %v", err)
 	}
 	if !passed {
-		t.Error("passed = false, want true when huggingface-cli --local-files-only exits 0")
+		t.Error("passed = false, want true when the resolved-revision snapshot directory exists in the cache")
 	}
-	if len(runner.calls) != 1 || runner.calls[0].Executable != "huggingface-cli" {
-		t.Errorf("runner.calls = %+v, want one bare-name huggingface-cli call", runner.calls)
+}
+
+func TestEvaluateConditionModelPresentMLXAbsent(t *testing.T) {
+	deps := EvaluatorDeps{ModelRuntimes: NewModelRuntimeRegistry(OllamaAdapter{}, MLXAdapter{CacheDir: t.TempDir()})}
+	passed, _, err := EvaluateCondition(context.Background(), deps, protocol.Condition{
+		Kind: protocol.CondKindModelPresent,
+		ModelPresent: &protocol.ModelPresentOperand{
+			Runtime:          "mlx",
+			ModelRef:         "mlx-community/Qwen2.5-Coder-7B-Instruct-4bit",
+			ResolvedRevision: "019cc73c45c770444708a6dd8690c66243cc5c80",
+		},
+	})
+	if err != nil {
+		t.Fatalf("EvaluateCondition: %v", err)
 	}
-	if runner.calls[0].Args[len(runner.calls[0].Args)-1] != "--local-files-only" {
-		t.Errorf("runner.calls[0].Args = %v, want the last arg to be --local-files-only", runner.calls[0].Args)
+	if passed {
+		t.Error("passed = true for an empty cache directory, want false")
 	}
 }
 

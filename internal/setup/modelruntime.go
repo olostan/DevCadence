@@ -45,12 +45,18 @@ type ModelRuntimeRegistry struct {
 }
 
 // NewModelRuntimeRegistry builds a registry from adapters, keyed by each
-// adapter's own Runtime(). A later adapter with a Runtime() already seen
-// overwrites the earlier one silently — callers are expected to pass each
-// runtime at most once.
+// adapter's own Runtime(). It panics if two adapters report the same
+// Runtime() — a misconfiguration that would otherwise silently replace
+// one adapter (potentially a production one) with another with no
+// indication anything was wrong; this is a construction-time programming
+// error, the same class of mistake net/http's ServeMux.Handle panics on
+// for a duplicate pattern, not a runtime condition to recover from.
 func NewModelRuntimeRegistry(adapters ...LocalModelRuntimeAdapter) *ModelRuntimeRegistry {
 	reg := &ModelRuntimeRegistry{adapters: make(map[string]LocalModelRuntimeAdapter, len(adapters))}
 	for _, a := range adapters {
+		if _, exists := reg.adapters[a.Runtime()]; exists {
+			panic("setup: NewModelRuntimeRegistry: duplicate adapter for runtime " + a.Runtime())
+		}
 		reg.adapters[a.Runtime()] = a
 	}
 	return reg

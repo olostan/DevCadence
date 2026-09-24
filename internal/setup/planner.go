@@ -2,6 +2,7 @@ package setup
 
 import (
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -23,18 +24,45 @@ const (
 	DefaultOllamaLicense      = "Apache-2.0"
 )
 
-// Standard model parameters for the MLX (Hugging Face / huggingface-cli)
-// download recipe — MLX-LM's own model distribution path. These are the
-// equal-peer counterpart of the DefaultOllama* constants above: neither
-// runtime is the "default" one, both are recipe inputs this planner treats
+// Standard model parameters for the MLX (Hugging Face Hub) download recipe
+// — MLX-LM's own model distribution path. These are the equal-peer
+// counterpart of the DefaultOllama* constants above: neither runtime is
+// the "default" one, both are recipe inputs this planner treats
 // symmetrically (see modelruntime.go, INVARIANTS.md DCI-055).
+//
+// DefaultMLXRevision MUST be an immutable Hugging Face commit hash, never
+// a mutable ref like "main" — an approved PlanDigest binds this exact
+// value, and a mutable branch ref would let the bytes actually downloaded
+// diverge from what was approved (the same immutable-plan property
+// DefaultOllamaDigest already provides on the Ollama side). This value was
+// resolved from the Hugging Face Hub API (`GET /api/models/{id}` →
+// `.sha`) against the repo named by DefaultMLXModelRef; re-resolve and
+// update both constants together if the recipe's model reference changes.
+// DefaultMLXSizeBytes was resolved the same way, from the repo tree at
+// that revision (`GET /api/models/{id}/tree/{revision}`, summed file
+// sizes) — a real measured value, not an estimate.
 const (
 	DefaultMLXModelRef  = "mlx-community/Qwen2.5-Coder-7B-Instruct-4bit"
-	DefaultMLXRevision  = "main"
-	DefaultMLXSizeBytes = 4300000000
+	DefaultMLXRevision  = "019cc73c45c770444708a6dd8690c66243cc5c80"
+	DefaultMLXSizeBytes = 4295890004
 	DefaultMLXSource    = "huggingface.co"
 	DefaultMLXLicense   = "Apache-2.0"
 )
+
+// hfCommitHashPattern matches a full Hugging Face/git commit hash (40
+// lowercase hex characters) — the only revision form that pins an
+// immutable snapshot. Branch/tag refs like "main" or "refs/pr/1" fail
+// this, by design.
+var hfCommitHashPattern = regexp.MustCompile(`^[0-9a-f]{40}$`)
+
+// isImmutableHFRevision reports whether rev is an immutable Hugging Face
+// commit hash rather than a mutable ref. The automated ensure_local_model
+// path for any Hugging-Face-backed runtime (MLX today) must never build an
+// executable action from a mutable ref — see localModelRecipe's use of
+// this in ensureLocalModelAction.
+func isImmutableHFRevision(rev string) bool {
+	return hfCommitHashPattern.MatchString(rev)
+}
 
 // PlannerOptions configures the remediation planner.
 type PlannerOptions struct {
@@ -282,12 +310,15 @@ func (p *Planner) Plan(report *protocol.DoctorReport, target protocol.SetupTarge
 		}
 
 		if isDarwinArm64 && (mlxDetected || mlxSelected) {
+			// "hf" is the current Hugging Face Hub CLI; the older
+			// "huggingface-cli" name was removed in huggingface_hub v1.0
+			// (see internal/setup/mlx_adapter.go's doc comment).
 			var hfPath, hfVersion string
 			if p.facts != nil {
 				factsFp, fpErr := environment.Fingerprint(*p.facts)
 				if fpErr == nil && factsFp == report.MachineFingerprint {
 					for _, sw := range p.facts.Software {
-						if (sw.ID == "huggingface-cli" || sw.ID == "huggingface_hub") && sw.Installed && sw.Path != "" && sw.Version != "" {
+						if (sw.ID == "hf" || sw.ID == "huggingface_hub") && sw.Installed && sw.Path != "" && sw.Version != "" {
 							hfPath, hfVersion = sw.Path, sw.Version
 							break
 						}
@@ -295,20 +326,21 @@ func (p *Planner) Plan(report *protocol.DoctorReport, target protocol.SetupTarge
 				}
 			}
 			action := p.ensureLocalModelAction(&actionIndex, dirActionIDs, localModelRecipe{
-				runtime:           "mlx",
-				modelRef:          DefaultMLXModelRef,
-				resolvedRevision:  DefaultMLXRevision,
-				expectedSizeBytes: DefaultMLXSizeBytes,
-				allowedSource:     DefaultMLXSource,
-				licenseReference:  DefaultMLXLicense,
-				commandName:       "huggingface-cli",
-				executablePath:    hfPath,
-				executableVersion: hfVersion,
-				recipeIDAuto:      "recipe.mlx.download_model",
-				recipeIDManual:    "recipe.manual.pull_mlx_model",
+				runtime:             "mlx",
+				modelRef:            DefaultMLXModelRef,
+				resolvedRevision:    DefaultMLXRevision,
+				expectedSizeBytes:   DefaultMLXSizeBytes,
+				allowedSource:       DefaultMLXSource,
+				licenseReference:    DefaultMLXLicense,
+				commandName:         "hf",
+				executablePath:      hfPath,
+				executableVersion:   hfVersion,
+				recipeIDAuto:        "recipe.mlx.download_model",
+				recipeIDManual:      "recipe.manual.pull_mlx_model",
+				revisionIsImmutable: isImmutableHFRevision,
 				manualSteps: []string{
 					"Install mlx-lm and huggingface_hub in a dedicated Python environment (e.g., pip install mlx-lm huggingface_hub)",
-					fmt.Sprintf("Run: huggingface-cli download %s --revision %s", DefaultMLXModelRef, DefaultMLXRevision),
+					fmt.Sprintf("Run: hf download %s --revision %s", DefaultMLXModelRef, DefaultMLXRevision),
 				},
 			})
 			actions = append(actions, action)
@@ -430,13 +462,24 @@ type localModelRecipe struct {
 	// preconditions beyond command_available/executable_verified (e.g.
 	// Ollama's local port check); most runtimes need none.
 	extraPreconditions []protocol.Condition
+	// revisionIsImmutable, when non-nil, gates the automated path on
+	// resolvedRevision actually being an immutable pin (e.g. a Hugging
+	// Face commit hash, not a mutable branch ref like "main") — an
+	// approved PlanDigest binds resolvedRevision, so a mutable ref would
+	// let the bytes downloaded at apply time diverge from what was
+	// approved. nil means the runtime's own resolvedRevision format is
+	// already inherently immutable (e.g. Ollama's sha256 digest) and
+	// needs no separate check.
+	revisionIsImmutable func(string) bool
 }
 
 // ensureLocalModelAction builds the action for one localModelRecipe: an
 // automated ensure_local_model operation when r.executablePath/Version
-// establish a trustworthy identity for r.commandName, otherwise a manual
-// action with the same real postcondition (model_present) — never a
-// weaker command_available proxy, for any runtime.
+// establish a trustworthy identity for r.commandName AND (when
+// r.revisionIsImmutable is set) r.resolvedRevision is actually an
+// immutable pin, otherwise a manual action with the same real
+// postcondition (model_present) — never a weaker command_available proxy,
+// for any runtime.
 func (p *Planner) ensureLocalModelAction(actionIndex *int, dependsOn []string, r localModelRecipe) protocol.SetupAction {
 	actID := fmt.Sprintf("act_pull_model_%s_%04d", r.runtime, *actionIndex)
 	*actionIndex++
@@ -455,7 +498,10 @@ func (p *Planner) ensureLocalModelAction(actionIndex *int, dependsOn []string, r
 		Detail: fmt.Sprintf("Model %s (%s) pulled to local storage via %s", r.modelRef, r.resolvedRevision, r.runtime),
 	}
 
-	if r.executablePath != "" && r.executableVersion != "" {
+	trustworthyIdentity := r.executablePath != "" && r.executableVersion != ""
+	revisionPinned := r.revisionIsImmutable == nil || r.revisionIsImmutable(r.resolvedRevision)
+
+	if trustworthyIdentity && revisionPinned {
 		op := protocol.TypedOperation{
 			Kind: protocol.OpKindEnsureLocalModel,
 			EnsureLocalModel: &protocol.EnsureLocalModelParams{

@@ -37,23 +37,14 @@ type applierDeps struct {
 	home      string
 	cache     *CacheManager
 	artifacts *artifacts.Store
-	// ollamaBaseURL overrides the default local Ollama API base for
-	// OllamaAdapter.EnsureModel's post-pull verification; empty means use
-	// the default. Tests set this to an httptest.Server URL.
-	ollamaBaseURL string
 	// modelRuntimes dispatches ensure_local_model operations to the
 	// adapter named by the operation's Runtime field — see
 	// modelruntime.go. nil means ensure_local_model operations fail
 	// closed with an error, the same as any other unconfigured dependency
-	// in this struct.
+	// in this struct. Each adapter carries its own runtime-specific
+	// configuration (e.g. OllamaAdapter.BaseURL) rather than this struct
+	// — see modelruntime.go/ollama_adapter.go.
 	modelRuntimes *ModelRuntimeRegistry
-}
-
-func (d applierDeps) ollamaBase() string {
-	if d.ollamaBaseURL != "" {
-		return d.ollamaBaseURL
-	}
-	return defaultOllamaBaseURL
 }
 
 // applyOperation dispatches op to its applier — the sole path through
@@ -143,14 +134,15 @@ func applyRunDiagnosticCheck(ctx context.Context, deps applierDeps, p *protocol.
 
 	case protocol.CheckStateRootWritable:
 		// A non-mutating check: run_diagnostic_check's IntrinsicPolicy
-		// (WP-M3B-1, frozen) declares AuthorityReadOnly for this operation
-		// kind, so this check must never itself write to disk — it was
-		// wrong for that to have been true here before. This inspects mode
-		// bits rather than proving writability by writing, which is a
-		// weaker, best-effort signal (it can't see ACLs, read-only
-		// filesystems, or quota); that tradeoff is accepted specifically to
-		// keep the operation genuinely read-only rather than reopening
-		// WP-M3B-1's accepted IntrinsicPolicy contract for one diagnostic.
+		// declares AuthorityReadOnly for this operation kind, so this
+		// check must never itself write to disk. This inspects the
+		// owner-write permission mode bit rather than proving writability
+		// by writing — a real but genuinely weaker signal than "this path
+		// is writable": it cannot see ACLs, read-only-mounted filesystems,
+		// or quota. The result wording below says exactly that, rather
+		// than asserting unqualified writability the check cannot
+		// actually establish (a prior revision's wording was flagged as
+		// untruthful for exactly this reason).
 		path := deps.home
 		info, statErr := os.Stat(path)
 		if statErr != nil {
@@ -158,10 +150,10 @@ func applyRunDiagnosticCheck(ctx context.Context, deps applierDeps, p *protocol.
 			return false, detail, nil, nil, diagnosticFailed(p.CheckName, detail)
 		}
 		if info.Mode().Perm()&0200 == 0 {
-			detail := fmt.Sprintf("%s: not writable (mode %o)", path, info.Mode().Perm())
+			detail := fmt.Sprintf("%s: owner-write permission bit is not set (mode %o) — not writable", path, info.Mode().Perm())
 			return false, detail, nil, nil, diagnosticFailed(p.CheckName, detail)
 		}
-		return false, fmt.Sprintf("%s is writable (mode %o)", path, info.Mode().Perm()), nil, nil, nil
+		return false, fmt.Sprintf("%s: owner-write permission bit is set (mode %o) — appears writable; this mode-bit check cannot see ACLs, read-only mounts, or quota, so it is not a guarantee", path, info.Mode().Perm()), nil, nil, nil
 
 	case protocol.CheckOllamaResponding:
 		passed, detail, err := evaluatePortListening(&protocol.PortOperand{Host: "127.0.0.1", Port: ollamaLocalPort})

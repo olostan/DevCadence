@@ -163,6 +163,39 @@ func TestSetupActionIntrinsicPolicyEnforcement(t *testing.T) {
 	}
 }
 
+func TestSetupActionEnsureLocalModelRequiresMatchingPostcondition(t *testing.T) {
+	// A valid action's operation and postcondition already agree (baseline).
+	act := validExecutableAction()
+	if err := act.Validate(); err != nil {
+		t.Fatalf("baseline action failed validation: %v", err)
+	}
+
+	// Mismatched model_ref between the operation and its postcondition must
+	// be rejected — a plan must not be able to approve pulling model A
+	// while declaring success against model B's presence.
+	mismatched := validExecutableAction()
+	mismatched.Postconditions = []protocol.Condition{
+		{
+			Kind: protocol.CondKindModelPresent,
+			ModelPresent: &protocol.ModelPresentOperand{
+				Runtime:          "ollama",
+				ModelRef:         "a-completely-different-model:latest",
+				ResolvedRevision: mismatched.Operation.EnsureLocalModel.ResolvedRevision,
+			},
+		},
+	}
+	if err := mismatched.Validate(); err == nil {
+		t.Fatal("action with mismatched ensure_local_model/model_present identity was accepted; expected error")
+	}
+
+	// No model_present postcondition at all must also be rejected.
+	missing := validExecutableAction()
+	missing.Postconditions = nil
+	if err := missing.Validate(); err == nil {
+		t.Fatal("ensure_local_model action with no model_present postcondition was accepted; expected error")
+	}
+}
+
 func TestSetupPlanValidationAndDigest(t *testing.T) {
 	act1 := validExecutableAction()
 	act2 := validManualAction()

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -229,7 +230,7 @@ func TestApplyOperationEnsureLocalModelOllama(t *testing.T) {
 	srv := newOllamaTagsServer(t, []ollamaModelEntry{
 		{Name: "smollm:135m", Digest: resolvedDigest, Size: 145000000},
 	})
-	deps.ollamaBaseURL = srv.URL
+	deps.modelRuntimes = NewModelRuntimeRegistry(OllamaAdapter{BaseURL: srv.URL}, MLXAdapter{})
 
 	op := protocol.TypedOperation{
 		Kind: protocol.OpKindEnsureLocalModel,
@@ -290,7 +291,7 @@ func TestApplyOperationEnsureLocalModelOllamaRejectsDigestMismatch(t *testing.T)
 	srv := newOllamaTagsServer(t, []ollamaModelEntry{
 		{Name: "smollm:135m", Digest: "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", Size: 145000000},
 	})
-	deps.ollamaBaseURL = srv.URL
+	deps.modelRuntimes = NewModelRuntimeRegistry(OllamaAdapter{BaseURL: srv.URL}, MLXAdapter{})
 
 	op := protocol.TypedOperation{
 		Kind: protocol.OpKindEnsureLocalModel,
@@ -346,7 +347,7 @@ func TestApplyOperationEnsureLocalModelOllamaRejectsSizeMismatch(t *testing.T) {
 	srv := newOllamaTagsServer(t, []ollamaModelEntry{
 		{Name: "smollm:135m", Digest: resolvedDigest, Size: 999999999}, // does not match ExpectedSizeBytes below
 	})
-	deps.ollamaBaseURL = srv.URL
+	deps.modelRuntimes = NewModelRuntimeRegistry(OllamaAdapter{BaseURL: srv.URL}, MLXAdapter{})
 
 	op := protocol.TypedOperation{
 		Kind: protocol.OpKindEnsureLocalModel,
@@ -376,7 +377,7 @@ func TestApplyOperationEnsureLocalModelOllamaPrefixesNonDefaultSource(t *testing
 	srv := newOllamaTagsServer(t, []ollamaModelEntry{
 		{Name: "smollm:135m", Digest: resolvedDigest, Size: 145000000},
 	})
-	deps.ollamaBaseURL = srv.URL
+	deps.modelRuntimes = NewModelRuntimeRegistry(OllamaAdapter{BaseURL: srv.URL}, MLXAdapter{})
 
 	op := protocol.TypedOperation{
 		Kind: protocol.OpKindEnsureLocalModel,
@@ -399,19 +400,48 @@ func TestApplyOperationEnsureLocalModelOllamaPrefixesNonDefaultSource(t *testing
 	}
 }
 
+const mlxTestRevision = "019cc73c45c770444708a6dd8690c66243cc5c80"
+
+// writeFakeHFSnapshot creates a fake Hugging Face Hub cache snapshot
+// directory under cacheDir for modelRef@revision, containing one regular
+// file of exactly sizeBytes, so MLXAdapter's filesystem-based
+// verification (no subprocess involved) has real, measurable content to
+// check — the same role newOllamaTagsServer plays for Ollama's HTTP-based
+// verification.
+func writeFakeHFSnapshot(t *testing.T, cacheDir, modelRef, revision string, sizeBytes int64) {
+	t.Helper()
+	dir := hfSnapshotDir(cacheDir, modelRef, revision)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		t.Fatalf("mkdir snapshot dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "model.safetensors"), make([]byte, sizeBytes), 0644); err != nil {
+		t.Fatalf("write fake snapshot file: %v", err)
+	}
+}
+
 func TestApplyOperationEnsureLocalModelMLX(t *testing.T) {
 	deps, home := applierTestDeps(t)
-	hfPath := filepath.Join(home, "huggingface-cli-fake")
+	hfPath := filepath.Join(home, "hf-fake")
 	runner := deps.runner.(*fakeCommandRunner)
 	runner.results[hfPath] = process.Result{Status: process.StatusCompleted, ExitCode: 0}
+
+	cacheDir := t.TempDir()
+	deps.modelRuntimes = NewModelRuntimeRegistry(OllamaAdapter{}, MLXAdapter{CacheDir: cacheDir})
+	modelRef := "mlx-community/Qwen2.5-Coder-7B-Instruct-4bit"
+	const size = 4096 // deliberately small — this test only proves size enforcement wires through, not a real model's byte count
+	// The download subprocess is faked (it doesn't really touch disk), so
+	// the snapshot the post-download verification reads must already be
+	// there — it stands in for what a real `hf download` would have
+	// produced.
+	writeFakeHFSnapshot(t, cacheDir, modelRef, mlxTestRevision, size)
 
 	op := protocol.TypedOperation{
 		Kind: protocol.OpKindEnsureLocalModel,
 		EnsureLocalModel: &protocol.EnsureLocalModelParams{
 			Runtime:           "mlx",
-			ModelRef:          "mlx-community/Qwen2.5-Coder-7B-Instruct-4bit",
-			ResolvedRevision:  "main",
-			ExpectedSizeBytes: 4300000000,
+			ModelRef:          modelRef,
+			ResolvedRevision:  mlxTestRevision,
+			ExpectedSizeBytes: size,
 			AllowedSource:     "huggingface.co",
 			LicenseReference:  "apache-2.0",
 		},
@@ -426,14 +456,60 @@ func TestApplyOperationEnsureLocalModelMLX(t *testing.T) {
 	if procResult == nil {
 		t.Fatal("procResult is nil, want the subprocess result for ensure_local_model")
 	}
-	if len(runner.calls) != 2 {
-		t.Fatalf("runner.calls = %+v, want 2 (download, then --local-files-only verification)", runner.calls)
+	if len(runner.calls) != 1 {
+		t.Fatalf("runner.calls = %+v, want exactly 1 (the download; verification reads the cache directly, no subprocess)", runner.calls)
 	}
 	if runner.calls[0].Executable != hfPath || runner.calls[0].Args[0] != "download" {
 		t.Errorf("runner.calls[0] = %+v, want a download call to the verified path", runner.calls[0])
 	}
-	if runner.calls[1].Args[len(runner.calls[1].Args)-1] != "--local-files-only" {
-		t.Errorf("runner.calls[1] = %+v, want the presence-verification call with --local-files-only", runner.calls[1])
+}
+
+func TestApplyOperationEnsureLocalModelMLXRejectsSizeMismatch(t *testing.T) {
+	deps, home := applierTestDeps(t)
+	hfPath := filepath.Join(home, "hf-fake")
+	deps.runner.(*fakeCommandRunner).results[hfPath] = process.Result{Status: process.StatusCompleted, ExitCode: 0}
+
+	cacheDir := t.TempDir()
+	deps.modelRuntimes = NewModelRuntimeRegistry(OllamaAdapter{}, MLXAdapter{CacheDir: cacheDir})
+	modelRef := "mlx-community/Qwen2.5-Coder-7B-Instruct-4bit"
+	writeFakeHFSnapshot(t, cacheDir, modelRef, mlxTestRevision, 999) // does not match ExpectedSizeBytes below
+
+	op := protocol.TypedOperation{
+		Kind: protocol.OpKindEnsureLocalModel,
+		EnsureLocalModel: &protocol.EnsureLocalModelParams{
+			Runtime:           "mlx",
+			ModelRef:          modelRef,
+			ResolvedRevision:  mlxTestRevision,
+			ExpectedSizeBytes: 4295890004,
+			AllowedSource:     "huggingface.co",
+			LicenseReference:  "apache-2.0",
+		},
+	}
+	mutated, detail, _, _, err := applyOperation(context.Background(), deps, op, false, hfPath)
+	if err != nil {
+		t.Fatalf("applyOperation returned an error rather than a failed-but-no-error result: %v", err)
+	}
+	if mutated {
+		t.Errorf("mutated = true despite a size mismatch, want false (detail: %s)", detail)
+	}
+}
+
+func TestApplyOperationEnsureLocalModelMLXRejectsUnapprovedSource(t *testing.T) {
+	deps, home := applierTestDeps(t)
+	hfPath := filepath.Join(home, "hf-fake")
+	op := protocol.TypedOperation{
+		Kind: protocol.OpKindEnsureLocalModel,
+		EnsureLocalModel: &protocol.EnsureLocalModelParams{
+			Runtime:           "mlx",
+			ModelRef:          "mlx-community/Qwen2.5-Coder-7B-Instruct-4bit",
+			ResolvedRevision:  mlxTestRevision,
+			ExpectedSizeBytes: 4295890004,
+			AllowedSource:     "some-other-hub.example.com",
+			LicenseReference:  "apache-2.0",
+		},
+	}
+	if _, _, _, _, err := applyOperation(context.Background(), deps, op, false, hfPath); err == nil {
+		t.Fatal("applyOperation accepted allowed_source other than huggingface.co for the mlx runtime; expected rejection")
 	}
 }
 
@@ -444,8 +520,8 @@ func TestApplyOperationEnsureLocalModelMLXRequiresVerifiedExecutablePath(t *test
 		EnsureLocalModel: &protocol.EnsureLocalModelParams{
 			Runtime:           "mlx",
 			ModelRef:          "mlx-community/Qwen2.5-Coder-7B-Instruct-4bit",
-			ResolvedRevision:  "main",
-			ExpectedSizeBytes: 4300000000,
+			ResolvedRevision:  mlxTestRevision,
+			ExpectedSizeBytes: 4295890004,
 			AllowedSource:     "huggingface.co",
 			LicenseReference:  "apache-2.0",
 		},
