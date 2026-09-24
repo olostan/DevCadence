@@ -1,9 +1,9 @@
 # Handoff — M3B guided bootstrap (feat/m3b-guided-bootstrap)
 
-Last updated: 2026-09-24T00:40:00Z by Claude Code / Sonnet 5 (cloud session, olostan@gmail.com)
+Last updated: 2026-09-24T00:55:00Z by Claude Code / Sonnet 5 (cloud session, olostan@gmail.com)
 
 Session takeover HEAD: `a38b293` (origin/main HEAD when this session started — branch did not exist yet)
-Expected remote HEAD before next push: `1e5b8bf` (advance this after every successful push — see "Git safety rules" in AGENT_HANDOFF_PROTOCOL.md)
+Expected remote HEAD before next push: `6833219` (advance this after every successful push — see "Git safety rules" in AGENT_HANDOFF_PROTOCOL.md)
 
 ## Milestone
 
@@ -55,7 +55,7 @@ file-backed ledger that writes it).
 
 | WP | Status | Checkpoint | Validation | Review |
 |----|--------|------------|------------|--------|
-| WP-M3B-1 | accepted | `95c5ec2` (this commit) | `go build ./...`, `go vet ./...`, `go test -count=1 ./...` all PASS (see EWP §8) | independent review complete — [PR #10 comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5805285148) (owner), 3 findings, all addressed in EWP §12 |
+| WP-M3B-1 | accepted | `6833219` | `go build ./...`, `go vet ./...`, `go test -count=1 ./...` all PASS (see EWP §8) | independent review complete — [PR #10 comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5805285148) (owner), 3 findings, all addressed in EWP §12; verified in [follow-up comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5805447822) |
 | WP-M3B-2 | not started | — | — | — |
 | WP-M3B-3 | unknown — likely partially pre-existing, unverified | — | — | blocked on WP-M3B-2; assess `internal/setup/planner.go` first |
 | WP-M3B-4 | not started | — | — | blocked on WP-M3B-3 |
@@ -70,10 +70,11 @@ until the whole milestone closes.)
 
 ## Currently in progress: none — WP-M3B-1 is closed out for this session
 
-- **EWP status:** committed at `4b006d3`, revised in place (same file,
-  new commit — not force-pushed/amended over the already-pushed `4b006d3`)
-  to incorporate independent review findings; see EWP §12 and
-  [PR #10 comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5805285148).
+- **EWP status:** originally committed at `4b006d3`; revised in the same
+  file at `6833219` (a new commit, not a rewrite of the already-pushed
+  `4b006d3`) to incorporate independent review findings; see EWP §12 and
+  [PR #10 comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5805285148),
+  confirmed in the [follow-up verification](https://github.com/olostan/DevCadence/pull/10#issuecomment-5805447822).
 - **Base commit this WP started from:** `a38b293` (origin/main).
 - **What's implemented so far:** the EWP itself (checkpoint artifact), plus
   three review-driven additions layered on top of the pre-existing
@@ -113,9 +114,10 @@ sequence this session used for WP-M3B-1.
 
 1. `git fetch origin feat/m3b-guided-bootstrap` and check out the branch.
    Record the fetched `HEAD` SHA as your own session's "Expected remote
-   HEAD" baseline (should be `4b006d3` unless someone else pushed after
-   this was written — if so, reconcile per the protocol's git safety
-   rules before doing anything else).
+   HEAD" baseline — adopt whatever SHA the fetch actually returns rather
+   than assuming it matches this file's "Expected remote HEAD" field
+   above; if it doesn't match, reconcile per the protocol's git safety
+   rules before doing anything else.
 2. Do not trust this file blindly: run `go build ./... && go test -count=1
    ./...` and confirm it matches what's claimed above.
 3. Read `docs/work-packages/wp-m3b-1-ewp.md` in full — it's short, and its
