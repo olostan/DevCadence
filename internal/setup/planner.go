@@ -14,13 +14,26 @@ import (
 
 const DefaultRecipeSetVersion = "1.0.0"
 
-// Standard model parameters for Ollama pull recipe
+// Standard model parameters for the Ollama pull recipe.
 const (
 	DefaultOllamaModelTag     = "qwen2.5-coder:7b"
 	DefaultOllamaDigest       = "sha256:e9f1a0e1c26c718a38a719c2f6d22efd332616f9f60f64c1257fa23f793b1373"
 	DefaultOllamaSizeBytes    = 4700000000
 	DefaultOllamaRegistryHost = "registry.ollama.ai"
 	DefaultOllamaLicense      = "Apache-2.0"
+)
+
+// Standard model parameters for the MLX (Hugging Face / huggingface-cli)
+// download recipe — MLX-LM's own model distribution path. These are the
+// equal-peer counterpart of the DefaultOllama* constants above: neither
+// runtime is the "default" one, both are recipe inputs this planner treats
+// symmetrically (see modelruntime.go, INVARIANTS.md DCI-055).
+const (
+	DefaultMLXModelRef  = "mlx-community/Qwen2.5-Coder-7B-Instruct-4bit"
+	DefaultMLXRevision  = "main"
+	DefaultMLXSizeBytes = 4300000000
+	DefaultMLXSource    = "huggingface.co"
+	DefaultMLXLicense   = "Apache-2.0"
 )
 
 // PlannerOptions configures the remediation planner.
@@ -181,7 +194,11 @@ func (p *Planner) Plan(report *protocol.DoctorReport, target protocol.SetupTarge
 		})
 	}
 
-	// Check Cognition: Pull model for local runtime if profile uses local execution
+	// Check Cognition: ensure a local model for whichever local runtime(s)
+	// are relevant, treating every runtime the planner knows about as an
+	// equal peer (INVARIANTS.md DCI-055, docs/MODEL_RUNTIME.md) — neither
+	// Ollama nor MLX gets a distinct code path shape; only their recipe
+	// inputs (command name, model ref, detection gate) differ.
 	if (profile == protocol.ProfileLocalHeavy || profile == protocol.ProfileHybridThin || profile == protocol.ProfileOffline) &&
 		(target == protocol.TargetAll || target == protocol.TargetCognition || target == protocol.TargetInference) {
 
@@ -194,142 +211,50 @@ func (p *Planner) Plan(report *protocol.DoctorReport, target protocol.SetupTarge
 				break
 			}
 		}
-
 		if shouldPullOllama {
-			trustworthyIdentity := false
-			var ollamaPath string
-			var ollamaVersion string
-
+			var ollamaPath, ollamaVersion string
 			if p.facts != nil {
 				factsFp, fpErr := environment.Fingerprint(*p.facts)
 				if fpErr == nil && factsFp == report.MachineFingerprint {
 					for _, sw := range p.facts.Software {
 						if sw.ID == "ollama" && sw.Installed && sw.Path != "" && sw.Version != "" {
-							ollamaPath = sw.Path
-							ollamaVersion = sw.Version
-							trustworthyIdentity = true
+							ollamaPath, ollamaVersion = sw.Path, sw.Version
 							break
 						}
 					}
 				}
 			}
-
-			actID := fmt.Sprintf("act_pull_model_%04d", actionIndex)
-			actionIndex++
-
-			if trustworthyIdentity {
-				op := protocol.TypedOperation{
-					Kind: protocol.OpKindOllamaPullModel,
-					OllamaPullModel: &protocol.OllamaPullModelParams{
-						ModelTag:            DefaultOllamaModelTag,
-						ResolvedDigest:      DefaultOllamaDigest,
-						ExpectedSizeBytes:   DefaultOllamaSizeBytes,
-						AllowedRegistryHost: DefaultOllamaRegistryHost,
-						LicenseReference:    DefaultOllamaLicense,
-					},
-				}
-				effects, auth := protocol.IntrinsicPolicy(op)
-				actions = append(actions, protocol.SetupAction{
-					ActionID:      actID,
-					RecipeID:      "recipe.ollama.pull_model",
-					RecipeVersion: p.recipeSetVersion,
-					Title:         fmt.Sprintf("Pull model: %s", DefaultOllamaModelTag),
-					Description:   fmt.Sprintf("Pulls verified local coding model %s via Ollama", DefaultOllamaModelTag),
-					Authority:     auth,
-					Effects:       effects,
-					Operation:     &op,
-					DependsOn:     dirActionIDs,
-					Preconditions: []protocol.Condition{
-						{
-							Kind: protocol.CondKindCommandAvailable,
-							CommandAvailable: &protocol.CommandAvailableOperand{
-								CommandName: "ollama",
-							},
-						},
-						{
-							Kind: protocol.CondKindExecutableVerified,
-							ExecutableVerified: &protocol.ExecutableVerifiedOperand{
-								CanonicalPath:   ollamaPath,
-								ExpectedVersion: ollamaVersion,
-							},
-						},
-						{
-							Kind: protocol.CondKindPortListening,
-							PortListening: &protocol.PortOperand{
-								Host: "127.0.0.1",
-								Port: 11434,
-							},
+			action := p.ensureLocalModelAction(&actionIndex, dirActionIDs, localModelRecipe{
+				runtime:           "ollama",
+				modelRef:          DefaultOllamaModelTag,
+				resolvedRevision:  DefaultOllamaDigest,
+				expectedSizeBytes: DefaultOllamaSizeBytes,
+				allowedSource:     DefaultOllamaRegistryHost,
+				licenseReference:  DefaultOllamaLicense,
+				commandName:       "ollama",
+				executablePath:    ollamaPath,
+				executableVersion: ollamaVersion,
+				recipeIDAuto:      "recipe.ollama.pull_model",
+				recipeIDManual:    "recipe.manual.pull_ollama_model",
+				manualSteps: []string{
+					"Ensure Ollama is running and accessible",
+					fmt.Sprintf("Run: ollama pull %s", DefaultOllamaModelTag),
+				},
+				extraPreconditions: []protocol.Condition{
+					{
+						Kind: protocol.CondKindPortListening,
+						PortListening: &protocol.PortOperand{
+							Host: "127.0.0.1",
+							Port: 11434,
 						},
 					},
-					Postconditions: []protocol.Condition{
-						{
-							Kind: protocol.CondKindModelDigestPresent,
-							ModelDigestPresent: &protocol.ModelDigestOperand{
-								Runtime:  "ollama",
-								ModelTag: DefaultOllamaModelTag,
-								Digest:   DefaultOllamaDigest,
-							},
-						},
-					},
-					ExpectedMutations: []protocol.ExpectedMutation{
-						{
-							Kind:   "model_pulled",
-							Target: DefaultOllamaModelTag,
-							Detail: fmt.Sprintf("Model %s with digest %s pulled to local storage", DefaultOllamaModelTag, DefaultOllamaDigest),
-						},
-					},
-					IdempotencyKey: fmt.Sprintf("ollama_pull_%s", DefaultOllamaModelTag),
-				})
-			} else {
-				actions = append(actions, protocol.SetupAction{
-					ActionID:      actID,
-					RecipeID:      "recipe.manual.pull_ollama_model",
-					RecipeVersion: p.recipeSetVersion,
-					Title:         fmt.Sprintf("Pull model manually: %s", DefaultOllamaModelTag),
-					Description:   fmt.Sprintf("Verified executable identity for Ollama is unavailable; manual model pull is required for %s", DefaultOllamaModelTag),
-					Authority:     protocol.AuthorityHighImpactManual,
-					Effects:       []protocol.EffectCategory{protocol.EffectPackageDownload, protocol.EffectFilesystemWrite},
-					DependsOn:     dirActionIDs,
-					ManualInstructions: &protocol.ManualGuide{
-						Summary: fmt.Sprintf("Pull %s using Ollama CLI", DefaultOllamaModelTag),
-						Steps: []string{
-							"Ensure Ollama is running and accessible",
-							fmt.Sprintf("Run: ollama pull %s", DefaultOllamaModelTag),
-						},
-						VerificationCheck: []protocol.Condition{
-							{
-								Kind: protocol.CondKindModelDigestPresent,
-								ModelDigestPresent: &protocol.ModelDigestOperand{
-									Runtime:  "ollama",
-									ModelTag: DefaultOllamaModelTag,
-									Digest:   DefaultOllamaDigest,
-								},
-							},
-						},
-					},
-					Postconditions: []protocol.Condition{
-						{
-							Kind: protocol.CondKindModelDigestPresent,
-							ModelDigestPresent: &protocol.ModelDigestOperand{
-								Runtime:  "ollama",
-								ModelTag: DefaultOllamaModelTag,
-								Digest:   DefaultOllamaDigest,
-							},
-						},
-					},
-					ExpectedMutations: []protocol.ExpectedMutation{
-						{
-							Kind:   "model_pulled",
-							Target: DefaultOllamaModelTag,
-							Detail: fmt.Sprintf("Model %s with digest %s pulled to local storage", DefaultOllamaModelTag, DefaultOllamaDigest),
-						},
-					},
-					IdempotencyKey: fmt.Sprintf("manual_ollama_pull_%s", DefaultOllamaModelTag),
-				})
-			}
+				},
+			})
+			actions = append(actions, action)
 		}
 
-		// Check MLX setup: Gate to compatible Darwin/arm64 systems
+		// MLX is only a viable local runtime on Apple Silicon — a real
+		// platform constraint, not a preference between MLX and Ollama.
 		isDarwinArm64 := p.facts != nil && p.facts.Host.Family == protocol.OSDarwin && p.facts.Host.Arch == "arm64"
 
 		mlxSelected := false
@@ -357,42 +282,36 @@ func (p *Planner) Plan(report *protocol.DoctorReport, target protocol.SetupTarge
 		}
 
 		if isDarwinArm64 && (mlxDetected || mlxSelected) {
-			actID := fmt.Sprintf("act_setup_mlx_%04d", actionIndex)
-			actionIndex++
-			actions = append(actions, protocol.SetupAction{
-				ActionID:      actID,
-				RecipeID:      "recipe.manual.setup_mlx",
-				RecipeVersion: p.recipeSetVersion,
-				Title:         "Set up MLX local inference",
-				Description:   "Guides manual configuration and verification of MLX local inference on Apple Silicon",
-				Authority:     protocol.AuthorityHighImpactManual,
-				Effects:       []protocol.EffectCategory{protocol.EffectPackageDownload, protocol.EffectFilesystemWrite},
-				DependsOn:     dirActionIDs,
-				ManualInstructions: &protocol.ManualGuide{
-					Summary: "Configure MLX local runtime on Apple Silicon",
-					Steps: []string{
-						"Install mlx-lm in a dedicated Python environment (e.g., pip install mlx-lm)",
-						"Launch the MLX model server or configure DevCadence MLX adapter endpoint",
-					},
-					VerificationCheck: []protocol.Condition{
-						{
-							Kind: protocol.CondKindCommandAvailable,
-							CommandAvailable: &protocol.CommandAvailableOperand{
-								CommandName: "mlx_lm.server",
-							},
-						},
-					},
+			var hfPath, hfVersion string
+			if p.facts != nil {
+				factsFp, fpErr := environment.Fingerprint(*p.facts)
+				if fpErr == nil && factsFp == report.MachineFingerprint {
+					for _, sw := range p.facts.Software {
+						if (sw.ID == "huggingface-cli" || sw.ID == "huggingface_hub") && sw.Installed && sw.Path != "" && sw.Version != "" {
+							hfPath, hfVersion = sw.Path, sw.Version
+							break
+						}
+					}
+				}
+			}
+			action := p.ensureLocalModelAction(&actionIndex, dirActionIDs, localModelRecipe{
+				runtime:           "mlx",
+				modelRef:          DefaultMLXModelRef,
+				resolvedRevision:  DefaultMLXRevision,
+				expectedSizeBytes: DefaultMLXSizeBytes,
+				allowedSource:     DefaultMLXSource,
+				licenseReference:  DefaultMLXLicense,
+				commandName:       "huggingface-cli",
+				executablePath:    hfPath,
+				executableVersion: hfVersion,
+				recipeIDAuto:      "recipe.mlx.download_model",
+				recipeIDManual:    "recipe.manual.pull_mlx_model",
+				manualSteps: []string{
+					"Install mlx-lm and huggingface_hub in a dedicated Python environment (e.g., pip install mlx-lm huggingface_hub)",
+					fmt.Sprintf("Run: huggingface-cli download %s --revision %s", DefaultMLXModelRef, DefaultMLXRevision),
 				},
-				Postconditions: []protocol.Condition{
-					{
-						Kind: protocol.CondKindCommandAvailable,
-						CommandAvailable: &protocol.CommandAvailableOperand{
-							CommandName: "mlx_lm.server",
-						},
-					},
-				},
-				IdempotencyKey: "manual_setup_mlx",
 			})
+			actions = append(actions, action)
 		}
 	}
 
@@ -481,4 +400,123 @@ func (p *Planner) Plan(report *protocol.DoctorReport, target protocol.SetupTarge
 	}
 
 	return plan, nil
+}
+
+// localModelRecipe collects one local model runtime's recipe inputs, so
+// ensureLocalModelAction can build an automated-or-manual ensure_local_model
+// action identically for every runtime — no runtime's action shape differs
+// from another's (INVARIANTS.md DCI-055).
+type localModelRecipe struct {
+	runtime           string
+	modelRef          string
+	resolvedRevision  string
+	expectedSizeBytes int64
+	allowedSource     string
+	licenseReference  string
+	// commandName is the CLI this runtime's automated path shells out to
+	// (e.g. "ollama", "huggingface-cli"), used for the command_available
+	// precondition and reported in the manual guide's steps.
+	commandName string
+	// executablePath/executableVersion are the trustworthy-identity
+	// evidence (from environment facts matching the current machine
+	// fingerprint) that authorizes the automated path; empty means fall
+	// back to a manual action, symmetric across every runtime.
+	executablePath    string
+	executableVersion string
+	recipeIDAuto      string
+	recipeIDManual    string
+	manualSteps       []string
+	// extraPreconditions are appended to the automated action's
+	// preconditions beyond command_available/executable_verified (e.g.
+	// Ollama's local port check); most runtimes need none.
+	extraPreconditions []protocol.Condition
+}
+
+// ensureLocalModelAction builds the action for one localModelRecipe: an
+// automated ensure_local_model operation when r.executablePath/Version
+// establish a trustworthy identity for r.commandName, otherwise a manual
+// action with the same real postcondition (model_present) — never a
+// weaker command_available proxy, for any runtime.
+func (p *Planner) ensureLocalModelAction(actionIndex *int, dependsOn []string, r localModelRecipe) protocol.SetupAction {
+	actID := fmt.Sprintf("act_pull_model_%s_%04d", r.runtime, *actionIndex)
+	*actionIndex++
+
+	postcondition := protocol.Condition{
+		Kind: protocol.CondKindModelPresent,
+		ModelPresent: &protocol.ModelPresentOperand{
+			Runtime:          r.runtime,
+			ModelRef:         r.modelRef,
+			ResolvedRevision: r.resolvedRevision,
+		},
+	}
+	mutation := protocol.ExpectedMutation{
+		Kind:   "model_pulled",
+		Target: r.modelRef,
+		Detail: fmt.Sprintf("Model %s (%s) pulled to local storage via %s", r.modelRef, r.resolvedRevision, r.runtime),
+	}
+
+	if r.executablePath != "" && r.executableVersion != "" {
+		op := protocol.TypedOperation{
+			Kind: protocol.OpKindEnsureLocalModel,
+			EnsureLocalModel: &protocol.EnsureLocalModelParams{
+				Runtime:           r.runtime,
+				ModelRef:          r.modelRef,
+				ResolvedRevision:  r.resolvedRevision,
+				ExpectedSizeBytes: r.expectedSizeBytes,
+				AllowedSource:     r.allowedSource,
+				LicenseReference:  r.licenseReference,
+			},
+		}
+		effects, auth := protocol.IntrinsicPolicy(op)
+		preconditions := append([]protocol.Condition{
+			{
+				Kind: protocol.CondKindCommandAvailable,
+				CommandAvailable: &protocol.CommandAvailableOperand{
+					CommandName: r.commandName,
+				},
+			},
+			{
+				Kind: protocol.CondKindExecutableVerified,
+				ExecutableVerified: &protocol.ExecutableVerifiedOperand{
+					CanonicalPath:   r.executablePath,
+					ExpectedVersion: r.executableVersion,
+				},
+			},
+		}, r.extraPreconditions...)
+
+		return protocol.SetupAction{
+			ActionID:          actID,
+			RecipeID:          r.recipeIDAuto,
+			RecipeVersion:     p.recipeSetVersion,
+			Title:             fmt.Sprintf("Pull model: %s", r.modelRef),
+			Description:       fmt.Sprintf("Pulls verified local coding model %s via %s", r.modelRef, r.runtime),
+			Authority:         auth,
+			Effects:           effects,
+			Operation:         &op,
+			DependsOn:         dependsOn,
+			Preconditions:     preconditions,
+			Postconditions:    []protocol.Condition{postcondition},
+			ExpectedMutations: []protocol.ExpectedMutation{mutation},
+			IdempotencyKey:    fmt.Sprintf("%s_pull_%s", r.runtime, r.modelRef),
+		}
+	}
+
+	return protocol.SetupAction{
+		ActionID:      actID,
+		RecipeID:      r.recipeIDManual,
+		RecipeVersion: p.recipeSetVersion,
+		Title:         fmt.Sprintf("Pull model manually: %s", r.modelRef),
+		Description:   fmt.Sprintf("Verified executable identity for %s is unavailable; manual model pull is required for %s", r.runtime, r.modelRef),
+		Authority:     protocol.AuthorityHighImpactManual,
+		Effects:       []protocol.EffectCategory{protocol.EffectPackageDownload, protocol.EffectFilesystemWrite},
+		DependsOn:     dependsOn,
+		ManualInstructions: &protocol.ManualGuide{
+			Summary:           fmt.Sprintf("Pull %s using the %s CLI", r.modelRef, r.runtime),
+			Steps:             r.manualSteps,
+			VerificationCheck: []protocol.Condition{postcondition},
+		},
+		Postconditions:    []protocol.Condition{postcondition},
+		ExpectedMutations: []protocol.ExpectedMutation{mutation},
+		IdempotencyKey:    fmt.Sprintf("manual_%s_pull_%s", r.runtime, r.modelRef),
+	}
 }

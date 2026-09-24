@@ -86,7 +86,7 @@
                 "recipe_version": { "type": "string" },
                 "operation_kind": {
                   "enum": [
-                    "ollama_pull_model",
+                    "ensure_local_model",
                     "create_directory",
                     "write_managed_config",
                     "remove_stale_cache",

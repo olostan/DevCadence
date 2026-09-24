@@ -28,6 +28,10 @@ type ExecutorOptions struct {
 	// OllamaBaseURL overrides the default local Ollama API base; empty
 	// means use the default. Tests set this to an httptest.Server URL.
 	OllamaBaseURL string
+	// ModelRuntimes overrides the local model runtime adapter set; nil
+	// means DefaultModelRuntimeAdapters() (Ollama and MLX as equal
+	// peers). Tests set this to register a fake adapter.
+	ModelRuntimes *ModelRuntimeRegistry
 }
 
 // Executor implements ADR-0014 §2's two-step approval workflow and §1/§7's
@@ -42,6 +46,7 @@ type Executor struct {
 	ids            ids.Source
 	endpointHealth EndpointHealthChecker
 	ollamaBaseURL  string
+	modelRuntimes  *ModelRuntimeRegistry
 }
 
 // NewExecutor returns an Executor rooted at an absolute Home. Cache and the
@@ -62,6 +67,9 @@ func NewExecutor(opts ExecutorOptions) (*Executor, error) {
 	if opts.IDs == nil {
 		opts.IDs = ids.NewULIDSource()
 	}
+	if opts.ModelRuntimes == nil {
+		opts.ModelRuntimes = NewModelRuntimeRegistry(DefaultModelRuntimeAdapters()...)
+	}
 
 	cache, err := NewCacheManager(filepath.Join(opts.Home, "state"), opts.Clock, 0)
 	if err != nil {
@@ -81,6 +89,7 @@ func NewExecutor(opts ExecutorOptions) (*Executor, error) {
 		ids:            opts.IDs,
 		endpointHealth: opts.EndpointHealth,
 		ollamaBaseURL:  opts.OllamaBaseURL,
+		modelRuntimes:  opts.ModelRuntimes,
 	}, nil
 }
 
@@ -103,11 +112,11 @@ func (e *Executor) CheckPostconditions(ctx context.Context, conditions []protoco
 }
 
 func (e *Executor) evaluatorDeps() EvaluatorDeps {
-	return EvaluatorDeps{Runner: e.runner, Home: e.home, EndpointHealth: e.endpointHealth, OllamaBaseURL: e.ollamaBaseURL}
+	return EvaluatorDeps{Runner: e.runner, Home: e.home, EndpointHealth: e.endpointHealth, OllamaBaseURL: e.ollamaBaseURL, ModelRuntimes: e.modelRuntimes}
 }
 
 func (e *Executor) applierDeps() applierDeps {
-	return applierDeps{runner: e.runner, home: e.home, cache: e.cache, artifacts: e.artifacts, ollamaBaseURL: e.ollamaBaseURL}
+	return applierDeps{runner: e.runner, home: e.home, cache: e.cache, artifacts: e.artifacts, ollamaBaseURL: e.ollamaBaseURL, modelRuntimes: e.modelRuntimes}
 }
 
 // openLockedLedger acquires the whole-home execution lock and opens the

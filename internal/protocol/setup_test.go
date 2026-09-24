@@ -35,11 +35,11 @@ func validExecutableAction() protocol.SetupAction {
 		},
 		Postconditions: []protocol.Condition{
 			{
-				Kind: protocol.CondKindModelDigestPresent,
-				ModelDigestPresent: &protocol.ModelDigestOperand{
-					Runtime:  "ollama",
-					ModelTag: "smollm:135m",
-					Digest:   "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+				Kind: protocol.CondKindModelPresent,
+				ModelPresent: &protocol.ModelPresentOperand{
+					Runtime:          "ollama",
+					ModelRef:         "smollm:135m",
+					ResolvedRevision: "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
 				},
 			},
 		},
@@ -52,13 +52,14 @@ func validExecutableAction() protocol.SetupAction {
 		},
 		IdempotencyKey: "pull-smollm:135m",
 		Operation: &protocol.TypedOperation{
-			Kind: protocol.OpKindOllamaPullModel,
-			OllamaPullModel: &protocol.OllamaPullModelParams{
-				ModelTag:            "smollm:135m",
-				ResolvedDigest:      "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-				ExpectedSizeBytes:   145000000,
-				AllowedRegistryHost: "registry.ollama.ai",
-				LicenseReference:    "apache-2.0",
+			Kind: protocol.OpKindEnsureLocalModel,
+			EnsureLocalModel: &protocol.EnsureLocalModelParams{
+				Runtime:           "ollama",
+				ModelRef:          "smollm:135m",
+				ResolvedRevision:  "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+				ExpectedSizeBytes: 145000000,
+				AllowedSource:     "registry.ollama.ai",
+				LicenseReference:  "apache-2.0",
 			},
 		},
 	}
@@ -333,7 +334,7 @@ func TestSetupLedgerEventValidationAndChain(t *testing.T) {
 	}
 
 	// Event 2 linking to Event 1
-	opKind := protocol.OpKindOllamaPullModel
+	opKind := protocol.OpKindEnsureLocalModel
 	ev2 := protocol.SetupLedgerEvent{
 		SchemaVersion:       protocol.SchemaVersion1,
 		Sequence:            2,

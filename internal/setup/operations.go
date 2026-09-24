@@ -27,12 +27,6 @@ const ollamaPullTimeout = 30 * time.Minute
 
 const diagnosticProbeTimeout = 10 * time.Second
 
-// ollamaDefaultRegistryHost is Ollama's own implicit default registry — a
-// model reference is only prefixed with AllowedRegistryHost when it names
-// something other than this, since `ollama pull <tag>` already resolves
-// against this host with no prefix needed.
-const ollamaDefaultRegistryHost = "registry.ollama.ai"
-
 // applierDeps supplies applyOperation's live dependencies. Unexported along
 // with applyOperation itself: the executor's approval/precondition/ledger
 // gating is the only intended path to mutating the system (ADR-0014 §1/§7
@@ -44,9 +38,15 @@ type applierDeps struct {
 	cache     *CacheManager
 	artifacts *artifacts.Store
 	// ollamaBaseURL overrides the default local Ollama API base for
-	// applyOllamaPullModel's post-pull verification; empty means use the
-	// default. Tests set this to an httptest.Server URL.
+	// OllamaAdapter.EnsureModel's post-pull verification; empty means use
+	// the default. Tests set this to an httptest.Server URL.
 	ollamaBaseURL string
+	// modelRuntimes dispatches ensure_local_model operations to the
+	// adapter named by the operation's Runtime field — see
+	// modelruntime.go. nil means ensure_local_model operations fail
+	// closed with an error, the same as any other unconfigured dependency
+	// in this struct.
+	modelRuntimes *ModelRuntimeRegistry
 }
 
 func (d applierDeps) ollamaBase() string {
@@ -81,8 +81,8 @@ func applyOperation(ctx context.Context, deps applierDeps, op protocol.TypedOper
 		return mutated, detail, nil, nil, err
 	case protocol.OpKindRunDiagnosticCheck:
 		return applyRunDiagnosticCheck(ctx, deps, op.RunDiagnosticCheck, captureOutput)
-	case protocol.OpKindOllamaPullModel:
-		return applyOllamaPullModel(ctx, deps, op.OllamaPullModel, captureOutput, verifiedExecutablePath)
+	case protocol.OpKindEnsureLocalModel:
+		return applyEnsureLocalModel(ctx, deps, op.EnsureLocalModel, captureOutput, verifiedExecutablePath)
 	default:
 		return false, "", nil, nil, errs.New(errs.CategoryInvalidArgument, "applyOperation: unhandled operation kind %q", op.Kind)
 	}
@@ -209,72 +209,17 @@ func homeOrTemp(home string) string {
 	return os.TempDir()
 }
 
-// ollamaPullRef resolves the model reference actually passed to `ollama
-// pull`: bare ModelTag when AllowedRegistryHost is Ollama's own implicit
-// default (the common case today), otherwise explicitly prefixed with the
-// declared registry host so the approved plan's registry bound is actually
-// what gets requested, not just recorded as metadata.
-func ollamaPullRef(p *protocol.OllamaPullModelParams) string {
-	if p.AllowedRegistryHost == "" || p.AllowedRegistryHost == ollamaDefaultRegistryHost {
-		return p.ModelTag
+// applyEnsureLocalModel dispatches to the adapter registered for
+// p.Runtime — the sole path through which any ensure_local_model operation
+// actually mutates the system. There is no default runtime: an
+// unregistered one is always an error, symmetric across every runtime
+// including "ollama" (see modelruntime.go).
+func applyEnsureLocalModel(ctx context.Context, deps applierDeps, p *protocol.EnsureLocalModelParams, captureOutput bool, verifiedExecutablePath string) (bool, string, *process.Result, *protocol.ArtifactRef, error) {
+	adapter, ok := deps.modelRuntimes.For(p.Runtime)
+	if !ok {
+		return false, "", nil, nil, unsupportedRuntimeError("applyEnsureLocalModel", p.Runtime)
 	}
-	return p.AllowedRegistryHost + "/" + p.ModelTag
-}
-
-func applyOllamaPullModel(ctx context.Context, deps applierDeps, p *protocol.OllamaPullModelParams, captureOutput bool, verifiedExecutablePath string) (bool, string, *process.Result, *protocol.ArtifactRef, error) {
-	if deps.runner == nil {
-		return false, "", nil, nil, errs.New(errs.CategoryInvalidArgument, "applyOllamaPullModel: requires a CommandRunner")
-	}
-	// The exact binary run here must be the one an executable_verified
-	// precondition already checked (digest/version) — never a bare name
-	// re-resolved from PATH, which could silently name a different binary
-	// than the one just verified (ADR-0014 §1).
-	if verifiedExecutablePath == "" {
-		return false, "", nil, nil, errs.New(errs.CategoryPolicyDenied,
-			"applyOllamaPullModel: requires an executable_verified precondition binding the exact ollama binary to run")
-	}
-
-	spec := process.Spec{
-		Executable: verifiedExecutablePath,
-		Args:       []string{"pull", ollamaPullRef(p)},
-		Dir:        homeOrTemp(deps.home),
-		Env:        process.BaseEnv(),
-		Timeout:    ollamaPullTimeout,
-	}
-	result, err := deps.runner.Run(ctx, spec)
-	if err != nil {
-		return false, "", nil, nil, err
-	}
-	artifact, artErr := maybeCaptureOutput(ctx, deps, "ollama_pull_model", result, captureOutput)
-	if artErr != nil {
-		return false, "", nil, nil, artErr
-	}
-	if !result.Success() {
-		return false, fmt.Sprintf("ollama pull %s failed (exit %d)", p.ModelTag, result.ExitCode), &result, artifact, nil
-	}
-
-	// Bounded supply chain (ADR-0014 §7): the pull exiting 0 only means the
-	// CLI reported success, not that what landed matches the approved
-	// digest/size. Verify against the live Ollama API before calling the
-	// operation a mutation, so a digest/size mismatch is caught by the
-	// operation itself, not only (after the fact, if at all) by a separate
-	// postcondition the plan happens to also declare.
-	tags, tagsErr := fetchOllamaTags(ctx, deps.ollamaBase())
-	if tagsErr != nil {
-		return false, "", &result, artifact, errs.Wrap(errs.CategoryConflict, tagsErr, "ollama pull %s reported success but the resulting model could not be verified", p.ModelTag)
-	}
-	entry, found := findOllamaModel(tags, p.ModelTag)
-	if !found {
-		return false, fmt.Sprintf("ollama pull %s reported success but the model is not present afterward", p.ModelTag), &result, artifact, nil
-	}
-	if normalizeDigest(entry.Digest) != normalizeDigest(p.ResolvedDigest) {
-		return false, fmt.Sprintf("ollama pull %s produced digest %s, which does not match the approved resolved_digest %s", p.ModelTag, entry.Digest, p.ResolvedDigest), &result, artifact, nil
-	}
-	if p.ExpectedSizeBytes > 0 && entry.Size != p.ExpectedSizeBytes {
-		return false, fmt.Sprintf("ollama pull %s produced size %d bytes, which does not match the approved expected_size_bytes %d", p.ModelTag, entry.Size, p.ExpectedSizeBytes), &result, artifact, nil
-	}
-
-	return true, fmt.Sprintf("pulled %s via ollama, digest and size verified against the approved plan", p.ModelTag), &result, artifact, nil
+	return adapter.EnsureModel(ctx, deps, p, captureOutput, verifiedExecutablePath)
 }
 
 // ansiEscape matches ANSI/VT100 control sequences a CLI tool's progress

@@ -578,7 +578,7 @@ func TestExecutorRecoverReconcilesInterruptedAction(t *testing.T) {
 	}
 }
 
-func TestExecutorOllamaPullModelUsesTheVerifiedExecutablePath(t *testing.T) {
+func TestExecutorEnsureLocalModelOllamaUsesTheVerifiedExecutablePath(t *testing.T) {
 	exec, home, _ := executorTestFixture(t)
 	ollamaPath := filepath.Join(home, "ollama-fake")
 	resolvedDigest := "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
@@ -588,10 +588,10 @@ func TestExecutorOllamaPullModelUsesTheVerifiedExecutablePath(t *testing.T) {
 	exec.ollamaBaseURL = srv.URL
 
 	op := protocol.TypedOperation{
-		Kind: protocol.OpKindOllamaPullModel,
-		OllamaPullModel: &protocol.OllamaPullModelParams{
-			ModelTag: "smollm:135m", ResolvedDigest: resolvedDigest,
-			ExpectedSizeBytes: 145000000, AllowedRegistryHost: "registry.ollama.ai", LicenseReference: "apache-2.0",
+		Kind: protocol.OpKindEnsureLocalModel,
+		EnsureLocalModel: &protocol.EnsureLocalModelParams{
+			Runtime: "ollama", ModelRef: "smollm:135m", ResolvedRevision: resolvedDigest,
+			ExpectedSizeBytes: 145000000, AllowedSource: "registry.ollama.ai", LicenseReference: "apache-2.0",
 		},
 	}
 	effects, auth := protocol.IntrinsicPolicy(op)
@@ -662,11 +662,11 @@ func TestExecutorTerminalizesActionOnPostconditionEvaluatorError(t *testing.T) {
 		// This postcondition can never be evaluated (unsupported runtime),
 		// so EvaluateCondition returns an error, not just "not satisfied".
 		Postconditions: []protocol.Condition{{
-			Kind: protocol.CondKindModelDigestPresent,
-			ModelDigestPresent: &protocol.ModelDigestOperand{
-				Runtime:  "some-unsupported-runtime",
-				ModelTag: "model:latest",
-				Digest:   "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+			Kind: protocol.CondKindModelPresent,
+			ModelPresent: &protocol.ModelPresentOperand{
+				Runtime:          "some-unsupported-runtime",
+				ModelRef:         "model:latest",
+				ResolvedRevision: "sha256:0000000000000000000000000000000000000000000000000000000000000000",
 			},
 		}},
 		IdempotencyKey: "create_dir_tmp_eval_error",

@@ -136,19 +136,19 @@
         },
         {
           "properties": {
-            "kind": { "const": "model_digest_present" },
-            "model_digest_present": {
+            "kind": { "const": "model_present" },
+            "model_present": {
               "type": "object",
               "additionalProperties": false,
-              "required": ["runtime", "model_tag", "digest"],
+              "required": ["runtime", "model_ref", "resolved_revision"],
               "properties": {
                 "runtime": { "type": "string" },
-                "model_tag": { "type": "string" },
-                "digest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" }
+                "model_ref": { "type": "string" },
+                "resolved_revision": { "type": "string" }
               }
             }
           },
-          "required": ["model_digest_present"],
+          "required": ["model_present"],
           "additionalProperties": false
         }
       ]
@@ -159,21 +159,22 @@
       "oneOf": [
         {
           "properties": {
-            "kind": { "const": "ollama_pull_model" },
-            "ollama_pull_model": {
+            "kind": { "const": "ensure_local_model" },
+            "ensure_local_model": {
               "type": "object",
               "additionalProperties": false,
-              "required": ["model_tag", "resolved_digest", "expected_size_bytes", "allowed_registry_host", "license_reference"],
+              "required": ["runtime", "model_ref", "resolved_revision", "expected_size_bytes", "allowed_source", "license_reference"],
               "properties": {
-                "model_tag": { "type": "string" },
-                "resolved_digest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+                "runtime": { "type": "string" },
+                "model_ref": { "type": "string" },
+                "resolved_revision": { "type": "string" },
                 "expected_size_bytes": { "type": "integer", "minimum": 1 },
-                "allowed_registry_host": { "type": "string" },
+                "allowed_source": { "type": "string" },
                 "license_reference": { "type": "string" }
               }
             }
           },
-          "required": ["ollama_pull_model"],
+          "required": ["ensure_local_model"],
           "additionalProperties": false
         },
         {

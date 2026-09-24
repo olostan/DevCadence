@@ -217,12 +217,12 @@ func TestPlannerDoesNotTreatMLXAsOllama(t *testing.T) {
 		if act.RecipeID == "recipe.ollama.pull_model" {
 			t.Fatalf("MLX endpoint must NOT trigger recipe.ollama.pull_model")
 		}
-		if act.RecipeID == "recipe.manual.setup_mlx" {
+		if act.RecipeID == "recipe.manual.pull_mlx_model" {
 			foundMLXGuide = true
 		}
 	}
 	if !foundMLXGuide {
-		t.Fatalf("expected recipe.manual.setup_mlx for MLX endpoint on Darwin arm64")
+		t.Fatalf("expected recipe.manual.pull_mlx_model for MLX endpoint on Darwin arm64")
 	}
 }
 
@@ -537,8 +537,8 @@ func TestPlannerMLXAbsentOnLinuxDoesNotCreateSetupMLX(t *testing.T) {
 	}
 
 	for _, act := range plan.Actions {
-		if act.RecipeID == "recipe.manual.setup_mlx" {
-			t.Fatalf("absent MLX on Linux must NOT create recipe.manual.setup_mlx")
+		if act.RecipeID == "recipe.manual.pull_mlx_model" {
+			t.Fatalf("absent MLX on Linux must NOT create recipe.manual.pull_mlx_model")
 		}
 	}
 }
@@ -588,8 +588,8 @@ func TestPlannerMLXAbsentAndNonSelectedOnDarwinDoesNotCreateSetupMLX(t *testing.
 	}
 
 	for _, act := range plan.Actions {
-		if act.RecipeID == "recipe.manual.setup_mlx" {
-			t.Fatalf("absent and non-selected MLX on Darwin must NOT create recipe.manual.setup_mlx")
+		if act.RecipeID == "recipe.manual.pull_mlx_model" {
+			t.Fatalf("absent and non-selected MLX on Darwin must NOT create recipe.manual.pull_mlx_model")
 		}
 	}
 }
@@ -640,12 +640,12 @@ func TestPlannerMLXSelectedOnDarwinCreatesSetupMLX(t *testing.T) {
 
 	foundMLXGuide := false
 	for _, act := range plan.Actions {
-		if act.RecipeID == "recipe.manual.setup_mlx" {
+		if act.RecipeID == "recipe.manual.pull_mlx_model" {
 			foundMLXGuide = true
 			break
 		}
 	}
 	if !foundMLXGuide {
-		t.Fatalf("absent-but-selected MLX on Darwin arm64 must create recipe.manual.setup_mlx")
+		t.Fatalf("absent-but-selected MLX on Darwin arm64 must create recipe.manual.pull_mlx_model")
 	}
 }

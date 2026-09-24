@@ -31,10 +31,11 @@ func applierTestDeps(t *testing.T) (applierDeps, string) {
 		t.Fatalf("artifacts.NewStore: %v", err)
 	}
 	return applierDeps{
-		runner:    &fakeCommandRunner{results: map[string]process.Result{}},
-		home:      home,
-		cache:     cache,
-		artifacts: store,
+		runner:        &fakeCommandRunner{results: map[string]process.Result{}},
+		home:          home,
+		cache:         cache,
+		artifacts:     store,
+		modelRuntimes: NewModelRuntimeRegistry(DefaultModelRuntimeAdapters()...),
 	}, home
 }
 
@@ -218,7 +219,7 @@ func newOllamaTagsServer(t *testing.T, models []ollamaModelEntry) *httptest.Serv
 	return srv
 }
 
-func TestApplyOperationOllamaPullModel(t *testing.T) {
+func TestApplyOperationEnsureLocalModelOllama(t *testing.T) {
 	deps, home := applierTestDeps(t)
 	ollamaPath := filepath.Join(home, "ollama-fake")
 	deps.runner.(*fakeCommandRunner).results[ollamaPath] = process.Result{
@@ -231,13 +232,14 @@ func TestApplyOperationOllamaPullModel(t *testing.T) {
 	deps.ollamaBaseURL = srv.URL
 
 	op := protocol.TypedOperation{
-		Kind: protocol.OpKindOllamaPullModel,
-		OllamaPullModel: &protocol.OllamaPullModelParams{
-			ModelTag:            "smollm:135m",
-			ResolvedDigest:      resolvedDigest,
-			ExpectedSizeBytes:   145000000,
-			AllowedRegistryHost: "registry.ollama.ai",
-			LicenseReference:    "apache-2.0",
+		Kind: protocol.OpKindEnsureLocalModel,
+		EnsureLocalModel: &protocol.EnsureLocalModelParams{
+			Runtime:           "ollama",
+			ModelRef:          "smollm:135m",
+			ResolvedRevision:  resolvedDigest,
+			ExpectedSizeBytes: 145000000,
+			AllowedSource:     "registry.ollama.ai",
+			LicenseReference:  "apache-2.0",
 		},
 	}
 	mutated, detail, procResult, artifact, err := applyOperation(context.Background(), deps, op, true, ollamaPath)
@@ -248,7 +250,7 @@ func TestApplyOperationOllamaPullModel(t *testing.T) {
 		t.Errorf("mutated = false, want true for a successful, verified pull (detail: %s)", detail)
 	}
 	if procResult == nil {
-		t.Fatal("procResult is nil, want the subprocess result for ollama_pull_model")
+		t.Fatal("procResult is nil, want the subprocess result for ensure_local_model")
 	}
 	if artifact == nil {
 		t.Error("artifact is nil, want captured output")
@@ -260,24 +262,25 @@ func TestApplyOperationOllamaPullModel(t *testing.T) {
 	}
 }
 
-func TestApplyOperationOllamaPullModelRequiresVerifiedExecutablePath(t *testing.T) {
+func TestApplyOperationEnsureLocalModelOllamaRequiresVerifiedExecutablePath(t *testing.T) {
 	deps, _ := applierTestDeps(t)
 	op := protocol.TypedOperation{
-		Kind: protocol.OpKindOllamaPullModel,
-		OllamaPullModel: &protocol.OllamaPullModelParams{
-			ModelTag:            "smollm:135m",
-			ResolvedDigest:      "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-			ExpectedSizeBytes:   145000000,
-			AllowedRegistryHost: "registry.ollama.ai",
-			LicenseReference:    "apache-2.0",
+		Kind: protocol.OpKindEnsureLocalModel,
+		EnsureLocalModel: &protocol.EnsureLocalModelParams{
+			Runtime:           "ollama",
+			ModelRef:          "smollm:135m",
+			ResolvedRevision:  "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+			ExpectedSizeBytes: 145000000,
+			AllowedSource:     "registry.ollama.ai",
+			LicenseReference:  "apache-2.0",
 		},
 	}
 	if _, _, _, _, err := applyOperation(context.Background(), deps, op, true, ""); err == nil {
-		t.Fatal("applyOperation ran ollama_pull_model with no verified executable path; expected rejection")
+		t.Fatal("applyOperation ran ensure_local_model (ollama) with no verified executable path; expected rejection")
 	}
 }
 
-func TestApplyOperationOllamaPullModelRejectsDigestMismatch(t *testing.T) {
+func TestApplyOperationEnsureLocalModelOllamaRejectsDigestMismatch(t *testing.T) {
 	deps, home := applierTestDeps(t)
 	ollamaPath := filepath.Join(home, "ollama-fake")
 	deps.runner.(*fakeCommandRunner).results[ollamaPath] = process.Result{
@@ -290,13 +293,14 @@ func TestApplyOperationOllamaPullModelRejectsDigestMismatch(t *testing.T) {
 	deps.ollamaBaseURL = srv.URL
 
 	op := protocol.TypedOperation{
-		Kind: protocol.OpKindOllamaPullModel,
-		OllamaPullModel: &protocol.OllamaPullModelParams{
-			ModelTag:            "smollm:135m",
-			ResolvedDigest:      "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-			ExpectedSizeBytes:   145000000,
-			AllowedRegistryHost: "registry.ollama.ai",
-			LicenseReference:    "apache-2.0",
+		Kind: protocol.OpKindEnsureLocalModel,
+		EnsureLocalModel: &protocol.EnsureLocalModelParams{
+			Runtime:           "ollama",
+			ModelRef:          "smollm:135m",
+			ResolvedRevision:  "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+			ExpectedSizeBytes: 145000000,
+			AllowedSource:     "registry.ollama.ai",
+			LicenseReference:  "apache-2.0",
 		},
 	}
 	mutated, detail, _, _, err := applyOperation(context.Background(), deps, op, true, ollamaPath)
@@ -315,7 +319,26 @@ func TestApplyOperationRejectsUnhandledKind(t *testing.T) {
 	}
 }
 
-func TestApplyOperationOllamaPullModelRejectsSizeMismatch(t *testing.T) {
+func TestApplyOperationEnsureLocalModelRejectsUnregisteredRuntime(t *testing.T) {
+	deps, home := applierTestDeps(t)
+	path := filepath.Join(home, "fake-runtime-cli")
+	op := protocol.TypedOperation{
+		Kind: protocol.OpKindEnsureLocalModel,
+		EnsureLocalModel: &protocol.EnsureLocalModelParams{
+			Runtime:           "some-other-runtime",
+			ModelRef:          "smollm:135m",
+			ResolvedRevision:  "rev",
+			ExpectedSizeBytes: 145000000,
+			AllowedSource:     "example.com",
+			LicenseReference:  "apache-2.0",
+		},
+	}
+	if _, _, _, _, err := applyOperation(context.Background(), deps, op, true, path); err == nil {
+		t.Fatal("applyOperation accepted an unregistered model runtime; expected a fail-closed error")
+	}
+}
+
+func TestApplyOperationEnsureLocalModelOllamaRejectsSizeMismatch(t *testing.T) {
 	deps, home := applierTestDeps(t)
 	ollamaPath := filepath.Join(home, "ollama-fake")
 	deps.runner.(*fakeCommandRunner).results[ollamaPath] = process.Result{Status: process.StatusCompleted, ExitCode: 0}
@@ -326,13 +349,14 @@ func TestApplyOperationOllamaPullModelRejectsSizeMismatch(t *testing.T) {
 	deps.ollamaBaseURL = srv.URL
 
 	op := protocol.TypedOperation{
-		Kind: protocol.OpKindOllamaPullModel,
-		OllamaPullModel: &protocol.OllamaPullModelParams{
-			ModelTag:            "smollm:135m",
-			ResolvedDigest:      resolvedDigest,
-			ExpectedSizeBytes:   145000000,
-			AllowedRegistryHost: "registry.ollama.ai",
-			LicenseReference:    "apache-2.0",
+		Kind: protocol.OpKindEnsureLocalModel,
+		EnsureLocalModel: &protocol.EnsureLocalModelParams{
+			Runtime:           "ollama",
+			ModelRef:          "smollm:135m",
+			ResolvedRevision:  resolvedDigest,
+			ExpectedSizeBytes: 145000000,
+			AllowedSource:     "registry.ollama.ai",
+			LicenseReference:  "apache-2.0",
 		},
 	}
 	mutated, detail, _, _, err := applyOperation(context.Background(), deps, op, true, ollamaPath)
@@ -344,7 +368,7 @@ func TestApplyOperationOllamaPullModelRejectsSizeMismatch(t *testing.T) {
 	}
 }
 
-func TestApplyOperationOllamaPullModelPrefixesNonDefaultRegistry(t *testing.T) {
+func TestApplyOperationEnsureLocalModelOllamaPrefixesNonDefaultSource(t *testing.T) {
 	deps, home := applierTestDeps(t)
 	ollamaPath := filepath.Join(home, "ollama-fake")
 	deps.runner.(*fakeCommandRunner).results[ollamaPath] = process.Result{Status: process.StatusCompleted, ExitCode: 0}
@@ -355,13 +379,14 @@ func TestApplyOperationOllamaPullModelPrefixesNonDefaultRegistry(t *testing.T) {
 	deps.ollamaBaseURL = srv.URL
 
 	op := protocol.TypedOperation{
-		Kind: protocol.OpKindOllamaPullModel,
-		OllamaPullModel: &protocol.OllamaPullModelParams{
-			ModelTag:            "smollm:135m",
-			ResolvedDigest:      resolvedDigest,
-			ExpectedSizeBytes:   145000000,
-			AllowedRegistryHost: "my-private-registry.example.com",
-			LicenseReference:    "apache-2.0",
+		Kind: protocol.OpKindEnsureLocalModel,
+		EnsureLocalModel: &protocol.EnsureLocalModelParams{
+			Runtime:           "ollama",
+			ModelRef:          "smollm:135m",
+			ResolvedRevision:  resolvedDigest,
+			ExpectedSizeBytes: 145000000,
+			AllowedSource:     "my-private-registry.example.com",
+			LicenseReference:  "apache-2.0",
 		},
 	}
 	if _, _, _, _, err := applyOperation(context.Background(), deps, op, true, ollamaPath); err != nil {
@@ -370,6 +395,62 @@ func TestApplyOperationOllamaPullModelPrefixesNonDefaultRegistry(t *testing.T) {
 
 	runner := deps.runner.(*fakeCommandRunner)
 	if len(runner.calls) != 1 || runner.calls[0].Args[1] != "my-private-registry.example.com/smollm:135m" {
-		t.Errorf("runner.calls = %+v, want the pull ref prefixed with the non-default AllowedRegistryHost", runner.calls)
+		t.Errorf("runner.calls = %+v, want the pull ref prefixed with the non-default AllowedSource", runner.calls)
+	}
+}
+
+func TestApplyOperationEnsureLocalModelMLX(t *testing.T) {
+	deps, home := applierTestDeps(t)
+	hfPath := filepath.Join(home, "huggingface-cli-fake")
+	runner := deps.runner.(*fakeCommandRunner)
+	runner.results[hfPath] = process.Result{Status: process.StatusCompleted, ExitCode: 0}
+
+	op := protocol.TypedOperation{
+		Kind: protocol.OpKindEnsureLocalModel,
+		EnsureLocalModel: &protocol.EnsureLocalModelParams{
+			Runtime:           "mlx",
+			ModelRef:          "mlx-community/Qwen2.5-Coder-7B-Instruct-4bit",
+			ResolvedRevision:  "main",
+			ExpectedSizeBytes: 4300000000,
+			AllowedSource:     "huggingface.co",
+			LicenseReference:  "apache-2.0",
+		},
+	}
+	mutated, detail, procResult, _, err := applyOperation(context.Background(), deps, op, false, hfPath)
+	if err != nil {
+		t.Fatalf("applyOperation: %v", err)
+	}
+	if !mutated {
+		t.Errorf("mutated = false, want true for a successful, verified MLX download (detail: %s)", detail)
+	}
+	if procResult == nil {
+		t.Fatal("procResult is nil, want the subprocess result for ensure_local_model")
+	}
+	if len(runner.calls) != 2 {
+		t.Fatalf("runner.calls = %+v, want 2 (download, then --local-files-only verification)", runner.calls)
+	}
+	if runner.calls[0].Executable != hfPath || runner.calls[0].Args[0] != "download" {
+		t.Errorf("runner.calls[0] = %+v, want a download call to the verified path", runner.calls[0])
+	}
+	if runner.calls[1].Args[len(runner.calls[1].Args)-1] != "--local-files-only" {
+		t.Errorf("runner.calls[1] = %+v, want the presence-verification call with --local-files-only", runner.calls[1])
+	}
+}
+
+func TestApplyOperationEnsureLocalModelMLXRequiresVerifiedExecutablePath(t *testing.T) {
+	deps, _ := applierTestDeps(t)
+	op := protocol.TypedOperation{
+		Kind: protocol.OpKindEnsureLocalModel,
+		EnsureLocalModel: &protocol.EnsureLocalModelParams{
+			Runtime:           "mlx",
+			ModelRef:          "mlx-community/Qwen2.5-Coder-7B-Instruct-4bit",
+			ResolvedRevision:  "main",
+			ExpectedSizeBytes: 4300000000,
+			AllowedSource:     "huggingface.co",
+			LicenseReference:  "apache-2.0",
+		},
+	}
+	if _, _, _, _, err := applyOperation(context.Background(), deps, op, true, ""); err == nil {
+		t.Fatal("applyOperation ran ensure_local_model (mlx) with no verified executable path; expected rejection")
 	}
 }

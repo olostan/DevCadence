@@ -190,16 +190,44 @@ func TestEvaluateConditionEndpointHealthyUsesConfiguredChecker(t *testing.T) {
 	}
 }
 
-func TestEvaluateConditionModelDigestPresentRejectsUnsupportedRuntime(t *testing.T) {
-	_, _, err := EvaluateCondition(context.Background(), EvaluatorDeps{}, protocol.Condition{
-		Kind: protocol.CondKindModelDigestPresent,
-		ModelDigestPresent: &protocol.ModelDigestOperand{
-			Runtime:  "some-other-runtime",
-			ModelTag: "model:latest",
-			Digest:   "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+func TestEvaluateConditionModelPresentMLX(t *testing.T) {
+	runner := &fakeCommandRunner{results: map[string]process.Result{
+		"huggingface-cli": {Status: process.StatusCompleted, ExitCode: 0},
+	}}
+	deps := EvaluatorDeps{Runner: runner, ModelRuntimes: NewModelRuntimeRegistry(DefaultModelRuntimeAdapters()...)}
+	passed, _, err := EvaluateCondition(context.Background(), deps, protocol.Condition{
+		Kind: protocol.CondKindModelPresent,
+		ModelPresent: &protocol.ModelPresentOperand{
+			Runtime:          "mlx",
+			ModelRef:         "mlx-community/Qwen2.5-Coder-7B-Instruct-4bit",
+			ResolvedRevision: "main",
+		},
+	})
+	if err != nil {
+		t.Fatalf("EvaluateCondition: %v", err)
+	}
+	if !passed {
+		t.Error("passed = false, want true when huggingface-cli --local-files-only exits 0")
+	}
+	if len(runner.calls) != 1 || runner.calls[0].Executable != "huggingface-cli" {
+		t.Errorf("runner.calls = %+v, want one bare-name huggingface-cli call", runner.calls)
+	}
+	if runner.calls[0].Args[len(runner.calls[0].Args)-1] != "--local-files-only" {
+		t.Errorf("runner.calls[0].Args = %v, want the last arg to be --local-files-only", runner.calls[0].Args)
+	}
+}
+
+func TestEvaluateConditionModelPresentRejectsUnregisteredRuntime(t *testing.T) {
+	deps := EvaluatorDeps{ModelRuntimes: NewModelRuntimeRegistry(DefaultModelRuntimeAdapters()...)}
+	_, _, err := EvaluateCondition(context.Background(), deps, protocol.Condition{
+		Kind: protocol.CondKindModelPresent,
+		ModelPresent: &protocol.ModelPresentOperand{
+			Runtime:          "some-other-runtime",
+			ModelRef:         "model:latest",
+			ResolvedRevision: "sha256:0000000000000000000000000000000000000000000000000000000000000000",
 		},
 	})
 	if err == nil {
-		t.Fatal("EvaluateCondition succeeded for an unsupported runtime; expected a fail-closed error")
+		t.Fatal("EvaluateCondition succeeded for an unregistered runtime; expected a fail-closed error")
 	}
 }

@@ -82,11 +82,11 @@ func (e EffectCategory) Valid() bool {
 type SetupTarget string
 
 const (
-	TargetAll        SetupTarget = "all"
-	TargetHardware   SetupTarget = "hardware"
-	TargetInference  SetupTarget = "inference"
-	TargetCognition  SetupTarget = "cognition"
-	TargetAuth       SetupTarget = "auth"
+	TargetAll       SetupTarget = "all"
+	TargetHardware  SetupTarget = "hardware"
+	TargetInference SetupTarget = "inference"
+	TargetCognition SetupTarget = "cognition"
+	TargetAuth      SetupTarget = "auth"
 )
 
 func (t SetupTarget) Valid() bool {
@@ -195,7 +195,15 @@ func (d DiagnosticCheckName) Valid() bool {
 type OperationKind string
 
 const (
-	OpKindOllamaPullModel    OperationKind = "ollama_pull_model"
+	// OpKindEnsureLocalModel is a runtime-agnostic "acquire this immutable
+	// model for this local runtime" operation. Runtime is an opaque,
+	// adapter-scoped identifier (e.g. "ollama", "mlx") — every local model
+	// runtime is a peer behind this one operation kind; no runtime is the
+	// default or the core-domain dependency (INVARIANTS.md DCI-055,
+	// docs/MODEL_RUNTIME.md). Runtime-specific mechanics (pull command,
+	// identity/revision scheme, presence verification) live entirely in
+	// the executor-layer adapter for that Runtime value, never here.
+	OpKindEnsureLocalModel   OperationKind = "ensure_local_model"
 	OpKindCreateDirectory    OperationKind = "create_directory"
 	OpKindWriteManagedConfig OperationKind = "write_managed_config"
 	OpKindRemoveStaleCache   OperationKind = "remove_stale_cache"
@@ -204,27 +212,42 @@ const (
 
 func (k OperationKind) Valid() bool {
 	switch k {
-	case OpKindOllamaPullModel, OpKindCreateDirectory, OpKindWriteManagedConfig, OpKindRemoveStaleCache, OpKindRunDiagnosticCheck:
+	case OpKindEnsureLocalModel, OpKindCreateDirectory, OpKindWriteManagedConfig, OpKindRemoveStaleCache, OpKindRunDiagnosticCheck:
 		return true
 	}
 	return false
 }
 
 type TypedOperation struct {
-	Kind               OperationKind              `json:"kind"`
-	OllamaPullModel    *OllamaPullModelParams    `json:"ollama_pull_model,omitempty"`
+	Kind               OperationKind             `json:"kind"`
+	EnsureLocalModel   *EnsureLocalModelParams   `json:"ensure_local_model,omitempty"`
 	CreateDirectory    *CreateDirectoryParams    `json:"create_directory,omitempty"`
 	WriteManagedConfig *WriteManagedConfigParams `json:"write_managed_config,omitempty"`
 	RemoveStaleCache   *RemoveStaleCacheParams   `json:"remove_stale_cache,omitempty"`
 	RunDiagnosticCheck *RunDiagnosticCheckParams `json:"run_diagnostic_check,omitempty"`
 }
 
-type OllamaPullModelParams struct {
-	ModelTag            string `json:"model_tag"`
-	ResolvedDigest      string `json:"resolved_digest"`
-	ExpectedSizeBytes   int64  `json:"expected_size_bytes"`
-	AllowedRegistryHost string `json:"allowed_registry_host"`
-	LicenseReference    string `json:"license_reference"`
+// EnsureLocalModelParams identifies an immutable model to acquire for a
+// named local runtime. Fields are deliberately runtime-agnostic:
+//   - ModelRef is the runtime-scoped model identity (an Ollama tag, an
+//     MLX/Hugging Face repo id, or whatever the next runtime adapter uses)
+//     — opaque to everything except that runtime's adapter.
+//   - ResolvedRevision is the immutable pin within that identity (Ollama's
+//     manifest digest, an HF commit SHA, etc.) — also adapter-interpreted,
+//     which is why it is not constrained to sha256-hex here the way other
+//     protocol digests are: the whole point of a runtime-agnostic type is
+//     that this package does not get to assume every runtime's immutable
+//     pin looks like Ollama's.
+//   - ExpectedSizeBytes/AllowedSource/LicenseReference are the bounded
+//     supply-chain metadata ADR-0014 §7 requires, enforced by the
+//     executor-layer adapter for Runtime against what it actually fetches.
+type EnsureLocalModelParams struct {
+	Runtime           string `json:"runtime"`
+	ModelRef          string `json:"model_ref"`
+	ResolvedRevision  string `json:"resolved_revision"`
+	ExpectedSizeBytes int64  `json:"expected_size_bytes"`
+	AllowedSource     string `json:"allowed_source"`
+	LicenseReference  string `json:"license_reference"`
 }
 
 type CreateDirectoryParams struct {
@@ -254,7 +277,7 @@ func (o TypedOperation) Validate() error {
 		return errs.New(errs.CategoryInvalidArgument, "%s: invalid kind %q", kind, string(o.Kind))
 	}
 	count := 0
-	if o.OllamaPullModel != nil {
+	if o.EnsureLocalModel != nil {
 		count++
 	}
 	if o.CreateDirectory != nil {
@@ -274,22 +297,25 @@ func (o TypedOperation) Validate() error {
 	}
 
 	switch o.Kind {
-	case OpKindOllamaPullModel:
-		p := o.OllamaPullModel
+	case OpKindEnsureLocalModel:
+		p := o.EnsureLocalModel
 		if p == nil {
-			return errs.New(errs.CategoryInvalidArgument, "%s: ollama_pull_model payload is required for kind %q", kind, o.Kind)
+			return errs.New(errs.CategoryInvalidArgument, "%s: ensure_local_model payload is required for kind %q", kind, o.Kind)
 		}
-		if p.ModelTag == "" {
-			return errs.New(errs.CategoryInvalidArgument, "%s: model_tag is required", kind)
+		if p.Runtime == "" {
+			return errs.New(errs.CategoryInvalidArgument, "%s: runtime is required", kind)
 		}
-		if !hexSha256Regex.MatchString(p.ResolvedDigest) {
-			return errs.New(errs.CategoryInvalidArgument, "%s: resolved_digest must be sha256 hex, got %q", kind, p.ResolvedDigest)
+		if p.ModelRef == "" {
+			return errs.New(errs.CategoryInvalidArgument, "%s: model_ref is required", kind)
+		}
+		if p.ResolvedRevision == "" {
+			return errs.New(errs.CategoryInvalidArgument, "%s: resolved_revision is required", kind)
 		}
 		if p.ExpectedSizeBytes <= 0 {
 			return errs.New(errs.CategoryInvalidArgument, "%s: expected_size_bytes must be positive, got %d", kind, p.ExpectedSizeBytes)
 		}
-		if p.AllowedRegistryHost == "" {
-			return errs.New(errs.CategoryInvalidArgument, "%s: allowed_registry_host is required", kind)
+		if p.AllowedSource == "" {
+			return errs.New(errs.CategoryInvalidArgument, "%s: allowed_source is required", kind)
 		}
 		if p.LicenseReference == "" {
 			return errs.New(errs.CategoryInvalidArgument, "%s: license_reference is required", kind)
@@ -339,7 +365,7 @@ func (o TypedOperation) Validate() error {
 // IntrinsicPolicy defines the intrinsic minimum authority and required effect categories for an operation.
 func IntrinsicPolicy(op TypedOperation) ([]EffectCategory, Authority) {
 	switch op.Kind {
-	case OpKindOllamaPullModel:
+	case OpKindEnsureLocalModel:
 		return []EffectCategory{EffectNetworkAccess, EffectModelDownload, EffectFilesystemWrite}, AuthorityUserConfirmation
 	case OpKindCreateDirectory:
 		return []EffectCategory{EffectFilesystemWrite}, AuthorityUserConfirmation
@@ -363,12 +389,19 @@ const (
 	CondKindManagedDirExists   ConditionKind = "managed_dir_exists"
 	CondKindPortListening      ConditionKind = "port_listening"
 	CondKindEndpointHealthy    ConditionKind = "endpoint_healthy"
-	CondKindModelDigestPresent ConditionKind = "model_digest_present"
+	// CondKindModelPresent is the runtime-agnostic counterpart to
+	// OpKindEnsureLocalModel: "this runtime has this immutable model
+	// revision available." Presence/revision semantics are entirely
+	// adapter-interpreted (see ModelPresentOperand and
+	// EnsureLocalModelParams's doc comment) — this package never assumes
+	// every runtime represents model identity the way Ollama's manifest
+	// digest does.
+	CondKindModelPresent ConditionKind = "model_present"
 )
 
 func (k ConditionKind) Valid() bool {
 	switch k {
-	case CondKindCommandAvailable, CondKindExecutableVerified, CondKindManagedDirExists, CondKindPortListening, CondKindEndpointHealthy, CondKindModelDigestPresent:
+	case CondKindCommandAvailable, CondKindExecutableVerified, CondKindManagedDirExists, CondKindPortListening, CondKindEndpointHealthy, CondKindModelPresent:
 		return true
 	}
 	return false
@@ -376,12 +409,12 @@ func (k ConditionKind) Valid() bool {
 
 type Condition struct {
 	Kind               ConditionKind              `json:"kind"`
-	CommandAvailable   *CommandAvailableOperand    `json:"command_available,omitempty"`
-	ExecutableVerified *ExecutableVerifiedOperand  `json:"executable_verified,omitempty"`
-	ManagedDirExists   *ManagedDirOperand          `json:"managed_dir_exists,omitempty"`
-	PortListening      *PortOperand                `json:"port_listening,omitempty"`
-	EndpointHealthy    *EndpointOperand            `json:"endpoint_healthy,omitempty"`
-	ModelDigestPresent *ModelDigestOperand         `json:"model_digest_present,omitempty"`
+	CommandAvailable   *CommandAvailableOperand   `json:"command_available,omitempty"`
+	ExecutableVerified *ExecutableVerifiedOperand `json:"executable_verified,omitempty"`
+	ManagedDirExists   *ManagedDirOperand         `json:"managed_dir_exists,omitempty"`
+	PortListening      *PortOperand               `json:"port_listening,omitempty"`
+	EndpointHealthy    *EndpointOperand           `json:"endpoint_healthy,omitempty"`
+	ModelPresent       *ModelPresentOperand       `json:"model_present,omitempty"`
 }
 
 type CommandAvailableOperand struct {
@@ -408,10 +441,14 @@ type EndpointOperand struct {
 	EndpointID string `json:"endpoint_id"`
 }
 
-type ModelDigestOperand struct {
-	Runtime  string `json:"runtime"`
-	ModelTag string `json:"model_tag"`
-	Digest   string `json:"digest"`
+// ModelPresentOperand mirrors EnsureLocalModelParams's identity fields —
+// see that type's doc comment for why Runtime/ModelRef/ResolvedRevision
+// are opaque, adapter-interpreted strings rather than a fixed sha256-hex
+// digest.
+type ModelPresentOperand struct {
+	Runtime          string `json:"runtime"`
+	ModelRef         string `json:"model_ref"`
+	ResolvedRevision string `json:"resolved_revision"`
 }
 
 func (c Condition) Validate() error {
@@ -435,7 +472,7 @@ func (c Condition) Validate() error {
 	if c.EndpointHealthy != nil {
 		count++
 	}
-	if c.ModelDigestPresent != nil {
+	if c.ModelPresent != nil {
 		count++
 	}
 	if count != 1 {
@@ -487,15 +524,15 @@ func (c Condition) Validate() error {
 		if c.EndpointHealthy == nil || c.EndpointHealthy.EndpointID == "" {
 			return errs.New(errs.CategoryInvalidArgument, "%s: endpoint_id is required", kind)
 		}
-	case CondKindModelDigestPresent:
-		if c.ModelDigestPresent == nil {
-			return errs.New(errs.CategoryInvalidArgument, "%s: model_digest_present operand is required", kind)
+	case CondKindModelPresent:
+		if c.ModelPresent == nil {
+			return errs.New(errs.CategoryInvalidArgument, "%s: model_present operand is required", kind)
 		}
-		if c.ModelDigestPresent.Runtime == "" || c.ModelDigestPresent.ModelTag == "" {
-			return errs.New(errs.CategoryInvalidArgument, "%s: runtime and model_tag are required", kind)
+		if c.ModelPresent.Runtime == "" || c.ModelPresent.ModelRef == "" {
+			return errs.New(errs.CategoryInvalidArgument, "%s: runtime and model_ref are required", kind)
 		}
-		if !hexSha256Regex.MatchString(c.ModelDigestPresent.Digest) {
-			return errs.New(errs.CategoryInvalidArgument, "%s: digest must be sha256 hex, got %q", kind, c.ModelDigestPresent.Digest)
+		if c.ModelPresent.ResolvedRevision == "" {
+			return errs.New(errs.CategoryInvalidArgument, "%s: resolved_revision is required", kind)
 		}
 	}
 	return nil
@@ -674,33 +711,33 @@ func (a SetupAction) Validate() error {
 }
 
 type SetupPlan struct {
-	SchemaVersion      SchemaVersion      `json:"schema_version"`
-	PlanID             string             `json:"plan_id"`
-	PlanDigest         string             `json:"plan_digest"`
-	RecipeSetVersion   string             `json:"recipe_set_version"`
-	MachineFingerprint string             `json:"machine_fingerprint"`
-	CreatedAt          Timestamp          `json:"created_at"`
-	Target             SetupTarget        `json:"target"`
-	Actions            []SetupAction      `json:"actions"`
-	RequiredAuthority  Authority          `json:"required_authority"`
-	TotalEffects       []EffectCategory   `json:"total_effects"`
+	SchemaVersion      SchemaVersion    `json:"schema_version"`
+	PlanID             string           `json:"plan_id"`
+	PlanDigest         string           `json:"plan_digest"`
+	RecipeSetVersion   string           `json:"recipe_set_version"`
+	MachineFingerprint string           `json:"machine_fingerprint"`
+	CreatedAt          Timestamp        `json:"created_at"`
+	Target             SetupTarget      `json:"target"`
+	Actions            []SetupAction    `json:"actions"`
+	RequiredAuthority  Authority        `json:"required_authority"`
+	TotalEffects       []EffectCategory `json:"total_effects"`
 }
 
 type setupPlanDigestView struct {
-	SchemaVersion      SchemaVersion      `json:"schema_version"`
-	PlanID             string             `json:"plan_id"`
-	RecipeSetVersion   string             `json:"recipe_set_version"`
-	MachineFingerprint string             `json:"machine_fingerprint"`
-	CreatedAt          Timestamp          `json:"created_at"`
-	Target             SetupTarget        `json:"target"`
-	Actions            []SetupAction      `json:"actions"`
-	RequiredAuthority  Authority          `json:"required_authority"`
-	TotalEffects       []EffectCategory   `json:"total_effects"`
+	SchemaVersion      SchemaVersion    `json:"schema_version"`
+	PlanID             string           `json:"plan_id"`
+	RecipeSetVersion   string           `json:"recipe_set_version"`
+	MachineFingerprint string           `json:"machine_fingerprint"`
+	CreatedAt          Timestamp        `json:"created_at"`
+	Target             SetupTarget      `json:"target"`
+	Actions            []SetupAction    `json:"actions"`
+	RequiredAuthority  Authority        `json:"required_authority"`
+	TotalEffects       []EffectCategory `json:"total_effects"`
 }
 
-func (p *SetupPlan) RecordKind() string         { return "SetupPlan" }
-func (p *SetupPlan) RecordID() string           { return p.PlanID }
-func (p *SetupPlan) SchemaVer() SchemaVersion   { return p.SchemaVersion }
+func (p *SetupPlan) RecordKind() string       { return "SetupPlan" }
+func (p *SetupPlan) RecordID() string         { return p.PlanID }
+func (p *SetupPlan) SchemaVer() SchemaVersion { return p.SchemaVersion }
 
 func (p *SetupPlan) Validate() error {
 	const kind = "SetupPlan"
@@ -978,9 +1015,9 @@ type SetupExecutionReport struct {
 	Results            []ActionResult  `json:"results"`
 }
 
-func (r *SetupExecutionReport) RecordKind() string         { return "SetupExecutionReport" }
-func (r *SetupExecutionReport) RecordID() string           { return r.ExecutionID }
-func (r *SetupExecutionReport) SchemaVer() SchemaVersion   { return r.SchemaVersion }
+func (r *SetupExecutionReport) RecordKind() string       { return "SetupExecutionReport" }
+func (r *SetupExecutionReport) RecordID() string         { return r.ExecutionID }
+func (r *SetupExecutionReport) SchemaVer() SchemaVersion { return r.SchemaVersion }
 
 func (r *SetupExecutionReport) Validate() error {
 	const kind = "SetupExecutionReport"

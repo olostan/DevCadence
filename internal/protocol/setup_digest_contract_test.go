@@ -77,22 +77,23 @@ func digestFixturePlan() SetupPlan {
 			CommandAvailable: &CommandAvailableOperand{CommandName: "ollama"},
 		}},
 		Postconditions: []Condition{{
-			Kind: CondKindModelDigestPresent,
-			ModelDigestPresent: &ModelDigestOperand{
-				Runtime: "ollama", ModelTag: "smollm:135m",
-				Digest: "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+			Kind: CondKindModelPresent,
+			ModelPresent: &ModelPresentOperand{
+				Runtime: "ollama", ModelRef: "smollm:135m",
+				ResolvedRevision: "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
 			},
 		}},
 		ExpectedMutations: []ExpectedMutation{{Kind: MutationModelPulled, Target: "smollm:135m", Detail: "Diagnostic model pulled"}},
 		IdempotencyKey:    "pull-smollm:135m",
 		Operation: &TypedOperation{
-			Kind: OpKindOllamaPullModel,
-			OllamaPullModel: &OllamaPullModelParams{
-				ModelTag:            "smollm:135m",
-				ResolvedDigest:      "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-				ExpectedSizeBytes:   145000000,
-				AllowedRegistryHost: "registry.ollama.ai",
-				LicenseReference:    "apache-2.0",
+			Kind: OpKindEnsureLocalModel,
+			EnsureLocalModel: &EnsureLocalModelParams{
+				Runtime:           "ollama",
+				ModelRef:          "smollm:135m",
+				ResolvedRevision:  "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+				ExpectedSizeBytes: 145000000,
+				AllowedSource:     "registry.ollama.ai",
+				LicenseReference:  "apache-2.0",
 			},
 		},
 	}
