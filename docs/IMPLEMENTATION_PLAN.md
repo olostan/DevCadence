@@ -157,7 +157,7 @@ Recording these facts is M1; *performing* discovery is not. The adaptive
 questioning loop (FR-D-006), human reflection (FR-D-007), external grounding
 (FR-D-008), running experiments (FR-D-009) and independent specification
 review (FR-D-010) require cognition endpoints from M3 and the semantic principal
-surface from M4A. M1 guarantees that when those arrive, the state they produce
+surface from M5. M1 guarantees that when those arrive, the state they produce
 is already durable, typed and reconstructable.
 
 ### Architectural decisions taken during M1
@@ -184,7 +184,7 @@ is already durable, typed and reconstructable.
 - The discovery workflow is absent: the records, events and projection exist,
   but nothing *performs* discovery — no questioning loop, no human reflection
   round, no experiment execution, no specification review. Those require M3
-  cognition capability and the M4A semantic principal surface.
+  cognition capability and the M5 semantic principal surface.
 - Experiment and review events are recorded but not projected, because the
   `discovery` object in the schema carries no counts for them.
 
@@ -279,7 +279,7 @@ Give execution-cognition roles (`Repository Scout`, `Implementer`) safe, bounded
 monorepo-aware ways to read, search, and validate a repository — and give
 long-running execution sessions a way to stay within context budgets — without
 enlarging the Principal's own interface. This is infrastructure M3's cognition
-runtime and M4A's execution-agent roles need; it is not part of M3B (guided
+runtime and M5's execution-agent roles need; it is not part of M3B (guided
 bootstrap), which is unrelated onboarding/setup work.
 
 ### Status
@@ -357,13 +357,13 @@ Per ADR-0016 §1, `read_file`, `grep_search`, `find_symbol` and `run_command`
 are execution-agent capabilities scoped to isolated worktrees for the
 `Repository Scout`/`Implementer` roles, not part of the Principal's own
 interface — the Principal still only sees the semantic operations listed in
-AGENTS.md §3 and M4A's deliverables. No MCP server exists yet to expose any
-tool externally (that is M4A work), so this boundary is currently structural
+AGENTS.md §3 and M5's deliverables. No MCP server exists yet to expose any
+tool externally (that is M5 work), so this boundary is currently structural
 (nothing outside `internal/tools`'s own tests calls these functions) rather
 than enforced by a wire-level contract.
 
 ADR-0016's 2026-09-23 amendment (see the ADR) splits this further into two
-evidence tiers M4A must carry forward: `grep_search`/`find_symbol` results are
+evidence tiers M5 must carry forward: `grep_search`/`find_symbol` results are
 compact, citable evidence `request_evidence` may fetch for the Principal
 directly; `read_file`/`fetch_content` remain execution-agent-only, reachable
 by the Principal only through a bounded, execution-agent-mediated snippet

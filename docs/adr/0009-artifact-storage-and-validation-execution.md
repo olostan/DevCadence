@@ -93,7 +93,7 @@ specifies). Baseline-scope validation is fully executable today (it names no
 task) and integration-scope validation is executable wherever a caller can
 supply an integrated commit and a task id — M2 does not add integration
 *orchestration* (which candidates get combined, in what order); that is
-M6/M9 territory, and this ADR does not distort the M1 schema to simulate it
+M7/M10 territory, and this ADR does not distort the M1 schema to simulate it
 early.
 
 ## Consequences

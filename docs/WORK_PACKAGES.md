@@ -43,7 +43,7 @@ Branch: `feat/m3b-guided-bootstrap` (create when WP-M3B-1 starts).
 Normative grounding for this milestone: ADR-0014 (guided bootstrap, setup
 plans, operational event ledger, readiness contracts — already `Accepted`,
 so the architecture decisions below are mostly settled, not open for
-relitigation), ADR-0011, ADR-0013, `docs/ENVIRONMENT_INTELLIGENCE_AND_ONBOARDING.md`,
+relitigation), ADR-0011, ADR-0013, ADR-0018, `docs/ENVIRONMENT_INTELLIGENCE_AND_ONBOARDING.md`,
 `docs/MODEL_RUNTIME.md`, `docs/SETUP.md`, `docs/SECURITY.md`. Read these —
 in that order — before expanding WP-M3B-1.
 
@@ -352,11 +352,10 @@ Cover Apple/MLX, NVIDIA/local, one subscription, multiple subscriptions,
 paid-API allowed/forbidden, mixed portfolios, endpoint loss, quota pressure,
 new-resource addition, topology collapse and future-driver extensibility.
 
-## Future milestones## Future milestones
+## Future milestones
 
 Add a new `## <Milestone>` section here, following the same shape (branch
 name, normative grounding, dependency chain, WP entries with objective/
-deliverables/MUST/acceptance-criteria/non-goals), when the next milestone
-after M3B is ready to be broken down. Don't pre-populate future milestones
-speculatively — this file describes work that's actually about to start,
-not the whole remaining roadmap in advance.
+deliverables/MUST/acceptance-criteria/non-goals), when a later milestone is ready to be broken down into implementation-sized
+work. Don't pre-populate all future milestones speculatively — this file keeps
+detailed scope cards only for work close enough to execute.

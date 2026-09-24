@@ -237,7 +237,7 @@ following CONTRIBUTING.md.
 
 - [x] Record the unknown-field policy in `schemas/README.md`.
 - [x] Align docs/PROTOCOLS.md §18 with this decision.
-- [ ] Revisit if a multi-version or multi-machine topology is introduced (M9).
+- [ ] Revisit if a multi-version or multi-machine topology is introduced (M10).
 
 ## ValidationResult subject (pre-first-release refinement)
 
