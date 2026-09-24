@@ -1,9 +1,9 @@
 # Handoff — M3B guided bootstrap (feat/m3b-guided-bootstrap)
 
-Last updated: 2026-09-24T00:55:00Z by Claude Code / Sonnet 5 (cloud session, olostan@gmail.com)
+Last updated: 2026-09-24T01:30:00Z by Claude Code / Sonnet 5 (cloud session, olostan@gmail.com)
 
 Session takeover HEAD: `a38b293` (origin/main HEAD when this session started — branch did not exist yet)
-Expected remote HEAD before next push: `6833219` (advance this after every successful push — see "Git safety rules" in AGENT_HANDOFF_PROTOCOL.md)
+Expected remote HEAD before next push: `2d0c8a6` (advance this after every successful push — see "Git safety rules" in AGENT_HANDOFF_PROTOCOL.md)
 
 ## Milestone
 
@@ -34,30 +34,29 @@ work-package breakdown:
   for WP-M3B-1 (see the EWP's §9 non-goals). It was authored directly on
   `main` by the project owner on 2026-09-22, before any EWP existed for it.
 
-**Before starting WP-M3B-2 or WP-M3B-3, the next session must first check
-whether `internal/setup/{doctor,planner,profiles,cache}.go` already
-substantially satisfies those WPs' scope cards**, the same way this session
-checked for WP-M3B-1 — rather than assuming a blank slate and writing
+**Before starting WP-M3B-3 (or any later WP), the next session must first
+check whether `internal/setup/{doctor,planner,profiles,cache}.go` already
+substantially satisfies its scope card**, the same way this session and the
+WP-M3B-1 session did — rather than assuming a blank slate and writing
 duplicate/conflicting code. If it does, the same pattern applies: write the
 EWP describing what's actually there, verify it fresh against that WP's own
 acceptance criteria, and accept it — or, if there's a real design gap or
 architectural mismatch versus what the EWP should specify, use the escalate/
-amend path in `AGENT_HANDOFF_PROTOCOL.md` rather than silently
-implementing on top of it or silently rewriting it. Note WP-M3B-2 (the
-ledger) is the more likely genuinely-not-yet-started piece — I did not find
-a JSONL setup ledger, `$DEVCADENCE_HOME/state/setup-ledger.jsonl`, or
-`setup.lock` implementation anywhere in the repo; only the `SetupLedgerEvent`
-*type* (`internal/protocol/setup.go`) and its schema/fixture exist, which is
-correctly WP-M3B-1 scope (the type), not WP-M3B-2 scope (the crash-safe
-file-backed ledger that writes it).
+amend path in `AGENT_HANDOFF_PROTOCOL.md` rather than silently implementing
+on top of it or silently rewriting it (WP-M3B-2's own EWP §12 is a worked
+example of that escalate-not-reopen path, for a different WP's frozen
+contract). **WP-M3B-2 confirmed the ledger genuinely didn't exist** (only
+the `SetupLedgerEvent` *type* did, correctly WP-M3B-1 scope) and built it
+fresh in `internal/setup/ledger.go`, `home.go`, `execlock.go` — see that
+WP's row above and `docs/work-packages/wp-m3b-2-ewp.md`.
 
 ## Work Package status
 
 | WP | Status | Checkpoint | Validation | Review |
 |----|--------|------------|------------|--------|
 | WP-M3B-1 | accepted | `6833219` | `go build ./...`, `go vet ./...`, `go test -count=1 ./...` all PASS (see EWP §8) | independent review complete — [PR #10 comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5805285148) (owner), 3 findings, all addressed in EWP §12; verified in [follow-up comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5805447822) |
-| WP-M3B-2 | not started | — | — | — |
-| WP-M3B-3 | unknown — likely partially pre-existing, unverified | — | — | blocked on WP-M3B-2; assess `internal/setup/planner.go` first |
+| WP-M3B-2 | implemented, pending review | `2d0c8a6` | `go build ./...`, `go vet ./...`, `go test -count=1 ./...`, `go test -race ./internal/setup/...` all PASS (see EWP §13) | not yet independently reviewed |
+| WP-M3B-3 | unknown — likely partially pre-existing, unverified | — | — | blocked on WP-M3B-2 review; assess `internal/setup/planner.go` first |
 | WP-M3B-4 | not started | — | — | blocked on WP-M3B-3 |
 | WP-M3B-5 | unknown — likely partially pre-existing, unverified | — | — | assess `internal/setup/doctor.go`, `profiles.go` first |
 | WP-M3B-6 | unknown — likely partially pre-existing, unverified | — | — | assess `internal/setup/planner.go`, `cache.go` first |
@@ -68,47 +67,63 @@ file-backed ledger that writes it).
 (Never write "merged" for a WP checkpoint — nothing is merged to `main`
 until the whole milestone closes.)
 
-## Currently in progress: none — WP-M3B-1 is closed out for this session
+## Currently in progress: WP-M3B-2, implemented, awaiting independent review
 
-- **EWP status:** originally committed at `4b006d3`; revised in the same
-  file at `6833219` (a new commit, not a rewrite of the already-pushed
-  `4b006d3`) to incorporate independent review findings; see EWP §12 and
-  [PR #10 comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5805285148),
-  confirmed in the [follow-up verification](https://github.com/olostan/DevCadence/pull/10#issuecomment-5805447822).
-- **Base commit this WP started from:** `a38b293` (origin/main).
-- **What's implemented so far:** the EWP itself (checkpoint artifact), plus
-  three review-driven additions layered on top of the pre-existing
-  `main` code (see EWP §12): `internal/protocol/setup_digest_contract_test.go`
-  (structural digest-coverage proof), `fixtures/protocol/setup-plan.valid-manual-action.json`,
-  and `fixtures/protocol/setup-plan.invalid-mixed-manual-and-executable-action.json`
-  (wired into `tests/schema_fixtures_test.go`'s round-trip table).
+WP-M3B-1 is fully closed out (accepted, reviewed) — see its own row above
+and `docs/work-packages/wp-m3b-1-ewp.md`.
+
+- **EWP status:** committed at `6255e28` (`docs/work-packages/wp-m3b-2-ewp.md`),
+  before any implementation code — per the Principal/Implementer sequence.
+  Revised in the same file (not yet pushed as of this HANDOFF update — see
+  next push) to add §12 (a design decision made during implementation) and
+  §13 (deterministic evidence) once the code landed.
+- **Base commit this WP started from:** `8cc2378`.
+- **What's implemented so far:** `internal/setup/home.go` (`ResolveHome`,
+  `EnsureLayout`), `internal/setup/execlock.go` (`AcquireExecutionLock`,
+  blocking exclusive `flock` on `state/setup.lock`, reusing the existing
+  `lockExclusive`/`unlock` primitives from `lock_unix.go`/`lock_windows.go`),
+  `internal/setup/ledger.go` (`OpenLedger`/`Ledger.Append`/`Ledger.Events`
+  with hash-chain verification and torn-write recovery; `FindInterrupted`/
+  `PostconditionChecker`/`ResolveInterrupted` for crash recovery without
+  re-execution; `ProjectExecutionReport` for the derived `SetupExecutionReport`
+  projection), plus `home_test.go`/`execlock_test.go`/`ledger_test.go`.
+  `cache.go`/`doctor.go`/`planner.go`/`profiles.go` were **not** modified —
+  reused as-is per the EWP's §0 provenance check.
+- **Design decision made during implementation:** `ProjectExecutionReport`
+  takes `machineFingerprint` as an explicit parameter rather than reading it
+  from the ledger, because no `SetupLedgerEvent` payload carries it (only
+  `SetupPlan.MachineFingerprint` does) and WP-M3B-1's ledger-event type
+  contract is an accepted, reviewed checkpoint not to be reopened for a
+  projection-layer convenience. Full rationale in EWP §12 — read this before
+  touching `ProjectExecutionReport`'s signature.
 - **What's verified:** `go build ./...` clean; `go vet ./...` clean;
-  `go test -count=1 ./...` — all 26 packages pass, 0 failures, including
-  every WP-M3B-1 acceptance-criteria test named in the EWP §7 table and
-  the three new digest-contract tests. Not yet run: `go test -race ./...`
-  (WP-M3B-9's deliverable per its scope card, but worth a spot-check by
-  whoever opens WP-M3B-2 against a mutable ledger/lock, since races are
-  exactly what that WP needs to get right).
-- **What's left for this WP:** nothing — WP-M3B-1 is accepted. Independent
-  per-WP checkpoint review happened and its findings are closed (EWP §12).
-- **Known blockers / open questions:** none for WP-M3B-1 itself. The open
-  question for the *milestone* is the one flagged above: how much of
-  WP-M3B-3/5/6 is already done in `internal/setup/*.go` and just needs the
-  same EWP-retrofit treatment versus a genuine gap. This session did not
-  resolve that question for WP-3/5/6 — only for WP-1.
+  `go test -count=1 ./...` — all 26 packages pass, 0 failures; `go test
+  -race ./internal/setup/...` clean (the lock/ledger code is exactly where
+  a race would show up, so this was run now rather than deferred to
+  WP-M3B-9). Full test list in EWP §13.
+- **What's left for this WP:** independent per-WP checkpoint review (same
+  pattern as WP-M3B-1 — open a PR review comment against the pushed
+  commit, address findings, then flip this row and the EWP's disposition
+  to `accepted`).
+- **Known blockers / open questions:** none for WP-M3B-2's own scope. The
+  milestone-level open question from WP-M3B-1's handoff (how much of
+  WP-M3B-3/5/6 is already covered by pre-existing `internal/setup/*.go`)
+  is still unresolved — this session did not touch it.
 
 ## Next concrete action
 
-Start WP-M3B-2 ("Setup event ledger and operational state layout"). Concrete
-first step: `grep -rn "setup-ledger\|DEVCADENCE_HOME\|setup.lock" internal/
-` and `find . -iname "*ledger*"` to confirm the ledger writer genuinely
-doesn't exist yet (this session's search found only the `SetupLedgerEvent`
-protocol type, not a ledger implementation — but verify fresh rather than
-trusting this note, per the protocol's own resume checklist). If confirmed
-absent, read `docs/WORK_PACKAGES.md`'s WP-M3B-2 entry and ADR-0014 §3-4 in
-full, then write `docs/work-packages/wp-m3b-2-ewp.md` per AGENTS.md §6
-before writing any ledger code, following the same Principal/Implementer
-sequence this session used for WP-M3B-1.
+Push this checkpoint (EWP revision + `home.go`/`execlock.go`/`ledger.go`
++ tests + this HANDOFF.md update as one commit), open/continue PR #10 for
+review of WP-M3B-2, and address any findings the same way WP-M3B-1's
+review was closed. Once WP-M3B-2 is accepted, start WP-M3B-3
+("Executor and approval semantics") — **first** check whether
+`internal/setup/planner.go` already substantially covers its scope (per
+the pre-check pattern established for WP-M3B-1/2), specifically: does it
+already implement the two-step approval workflow, precondition
+rechecking, and the `--yes`-equivalent scope restriction, or does it only
+generate plans (i.e. is it a WP-M3B-6 "planner"/recipes component wearing
+a name that sounds like WP-M3B-3's executor)? Read
+`internal/setup/planner.go` in full before assuming either answer.
 
 ## Resume checklist for the next agent
 
@@ -120,10 +135,14 @@ sequence this session used for WP-M3B-1.
    rules before doing anything else.
 2. Do not trust this file blindly: run `go build ./... && go test -count=1
    ./...` and confirm it matches what's claimed above.
-3. Read `docs/work-packages/wp-m3b-1-ewp.md` in full — it's short, and its
-   "Provenance" section is why WP-M3B-2 needs the same pre-check this
-   session did for WP-M3B-1.
-4. Read `docs/WORK_PACKAGES.md`'s WP-M3B-2 entry and ADR-0014 §3-4.
+3. Read `docs/work-packages/wp-m3b-1-ewp.md`'s "Provenance" section and
+   `docs/work-packages/wp-m3b-2-ewp.md` in full (both short) — they explain
+   why every later WP needs the same "check what's already there" pre-check,
+   and WP-M3B-2's §12 is a worked example of escalating rather than
+   reopening a frozen WP's contract if the next WP hits a similar gap.
+4. Read `docs/WORK_PACKAGES.md`'s WP-M3B-3 entry and ADR-0014 §2 (approval
+   workflow) — and `internal/setup/planner.go` itself, per "Next concrete
+   action" above.
 5. Continue from "Next concrete action" above.
 6. At the next durable checkpoint, update this file (including advancing
    "Expected remote HEAD") and push it together with that checkpoint's

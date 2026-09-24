@@ -5,7 +5,7 @@
 - **Base commit:** `8cc2378` (`feat/m3b-guided-bootstrap`, includes accepted WP-M3B-1 checkpoint)
 - **Branch:** `feat/m3b-guided-bootstrap`
 - **Depends on:** WP-M3B-1 (accepted at `6833219`) — reuses its `protocol.SetupLedgerEvent`, `protocol.EventPayload`, `protocol.SetupExecutionReport`, `protocol.Condition` types verbatim; this WP adds no new protocol types.
-- **Status:** Draft — implementation not yet written as of this commit.
+- **Status:** Implemented, pending independent review. See §12 for one design decision made during implementation (`ProjectExecutionReport`'s `machineFingerprint` parameter) and §13 for deterministic evidence.
 
 ## 0. What already exists (read before implementing anything)
 
@@ -34,7 +34,7 @@ Build the crash-safe, hash-chained, append-only setup event ledger and the `$DEV
 - **Execution lock (`execlock.go`):** `AcquireExecutionLock(home string) (*ExecutionLock, error)` opens (creating if absent, mode `0600`) `state/setup.lock` and takes a **blocking** exclusive `flock` via the existing `lockExclusive` primitive from `lock_unix.go`/`lock_windows.go` — "serialized," per the scope card's acceptance criterion, means a second concurrent run waits rather than fails. `(*ExecutionLock).Release()` unlocks and closes.
 - **Ledger (`ledger.go`):** `Ledger` wraps a single JSONL file path (`state/setup-ledger.jsonl`). It is not itself lock-holding — callers acquire `ExecutionLock` first (this WP's tests construct a `Ledger` directly without a lock, since lock acquisition is orthogonal to ledger correctness; only whole-process-level serialization depends on the lock). `OpenLedger(path string) (*Ledger, error)` loads and validates the existing file (recovering a torn final write, failing closed on any earlier corruption — see §6), establishing the in-memory chain tip. `(*Ledger).Append(event *protocol.SetupLedgerEvent) (*protocol.SetupLedgerEvent, error)` takes a caller-populated event (`ExecutionID`, `PlanID`, `PlanDigest`, `ActionID`, `Timestamp`, `Type`, `Payload`, `EventID` already set by the caller via its own `ids.Source`/`clock.Clock`, matching the `planner.go` convention), overwrites `Sequence`/`PreviousEventDigest`/`EventDigest` from the current chain tip, appends one canonical-JSON line, `fsync`s, and returns the finalized event. ADR-0014 §3 requires `EventActionStarting` specifically to be flushed and `fsync`'d *before* the caller runs the command it describes — that ordering is the caller's (WP-M3B-3's) responsibility to sequence correctly; this WP's `Append` guarantees the fsync happens synchronously within the call, which is what makes that ordering possible.
 - **Recovery (`ledger.go`):** `FindInterrupted(events []*protocol.SetupLedgerEvent) []InterruptedAction` is a pure function over already-loaded events: for each `execution_id` whose most recent relevant event is an `ActionStarting` with no later `ActionTerminated` for that `action_id` and no `ExecutionFinished` for that execution, it reports an `InterruptedAction`. `PostconditionChecker` is a one-method interface (`CheckPostconditions(ctx, []protocol.Condition) (bool, string, error)`) this package depends on but does not implement — WP-M3B-3 supplies the real implementation backed by live condition evaluation; this WP's own tests use a stub. `ResolveInterrupted(ctx, checker PostconditionChecker, postconditions []protocol.Condition) (protocol.ActionStatus, string, error)` checks postconditions once and returns `ActionStatusSucceeded` or `ActionStatusBlocked` — **never** re-executes anything, per ADR-0014 §3's explicit "never blindly rerun."
-- **Projection:** `ProjectExecutionReport(events []*protocol.SetupLedgerEvent, executionID string) (*protocol.SetupExecutionReport, error)` derives a `SetupExecutionReport` purely from ledger events for one execution — no separate report state is ever written independently of the ledger (ADR-0014 §3: "not the primary ledger record").
+- **Projection:** `ProjectExecutionReport(events []*protocol.SetupLedgerEvent, executionID, machineFingerprint string) (*protocol.SetupExecutionReport, error)` derives a `SetupExecutionReport` from ledger events for one execution plus the machine fingerprint of the plan being executed — no separate report *state* is ever written independently of the ledger (ADR-0014 §3: "not the primary ledger record"); see §12 for why `machineFingerprint` is a parameter rather than something read back out of the ledger itself.
 
 ## 3. Verified assumptions and evidence
 
@@ -93,7 +93,7 @@ type PostconditionChecker interface {
 }
 func ResolveInterrupted(ctx context.Context, checker PostconditionChecker, postconditions []protocol.Condition) (protocol.ActionStatus, string, error)
 
-func ProjectExecutionReport(events []*protocol.SetupLedgerEvent, executionID string) (*protocol.SetupExecutionReport, error)
+func ProjectExecutionReport(events []*protocol.SetupLedgerEvent, executionID, machineFingerprint string) (*protocol.SetupExecutionReport, error)
 ```
 
 ## 6. Pseudocode: `OpenLedger` recovery algorithm
@@ -157,8 +157,41 @@ function OpenLedger(path):
 
 ## 10. Escalation conditions
 
-None anticipated. If implementation reveals `protocol.SetupLedgerEvent`'s fields are insufficient to reconstruct `SetupExecutionReport` correctly (e.g. a needed timestamp or artifact reference is missing from a payload), that is a WP-M3B-1 type-contract gap, not something this WP silently works around — it would be escalated as a proposed amendment to the WP-M3B-1 EWP/ADR-0014, not patched ad hoc.
+Triggered once, resolved without amending WP-M3B-1's frozen contract — see §12.
 
 ## 11. Disposition
 
-Draft. To be updated to `implemented, pending review` once the code lands, and `accepted` once independently reviewed, matching the WP-M3B-1 checkpoint pattern.
+Implemented; pending independent review, matching the WP-M3B-1 checkpoint pattern (this checkpoint is only marked `accepted` once that review's findings, if any, are closed).
+
+## 12. Design decision made during implementation: `ProjectExecutionReport`'s `machineFingerprint` parameter
+
+§10 anticipated exactly this class of gap. While implementing `ProjectExecutionReport`, `protocol.SetupExecutionReport.Validate()` requires a non-empty, sha256-hex `MachineFingerprint` — but no `SetupLedgerEvent` payload (checked: `ExecutionCreatedPayload`, `PlanApprovedPayload`, `ActionStartingPayload`, `ActionProcessCompletedPayload`, `PostconditionVerifiedPayload`, `ActionTerminatedPayload`, `ExecutionFinishedPayload`, all in `internal/protocol/ledger.go`) carries a machine fingerprint. Only `protocol.SetupPlan.MachineFingerprint` (WP-M3B-1) does.
+
+Two options were available:
+1. **Amend WP-M3B-1's `ExecutionCreatedPayload`** to add a `machine_fingerprint` field, threading it through the ledger event stream so `ProjectExecutionReport` could read it back purely from `events`.
+2. **Add `machineFingerprint` as an explicit parameter** to `ProjectExecutionReport`, sourced by the caller from the `SetupPlan` it is executing (which it necessarily already holds — a plan is what's being executed).
+
+Option 2 was chosen and implemented. Rationale: WP-M3B-1's `SetupLedgerEvent`/`EventPayload` types are an **accepted, independently-reviewed checkpoint** (`docs/work-packages/wp-m3b-1-ewp.md`); AGENTS.md §7 says a local agent "must not quietly reinterpret a MUST-level architectural requirement," and reopening an accepted checkpoint's type contract for a projection-layer convenience is exactly the kind of scope creep `AGENT_HANDOFF_PROTOCOL.md`'s "a frozen decision may be reopened only by materially new evidence or changed requirements" guards against. This isn't materially new evidence about the ledger's own correctness — the ledger doesn't need the machine fingerprint for anything it does (hash-chaining, corruption detection, interruption recovery all work identically without it); only this one derived report type needs it, and it already has an unambiguous, single source of truth (the plan) available to whichever caller is doing the projecting. Passing it through as a parameter keeps `ProjectExecutionReport` pure and deterministic (same inputs → same output) and keeps the "not a second source of truth" principle intact: the value isn't decided or duplicated here, only passed through from the one place it already lives.
+
+This is documented rather than silently done, per AGENTS.md §7's escalation requirement — no protocol type was changed, no WP-M3B-1 checkpoint was reopened, and the decision and its rationale are recorded here for review.
+
+## 13. Deterministic evidence (this session, base commit `8cc2378`, Go toolchain `go1.25.0`, linux/amd64)
+
+```
+$ go build ./...
+(clean, exit 0)
+
+$ go vet ./...
+(clean, exit 0)
+
+$ go test -count=1 ./...
+ok  	github.com/olostan/DevCadence/internal/setup	0.249s
+... (all 26 packages ok, 0 failures)
+
+$ go test -race ./internal/setup/...
+ok  	github.com/olostan/DevCadence/internal/setup	1.333s
+```
+
+New tests (all PASS): `TestResolveHomeUsesEnvVarWhenSet`, `TestResolveHomeFallsBackToDotDevcadence`, `TestResolveHomeRejectsRelativeOverride`, `TestEnsureLayoutIsIdempotentAndCreatesExpectedDirs`, `TestEnsureLayoutRejectsRelativeHome`, `TestExecutionLockSerializesConcurrentRuns`, `TestAcquireExecutionLockRejectsRelativeHome`, `TestExecutionLockReleaseIsIdempotent`, `TestLedgerAppendAndReload`, `TestLedgerFailsClosedOnNonFinalCorruption`, `TestLedgerRecoversTornFinalWrite` (2 subtests: truncated mid-write, complete-but-invalid final line), `TestLedgerRecoversInterruptedAction`, `TestFindInterruptedIgnoresFinishedExecutions`, `TestProjectExecutionReport`.
+
+Each acceptance criterion from §8 maps directly to one of these — `TestLedgerRecoversInterruptedAction` for the crash-recovery criterion, `TestLedgerFailsClosedOnNonFinalCorruption` and `TestLedgerRecoversTornFinalWrite` for the corruption-handling criteria, `TestExecutionLockSerializesConcurrentRuns` for the lock-serialization criterion.
