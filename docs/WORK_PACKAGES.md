@@ -15,17 +15,24 @@ one WP" to a quota cutoff is an acceptable loss, each large enough to be a
 coherent unit of review.
 
 **Each entry here is a scope card, not the full Engineering Work Package
-AGENTS.md §6 describes.** The first action of whichever agent starts a given
-WP is to read the milestone's ADRs (cited per WP below), expand the scope
-card into a full Work Package (objective, architectural intent, MUST/
-SHOULD/SUGGESTED/LOCAL_DISCRETION constraints, interface sketches,
-pseudocode where logic is non-trivial, edge cases, acceptance criteria,
-base commit) per AGENTS.md §6, and record that expansion — either inline in
-this file under the WP's entry, or in a linked note — so the next agent (if
-a handoff happens mid-WP) inherits the detailed plan, not just this card.
+AGENTS.md §6 describes, and a scope card is not implementation authority.**
+Per `AGENT_HANDOFF_PROTOCOL.md`'s "Principal/Implementer separation," a
+Principal-capable session must read the milestone's ADRs (cited per WP
+below), expand the scope card into a full Work Package (objective,
+architectural intent, MUST/SHOULD/SUGGESTED/LOCAL_DISCRETION constraints,
+interface sketches, pseudocode where logic is non-trivial, edge cases,
+acceptance criteria, base commit) per AGENTS.md §6, and commit that EWP as
+its own linked file (e.g. `docs/work-packages/wp-m3b-4-ewp.md`) before any
+implementation code is written against it. An implementation session works
+against the committed EWP, not the scope card directly, and escalates
+(amending the EWP explicitly) rather than silently redesigning if it finds
+the EWP's assumptions false.
 
 All Work Packages for one milestone land on **one shared branch**, one PR,
-per `AGENT_HANDOFF_PROTOCOL.md` — not a branch/PR per WP.
+per `AGENT_HANDOFF_PROTOCOL.md` — not a branch/PR per WP. Only one session
+implements at a time (see that protocol's "Concurrency model"); WPs with no
+dependency on each other may be done in whichever order, never
+concurrently, under this v1 protocol.
 
 ---
 
@@ -41,8 +48,10 @@ relitigation), ADR-0011, ADR-0013, `docs/ENVIRONMENT_INTELLIGENCE_AND_ONBOARDING
 in that order — before expanding WP-M3B-1.
 
 Dependency chain: WP1 → WP2 → WP3 → {WP4, WP5, WP6 in any order} → WP7 →
-WP8 → WP9. WP4–WP6 can be parallelized across sessions if more than one is
-active, since they don't depend on each other, only on WP1–WP3.
+WP8 → WP9. WP4–WP6 have no dependency on each other and may be completed in
+any order; under this protocol's single-writer model they are still
+implemented one at a time, not concurrently — see
+`AGENT_HANDOFF_PROTOCOL.md`'s "Concurrency model."
 
 ### WP-M3B-1 — Setup domain types and plan digest
 
@@ -117,33 +126,41 @@ postcondition state; a corrupted non-final ledger line fails closed; a
 corrupted/truncated final line recovers as a torn write; concurrent setup
 runs are serialized by `setup.lock`.
 
-### WP-M3B-3 — Executor and CLI approval workflow
+### WP-M3B-3 — Executor and approval semantics (service layer, no public CLI)
 
 **Objective:** wire WP-M3B-1's plan types and WP-M3B-2's ledger into an
-actual executor, plus the two-step CLI approval workflow.
+actual executor with the two-step approval workflow — as a service-level
+API `internal/setup` exposes, not the public CLI command. Public command
+registration/flag-parsing/presentation is WP-M3B-7's job; this WP owns the
+approval/precondition/execution *semantics* the CLI will later call.
 
 **Deliverables:**
-- `devcadence setup plan [target] --output <file>` and
-  `devcadence setup apply --plan <file> --approve-plan <sha256:digest>
-  [--yes]` per ADR-0014 §2.
+- Service-level plan-generation and plan-apply operations implementing the
+  two-step approval workflow from ADR-0014 §2 (`PlanDigest` verification,
+  `--yes` scope, drift rejection) as Go APIs a caller invokes directly — a
+  thin test harness is fine, a registered Cobra/CLI command is not this
+  WP's deliverable.
 - Precondition rechecking immediately before each action executes; any
   drift since plan generation invalidates approval and halts, demanding a
   fresh plan.
-- `--yes` authorizes only `user_confirmation`-level actions; privileged/
-  high-impact actions always require the explicit digest-approval path.
+- `--yes`-equivalent scope: authorizes only `user_confirmation`-level
+  actions; privileged/high-impact actions always require the explicit
+  digest-approval path, regardless of how the caller is invoked.
 - Subprocess execution exclusively through `internal/process.Runner`
   behind the narrow `internal/setup.CommandRunner` interface (ADR-0014 §7).
 - Output capture bounded to 4 MiB, ANSI-stripped, content-addressed;
   authentication operations capture zero raw output artifacts.
 
 **MUST:** no operation reachable through any path other than this executor
-— no ad hoc shell-out anywhere else in `internal/setup`.
+— no ad hoc shell-out anywhere else in `internal/setup`. No public command
+registration in this WP (WP-M3B-7 owns that surface).
 
 **Acceptance criteria:** a plan approved with the wrong digest is rejected;
 a plan whose preconditions drifted between generation and apply halts
-without executing later actions; `--yes` on a plan containing a
-privileged action is rejected outright; output artifacts respect the byte
-cap and never appear for authentication operations.
+without executing later actions; the `--yes`-equivalent scope on a plan
+containing a privileged action is rejected outright; output artifacts
+respect the byte cap and never appear for authentication operations — all
+exercised against the service API directly, without a CLI in the loop.
 
 ### WP-M3B-4 — Credential-reference abstraction
 
@@ -171,14 +188,22 @@ config, ledger event, artifact metadata, or log line.
 
 **Acceptance criteria:** a config value that looks like a raw secret is
 rejected at load time; ledger events and artifacts for a credentialed
-operation contain no secret material under inspection; version-output-only
-"detection" of an authenticated CLI is explicitly not accepted as a
-`command_available`/readiness signal.
+operation contain no secret material under inspection; version output may
+establish installation/`command_available` evidence only — it MUST NOT be
+accepted as establishing authenticated-session availability or provider/
+cognition readiness, which require an actual authenticated-call probe or
+equivalent evidence (ADR-0014 §6: version output proves installation,
+never authentication — this is narrower than "never a readiness signal at
+all," since installation genuinely is one legitimate `command_available`
+signal).
 
-### WP-M3B-5 — Doctor readiness and recommendation engine
+### WP-M3B-5 — Doctor readiness and recommendation engine (service layer, no public CLI)
 
-**Objective:** `devcadence doctor` diagnostic evaluation and the pure-
-function deployment-profile recommendation engine.
+**Objective:** the `devcadence doctor` diagnostic evaluation and pure-
+function deployment-profile recommendation engine, as a service `internal/
+doctor` (or equivalent) exposes. Like WP-M3B-3, this WP owns behavior, not
+command/flag parsing — WP-M3B-7 registers the actual `devcadence doctor`
+command against this service.
 
 **Deliverables:**
 - `DoctorReport` with explicit `ReadinessEvaluationScope` (target profile,
@@ -191,8 +216,10 @@ function deployment-profile recommendation engine.
   (facts, profile, policy, preferences) → `SelectedProfile` (one of
   local-heavy / hybrid-thin / cloud-cognition / offline / custom) or
   `nil` with reported missing prerequisites.
-- `doctor --fix` as a convenience that only generates a `SetupPlan` file —
-  never executes or approves anything (ADR-0014 §7).
+- The service-level behavior `doctor --fix` will expose: generating a
+  `SetupPlan` file from the current `DoctorReport`, never executing or
+  approving anything (ADR-0014 §7) — as a callable operation; the `--fix`
+  flag itself is WP-M3B-7's.
 
 **Acceptance criteria:** same synthetic-fixture-machine verification
 pattern M3A already established (`internal/environment/fixtures.go`) — no
@@ -223,23 +250,33 @@ install-class operation.
 
 ### WP-M3B-7 — CLI surface (non-interactive/plain/JSON first)
 
-**Objective:** wire WP-M3B-1 through WP-M3B-6 into the actual
-`devcadence doctor` / `devcadence setup` commands, non-interactive and
-`--json` modes first — the TUI (WP-M3B-8) layers on top of this, not the
-other way around.
+**Objective:** own **all public command registration** for `devcadence
+doctor` / `devcadence setup`, wiring WP-M3B-3's and WP-M3B-5's service APIs
+(plus WP-M3B-1/2/4/6 underneath them) to actual commands — non-interactive
+and `--json` modes first. The TUI (WP-M3B-8) layers on top of this, not the
+other way around. This WP is the single owner of: command/flag parsing,
+the `--fix` flag, `setup plan`/`setup apply` command registration, plain/
+JSON output presentation, the exit-code contract, help text, and `--no-tui`
+(accepted as a no-op here since there's no TUI yet — WP-M3B-8 makes it a
+real flag).
 
 **Deliverables:**
-- `devcadence doctor` (plain and `--json` output).
-- `devcadence setup plan` / `devcadence setup apply` (already scoped in
-  WP-M3B-3; this WP is the CLI-command wiring/UX polish, help text, exit
-  codes, `--no-tui` accepted as a no-op since there's no TUI yet).
+- `devcadence doctor` command (plain and `--json` output), including the
+  `--fix` flag calling WP-M3B-5's plan-generation behavior.
+- `devcadence setup plan` / `devcadence setup apply` commands, calling
+  WP-M3B-3's service API — this WP owns parsing/presentation only, not the
+  approval semantics WP-M3B-3 already implemented.
+- Help text documenting the two-step approval workflow; a defined exit-code
+  contract.
 - Non-interactive mode emits no control sequences of any kind, verified by
   fixture.
 
 **Acceptance criteria:** every command has a `--json` mode whose output
 validates against a published schema; help output documents the two-step
 approval workflow; exit codes distinguish "nothing to do," "plan
-generated," "drift detected, refresh needed," and "execution failed."
+generated," "drift detected, refresh needed," and "execution failed"; no
+approval/precondition/readiness logic is duplicated here that WP-M3B-3/5
+already implemented — this WP calls it, it does not reimplement it.
 
 ### WP-M3B-8 — Terminal UX
 
@@ -288,8 +325,10 @@ misleading is not done").
   describe what's actually implemented.
 - `README.md`/`INVARIANTS.md`: spot-check for anything M3B changes that
   needs reflecting there.
-- Delete `HANDOFF.md` from the branch as the final commit before the PR
-  goes to review, per `AGENT_HANDOFF_PROTOCOL.md`.
+- `HANDOFF.md` stays through review/repair per `AGENT_HANDOFF_PROTOCOL.md`
+  and is deleted only once the milestone candidate is frozen/closed and
+  green to merge — not as part of this WP, which only gets the candidate
+  to "ready for review."
 
 **Acceptance criteria:** every fixture above passes; `go test -count=1
 ./... && go test -race ./... && go vet ./...` clean; the milestone's own

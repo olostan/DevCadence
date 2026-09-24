@@ -21,62 +21,183 @@ hours or days. A cloud-hosted session in particular cannot be reached or
 resumed at all once its quota is exhausted — the only durable record of
 progress is what has been **committed and pushed to GitHub**.
 
-This protocol exists to make that loss impossible: at any point a session
-might be cut off, the branch on GitHub should already contain everything
-needed for a **different** agent — possibly a different model, a different
-provider, with zero memory of this conversation — to pick up exactly where
-the previous one stopped.
+This protocol bounds that loss and makes recovery deterministic: it does
+not make loss of *any* work impossible (an uncommitted increment in
+progress at the exact moment of a cutoff is still lost — see "The two rules"
+below), but it keeps that loss small and keeps the branch on GitHub always
+self-describing enough for a **different** agent — possibly a different
+model, a different provider, with zero memory of this conversation — to
+verify what's actually there and continue from it correctly.
 
-## The two rules everything else follows from
+## Revision history
+
+This is the second revision. The first (reviewed on PR #9) proposed a
+model that turned out to conflict with itself and with `AGENTS.md`: it
+allowed Work Packages to be "parallelized across sessions" while also
+specifying one shared branch and one root `HANDOFF.md` — which cannot
+represent multiple concurrent writers safely — and it let the same
+execution agent both author and implement a Work Package's detailed design,
+collapsing the Principal/Implementer authority split `AGENTS.md` §4/§6/§7
+establishes. An independent review
+([PR #9 comment](https://github.com/olostan/DevCadence/pull/9#issuecomment-5804998531))
+found these plus eight further material/non-blocking issues, all
+incorporated below.
+
+## The rules everything else follows from
 
 1. **Commit and push early and often — never batch work waiting for a
    "good stopping point" that might not arrive.** A quota cutoff can happen
    mid-thought. If it would hurt to lose the last hour of work, that work
-   should already be on GitHub.
+   should already be on GitHub. This bounds loss to "whatever's uncommitted
+   right now," not "however long since the last push."
 2. **The branch, not the conversation, is the source of truth.** Never
    write anything into a handoff note that assumes the next agent shares
    this session's memory ("as discussed above," "the approach we agreed
    on"). Write it as if a stranger will read it cold, because one will.
+3. **One writer at a time on a given milestone's implementation.** See
+   "Concurrency model" below — this is what makes rule 1 and the handoff
+   file actually work, rather than racing.
+4. **A scope card is not implementation authority.** See "Principal/
+   Implementer separation" below — an execution agent does not get to
+   invent the design it then implements.
 
-## Branch and commit discipline
+## Concurrency model: single-writer implementation per milestone
 
-- One **shared, long-lived branch per milestone** (e.g.
-  `feat/m3b-guided-bootstrap`), not one branch per Work Package. All Work
-  Packages for that milestone land on this same branch, sequentially, as
-  the milestone's own `docs/WORK_PACKAGES.md` entry breaks them down.
-- **One PR per milestone**, opened as a **draft** as soon as the first
-  commit lands, and kept open/updated across every session and every WP
-  until the whole milestone is done. Don't open a fresh PR per WP and
-  don't open a fresh PR per session — the continuity is the point.
-- **Every meaningful increment is its own commit, pushed immediately** —
-  not staged locally and pushed "later." If a session ends between two
-  commits, at most one small, easily-redone increment is lost, never a
-  whole WP.
-- **Never leave the pushed branch in a state that doesn't build.** Prefer
-  an incomplete-but-compiling stub (a function that returns
-  `ErrNotImplemented`, a test marked `t.Skip("WP-M3B-4")`) over a broken
-  tree. A future agent's first move is to build and test what's there;
-  that has to work before anything else does.
-- Follow `CONTRIBUTING.md`'s existing "one conceptual change per commit"
-  guidance — this protocol doesn't change that, it just adds "and push it
-  immediately, don't wait to batch."
+Multiple Work Packages inside a milestone may have no dependency on each
+other (`docs/WORK_PACKAGES.md` notes this where it's true) and could in
+principle be implemented in parallel. **This protocol does not attempt
+that.** A shared branch with one `HANDOFF.md` cannot safely represent
+multiple concurrent writers — two sessions starting from the same `HEAD`
+can race, and one agent's push silently makes another's working tree stale
+mid-edit. Real parallel implementation would need per-WP branches/worktrees
+under a milestone integration branch, with a human or Principal-level
+session integrating completed WP branches; that is real additional
+machinery this protocol does not build, because the actual problem it
+exists to solve (a solo developer's sessions handing off to each other
+across provider quota resets) doesn't need it.
+
+So: **independent-of-each-other Work Packages are still implemented one at
+a time**, in the order recorded in `docs/WORK_PACKAGES.md`, by whichever
+single session currently holds the branch. Independent **review** (multiple
+reviewers examining the same immutable checkpoint) is a different thing and
+is encouraged in parallel, same as `docs/REVIEW_AND_CONVERGENCE.md` §1.2
+already prefers.
+
+### Git safety rules for the shared milestone branch
+
+Because it's explicitly shared, mutable-until-closure history across
+sessions:
+
+- **Never force-push the milestone branch.**
+- **Never rebase already-pushed milestone-branch history.**
+- At the start of a session, record the remote `HEAD` SHA being claimed (in
+  `HANDOFF.md` — see below).
+- Before pushing, fetch the remote branch first. If its `HEAD` is no longer
+  the expected parent, **stop and reconcile** (read what changed, merge it
+  in explicitly) rather than force-pushing or rebasing over it. Git's
+  non-fast-forward rejection is the actual concurrency guard here; the
+  handoff file's timestamp (below) is only advisory metadata on top of it,
+  never a substitute for it.
+- A recent `Last updated` timestamp in `HANDOFF.md` means *likely* still
+  active — a session can work for hours between handoff updates, so an
+  older timestamp means only *possibly* abandoned, never proof. If there's
+  any doubt whether another session is still active, ask the human/owner
+  before taking over, rather than assuming abandonment.
+
+### Keeping the milestone branch current with `main`
+
+A milestone branch can live for a while. At WP boundaries (not mid-WP):
+fetch `main`; if it advanced materially, merge it into the milestone branch
+(never rebase); resolve conflicts explicitly; rerun the relevant
+deterministic baseline (`go build ./... && go test ./...` at minimum); and
+record the new base in `HANDOFF.md`/the WP checkpoint. This is the same
+"merge the base branch into the PR head" pattern this project's own
+PR-babysitting rules already use elsewhere — nothing new, just applied to a
+long-lived branch instead of a short-lived PR.
+
+## Principal/Implementer separation
+
+`AGENTS.md` §4 makes producing a detailed Engineering Work Package a
+Principal-cognition responsibility, before implementation; §6 says a
+substantial Work Package must include objective, architectural intent,
+MUST/SHOULD/SUGGESTED/LOCAL_DISCRETION constraints, interface sketches,
+pseudocode where non-trivial, edge cases, and acceptance criteria — not
+"implement feature X"; §7 says local agents may challenge but must not
+silently redesign a MUST-level requirement. A Work Package entry in
+`docs/WORK_PACKAGES.md` is deliberately a lighter-weight *scope card*, not
+that full artifact — so treating "expand the scope card" as something the
+same agent that will then implement it can just do on its own collapses
+exactly the boundary those sections exist to keep.
+
+**The correct sequence:**
+
+```text
+scope card (docs/WORK_PACKAGES.md)
+        ↓
+Principal-capable session expands it into a full
+Engineering Work Package per AGENTS.md §6
+        ↓
+EWP is committed to the milestone branch, with its base SHA,
+as its own commit — this is a checkpoint, not a draft
+        ↓
+(systemic/architectural/security-sensitive WPs: review/approval
+of the EWP itself before implementation starts — see
+"Per-WP checkpoints and review" below)
+        ↓
+implementation session(s) implement against the committed,
+frozen EWP — not against the scope card directly
+        ↓
+if the implementer finds the EWP's assumption false or its
+design contradicted by something real, it escalates/amends the
+EWP explicitly (a new committed revision) — it does not
+silently redesign and implement something else
+```
+
+The same underlying agent/session may fill both the Principal-expansion
+role and the implementation role back to back — nothing here requires two
+different providers — but the **role transition must be explicit**: the
+EWP gets committed and frozen as its own artifact before implementation
+code is written, so a handoff mid-WP always has a real design document to
+resume against, not just a scope card and whatever the previous session
+happened to be thinking.
 
 ## The handoff file
 
 A single file, **`HANDOFF.md`, at the repository root of the working
 branch** (not `docs/` — it's temporary, not normative documentation), is
-the resumoption point for the next agent. It is:
+the resumption point for the next agent. It is:
 
 - **Committed to the branch** alongside the code it describes, so it
   travels with `git fetch`/`git checkout`, not left in any one session's
   memory.
 - **Updated, not appended to forever** — it describes current state, not a
   chronological log. (Git history is the log; this file is a snapshot.)
-- **Rewritten as close to the end of every session as possible** — the
-  last thing a session does before it might run out of quota is bring this
-  file up to date and push it.
-- **Deleted in the milestone's final commit**, once every WP is done and
-  the PR is ready for review — it should never merge into `main`.
+- **Updated at every durable checkpoint, not deferred to end-of-session.**
+  The failure mode this protocol exists for is a session becoming
+  inaccessible *without* a graceful end-of-session phase — a rule that
+  only updates the handoff file "near the end" doesn't survive the exact
+  event it's meant to survive. Whenever a commit materially changes WP
+  status, verified commands, the next action, a known blocker, or an
+  interface decision, update `HANDOFF.md` in that same checkpoint or
+  immediately after, and push both together. It does not need updating for
+  every single edit — just every point where losing "since the last
+  update" would actually hurt.
+- **Never contains secrets, tokens, raw credential values, private
+  provider-session data, or large raw logs** — it is intentionally
+  committed and pushed. Reference artifacts/commits/ledger entries
+  instead, never paste sensitive content into it.
+- **Has no authority over `AGENTS.md`, accepted ADRs, invariants, or a
+  committed EWP's acceptance criteria.** It is status/evidence metadata,
+  not a decision record. If a previous session wrote something like "we
+  decided to change X, continue this way" without a corresponding
+  committed EWP/ADR change backing it, the next agent treats that as a
+  *claim* to verify or escalate — never as standing authority to act on.
+- **Kept through review and repair, deleted only at closure.** Review and
+  repair (`docs/REVIEW_AND_CONVERGENCE.md`) can itself span multiple
+  quota-limited sessions — a milestone candidate reaching "ready for
+  review" is not the end of multi-session work, closure/freeze is. Delete
+  `HANDOFF.md` as part of final cleanup after the candidate is frozen and
+  green to merge, not before. It must never reach `main`.
 
 ### Handoff file template
 
@@ -86,21 +207,29 @@ the resumoption point for the next agent. It is:
 Last updated: <UTC timestamp> by <session/provider identifier, e.g.
 "Claude Code / Sonnet 5" or "session run on <provider>">
 
+Remote HEAD claimed at session start: `<sha>`
+
 ## Milestone
 <Milestone ID and one-line goal, e.g. "M3B — guided bootstrap and onboarding">
 See docs/WORK_PACKAGES.md#<milestone> for the full Work Package breakdown.
 
 ## Work Package status
 
-| WP | Status | Notes |
-|----|--------|-------|
-| WP-M3B-1 | done | merged in commits abc123..def456 |
-| WP-M3B-2 | in progress | see below |
-| WP-M3B-3 | not started | blocked on WP-M3B-2 |
-| ... | | |
+| WP | Status | Checkpoint | Validation | Review |
+|----|--------|------------|------------|--------|
+| WP-M3B-1 | accepted | `<sha>` | `go test ./... ` PASS | correctness review complete |
+| WP-M3B-2 | in progress | — | — | — |
+| WP-M3B-3 | not started | — | — | blocked on WP-M3B-2 |
+| ... | | | | |
+
+(Never write "merged" for a WP checkpoint — nothing is merged to `main`
+until the whole milestone closes. "accepted at checkpoint `<sha>`" is the
+correct phrasing.)
 
 ## Currently in progress: <WP ID>
 
+- **EWP status:** <not yet expanded / expanded and committed at `<sha>` /
+  amended at `<sha>` because ...>
 - **Base commit this WP started from:** `<sha>`
 - **What's implemented so far:** <concrete, specific — file paths, function
   names, what they do>
@@ -125,52 +254,70 @@ literally the next file to open / function to write / test to run.>
    confirm the actual state matches what's claimed above before doing
    anything else. If it doesn't match, fix the discrepancy in this file
    first.
-3. Read this WP's entry in `docs/WORK_PACKAGES.md` in full before writing
-   code — this handoff file is a status snapshot, not a substitute for the
-   WP's actual scope/constraints/acceptance criteria.
-4. Continue from "Next concrete action" above.
-5. Before this session ends (quota running low, or the WP/milestone is
-   done), update this file again and push.
+3. Check whether `Last updated` is recent enough that another session
+   might still be active; if in doubt, ask the human before proceeding.
+4. Read this WP's entry in `docs/WORK_PACKAGES.md`, and its committed EWP
+   if one exists, in full before writing code — this handoff file is a
+   status snapshot, not a substitute for either.
+5. Continue from "Next concrete action" above.
+6. At the next durable checkpoint (not just "before the session ends"),
+   update this file again and push it together with that checkpoint's
+   commit.
 ```
 
-### Advisory claim marker (not a lock — this can't be enforced across
-independent sessions)
+## Per-WP checkpoints and review
 
-The `Last updated` timestamp doubles as a soft claim marker. If a new agent
-picks up the branch and finds `Last updated` very recent (say, under the
-last couple of hours), another session may still be actively working on it
-— check with the human before proceeding, rather than risk two agents
-editing the same WP concurrently and producing conflicting commits. If the
-timestamp is old, treat the branch as abandoned (quota exhausted) and
-proceed normally.
+Deferring all review to one giant end-of-milestone diff lets a bad early
+interface decision propagate through every later WP before anyone catches
+it. Instead, when a WP is marked done, record an immutable checkpoint (the
+table above) with: the EWP revision it implemented, base SHA, completion
+SHA, exact deterministic validation run, acceptance-criteria result, and
+required review disposition. Later WPs that depend on it start from that
+accepted checkpoint, not from an unreviewed one.
+
+Security-sensitive WPs in particular (e.g. WP-M3B-4's credential-reference
+abstraction) get their `CONTRIBUTING.md`-required threat-model review at
+their own checkpoint, before later WPs build on that contract — not
+deferred to the final milestone review, by which point the cost of a
+finding is much higher.
+
+The milestone PR still gets a final integration/closure review once every
+WP is accepted, per `docs/REVIEW_AND_CONVERGENCE.md`'s normal campaign —
+per-WP checkpoints reduce what that final review has to catch, they don't
+replace it.
 
 ## Work Package boundaries
 
-Work Packages exist to make quota cutoffs cheap, not just to organize the
-milestone conceptually. When splitting a milestone (`docs/WORK_PACKAGES.md`
-is where this is recorded per-milestone), prefer boundaries where:
+Work Packages exist to make quota cutoffs and review both cheap, not just
+to organize the milestone conceptually. When splitting a milestone
+(`docs/WORK_PACKAGES.md` is where this is recorded per-milestone), prefer
+boundaries where:
 
 - each WP is independently buildable and testable at its own final commit,
   even if later WPs aren't started yet;
+- each WP has exactly one owner for any given public surface (a service/
+  domain layer and the CLI wiring that exposes it are different WPs if
+  that avoids two WPs both claiming to deliver the same command);
 - a WP is small enough that losing "the rest of this WP" to a quota
   cutoff is an acceptable, cheaply-redone loss — if a WP feels like it
-  would take one agent session's entire budget, split it further;
-  the actual per-WP size still needs case-by-case judgment against the
-  budget available, the same way the M3B sizing discussion in this
-  project's own history did;
-- dependencies between WPs are explicit and linear where possible, so a
-  new agent doesn't have to reconstruct which WPs block which from
-  scratch.
+  would take one agent session's entire budget, split it further; the
+  actual per-WP size still needs case-by-case judgment against the budget
+  available;
+- dependencies between WPs are explicit and linear, so a new agent doesn't
+  have to reconstruct which WPs block which from scratch, and "no
+  dependency between these WPs" is recorded as "may be done in either
+  order" — never as "may be done concurrently" (see "Concurrency model"
+  above).
 
-Per AGENTS.md §6, a WP entry in `docs/WORK_PACKAGES.md` is a *scope card*
-(objective, deliverables, constraints, acceptance criteria, dependencies,
-non-goals) — not necessarily the full detailed Engineering Work Package
-AGENTS.md describes (interface sketches, pseudocode, edge cases). **The
-first action of whichever agent starts a given WP is to expand that scope
-card into a full Engineering Work Package per AGENTS.md §6** before writing
-implementation code, and to record that expansion (as a section in this
-WP's part of `docs/WORK_PACKAGES.md`, or linked from it) so the next agent
-inherits the detailed plan, not just the scope card.
+A WP entry in `docs/WORK_PACKAGES.md` stays a compact scope card
+permanently — it is not replaced by the full EWP. The full EWP a Principal-
+capable session expands it into (per "Principal/Implementer separation"
+above) lives as its own linked file per WP (e.g.
+`docs/work-packages/wp-m3b-4-ewp.md`), committed once frozen. At milestone
+closure, decide deliberately whether each WP's detailed EWP is kept
+permanently for engineering provenance or archived — don't let
+`docs/WORK_PACKAGES.md` itself silently grow into an implementation
+archive; Git history is available for archaeology either way.
 
 ## What does not change
 
@@ -179,4 +326,6 @@ Everything else in `AGENTS.md`, `CONTRIBUTING.md`, and
 evidence over claims, documentation staying synchronized with behavior,
 security-sensitive changes needing a threat-model review, and so on. This
 protocol only adds the discipline needed to survive a mid-milestone quota
-cutoff — it does not relax anything else.
+cutoff — it does not relax anything else, and where an earlier version of
+this document read as if it did (see "Revision history"), that was a
+mistake this revision corrects.
