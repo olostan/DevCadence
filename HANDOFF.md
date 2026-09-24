@@ -119,16 +119,20 @@ implementation of `internal/protocol/setup.go`/`internal/setup/{doctor,
 planner,profiles,cache}.go` that predates this protocol and the M3B
 work-package breakdown — see `docs/work-packages/wp-m3b-1-ewp.md`'s
 Provenance section for the full story. WP-M3B-1's types have since been
-substantially amended (the runtime-agnostic redesign, see above); the
-`planner.go` executor-adjacent scaffolding (`doctor.go`, `profiles.go`,
-`cache.go`) has **not** been assessed for WP-M3B-5/6's own scope — still
-open, same as before.
+substantially amended (the runtime-agnostic redesign, see above).
+`doctor.go`, `profiles.go`, and `planner.go` have now been assessed for
+WP-M3B-5's scope (`docs/work-packages/wp-m3b-5-ewp.md` §0/§0a) — all three
+already substantially satisfy it; only the gaps that EWP identifies remain.
+`cache.go` and the fuller WP-M3B-6 "Bounded recipes" scope card are
+**still unassessed**.
 
-**Before starting WP-M3B-5 or WP-M3B-6 (or any later WP), the next session
-must first check whether `internal/setup/{doctor,planner,profiles,cache}.go`
-already substantially satisfies its scope card**, the same way every prior
-session in this milestone did — rather than assuming a blank slate and
-writing duplicate/conflicting code. If it does, write the EWP describing
+**Before starting WP-M3B-6 (or any later WP), the next session must first
+check whether `internal/setup/{planner,cache}.go` already substantially
+satisfies its scope card** — `planner.go` in particular already resolves
+immutable digests and license metadata for its model-pull recipes, which
+overlaps WP-M3B-6's own acceptance criteria (see the WP-M3B-5 EWP's pre-check
+for what was already read). Same discipline as every prior WP in this
+milestone: don't assume a blank slate. If it does, write the EWP describing
 what's actually there, verify it fresh against that WP's own acceptance
 criteria, and accept it — or, if there's a real design gap, use the
 escalate/amend path in `AGENT_HANDOFF_PROTOCOL.md` rather than silently
@@ -142,8 +146,8 @@ implementing on top of it or rewriting it.
 | WP-M3B-2 | accepted | `bb01bc9` | all PASS (see EWP §13) | independent review complete — [comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5805603916), 7 findings, all addressed in EWP §14 |
 | WP-M3B-3 | **accepted** (§21) | `cc799cd` | `go build ./...`, `go vet ./...`, `go test -count=1 ./...`, `go test -race ./internal/setup/... ./internal/cognition/mlx/... ./internal/environment/...`, `GOOS=windows GOARCH=amd64 go build ./...` all PASS | 7 independent review rounds, 25 findings total, all resolved — see EWP §15–§21. Final acceptance: [comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5809019161) |
 | WP-M3B-4 | **accepted** (§16) | `75e65a7` | `go build ./...`, `go vet ./...`, `go test -count=1 ./...`, `go test -race ./internal/credentials/... ./internal/protocol/... ./internal/cognition/...`, `GOOS=windows GOARCH=amd64 go build ./...` all PASS | 3 independent review rounds, 6+3+2 findings total, all resolved — see EWP §13–§16. Final acceptance: [comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5819033678) |
-| WP-M3B-5 | pre-check done, not started — see "Currently in progress" below | — | — | `internal/setup/doctor.go`/`profiles.go` already substantially implement DoctorReport/readiness/profile-recommendation; a typed `ResourceInventory` record, `--fix` plan generation, and credential-reference integration are genuinely missing and need their own EWP |
-| WP-M3B-6 | unknown — likely partially pre-existing, unverified | — | — | assess `internal/setup/planner.go`, `cache.go` first |
+| WP-M3B-5 | EWP drafted (`wp-m3b-5-ewp.md`), not implemented — see "Currently in progress" below | — | — | `doctor.go`/`profiles.go`/`planner.go` already substantially implement DoctorReport, readiness, profile-recommendation, and finding→SetupPlan generation; only a typed `ResourceInventory` record, credential-reference wiring, and two more `Planner.Plan` finding cases remain |
+| WP-M3B-6 | unknown — likely partially pre-existing, unverified; `planner.go` already resolves immutable digests + license metadata for its model-pull recipes (found while pre-checking WP-M3B-5) | — | — | assess `internal/setup/planner.go` (already read in full for WP-M3B-5, findings in `wp-m3b-5-ewp.md` §0) and `cache.go` against the full WP-M3B-6 scope card next |
 | WP-M3B-7 | not started | — | — | blocked on WP-3/4/5/6 |
 | WP-M3B-8 | not started — verification suite and docs sync (formerly WP9) | — | — | blocked on all prior |
 
@@ -255,20 +259,19 @@ until the whole milestone closes.)
   Full detail and every new test in `docs/work-packages/wp-m3b-4-ewp.md` §15.
 - **Acceptance:** [comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5819033678), owner, 2026-09-24, at head `75e65a7`. Both §15 findings accepted; a regression sweep over every finding closed across §13/§14/§15 found nothing reopened. **"WP-M3B-4 is accepted. GREEN to proceed to WP-M3B-5."** PR #10 itself remains open/draft for the rest of M3B. EWP §16 records the acceptance.
 
-## Currently in progress: WP-M3B-5 — Doctor readiness and resource inventory (pre-check done, EWP not yet written)
+## Currently in progress: WP-M3B-5 — Doctor readiness and resource inventory (EWP drafted, not yet implemented)
 
-Per this file's own established pre-check pattern (every WP in this milestone starts by checking whether the target files already substantially exist), read `internal/setup/doctor.go` (739 lines) and `internal/setup/profiles.go` (489 lines) in full before writing anything. Findings:
+`docs/work-packages/wp-m3b-5-ewp.md` is written. It supersedes the informal pre-check notes this section used to carry — in particular, an earlier version of this section incorrectly claimed "no `doctor --fix` plan-generation path exists." That was wrong: `internal/setup/planner.go` (577 lines, read in full while writing the EWP after `doctor.go`/`profiles.go`) already implements `Planner.Plan(report *DoctorReport, ...)`, which converts `DiagnosticFinding`s into real `SetupPlan`/`SetupAction`s (managed-directory creation, a manual Git-install action, and Ollama/MLX model-pull recipes with resolved immutable digests and license metadata) — this WP's actual remaining scope, per the EWP's §0/§0a, is narrower:
 
-- **Substantially already implemented:** `Doctor.Run` already produces a `protocol.DoctorReport` with `EvaluationScope`, `Readiness`, `Findings`, `RecommendedProfile`, `DiscoveredEndpoints`, and `PrincipalHosts`. `evaluateReadiness` already implements the normative readiness-state machine (mandatory-dependency errors → `ACTION_REQUIRED`; no target profile → `PARTIALLY_READY`; per-profile local/remote endpoint requirements; role-routing checks via `cognition.Route`; stale/warning evidence → `READY_WITH_REDUCED_CAP`; otherwise `READY`) from verified evidence, not heuristics. `ProfileRecommender.Recommend` (`profiles.go`) already produces `protocol.ProfileRecommendation` with `SelectedProfile`/`Alternatives`/`Rationale`/`Limitations`/`Unknowns`, using fixed memory/accelerator thresholds only as human-readable **labels** (explicitly allowed by ADR-0014 §92: "Human-readable deployment labels may summarize the environment"), while actual role eligibility is checked through `cognition.Route` — this reads as compliant with the WP-M3B-5 MUST ("no provider/model role doctrine or static weighted 'optimal' portfolio logic"), not a violation, but needs explicit confirmation in the EWP's own analysis rather than assumed.
-- **Genuinely missing (confirmed by `grep -rl ResourceInventory --include=*.go .` returning zero files):**
-  1. **No typed `ResourceInventory` protocol record exists at all.** `docs/PROTOCOLS.md`'s `### ResourceInventory` section and the WP-M3B-5 scope card both require "a deterministic snapshot/projection referencing MachineCapabilityProfile, cognition endpoints/capability provenance, session-driver features, host availability, credential references/auth status, configured economic/budget bindings and current resource observations where safely available." `DoctorReport` carries adjacent pieces (`DiscoveredEndpoints`, `PrincipalHosts`) but nothing unifies them into that named, schema-backed record. This is the WP's central deliverable and needs its own type, JSON Schema, and `protocol.Record` wiring (following the WP-M3B-4 pattern).
-  2. **`doctor.go` never references `internal/credentials`.** The scope card explicitly requires the ResourceInventory to cover "credential references" — WP-M3B-4 (this session) built the whole `CredentialRef`/`AuthEvidence`/`Manager` substrate, but nothing in `doctor.go` calls into it yet. Wiring this in is genuinely new work, not a rename.
-  3. **No `doctor --fix` plan-generation path exists.** The scope card requires "`doctor --fix` generates SetupPlan from concrete missing/remediable facts." `Doctor.Run` produces `Findings` with `Remediation` strings (human text) but nothing converts a `DiagnosticFinding` into a `protocol.SetupPlan`/`SetupAction` (WP-M3B-1's types). This is service-layer work belonging to WP-M3B-5 per the scope card ("service layer, no public CLI" — WP-M3B-7 wires the actual `--fix` flag).
-- **Not yet done:** writing the actual `docs/work-packages/wp-m3b-5-ewp.md` EWP (objective, threat model, interfaces, implementation strategy, acceptance criteria) that AGENTS.md §6 requires before implementation. This pre-check is deliberately stopping short of that so it can get its own focused pass rather than being rushed into the same session as WP-M3B-4's three review rounds.
+1. A new `protocol.ResourceInventory` record (schema + fixtures + `Record` wiring) — the one confirmed-missing central deliverable (`grep -rl ResourceInventory --include=*.go .` returns zero Go files).
+2. Wiring `internal/credentials.Manager` into `Doctor` so the inventory's credential section is real, not a stub.
+3. Two more finding-code cases in `Planner.Plan` (`FindingCodeAuthExpired` → a manual re-auth action; `FindingCodeNoCodingEndpoint` deliberately left un-actioned, per the EWP's MUST-constraint analysis) — a narrow extension of the existing pattern, not new architecture.
+
+Full objective, invariants/ADRs, threat model, proposed types, implementation strategy, acceptance-criteria mapping, and non-goals are in the EWP. Not yet implemented.
 
 ## Next concrete action
 
-Write `docs/work-packages/wp-m3b-5-ewp.md` following the WP-M3B-1 through WP-M3B-4 template (objective/rationale, existing-code assessment — reuse the pre-check findings above —, relevant invariants/ADRs, threat model, proposed `ResourceInventory` interface/schema, implementation strategy for the doctor/credentials/plan-generation wiring, acceptance criteria mirroring the scope card, non-goals, escalation conditions), then implement against it, then push for independent review — the same EWP-before-code discipline every prior WP in this milestone followed.
+Implement against `docs/work-packages/wp-m3b-5-ewp.md` §6 (implementation strategy): the `ResourceInventory` type/schema/fixtures first (self-contained, no `Doctor`/`Planner` changes needed), then the `Doctor`/`credentials.Manager` wiring, then the two `Planner.Plan` finding-code additions, then the full verification suite (`go build`, `go vet`, `go test -count=1 ./...`, race, cross-compile) before pushing for independent review — the same EWP-before-code discipline every prior WP in this milestone followed.
 
 ## Resume checklist for the next agent
 
