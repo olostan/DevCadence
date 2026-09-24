@@ -43,14 +43,15 @@ func ReadManagedConfig(home string) (ManagedConfig, error) {
 	return cfg, nil
 }
 
-// WriteManagedConfigKey validates value against key's rules, then
+// writeManagedConfigKey validates value against key's rules, then
 // atomically persists key=value into the managed config file (read-modify-
 // write of the whole small file — there is no concurrent-writer scenario
 // this needs to handle beyond what AcquireExecutionLock already serializes
-// at the whole-setup-run level).
-func WriteManagedConfigKey(home string, key protocol.ManagedConfigKey, value string) error {
+// at the whole-setup-run level). Unexported: the executor is the only
+// intended path to mutating managed config (ADR-0014 §1/§7 MUST).
+func writeManagedConfigKey(home string, key protocol.ManagedConfigKey, value string) error {
 	if !key.Valid() {
-		return errs.New(errs.CategoryInvalidArgument, "WriteManagedConfigKey: invalid key %q", key)
+		return errs.New(errs.CategoryInvalidArgument, "writeManagedConfigKey: invalid key %q", key)
 	}
 	if err := key.ValidateValue(value); err != nil {
 		return err

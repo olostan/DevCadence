@@ -65,6 +65,12 @@ func LocationPath(home string, loc protocol.ManagedDirectoryLocation) (string, e
 	}
 }
 
+// ledgerPath resolves the single setup ledger file path under home, shared
+// by Executor.Apply/Recover so both always open the same file.
+func ledgerPath(home string) string {
+	return filepath.Join(home, "state", "setup-ledger.jsonl")
+}
+
 // EnsureLayout idempotently creates the $DEVCADENCE_HOME directory layout
 // (state/, artifacts/setup/, tmp/) with mode 0700, per ADR-0014 §4. A
 // directory that already existed with a looser mode is tightened, not left

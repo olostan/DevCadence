@@ -30,6 +30,12 @@ const evaluatorNetworkTimeout = 5 * time.Second
 // preconditions (see WP-M3B-3 EWP §3 for the verified cross-reference).
 const ollamaLocalPort = 11434
 
+// defaultOllamaBaseURL is the production Ollama API base; EvaluatorDeps/
+// applierDeps.OllamaBaseURL overrides it, which is what lets tests point
+// model_digest_present / ollama_pull_model's supply-chain verification at
+// an httptest.Server instead of a real local Ollama daemon.
+var defaultOllamaBaseURL = fmt.Sprintf("http://127.0.0.1:%d", ollamaLocalPort)
+
 // EndpointHealthChecker evaluates cognition endpoint health. It is not
 // implemented by this package: endpoint_healthy conditions need the M3A
 // cognition endpoint registry/probing machinery, which internal/setup does
@@ -48,6 +54,17 @@ type EvaluatorDeps struct {
 	// EndpointHealth is optional; nil means endpoint_healthy conditions
 	// fail closed.
 	EndpointHealth EndpointHealthChecker
+	// OllamaBaseURL overrides the default local Ollama API base
+	// ("http://127.0.0.1:11434") — empty means use the default. Tests set
+	// this to an httptest.Server URL.
+	OllamaBaseURL string
+}
+
+func (d EvaluatorDeps) ollamaBaseURL() string {
+	if d.OllamaBaseURL != "" {
+		return d.OllamaBaseURL
+	}
+	return defaultOllamaBaseURL
 }
 
 // EvaluateCondition checks whether cond currently holds against the live
@@ -65,7 +82,7 @@ func EvaluateCondition(ctx context.Context, deps EvaluatorDeps, cond protocol.Co
 	case protocol.CondKindPortListening:
 		return evaluatePortListening(cond.PortListening)
 	case protocol.CondKindModelDigestPresent:
-		return evaluateModelDigestPresent(ctx, cond.ModelDigestPresent)
+		return evaluateModelDigestPresent(ctx, deps.ollamaBaseURL(), cond.ModelDigestPresent)
 	case protocol.CondKindEndpointHealthy:
 		return evaluateEndpointHealthy(ctx, deps, cond.EndpointHealthy)
 	default:
@@ -176,58 +193,87 @@ func evaluatePortListening(op *protocol.PortOperand) (bool, string, error) {
 	return true, fmt.Sprintf("%s is listening", addr), nil
 }
 
+// ollamaModelEntry mirrors just the fields this file needs from one entry of
+// Ollama's GET /api/tags response.
+type ollamaModelEntry struct {
+	Name   string `json:"name"`
+	Digest string `json:"digest"`
+	Size   int64  `json:"size"`
+}
+
 // ollamaTagsResponse mirrors just the fields this file needs from Ollama's
 // GET /api/tags response — a minimal, independent parse rather than a
 // dependency on internal/cognition/ollama's richer adapter, which is built
 // around discovery/probing, not a single tag/digest existence check.
 type ollamaTagsResponse struct {
-	Models []struct {
-		Name   string `json:"name"`
-		Digest string `json:"digest"`
-	} `json:"models"`
+	Models []ollamaModelEntry `json:"models"`
 }
 
-func evaluateModelDigestPresent(ctx context.Context, op *protocol.ModelDigestOperand) (bool, string, error) {
+// fetchOllamaTags queries the local Ollama API's model list. Shared by
+// evaluateModelDigestPresent (a live Condition check) and
+// applyOllamaPullModel (post-pull supply-chain verification), so the two
+// can never silently disagree about what "present" means.
+func fetchOllamaTags(ctx context.Context, baseURL string) (ollamaTagsResponse, error) {
+	client := &http.Client{Timeout: evaluatorNetworkTimeout}
+	url := baseURL + "/api/tags"
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return ollamaTagsResponse{}, errs.Wrap(errs.CategoryInternal, err, "build ollama tags request")
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return ollamaTagsResponse{}, errs.Wrap(errs.CategoryConflict, err, "ollama not reachable at %s", url)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return ollamaTagsResponse{}, errs.New(errs.CategoryConflict, "ollama tags request returned status %d", resp.StatusCode)
+	}
+	var tags ollamaTagsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&tags); err != nil {
+		return ollamaTagsResponse{}, errs.Wrap(errs.CategoryInternal, err, "decode ollama tags response")
+	}
+	return tags, nil
+}
+
+func findOllamaModel(tags ollamaTagsResponse, modelTag string) (ollamaModelEntry, bool) {
+	for _, m := range tags.Models {
+		if m.Name == modelTag {
+			return m, true
+		}
+	}
+	return ollamaModelEntry{}, false
+}
+
+// normalizeDigest strips an optional "sha256:" prefix so two digests can be
+// compared as bare hex.
+func normalizeDigest(d string) string { return strings.TrimPrefix(d, "sha256:") }
+
+func evaluateModelDigestPresent(ctx context.Context, ollamaBaseURL string, op *protocol.ModelDigestOperand) (bool, string, error) {
 	if op.Runtime != "ollama" {
 		return false, "", errs.New(errs.CategoryInvalidArgument,
 			"evaluateModelDigestPresent: unsupported runtime %q (only \"ollama\" is implemented)", op.Runtime)
 	}
 
-	client := &http.Client{Timeout: evaluatorNetworkTimeout}
-	url := fmt.Sprintf("http://127.0.0.1:%d/api/tags", ollamaLocalPort)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	tags, err := fetchOllamaTags(ctx, ollamaBaseURL)
 	if err != nil {
-		return false, "", errs.Wrap(errs.CategoryInternal, err, "build ollama tags request")
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return false, fmt.Sprintf("ollama not reachable at %s", url), nil
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return false, fmt.Sprintf("ollama tags request returned status %d", resp.StatusCode), nil
+		// Unreachable/unhealthy Ollama means the condition does not
+		// currently hold, not that evaluation itself failed — the caller
+		// (an executor precondition/postcondition check) should see "not
+		// satisfied," not error out on a transient connectivity gap.
+		return false, err.Error(), nil
 	}
 
-	var tags ollamaTagsResponse
-	if err := json.NewDecoder(resp.Body).Decode(&tags); err != nil {
-		return false, "", errs.Wrap(errs.CategoryInternal, err, "decode ollama tags response")
+	entry, found := findOllamaModel(tags, op.ModelTag)
+	if !found {
+		return false, fmt.Sprintf("model %s not present", op.ModelTag), nil
 	}
-
-	wantDigest := strings.TrimPrefix(op.Digest, "sha256:")
-	for _, m := range tags.Models {
-		if m.Name != op.ModelTag {
-			continue
-		}
-		gotDigest := strings.TrimPrefix(m.Digest, "sha256:")
-		// Ollama's manifest digest may be reported at full or short length;
-		// a prefix match on the normalised hex is sufficient and avoids a
-		// false negative purely from formatting differences.
-		if strings.HasPrefix(gotDigest, wantDigest) || strings.HasPrefix(wantDigest, gotDigest) {
-			return true, fmt.Sprintf("model %s present with matching digest", op.ModelTag), nil
-		}
-		return false, fmt.Sprintf("model %s present but digest %s does not match expected %s", op.ModelTag, m.Digest, op.Digest), nil
+	// Exact normalized-digest equality only — a prefix match would accept
+	// any digest sharing a prefix with the expected one, which is not
+	// verification of the immutable digest the protocol field represents.
+	if normalizeDigest(entry.Digest) != normalizeDigest(op.Digest) {
+		return false, fmt.Sprintf("model %s present but digest %s does not match expected %s", op.ModelTag, entry.Digest, op.Digest), nil
 	}
-	return false, fmt.Sprintf("model %s not present", op.ModelTag), nil
+	return true, fmt.Sprintf("model %s present with matching digest", op.ModelTag), nil
 }
 
 func evaluateEndpointHealthy(ctx context.Context, deps EvaluatorDeps, op *protocol.EndpointOperand) (bool, string, error) {

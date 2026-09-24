@@ -4,10 +4,10 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
-	"github.com/olostan/DevCadence/internal/artifacts"
 	"github.com/olostan/DevCadence/internal/clock"
 	"github.com/olostan/DevCadence/internal/ids"
 	"github.com/olostan/DevCadence/internal/process"
@@ -40,29 +40,14 @@ func executorTestFixture(t *testing.T) (*Executor, string, clock.Clock) {
 	if err := EnsureLayout(home); err != nil {
 		t.Fatalf("EnsureLayout: %v", err)
 	}
-	ledger, err := OpenLedger(filepath.Join(home, "state", "setup-ledger.jsonl"))
-	if err != nil {
-		t.Fatalf("OpenLedger: %v", err)
-	}
-	store, err := artifacts.NewStore(filepath.Join(home, "artifacts", "setup"), ids.NewSequential())
-	if err != nil {
-		t.Fatalf("artifacts.NewStore: %v", err)
-	}
-	cache, err := NewCacheManager(filepath.Join(home, "state"), clock.NewFake(time.Date(2026, 9, 24, 12, 0, 0, 0, time.UTC), 0), 0)
-	if err != nil {
-		t.Fatalf("NewCacheManager: %v", err)
-	}
 	clk := clock.NewFake(time.Date(2026, 9, 24, 12, 0, 0, 0, time.UTC), time.Second)
 	runner := &fakeCommandRunner{results: map[string]process.Result{}}
 
 	exec, err := NewExecutor(ExecutorOptions{
-		Runner:    runner,
-		Home:      home,
-		Ledger:    ledger,
-		Cache:     cache,
-		Artifacts: store,
-		Clock:     clk,
-		IDs:       ids.NewSequential(),
+		Runner: runner,
+		Home:   home,
+		Clock:  clk,
+		IDs:    ids.NewSequential(),
 	})
 	if err != nil {
 		t.Fatalf("NewExecutor: %v", err)
@@ -147,7 +132,7 @@ func TestExecutorRejectsWrongDigest(t *testing.T) {
 		t.Fatal("Apply accepted a plan with the wrong approved digest; expected an error")
 	}
 
-	if _, statErr := os.Stat(filepath.Join(home, "state", "setup-ledger.jsonl")); !os.IsNotExist(statErr) {
+	if _, statErr := os.Stat(ledgerPath(home)); !os.IsNotExist(statErr) {
 		t.Fatalf("ledger file exists after a digest-mismatched Apply; expected no ledger writes at all")
 	}
 }
@@ -241,7 +226,7 @@ func TestExecutorRejectsYesScopeOnPrivilegedPlan(t *testing.T) {
 		t.Fatal("Apply accepted --yes-equivalent scope on a plan requiring high_impact_manual authority; expected rejection")
 	}
 
-	if _, statErr := os.Stat(filepath.Join(home, "state", "setup-ledger.jsonl")); !os.IsNotExist(statErr) {
+	if _, statErr := os.Stat(ledgerPath(home)); !os.IsNotExist(statErr) {
 		t.Fatalf("ledger file exists after a yesScope-rejected Apply; expected no ledger writes at all")
 	}
 }
@@ -356,9 +341,6 @@ func TestExecutorManualActionHaltsTheWalk(t *testing.T) {
 		IdempotencyKey: "manual_install_something",
 	}
 	second := createDirAction("act-002", "act-001")
-	// act-002 doesn't actually depend on act-001 in the graph sense that
-	// matters here beyond ordering, but DependsOn keeps it strictly after
-	// act-001 in the required topological order (SetupPlan.Validate()).
 	plan := buildActionPlan(t, protocol.TargetAll, manual, second)
 
 	report, err := exec.Apply(context.Background(), plan, plan.PlanDigest, false)
@@ -409,5 +391,328 @@ func TestExecutorRejectsInvalidPlan(t *testing.T) {
 
 	if _, err := exec.Apply(context.Background(), plan, plan.PlanDigest, false); err == nil {
 		t.Fatal("Apply accepted a plan that fails its own Validate(); expected an error")
+	}
+}
+
+func TestNewExecutorRequiresAbsoluteHome(t *testing.T) {
+	_, err := NewExecutor(ExecutorOptions{
+		Runner: &fakeCommandRunner{},
+		Home:   "relative/home",
+	})
+	if err == nil {
+		t.Fatal("NewExecutor accepted a relative Home; expected an error")
+	}
+}
+
+// blockingCommandRunner signals started the first time Run is called, then
+// blocks until release is closed — used to hold an Executor.Apply call
+// "in progress" (and thus holding the execution lock) long enough for a
+// concurrent Apply attempt to observe it.
+type blockingCommandRunner struct {
+	started  chan struct{}
+	release  chan struct{}
+	startsOn sync.Once
+}
+
+func newBlockingCommandRunner() *blockingCommandRunner {
+	return &blockingCommandRunner{started: make(chan struct{}), release: make(chan struct{})}
+}
+
+func (b *blockingCommandRunner) Run(ctx context.Context, spec process.Spec) (process.Result, error) {
+	b.startsOn.Do(func() { close(b.started) })
+	<-b.release
+	return process.Result{Status: process.StatusCompleted, ExitCode: 0}, nil
+}
+
+func TestExecutorSerializesConcurrentApply(t *testing.T) {
+	home := t.TempDir()
+	if err := EnsureLayout(home); err != nil {
+		t.Fatalf("EnsureLayout: %v", err)
+	}
+
+	blocker := newBlockingCommandRunner()
+	exec1, err := NewExecutor(ExecutorOptions{Runner: blocker, Home: home, IDs: ids.NewSequential()})
+	if err != nil {
+		t.Fatalf("NewExecutor (1): %v", err)
+	}
+	exec2, err := NewExecutor(ExecutorOptions{Runner: &fakeCommandRunner{results: map[string]process.Result{}}, Home: home, IDs: ids.NewSequential()})
+	if err != nil {
+		t.Fatalf("NewExecutor (2): %v", err)
+	}
+
+	plan1 := buildActionPlan(t, protocol.TargetAll, mlxAction("act-001", []protocol.EffectCategory{protocol.EffectNetworkAccess}))
+	plan2 := buildActionPlan(t, protocol.TargetAll, createDirAction("act-001"))
+
+	done1 := make(chan error, 1)
+	go func() {
+		_, err := exec1.Apply(context.Background(), plan1, plan1.PlanDigest, false)
+		done1 <- err
+	}()
+
+	select {
+	case <-blocker.started:
+	case <-time.After(5 * time.Second):
+		t.Fatal("exec1's Apply never reached the blocking subprocess call")
+	}
+
+	done2 := make(chan error, 1)
+	go func() {
+		_, err := exec2.Apply(context.Background(), plan2, plan2.PlanDigest, false)
+		done2 <- err
+	}()
+
+	select {
+	case <-done2:
+		t.Fatal("exec2's Apply completed while exec1 still held the execution lock; expected it to block")
+	case <-time.After(200 * time.Millisecond):
+		// Expected: exec2 is still blocked on the execution lock.
+	}
+
+	close(blocker.release)
+
+	if err := <-done1; err != nil {
+		t.Fatalf("exec1's Apply: %v", err)
+	}
+	select {
+	case err := <-done2:
+		if err != nil {
+			t.Fatalf("exec2's Apply: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("exec2's Apply did not complete after exec1 released the execution lock")
+	}
+}
+
+// simulateCrash opens the ledger directly (bypassing Executor.Apply) and
+// appends ExecutionCreated/PlanApproved/ActionStarting for action, leaving
+// no terminal event — the same durable-but-unresolved state a real crash
+// between ActionStarting and any terminal event would leave.
+func simulateCrash(t *testing.T, home string, plan *protocol.SetupPlan, action protocol.SetupAction) {
+	t.Helper()
+	ledger, err := OpenLedger(ledgerPath(home))
+	if err != nil {
+		t.Fatalf("OpenLedger: %v", err)
+	}
+	idSrc := ids.NewSequential()
+	now := protocol.NewTimestamp(time.Date(2026, 9, 24, 12, 0, 0, 0, time.UTC))
+	for _, e := range []*protocol.SetupLedgerEvent{
+		{
+			SchemaVersion: protocol.SchemaVersion1, EventID: idSrc.New("evt"),
+			ExecutionID: "exec-crashed", PlanID: plan.PlanID, PlanDigest: plan.PlanDigest,
+			Timestamp: now, Type: protocol.EventExecutionCreated,
+			Payload: protocol.EventPayload{ExecutionCreated: &protocol.ExecutionCreatedPayload{InitiatedBy: "test", Target: plan.Target}},
+		},
+		{
+			SchemaVersion: protocol.SchemaVersion1, EventID: idSrc.New("evt"),
+			ExecutionID: "exec-crashed", PlanID: plan.PlanID, PlanDigest: plan.PlanDigest,
+			Timestamp: now, Type: protocol.EventPlanApproved,
+			Payload: protocol.EventPayload{PlanApproved: &protocol.PlanApprovedPayload{ApprovedAuthority: plan.RequiredAuthority, ApprovedBy: "test"}},
+		},
+		{
+			SchemaVersion: protocol.SchemaVersion1, EventID: idSrc.New("evt"),
+			ExecutionID: "exec-crashed", PlanID: plan.PlanID, PlanDigest: plan.PlanDigest, ActionID: action.ActionID,
+			Timestamp: now, Type: protocol.EventActionStarting,
+			Payload: protocol.EventPayload{ActionStarting: &protocol.ActionStartingPayload{
+				ActionID: action.ActionID, RecipeID: action.RecipeID, RecipeVersion: action.RecipeVersion,
+				IdempotencyKey: action.IdempotencyKey,
+			}},
+		},
+	} {
+		if _, err := ledger.Append(e); err != nil {
+			t.Fatalf("Append: %v", err)
+		}
+	}
+}
+
+func TestExecutorApplyRefusesWhileInterruptedActionsUnresolved(t *testing.T) {
+	home := t.TempDir()
+	if err := EnsureLayout(home); err != nil {
+		t.Fatalf("EnsureLayout: %v", err)
+	}
+	action := createDirAction("act-001")
+	plan := buildActionPlan(t, protocol.TargetAll, action)
+	simulateCrash(t, home, plan, action)
+
+	exec, err := NewExecutor(ExecutorOptions{Runner: &fakeCommandRunner{results: map[string]process.Result{}}, Home: home, IDs: ids.NewSequential()})
+	if err != nil {
+		t.Fatalf("NewExecutor: %v", err)
+	}
+
+	otherPlan := buildActionPlan(t, protocol.TargetAll, createDirAction("act-999"))
+	if _, err := exec.Apply(context.Background(), otherPlan, otherPlan.PlanDigest, false); err == nil {
+		t.Fatal("Apply started a new execution despite an unresolved interrupted action; expected rejection")
+	}
+}
+
+func TestExecutorRecoverReconcilesInterruptedAction(t *testing.T) {
+	home := t.TempDir()
+	if err := EnsureLayout(home); err != nil {
+		t.Fatalf("EnsureLayout: %v", err)
+	}
+	// The action's postcondition (managed_dir_exists for tmp/) already
+	// holds because EnsureLayout created it — simulating the case where the
+	// actual mutation completed before the crash, so recovery should
+	// resolve to succeeded without rerunning anything.
+	action := createDirAction("act-001")
+	plan := buildActionPlan(t, protocol.TargetAll, action)
+	simulateCrash(t, home, plan, action)
+
+	exec, err := NewExecutor(ExecutorOptions{Runner: &fakeCommandRunner{results: map[string]process.Result{}}, Home: home, IDs: ids.NewSequential()})
+	if err != nil {
+		t.Fatalf("NewExecutor: %v", err)
+	}
+
+	statuses, err := exec.Recover(context.Background(), plan)
+	if err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	if len(statuses) != 1 || statuses[0] != protocol.ActionStatusSucceeded {
+		t.Fatalf("Recover statuses = %+v, want one succeeded", statuses)
+	}
+
+	// The interrupted action must be durably resolved now — a fresh Apply
+	// on a different plan must no longer be refused.
+	otherPlan := buildActionPlan(t, protocol.TargetAll, createDirAction("act-999"))
+	if _, err := exec.Apply(context.Background(), otherPlan, otherPlan.PlanDigest, false); err != nil {
+		t.Fatalf("Apply after Recover: %v", err)
+	}
+}
+
+func TestExecutorOllamaPullModelUsesTheVerifiedExecutablePath(t *testing.T) {
+	exec, home, _ := executorTestFixture(t)
+	ollamaPath := filepath.Join(home, "ollama-fake")
+	resolvedDigest := "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+	exec.runner.(*fakeCommandRunner).results[ollamaPath] = process.Result{Status: process.StatusCompleted, ExitCode: 0, Stdout: []byte("ollama version 1.0.0")}
+
+	srv := newOllamaTagsServer(t, []ollamaModelEntry{{Name: "smollm:135m", Digest: resolvedDigest, Size: 145000000}})
+	exec.ollamaBaseURL = srv.URL
+
+	op := protocol.TypedOperation{
+		Kind: protocol.OpKindOllamaPullModel,
+		OllamaPullModel: &protocol.OllamaPullModelParams{
+			ModelTag: "smollm:135m", ResolvedDigest: resolvedDigest,
+			ExpectedSizeBytes: 145000000, AllowedRegistryHost: "registry.ollama.ai", LicenseReference: "apache-2.0",
+		},
+	}
+	effects, auth := protocol.IntrinsicPolicy(op)
+	action := protocol.SetupAction{
+		ActionID: "act-001", RecipeID: "recipe.ollama.pull_model", RecipeVersion: "1.0",
+		Title: "Pull model", Description: "Pulls smollm:135m",
+		Authority: auth, Effects: effects, Operation: &op,
+		Preconditions: []protocol.Condition{{
+			Kind: protocol.CondKindExecutableVerified,
+			ExecutableVerified: &protocol.ExecutableVerifiedOperand{
+				CanonicalPath: ollamaPath, ExpectedVersion: "1.0.0",
+			},
+		}},
+		IdempotencyKey: "ollama_pull_smollm",
+	}
+	// Make the executable_verified precondition itself pass: create a real
+	// (fake) executable file at ollamaPath.
+	if err := os.WriteFile(ollamaPath, []byte("#!/bin/sh\n"), 0755); err != nil {
+		t.Fatalf("write fake ollama binary: %v", err)
+	}
+
+	plan := buildActionPlan(t, protocol.TargetAll, action)
+	report, err := exec.Apply(context.Background(), plan, plan.PlanDigest, false)
+	if err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	if len(report.Results) != 1 || report.Results[0].Status != protocol.ActionStatusSucceeded {
+		t.Fatalf("report.Results = %+v, want one succeeded", report.Results)
+	}
+
+	// Two calls are expected: the executable_verified precondition's
+	// --version check, then the actual `pull`. Both must run the exact
+	// verified path, never a bare "ollama" resolved from PATH.
+	runner := exec.runner.(*fakeCommandRunner)
+	if len(runner.calls) != 2 {
+		t.Fatalf("runner.calls = %+v, want exactly 2 calls (--version precondition check, then pull)", runner.calls)
+	}
+	for i, call := range runner.calls {
+		if call.Executable != ollamaPath {
+			t.Errorf("runner.calls[%d].Executable = %q, want the exact verified path %q, not a bare \"ollama\"", i, call.Executable, ollamaPath)
+		}
+	}
+	if runner.calls[1].Args[0] != "pull" {
+		t.Errorf("runner.calls[1].Args = %v, want the pull invocation", runner.calls[1].Args)
+	}
+}
+
+func TestExecutorTerminalizesActionOnPostconditionEvaluatorError(t *testing.T) {
+	exec, _, _ := executorTestFixture(t)
+
+	op := protocol.TypedOperation{
+		Kind: protocol.OpKindCreateDirectory,
+		CreateDirectory: &protocol.CreateDirectoryParams{
+			Location:    protocol.LocationTmp,
+			FileModeOct: "0700",
+		},
+	}
+	effects, auth := protocol.IntrinsicPolicy(op)
+	action := protocol.SetupAction{
+		ActionID:      "act-001",
+		RecipeID:      "recipe.mkdir.tmp",
+		RecipeVersion: "1.0",
+		Title:         "Create tmp dir",
+		Description:   "Creates the managed tmp directory",
+		Authority:     auth,
+		Effects:       effects,
+		Operation:     &op,
+		// This postcondition can never be evaluated (unsupported runtime),
+		// so EvaluateCondition returns an error, not just "not satisfied".
+		Postconditions: []protocol.Condition{{
+			Kind: protocol.CondKindModelDigestPresent,
+			ModelDigestPresent: &protocol.ModelDigestOperand{
+				Runtime:  "some-unsupported-runtime",
+				ModelTag: "model:latest",
+				Digest:   "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+			},
+		}},
+		IdempotencyKey: "create_dir_tmp_eval_error",
+	}
+	plan := buildActionPlan(t, protocol.TargetAll, action)
+
+	report, err := exec.Apply(context.Background(), plan, plan.PlanDigest, false)
+	if err == nil {
+		t.Fatal("Apply succeeded despite a postcondition evaluator error; expected an error")
+	}
+	if report == nil {
+		t.Fatal("Apply returned a nil report; expected a partial report with the action terminalized")
+	}
+	if len(report.Results) != 1 {
+		t.Fatalf("report.Results = %+v, want exactly one result", report.Results)
+	}
+	// The key assertion: the action must be terminal (failed), never left
+	// looking like it's still running/started, even though evaluation of
+	// its postcondition itself errored rather than just failing.
+	if report.Results[0].Status == protocol.ActionStatusRunning || report.Results[0].Status == protocol.ActionStatusInterrupted {
+		t.Errorf("report.Results[0].Status = %q, want a terminal status (not running/interrupted)", report.Results[0].Status)
+	}
+	if report.Results[0].FinishedAt == nil {
+		t.Error("report.Results[0].FinishedAt is nil, want set — the action must reach ActionTerminated")
+	}
+}
+
+func TestAnsiEscapeStripsOSCAndPrivateModeSequences(t *testing.T) {
+	cases := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{"plain color CSI", "\x1b[31mred\x1b[0m text", "red text"},
+		{"private mode CSI (cursor hide)", "before\x1b[?25lafter", "beforeafter"},
+		{"OSC terminated by BEL (title change)", "before\x1b]0;My Title\x07after", "beforeafter"},
+		{"OSC terminated by ST", "before\x1b]0;My Title\x1b\\after", "beforeafter"},
+		{"carriage return", "progress\rmore", "progressmore"},
+		{"no escapes", "plain text", "plain text"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := string(ansiEscape.ReplaceAll([]byte(tc.input), nil))
+			if got != tc.want {
+				t.Errorf("stripped %q = %q, want %q", tc.input, got, tc.want)
+			}
+		})
 	}
 }
