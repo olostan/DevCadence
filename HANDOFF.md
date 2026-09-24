@@ -3,7 +3,7 @@
 Last updated: 2026-09-24T01:30:00Z by Claude Code / Sonnet 5 (cloud session, olostan@gmail.com)
 
 Session takeover HEAD: `a38b293` (origin/main HEAD when this session started — branch did not exist yet)
-Expected remote HEAD before next push: `bb01bc9` (advance this after every successful push — see "Git safety rules" in AGENT_HANDOFF_PROTOCOL.md)
+Expected remote HEAD before next push: `e257774` (the actual current pushed HEAD — this field always tracks the real remote tip, which is not necessarily the same commit as a WP's own immutable checkpoint SHA in the table below; advance this after every successful push — see "Git safety rules" in AGENT_HANDOFF_PROTOCOL.md)
 
 ## Milestone
 
