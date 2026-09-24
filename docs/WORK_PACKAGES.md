@@ -62,11 +62,17 @@ validation. No process execution, no CLI, no ledger yet — pure types,
 validation functions, and JSON Schemas.
 
 **Deliverables:**
-- Go types for `TypedOperation` (`ollama_pull_model`, `create_directory`,
+- Go types for `TypedOperation` (`ensure_local_model`, `create_directory`,
   `write_managed_config`, `remove_stale_cache`, `run_diagnostic_check`) and
   `Condition` (`command_available`, `executable_verified`,
   `managed_dir_exists`, `port_listening`, `endpoint_healthy`,
-  `model_digest_present`) per ADR-0014 §1.
+  `model_present`) per ADR-0014 §1. `ensure_local_model`/`model_present`
+  are the accepted runtime-agnostic amendment to this WP (see
+  `docs/work-packages/wp-m3b-1-ewp.md` §13): a generic `Runtime`-scoped
+  model identity dispatched through a `LocalModelRuntimeAdapter` registry,
+  not an Ollama-specific operation kind — `ensure_local_model` originally
+  shipped as `ollama_pull_model`/`model_digest_present`, corrected during
+  WP-M3B-3 per explicit project-owner direction and INVARIANTS.md DCI-055.
 - `ManagedDirectoryLocation`, `CacheTarget`, `ManagedConfigKey` allowlists.
 - `SetupPlan`/`SetupAction` types and canonical `PlanDigest` (SHA-256 over
   canonical JSON with only `plan_digest` omitted) per ADR-0014 §2.

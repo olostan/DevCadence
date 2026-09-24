@@ -122,10 +122,7 @@ func evaluateExecutableVerified(ctx context.Context, deps EvaluatorDeps, op *pro
 		if dir == "" {
 			dir = os.TempDir()
 		}
-		versionArgs := op.VersionArgs
-		if len(versionArgs) == 0 {
-			versionArgs = []string{"--version"}
-		}
+		versionArgs := versionProbeArgs(op.VersionProbe)
 		result, err := deps.Runner.Run(ctx, processSpecFor(op.CanonicalPath, versionArgs, dir))
 		if err != nil {
 			return false, "", err
@@ -137,6 +134,22 @@ func evaluateExecutableVerified(ctx context.Context, deps EvaluatorDeps, op *pro
 	}
 
 	return true, fmt.Sprintf("%s verified", op.CanonicalPath), nil
+}
+
+// versionProbeArgs is the executor-owned mapping from a closed
+// protocol.VersionProbeKind to the exact argv it runs — the only place
+// this argv is decided. A plan can select a probe kind but can never
+// supply its own argv: protocol.VersionProbeKind is a closed enum
+// (Valid() rejects anything else at plan-validation time), so this
+// switch's default is unreachable for a validated plan, not a silent
+// fallback for attacker-controlled input.
+func versionProbeArgs(kind protocol.VersionProbeKind) []string {
+	switch kind {
+	case protocol.VersionProbeVersionSubcommand:
+		return []string{"version"}
+	default:
+		return []string{"--version"}
+	}
 }
 
 func digestFile(path string) (string, error) {

@@ -164,6 +164,39 @@ func TestSetupActionIntrinsicPolicyEnforcement(t *testing.T) {
 	}
 }
 
+func TestConditionExecutableVerifiedRejectsArbitraryVersionProbe(t *testing.T) {
+	// version_probe is a closed enum, not a free-form argv field — a plan
+	// must not be able to smuggle arbitrary command arguments into a
+	// supposedly read-only executable_verified condition (ADR-0014's
+	// closed-typed-protocol property).
+	cond := protocol.Condition{
+		Kind: protocol.CondKindExecutableVerified,
+		ExecutableVerified: &protocol.ExecutableVerifiedOperand{
+			CanonicalPath:   "/usr/local/bin/hf",
+			ExpectedVersion: "1.0.0",
+			VersionProbe:    protocol.VersionProbeKind("-c; rm -rf /"),
+		},
+	}
+	if err := cond.Validate(); err == nil {
+		t.Fatal("Condition.Validate accepted an arbitrary version_probe value; expected rejection of anything outside the closed enum")
+	}
+
+	// Both recognized enum values, and the empty default, must validate.
+	for _, kind := range []protocol.VersionProbeKind{"", protocol.VersionProbeDoubleDashVersion, protocol.VersionProbeVersionSubcommand} {
+		ok := protocol.Condition{
+			Kind: protocol.CondKindExecutableVerified,
+			ExecutableVerified: &protocol.ExecutableVerifiedOperand{
+				CanonicalPath:   "/usr/local/bin/hf",
+				ExpectedVersion: "1.0.0",
+				VersionProbe:    kind,
+			},
+		}
+		if err := ok.Validate(); err != nil {
+			t.Errorf("Condition.Validate rejected version_probe %q: %v", kind, err)
+		}
+	}
+}
+
 func TestSetupActionEnsureLocalModelRequiresMatchingPostcondition(t *testing.T) {
 	// A valid action's operation and postcondition already agree (baseline).
 	act := validExecutableAction()

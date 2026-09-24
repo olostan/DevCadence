@@ -431,21 +431,51 @@ type CommandAvailableOperand struct {
 	CommandName string `json:"command_name"`
 }
 
+// VersionProbeKind names one of a closed set of ways to make an executable
+// print its version. This is deliberately a typed enum, not a free-form
+// argv field: executable_verified is supposed to be a read-only
+// verification condition, and an arbitrary-argv field on it would let a
+// generated (or malicious) plan turn "verify this binary's version" into
+// "run this binary with any argv I choose" — the exact open-ended-bag
+// shape ADR-0014's closed typed-protocol design exists to prevent. Adding
+// a new probe convention means adding a new enum value and its
+// executor-owned argv mapping (versionProbeArgs in
+// internal/setup/conditions.go), never a plan-supplied argv list.
+type VersionProbeKind string
+
+const (
+	// VersionProbeDoubleDashVersion runs the executable with a single
+	// "--version" argument — the common case (git, ollama, docker, ...).
+	VersionProbeDoubleDashVersion VersionProbeKind = "double_dash_version"
+	// VersionProbeVersionSubcommand runs the executable with a single
+	// "version" argument — e.g. the current Hugging Face Hub CLI, which
+	// exposes a "version" subcommand rather than a "--version" flag
+	// (https://huggingface.co/docs/huggingface_hub/main/package_reference/cli).
+	VersionProbeVersionSubcommand VersionProbeKind = "version_subcommand"
+)
+
+func (k VersionProbeKind) Valid() bool {
+	switch k {
+	case "", VersionProbeDoubleDashVersion, VersionProbeVersionSubcommand:
+		return true
+	}
+	return false
+}
+
 type ExecutableVerifiedOperand struct {
 	CanonicalPath   string `json:"canonical_path"`
 	ExpectedVersion string `json:"expected_version"`
 	ExpectedDigest  string `json:"expected_digest,omitempty"`
-	// VersionArgs is the argv that makes CanonicalPath print its version,
-	// checked against ExpectedVersion. Empty means ["--version"] — the
-	// common case, but not universal: e.g. the current Hugging Face Hub
-	// CLI exposes a "version" subcommand rather than a "--version" flag
-	// (https://huggingface.co/docs/huggingface_hub/main/package_reference/cli).
-	// This mirrors internal/environment.SoftwareDescriptor.VersionArgs,
-	// which the same per-tool variation already required at discovery
-	// time — this field lets a setup plan's own executable_verified
-	// precondition agree with however that tool was actually discovered,
-	// instead of hardcoding one flag convention for every tool.
-	VersionArgs []string `json:"version_args,omitempty"`
+	// VersionProbe selects, from the closed VersionProbeKind set, how
+	// CanonicalPath is asked for its version before comparing the output
+	// against ExpectedVersion. Empty means VersionProbeDoubleDashVersion —
+	// the common case, but not universal (see that constant's doc
+	// comment). This mirrors internal/environment.SoftwareDescriptor's own
+	// per-tool version-probe variation, which discovery already needed for
+	// the same reason — this field lets a setup plan's own
+	// executable_verified precondition agree with however that tool was
+	// actually discovered, without accepting arbitrary argv to do it.
+	VersionProbe VersionProbeKind `json:"version_probe,omitempty"`
 }
 
 type ManagedDirOperand struct {
@@ -526,6 +556,9 @@ func (c Condition) Validate() error {
 		}
 		if c.ExecutableVerified.ExpectedDigest != "" && !hexSha256Regex.MatchString(c.ExecutableVerified.ExpectedDigest) {
 			return errs.New(errs.CategoryInvalidArgument, "%s: expected_digest must be sha256 hex, got %q", kind, c.ExecutableVerified.ExpectedDigest)
+		}
+		if !c.ExecutableVerified.VersionProbe.Valid() {
+			return errs.New(errs.CategoryInvalidArgument, "%s: invalid version_probe %q", kind, string(c.ExecutableVerified.VersionProbe))
 		}
 	case CondKindManagedDirExists:
 		if c.ManagedDirExists == nil {

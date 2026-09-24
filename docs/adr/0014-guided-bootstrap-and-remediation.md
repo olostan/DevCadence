@@ -25,9 +25,10 @@ Implementing M3B requires settling durable operational contracts so that mutatio
 ### 1. Closed Discriminated-Union Operations and Conditions
 
 Setup operations and conditions are closed, typed protocols, not open-ended key-value bags:
-- `TypedOperation` is a discriminated union of supported operations (`ollama_pull_model`, `create_directory`, `write_managed_config`, `remove_stale_cache`, `run_diagnostic_check`).
+- `TypedOperation` is a discriminated union of supported operations (`ensure_local_model`, `create_directory`, `write_managed_config`, `remove_stale_cache`, `run_diagnostic_check`). `ensure_local_model` is runtime-agnostic — it names a `Runtime` string (e.g. `"ollama"`, `"mlx"`) and dispatches to a `LocalModelRuntimeAdapter` registered for that runtime, so no local model-serving runtime is privileged over another in the core protocol (WP-M3B-1 amendment, INVARIANTS.md DCI-055; see `docs/work-packages/wp-m3b-1-ewp.md` §13).
 - Operation parameters are strictly bounded: directory creation is restricted to allowlisted locations (`ManagedDirectoryLocation`), cache removal to allowlisted targets (`CacheTarget`), and configuration mutation to allowlisted keys (`ManagedConfigKey`) and non-secret typed values.
-- `Condition` is a discriminated union of closed condition kinds (`command_available`, `executable_verified`, `managed_dir_exists`, `port_listening`, `endpoint_healthy`, `model_digest_present`).
+- `Condition` is a discriminated union of closed condition kinds (`command_available`, `executable_verified`, `managed_dir_exists`, `port_listening`, `endpoint_healthy`, `model_present`). `model_present` is `ensure_local_model`'s runtime-agnostic postcondition counterpart, dispatched through the same adapter registry.
+- `CondExecutableVerified`'s version check is itself a closed choice, not a free-form command: `VersionProbe` selects from a fixed `VersionProbeKind` enum (`double_dash_version`, `version_subcommand`) whose argv mapping is executor-owned, not plan-supplied — a plan can pick which probe convention a tool uses, never supply arbitrary arguments to it.
 - `CondExecutableVerified` verifies the canonical binary path, expected version, and digest before an action executes, preventing PATH substitution attacks.
 - **Intrinsic Policy:** The executor—not the recipe—defines the intrinsic minimum authority and effect categories for each operation kind (`IntrinsicPolicy(op)`). Plan validation rejects any action whose declared authority or effects are weaker than the executor's intrinsic policy.
 - **Mutual Exclusion:** Manual actions (`Operation == nil`, non-empty `ManualInstructions`, read-only typed verification conditions) and executable actions (`Operation != nil`, no manual guide) are mutually exclusive.
@@ -101,7 +102,7 @@ Setup operations and conditions are closed, typed protocols, not open-ended key-
 ### 7. Bounded Supply-Chain Recipes and Output Artifacts
 
 - System driver/kernel/permission modifications are strictly `AuthorityHighImpactManual`.
-- Executable operations are user-level only with declared registries, immutable digests, sizes, and licenses.
+- Executable operations are user-level only with declared sources, immutable identities/revisions, and sizes, each verified by the runtime adapter that actually fetched the artifact (e.g. Ollama's registry digest match, MLX's measured on-disk snapshot size against a pinned Hugging Face commit hash) rather than by one hardcoded format assumption — `LicenseReference` is approval/provenance metadata, not independently verified against fetched artifact metadata by any current adapter.
 - Subprocess execution routes exclusively through `internal/process.Runner` (satisfying the narrow `internal/setup.CommandRunner` interface).
 - Output capture is bounded (`4 MiB`), stripped of ANSI control characters, and stored using content-addressed artifacts. Authentication operations capture zero raw output artifacts.
 - `doctor --fix` is strictly a convenience shortcut for generating a `SetupPlan` file; it never executes or approves mutations.
@@ -119,4 +120,4 @@ Setup operations and conditions are closed, typed protocols, not open-ended key-
 ### Costs
 - Setup actions require explicit Go types, validation functions, and JSON Schema definitions for every new operation and condition.
 - Ledger replay and hash-chain verification add operational complexity to the executor.
-- Requiring resolved model digests adds pre-planning resolution logic for package/model downloads.
+- Requiring a runtime-neutral immutable model identity/revision (resolved before `PlanDigest` is computed — e.g. a pinned Hugging Face commit hash, not a mutable ref like `main`) adds pre-planning resolution logic for package/model downloads, for every local runtime, not just Ollama.
