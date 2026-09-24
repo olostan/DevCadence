@@ -22,6 +22,22 @@ type CLISessionAuthAdapter interface {
 	ProbeAuth(ctx context.Context, runner CommandRunner, clk clock.Clock, ref protocol.CredentialRef) protocol.AuthEvidence
 }
 
+// runGuarded is the sole path either adapter in this file uses to execute a
+// process.Spec: it enforces ValidateProcessSpecNoSecrets before the
+// runner ever sees the spec, so "no secret in argv/env" is a real
+// execution-time gate for every WP4 credential/auth probe this package
+// runs, not an opt-in helper a caller could forget to call. Both adapters'
+// specs are built from their own fixed configuration (Executable/Args),
+// never from the caller-supplied ref, so this should never actually fire
+// in production — it exists as defense in depth against a future adapter
+// (or a misconfigured one) that builds a spec from untrusted input.
+func runGuarded(ctx context.Context, runner CommandRunner, spec process.Spec) (process.Result, error) {
+	if err := ValidateProcessSpecNoSecrets(spec); err != nil {
+		return process.Result{}, err
+	}
+	return runner.Run(ctx, spec)
+}
+
 // VersionOnlyAdapter handles CLIs where only installation/version checking is known.
 // Per ADR-0014 §6, running --version can NEVER produce status "authenticated".
 type VersionOnlyAdapter struct {
@@ -44,12 +60,13 @@ func (a *VersionOnlyAdapter) ProbeAuth(ctx context.Context, runner CommandRunner
 	}
 
 	evidence := protocol.AuthEvidence{
-		RefID:       ref.RefID,
-		Kind:        ref.Kind,
-		ProbeKind:   protocol.AuthProbeCLIVersionOnly,
-		ObservedAt:  now,
-		ProbeTarget: a.Executable,
-		AdapterID:   a.ID,
+		SchemaVersion: protocol.SchemaVersion1,
+		RefID:         ref.RefID,
+		Kind:          ref.Kind,
+		ProbeKind:     protocol.AuthProbeCLIVersionOnly,
+		ObservedAt:    now,
+		ProbeTarget:   a.Executable,
+		AdapterID:     a.ID,
 	}
 
 	if runner == nil {
@@ -65,7 +82,7 @@ func (a *VersionOnlyAdapter) ProbeAuth(ctx context.Context, runner CommandRunner
 		Timeout:    5 * time.Second,
 	}
 
-	res, err := runner.Run(ctx, spec)
+	res, err := runGuarded(ctx, runner, spec)
 	if err != nil || res.Status == process.StatusTimeout || res.Status == process.StatusCancelled {
 		evidence.Status = protocol.AuthStatusUnavailable
 		evidence.Detail = "CLI executable could not be executed"
@@ -102,12 +119,13 @@ func (a *BoundedCLIAuthAdapter) Handles(locator string) bool {
 func (a *BoundedCLIAuthAdapter) ProbeAuth(ctx context.Context, runner CommandRunner, clk clock.Clock, ref protocol.CredentialRef) protocol.AuthEvidence {
 	now := protocol.NewTimestamp(clk.Now())
 	evidence := protocol.AuthEvidence{
-		RefID:       ref.RefID,
-		Kind:        ref.Kind,
-		ProbeKind:   protocol.AuthProbeCLIAuthCall,
-		ObservedAt:  now,
-		ProbeTarget: a.Executable,
-		AdapterID:   a.ID,
+		SchemaVersion: protocol.SchemaVersion1,
+		RefID:         ref.RefID,
+		Kind:          ref.Kind,
+		ProbeKind:     protocol.AuthProbeCLIAuthCall,
+		ObservedAt:    now,
+		ProbeTarget:   a.Executable,
+		AdapterID:     a.ID,
 	}
 
 	if runner == nil {
@@ -123,7 +141,7 @@ func (a *BoundedCLIAuthAdapter) ProbeAuth(ctx context.Context, runner CommandRun
 		Timeout:    10 * time.Second,
 	}
 
-	res, err := runner.Run(ctx, spec)
+	res, err := runGuarded(ctx, runner, spec)
 	if err != nil || res.Status == process.StatusTimeout || res.Status == process.StatusCancelled {
 		evidence.Status = protocol.AuthStatusIndeterminate
 		evidence.Detail = "auth probe timed out or failed to execute"
@@ -135,7 +153,9 @@ func (a *BoundedCLIAuthAdapter) ProbeAuth(ctx context.Context, runner CommandRun
 	output := strings.ToLower(string(res.Stdout) + " " + string(res.Stderr))
 
 	if !res.Success() {
-		// Non-zero exit code
+		// A nonzero exit code recognized (by an explicit, provider-specific
+		// message match) as this CLI's own "not logged in" signal is real
+		// unauthenticated evidence.
 		for _, msg := range a.UnauthenticatedMsgs {
 			if strings.Contains(output, strings.ToLower(msg)) {
 				evidence.Status = protocol.AuthStatusUnauthenticated
@@ -143,9 +163,15 @@ func (a *BoundedCLIAuthAdapter) ProbeAuth(ctx context.Context, runner CommandRun
 				return evidence
 			}
 		}
-		// If exit code is not 0 and no specific unauthenticated message matched:
-		evidence.Status = protocol.AuthStatusUnauthenticated
-		evidence.Detail = "CLI auth check returned failure exit code"
+		// An unrecognized nonzero exit is NOT evidence of being
+		// unauthenticated — it can just as easily mean the executable
+		// failed to run correctly, an incompatible CLI version, a local
+		// configuration error, a provider outage, or a permission
+		// failure. Only a provider-specific authoritative signal
+		// (a matched UnauthenticatedMsgs entry, above) may report
+		// unauthenticated; anything else is indeterminate.
+		evidence.Status = protocol.AuthStatusIndeterminate
+		evidence.Detail = "CLI auth check returned a failure exit code not recognized as an unauthenticated signal"
 		return evidence
 	}
 
@@ -186,13 +212,14 @@ func (s *StaticCLIAuthAdapter) ProbeAuth(_ context.Context, _ CommandRunner, clk
 		detail = "static test probe result"
 	}
 	return protocol.AuthEvidence{
-		RefID:       ref.RefID,
-		Kind:        ref.Kind,
-		Status:      s.Status,
-		ProbeKind:   kind,
-		ObservedAt:  protocol.NewTimestamp(clk.Now()),
-		ProbeTarget: s.Target,
-		AdapterID:   s.ID,
-		Detail:      detail,
+		SchemaVersion: protocol.SchemaVersion1,
+		RefID:         ref.RefID,
+		Kind:          ref.Kind,
+		Status:        s.Status,
+		ProbeKind:     kind,
+		ObservedAt:    protocol.NewTimestamp(clk.Now()),
+		ProbeTarget:   s.Target,
+		AdapterID:     s.ID,
+		Detail:        detail,
 	}
 }

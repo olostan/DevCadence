@@ -19,12 +19,14 @@ import (
 const SentinelSecret = "sk-ant-test-sentinel-vault-token-xyz-12345"
 
 type fakeRunner struct {
-	results map[string]process.Result
-	errs    map[string]error
+	results     map[string]process.Result
+	errs        map[string]error
+	invocations []string
 }
 
 func (f *fakeRunner) Run(_ context.Context, spec process.Spec) (process.Result, error) {
 	key := spec.Executable + " " + strings.Join(spec.Args, " ")
+	f.invocations = append(f.invocations, key)
 	if err, ok := f.errs[key]; ok {
 		return process.Result{}, err
 	}
@@ -34,6 +36,8 @@ func (f *fakeRunner) Run(_ context.Context, spec process.Spec) (process.Result, 
 	// Default to exit 0
 	return process.Result{Status: process.StatusCompleted, ExitCode: 0}, nil
 }
+
+func (f *fakeRunner) calls() []string { return f.invocations }
 
 func TestEnvVarPresenceOnly(t *testing.T) {
 	reader := credentials.NewMapEnvReader(map[string]string{
@@ -76,9 +80,10 @@ func TestSentinelSecretNeverLeaksFromEnvResolution(t *testing.T) {
 	}
 
 	ref := protocol.CredentialRef{
-		RefID:   "cred-001",
-		Kind:    protocol.CredRefEnvVar,
-		Locator: "ANTHROPIC_API_KEY",
+		SchemaVersion: protocol.SchemaVersion1,
+		RefID:         "cred-001",
+		Kind:          protocol.CredRefEnvVar,
+		Locator:       "ANTHROPIC_API_KEY",
 	}
 
 	ev, err := mgr.CheckCredential(context.Background(), ref)
@@ -86,8 +91,11 @@ func TestSentinelSecretNeverLeaksFromEnvResolution(t *testing.T) {
 		t.Fatalf("unexpected CheckCredential error: %v", err)
 	}
 
-	if ev.Status != protocol.AuthStatusAuthenticated {
-		t.Fatalf("status = %q, want %q", ev.Status, protocol.AuthStatusAuthenticated)
+	// Presence of an env var is not proof of authentication (finding 1):
+	// only an authoritative probe that actually exercises the credential
+	// can produce "authenticated".
+	if ev.Status != protocol.AuthStatusIndeterminate {
+		t.Fatalf("status = %q, want %q", ev.Status, protocol.AuthStatusIndeterminate)
 	}
 
 	// Assert sentinel secret never appears in any string representation or serialization
@@ -144,9 +152,10 @@ func TestCLIVersionOutputAloneCannotEstablishAuthenticatedState(t *testing.T) {
 	}
 
 	ref := protocol.CredentialRef{
-		RefID:   "cred-claude",
-		Kind:    protocol.CredRefCLISession,
-		Locator: "claude",
+		SchemaVersion: protocol.SchemaVersion1,
+		RefID:         "cred-claude",
+		Kind:          protocol.CredRefCLISession,
+		Locator:       "claude",
 	}
 
 	ev, err := mgr.CheckCredential(context.Background(), ref)
@@ -224,9 +233,10 @@ func TestCLIAuthProbeSuccessAndFailure(t *testing.T) {
 
 	// 1. Success -> authenticated
 	evClaude, err := mgr.CheckCredential(context.Background(), protocol.CredentialRef{
-		RefID:   "cred-claude",
-		Kind:    protocol.CredRefCLISession,
-		Locator: "claude",
+		SchemaVersion: protocol.SchemaVersion1,
+		RefID:         "cred-claude",
+		Kind:          protocol.CredRefCLISession,
+		Locator:       "claude",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -237,9 +247,10 @@ func TestCLIAuthProbeSuccessAndFailure(t *testing.T) {
 
 	// 2. Failure -> unauthenticated
 	evCodex, err := mgr.CheckCredential(context.Background(), protocol.CredentialRef{
-		RefID:   "cred-codex",
-		Kind:    protocol.CredRefCLISession,
-		Locator: "codex",
+		SchemaVersion: protocol.SchemaVersion1,
+		RefID:         "cred-codex",
+		Kind:          protocol.CredRefCLISession,
+		Locator:       "codex",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -250,9 +261,10 @@ func TestCLIAuthProbeSuccessAndFailure(t *testing.T) {
 
 	// 3. Timeout -> indeterminate
 	evGemini, err := mgr.CheckCredential(context.Background(), protocol.CredentialRef{
-		RefID:   "cred-gemini",
-		Kind:    protocol.CredRefCLISession,
-		Locator: "gemini",
+		SchemaVersion: protocol.SchemaVersion1,
+		RefID:         "cred-gemini",
+		Kind:          protocol.CredRefCLISession,
+		Locator:       "gemini",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -263,9 +275,10 @@ func TestCLIAuthProbeSuccessAndFailure(t *testing.T) {
 
 	// 4. Missing / Error -> indeterminate/unavailable
 	evMissing, err := mgr.CheckCredential(context.Background(), protocol.CredentialRef{
-		RefID:   "cred-missing",
-		Kind:    protocol.CredRefCLISession,
-		Locator: "missing",
+		SchemaVersion: protocol.SchemaVersion1,
+		RefID:         "cred-missing",
+		Kind:          protocol.CredRefCLISession,
+		Locator:       "missing",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -306,9 +319,10 @@ func TestHostileAuthProbeOutputNeverLeaks(t *testing.T) {
 	}
 
 	ev, err := mgr.CheckCredential(context.Background(), protocol.CredentialRef{
-		RefID:   "cred-claude",
-		Kind:    protocol.CredRefCLISession,
-		Locator: "claude",
+		SchemaVersion: protocol.SchemaVersion1,
+		RefID:         "cred-claude",
+		Kind:          protocol.CredRefCLISession,
+		Locator:       "claude",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -373,24 +387,27 @@ func TestKeychainPresenceResolution(t *testing.T) {
 		t.Fatalf("failed to create manager: %v", err)
 	}
 
-	// Existing item -> authenticated
+	// Existing item -> indeterminate (presence only; finding 1 — presence
+	// must never be promoted to authenticated).
 	evPresent, err := mgr.CheckCredential(context.Background(), protocol.CredentialRef{
-		RefID:   "cred-kc-1",
-		Kind:    protocol.CredRefKeychainRef,
-		Locator: "devcadence/existing/key",
+		SchemaVersion: protocol.SchemaVersion1,
+		RefID:         "cred-kc-1",
+		Kind:          protocol.CredRefKeychainRef,
+		Locator:       "devcadence/existing/key",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if evPresent.Status != protocol.AuthStatusAuthenticated {
-		t.Fatalf("status = %q, want authenticated", evPresent.Status)
+	if evPresent.Status != protocol.AuthStatusIndeterminate {
+		t.Fatalf("status = %q, want indeterminate", evPresent.Status)
 	}
 
 	// Missing item -> unauthenticated
 	evMissing, err := mgr.CheckCredential(context.Background(), protocol.CredentialRef{
-		RefID:   "cred-kc-2",
-		Kind:    protocol.CredRefKeychainRef,
-		Locator: "devcadence/missing/key",
+		SchemaVersion: protocol.SchemaVersion1,
+		RefID:         "cred-kc-2",
+		Kind:          protocol.CredRefKeychainRef,
+		Locator:       "devcadence/missing/key",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -420,9 +437,10 @@ func TestProviderNeutralAdapterContract(t *testing.T) {
 	}
 
 	ev, err := mgr.CheckCredential(context.Background(), protocol.CredentialRef{
-		RefID:   "cred-enterprise",
-		Kind:    protocol.CredRefCLISession,
-		Locator: "enterprise-tool:profile-a",
+		SchemaVersion: protocol.SchemaVersion1,
+		RefID:         "cred-enterprise",
+		Kind:          protocol.CredRefCLISession,
+		Locator:       "enterprise-tool:profile-a",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -451,9 +469,10 @@ func TestSerializationContainsNoSentinelSecretMaterial(t *testing.T) {
 	}
 
 	ref := protocol.CredentialRef{
-		RefID:   "cred-openai",
-		Kind:    protocol.CredRefEnvVar,
-		Locator: "OPENAI_API_KEY",
+		SchemaVersion: protocol.SchemaVersion1,
+		RefID:         "cred-openai",
+		Kind:          protocol.CredRefEnvVar,
+		Locator:       "OPENAI_API_KEY",
 	}
 
 	ev, err := mgr.CheckCredential(context.Background(), ref)
@@ -506,3 +525,134 @@ func TestSerializationContainsNoSentinelSecretMaterial(t *testing.T) {
 	}
 }
 
+// TestUnsupportedKeychainBackendIsUnavailableNotAbsent proves an
+// unsupported keychain backend reports unavailable, not unauthenticated —
+// an unsupported backend never actually looked for the item, so it must
+// not be read as evidence the item is absent (finding 1's related bug).
+func TestUnsupportedKeychainBackendIsUnavailableNotAbsent(t *testing.T) {
+	clk := clock.NewFake(time.Date(2026, 9, 24, 10, 0, 0, 0, time.UTC), 0)
+	mgr, err := credentials.NewManager(credentials.Options{
+		Clock:    clk,
+		Keychain: credentials.UnsupportedKeychainChecker{},
+	})
+	if err != nil {
+		t.Fatalf("failed to create manager: %v", err)
+	}
+
+	ev, err := mgr.CheckCredential(context.Background(), protocol.CredentialRef{
+		SchemaVersion: protocol.SchemaVersion1,
+		RefID:         "cred-kc-unsupported",
+		Kind:          protocol.CredRefKeychainRef,
+		Locator:       "devcadence/some/key",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if ev.Status != protocol.AuthStatusUnavailable {
+		t.Fatalf("status = %q, want unavailable (an unsupported backend never checked, so it must not report unauthenticated)", ev.Status)
+	}
+}
+
+// TestBoundedCLIAuthAdapterUnrecognizedFailureIsIndeterminate proves an
+// unmatched nonzero exit code (no UnauthenticatedMsgs entry matched) is
+// reported as indeterminate, not unauthenticated (finding 6) — a nonzero
+// exit can mean executable failure, an incompatible CLI version, local
+// misconfiguration, a provider outage, or a permission failure, none of
+// which is evidence the user is unauthenticated.
+func TestBoundedCLIAuthAdapterUnrecognizedFailureIsIndeterminate(t *testing.T) {
+	clk := clock.NewFake(time.Date(2026, 9, 24, 10, 0, 0, 0, time.UTC), 0)
+	runner := &fakeRunner{
+		results: map[string]process.Result{
+			"flaky-cli auth status": {
+				Status:   process.StatusCompleted,
+				ExitCode: 127,
+				Stderr:   []byte("flaky-cli: command not found in this shell config\n"),
+			},
+		},
+	}
+	adapter := &credentials.BoundedCLIAuthAdapter{
+		ID:                  "flaky-auth",
+		Executable:          "flaky-cli",
+		ProbeArgs:           []string{"auth", "status"},
+		UnauthenticatedMsgs: []string{"not logged in", "login required"},
+	}
+	mgr, err := credentials.NewManager(credentials.Options{
+		Clock:       clk,
+		Runner:      runner,
+		CLIAdapters: []credentials.CLISessionAuthAdapter{adapter},
+	})
+	if err != nil {
+		t.Fatalf("failed to create manager: %v", err)
+	}
+
+	ev, err := mgr.CheckCredential(context.Background(), protocol.CredentialRef{
+		SchemaVersion: protocol.SchemaVersion1,
+		RefID:         "cred-flaky",
+		Kind:          protocol.CredRefCLISession,
+		Locator:       "flaky-cli",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if ev.Status != protocol.AuthStatusIndeterminate {
+		t.Fatalf("status = %q, want indeterminate (an unrecognized failure exit code is not evidence of being unauthenticated)", ev.Status)
+	}
+}
+
+// TestCLIAdaptersEnforceProcessSpecSecretGuard proves the secret guard is
+// on the actual execution path both adapters use, not merely available as
+// an opt-in helper (finding 2): an adapter configured (however that came
+// to be — misconfiguration, a future adapter building args from untrusted
+// input) with a secret-looking arg must never reach the runner.
+func TestCLIAdaptersEnforceProcessSpecSecretGuard(t *testing.T) {
+	clk := clock.NewFake(time.Date(2026, 9, 24, 10, 0, 0, 0, time.UTC), 0)
+	runner := &fakeRunner{results: map[string]process.Result{}}
+
+	versionAdapter := &credentials.VersionOnlyAdapter{
+		ID:         "leaky-version",
+		Executable: "leaky-cli",
+		Arg:        SentinelSecret,
+	}
+	authAdapter := &credentials.BoundedCLIAuthAdapter{
+		ID:         "leaky-auth",
+		Executable: "leaky-cli",
+		ProbeArgs:  []string{SentinelSecret},
+	}
+
+	for _, tc := range []struct {
+		name    string
+		adapter credentials.CLISessionAuthAdapter
+	}{
+		{"VersionOnlyAdapter", versionAdapter},
+		{"BoundedCLIAuthAdapter", authAdapter},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			mgr, err := credentials.NewManager(credentials.Options{
+				Clock:       clk,
+				Runner:      runner,
+				CLIAdapters: []credentials.CLISessionAuthAdapter{tc.adapter},
+			})
+			if err != nil {
+				t.Fatalf("failed to create manager: %v", err)
+			}
+
+			ev, err := mgr.CheckCredential(context.Background(), protocol.CredentialRef{
+				SchemaVersion: protocol.SchemaVersion1,
+				RefID:         "cred-leaky",
+				Kind:          protocol.CredRefCLISession,
+				Locator:       "leaky-cli",
+			})
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if ev.Status == protocol.AuthStatusAuthenticated {
+				t.Fatalf("SECURITY VIOLATION: adapter with a secret-looking arg reached the runner and reported authenticated")
+			}
+			for _, call := range runner.calls() {
+				if strings.Contains(call, SentinelSecret) {
+					t.Fatalf("SECURITY VIOLATION: runner was invoked with a secret-looking argument: %q", call)
+				}
+			}
+		})
+	}
+}

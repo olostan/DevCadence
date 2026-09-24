@@ -244,6 +244,7 @@ func AllNames() []Name {
 		NameSpecificationReadiness, NameReviewCampaign, NameFindingDisposition,
 		NameClosureDecision, NameMachineCapabilityProfile,
 		NameDoctorReport, NameSetupPlan, NameSetupExecutionReport, NameSetupLedgerEvent,
+		NameCredentialRef, NameAuthEvidence,
 	}
 	sort.Slice(names, func(i, j int) bool {
 		if len(names[i]) != len(names[j]) {

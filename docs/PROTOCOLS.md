@@ -670,21 +670,23 @@ CredentialRef
 ```
 
 ### CredentialRef
-An opaque reference to an authorization mechanism. It is provider-neutral and holds no secret custody:
-- `ref_id`: stable identifier for the reference;
+An opaque reference to an authorization mechanism. It is provider-neutral, holds no secret custody, and is a durable record (`schema_version`, `Validate()`, registered in `protocol.NewRecord`):
+- `schema_version`: durable contract version;
+- `ref_id`: stable identifier for the reference, bounded and rejected if secret-shaped (the same opaque-ID check `AuthEvidence.ref_id`/`adapter_id` share);
 - `kind`: `env_var | cli_session | keychain_ref`;
 - `locator`: non-secret locator (e.g. uppercase environment variable identifier, CLI session handle, or keychain service locator). Raw secret values are rejected at boundary validation.
 
 ### AuthEvidence
 A structured, bounded durable record of authentication readiness resulting from an evaluation:
-- `ref_id`: reference identifier matching the CredentialRef;
-- `kind`: credential reference kind;
+- `schema_version`: durable contract version;
+- `ref_id`: reference identifier matching the CredentialRef, same opaque-ID contract;
+- `kind`: credential reference kind — structurally bound to `probe_kind` (`env_var`→`env_presence`, `keychain_ref`→`keychain_presence`, `cli_session`→`cli_auth_call`|`cli_version_only`; any other pairing is rejected);
 - `status`: `authenticated | unauthenticated | unavailable | indeterminate`;
 - `probe_kind`: `env_presence | cli_auth_call | cli_version_only | keychain_presence`;
 - `observed_at`: timestamp of the probe;
 - `probe_target`: optional locator or CLI tool name;
-- `adapter_id`: optional adapter identifier;
+- `adapter_id`: optional adapter identifier, same opaque-ID contract;
 - `detail`: bounded, non-secret diagnostic description.
 
-Crucial invariant: `cli_version_only` probes (e.g. `claude --version`) prove software installation only, NEVER authentication. A record claiming `authenticated` from a `cli_version_only` probe is structurally refused.
+Crucial invariant: only `cli_auth_call` (an authoritative probe that actually exercises the credential against its provider) may produce `authenticated`. `cli_version_only` (e.g. `claude --version`), `env_presence`, and `keychain_presence` probes prove installation or mere presence only, NEVER authentication — a record claiming `authenticated` from any of the three is structurally refused by `AuthEvidence.Validate()`. Presence therefore reports `indeterminate` (not `authenticated`); absence reports `unauthenticated`; a check that could not be completed at all (e.g. no keychain backend on this platform) reports `unavailable`, never `unauthenticated` — an incomplete check is not evidence of absence.
 See schemas/credential-ref.schema.json and schemas/auth-evidence.schema.json.

@@ -53,6 +53,16 @@ func NewManager(opts Options) (*Manager, error) {
 
 // CheckCredential inspects the authorization source referenced by ref and produces
 // structured AuthEvidence. It NEVER reads, logs, or stores raw secrets.
+//
+// env_presence and keychain_presence probes can only ever prove that a
+// value exists somewhere — never that it is valid, accepted by the
+// provider, unexpired, or bound to a usable session. Presence therefore
+// maps to AuthStatusIndeterminate, never AuthStatusAuthenticated (the same
+// "installed is not authenticated" distinction AuthProbeCLIVersionOnly
+// already draws, now enforced structurally by AuthEvidence.Validate too).
+// Absence maps to AuthStatusUnauthenticated: there is no credential for
+// the reference to resolve to at all, which is itself a real (if weak)
+// negative signal, unlike mere presence being promoted to a positive one.
 func (m *Manager) CheckCredential(ctx context.Context, ref protocol.CredentialRef) (protocol.AuthEvidence, error) {
 	if err := ref.Validate(); err != nil {
 		return protocol.AuthEvidence{}, err
@@ -67,17 +77,18 @@ func (m *Manager) CheckCredential(ctx context.Context, ref protocol.CredentialRe
 		status := protocol.AuthStatusUnauthenticated
 		detail := "environment variable is unset or empty"
 		if present {
-			status = protocol.AuthStatusAuthenticated
-			detail = "environment variable is present"
+			status = protocol.AuthStatusIndeterminate
+			detail = "environment variable is present; presence alone does not verify the credential is valid or accepted by the provider"
 		}
 		evidence = protocol.AuthEvidence{
-			RefID:       ref.RefID,
-			Kind:        ref.Kind,
-			Status:      status,
-			ProbeKind:   protocol.AuthProbeEnvPresence,
-			ObservedAt:  now,
-			ProbeTarget: ref.Locator,
-			Detail:      detail,
+			SchemaVersion: protocol.SchemaVersion1,
+			RefID:         ref.RefID,
+			Kind:          ref.Kind,
+			Status:        status,
+			ProbeKind:     protocol.AuthProbeEnvPresence,
+			ObservedAt:    now,
+			ProbeTarget:   ref.Locator,
+			Detail:        detail,
 		}
 
 	case protocol.CredRefCLISession:
@@ -91,49 +102,59 @@ func (m *Manager) CheckCredential(ctx context.Context, ref protocol.CredentialRe
 
 		if matched == nil {
 			evidence = protocol.AuthEvidence{
-				RefID:       ref.RefID,
-				Kind:        ref.Kind,
-				Status:      protocol.AuthStatusIndeterminate,
-				ProbeKind:   protocol.AuthProbeCLIAuthCall,
-				ObservedAt:  now,
-				ProbeTarget: ref.Locator,
-				Detail:      "no auth probe adapter available for CLI locator",
+				SchemaVersion: protocol.SchemaVersion1,
+				RefID:         ref.RefID,
+				Kind:          ref.Kind,
+				Status:        protocol.AuthStatusIndeterminate,
+				ProbeKind:     protocol.AuthProbeCLIAuthCall,
+				ObservedAt:    now,
+				ProbeTarget:   ref.Locator,
+				Detail:        "no auth probe adapter available for CLI locator",
 			}
 		} else {
 			evidence = matched.ProbeAuth(ctx, m.runner, m.clock, ref)
 		}
 
 	case protocol.CredRefKeychainRef:
+		// A KeychainChecker reports its outcome as (present, err): err
+		// means the check itself could not be completed — including an
+		// unsupported/unavailable backend (see UnsupportedKeychainChecker) —
+		// which is evidence the check is inconclusive, not evidence the
+		// referenced item is absent. Only a completed check (err == nil)
+		// distinguishes present from absent.
 		present, err := m.keychain.CheckPresence(ctx, ref.Locator)
 		if err != nil {
 			evidence = protocol.AuthEvidence{
-				RefID:       ref.RefID,
-				Kind:        ref.Kind,
-				Status:      protocol.AuthStatusUnavailable,
-				ProbeKind:   protocol.AuthProbeKeychainPresence,
-				ObservedAt:  now,
-				ProbeTarget: ref.Locator,
-				Detail:      "keychain presence check failed",
+				SchemaVersion: protocol.SchemaVersion1,
+				RefID:         ref.RefID,
+				Kind:          ref.Kind,
+				Status:        protocol.AuthStatusUnavailable,
+				ProbeKind:     protocol.AuthProbeKeychainPresence,
+				ObservedAt:    now,
+				ProbeTarget:   ref.Locator,
+				Detail:        "keychain presence check could not be completed",
 			}
 		} else if present {
 			evidence = protocol.AuthEvidence{
-				RefID:       ref.RefID,
-				Kind:        ref.Kind,
-				Status:      protocol.AuthStatusAuthenticated,
-				ProbeKind:   protocol.AuthProbeKeychainPresence,
-				ObservedAt:  now,
-				ProbeTarget: ref.Locator,
-				Detail:      "keychain item is present",
+				SchemaVersion: protocol.SchemaVersion1,
+				RefID:         ref.RefID,
+				Kind:          ref.Kind,
+				Status:        protocol.AuthStatusIndeterminate,
+				ProbeKind:     protocol.AuthProbeKeychainPresence,
+				ObservedAt:    now,
+				ProbeTarget:   ref.Locator,
+				Detail:        "keychain item is present; presence alone does not verify the credential is valid or accepted by the provider",
 			}
 		} else {
 			evidence = protocol.AuthEvidence{
-				RefID:       ref.RefID,
-				Kind:        ref.Kind,
-				Status:      protocol.AuthStatusUnauthenticated,
-				ProbeKind:   protocol.AuthProbeKeychainPresence,
-				ObservedAt:  now,
-				ProbeTarget: ref.Locator,
-				Detail:      "keychain item is not found",
+				SchemaVersion: protocol.SchemaVersion1,
+				RefID:         ref.RefID,
+				Kind:          ref.Kind,
+				Status:        protocol.AuthStatusUnauthenticated,
+				ProbeKind:     protocol.AuthProbeKeychainPresence,
+				ObservedAt:    now,
+				ProbeTarget:   ref.Locator,
+				Detail:        "keychain item is not found",
 			}
 		}
 

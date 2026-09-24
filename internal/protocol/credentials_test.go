@@ -18,25 +18,28 @@ func TestCredentialRefValidation_AllKinds(t *testing.T) {
 		{
 			name: "valid env_var",
 			ref: protocol.CredentialRef{
-				RefID:   "cred-env-anthropic",
-				Kind:    protocol.CredRefEnvVar,
-				Locator: "ANTHROPIC_API_KEY",
+				SchemaVersion: protocol.SchemaVersion1,
+				RefID:         "cred-env-anthropic",
+				Kind:          protocol.CredRefEnvVar,
+				Locator:       "ANTHROPIC_API_KEY",
 			},
 		},
 		{
 			name: "valid cli_session",
 			ref: protocol.CredentialRef{
-				RefID:   "cred-cli-claude",
-				Kind:    protocol.CredRefCLISession,
-				Locator: "claude-code:session-1",
+				SchemaVersion: protocol.SchemaVersion1,
+				RefID:         "cred-cli-claude",
+				Kind:          protocol.CredRefCLISession,
+				Locator:       "claude-code:session-1",
 			},
 		},
 		{
 			name: "valid keychain_ref",
 			ref: protocol.CredentialRef{
-				RefID:   "cred-keychain-default",
-				Kind:    protocol.CredRefKeychainRef,
-				Locator: "devcadence/service/default",
+				SchemaVersion: protocol.SchemaVersion1,
+				RefID:         "cred-keychain-default",
+				Kind:          protocol.CredRefKeychainRef,
+				Locator:       "devcadence/service/default",
 			},
 		},
 	}
@@ -64,9 +67,10 @@ func TestCredentialRefValidation_AllKinds(t *testing.T) {
 
 func TestCredentialRefValidation_UnknownKindRejected(t *testing.T) {
 	ref := protocol.CredentialRef{
-		RefID:   "cred-invalid-kind",
-		Kind:    protocol.CredentialRefKind("oauth_bearer_store"),
-		Locator: "TOKEN",
+		SchemaVersion: protocol.SchemaVersion1,
+		RefID:         "cred-invalid-kind",
+		Kind:          protocol.CredentialRefKind("oauth_bearer_store"),
+		Locator:       "TOKEN",
 	}
 	if err := ref.Validate(); err == nil {
 		t.Fatal("expected error for unknown CredentialRefKind, got nil")
@@ -83,57 +87,64 @@ func TestCredentialRefValidation_MalformedOrEmpty(t *testing.T) {
 		{
 			name: "empty ref_id",
 			ref: protocol.CredentialRef{
-				RefID:   "",
-				Kind:    protocol.CredRefEnvVar,
-				Locator: "ANTHROPIC_API_KEY",
+				SchemaVersion: protocol.SchemaVersion1,
+				RefID:         "",
+				Kind:          protocol.CredRefEnvVar,
+				Locator:       "ANTHROPIC_API_KEY",
 			},
 		},
 		{
 			name: "ref_id with whitespace",
 			ref: protocol.CredentialRef{
-				RefID:   "bad ref id",
-				Kind:    protocol.CredRefEnvVar,
-				Locator: "ANTHROPIC_API_KEY",
+				SchemaVersion: protocol.SchemaVersion1,
+				RefID:         "bad ref id",
+				Kind:          protocol.CredRefEnvVar,
+				Locator:       "ANTHROPIC_API_KEY",
 			},
 		},
 		{
 			name: "empty locator",
 			ref: protocol.CredentialRef{
-				RefID:   "cred-1",
-				Kind:    protocol.CredRefEnvVar,
-				Locator: "",
+				SchemaVersion: protocol.SchemaVersion1,
+				RefID:         "cred-1",
+				Kind:          protocol.CredRefEnvVar,
+				Locator:       "",
 			},
 		},
 		{
 			name: "env_var lowercase locator",
 			ref: protocol.CredentialRef{
-				RefID:   "cred-1",
-				Kind:    protocol.CredRefEnvVar,
-				Locator: "anthropic_api_key",
+				SchemaVersion: protocol.SchemaVersion1,
+				RefID:         "cred-1",
+				Kind:          protocol.CredRefEnvVar,
+				Locator:       "anthropic_api_key",
 			},
 		},
 		{
 			name: "env_var with dash",
 			ref: protocol.CredentialRef{
-				RefID:   "cred-1",
-				Kind:    protocol.CredRefEnvVar,
-				Locator: "ANTHROPIC-API-KEY",
+				SchemaVersion: protocol.SchemaVersion1,
+				RefID:         "cred-1",
+				Kind:          protocol.CredRefEnvVar,
+				Locator:       "ANTHROPIC-API-KEY",
 			},
 		},
 		{
 			name: "cli_session invalid characters",
 			ref: protocol.CredentialRef{
-				RefID:   "cred-1",
-				Kind:    protocol.CredRefCLISession,
-				Locator: "claude/session@1",
+				SchemaVersion: protocol.SchemaVersion1,
+				RefID:         "cred-1",
+				Kind:          protocol.CredRefCLISession,
+				Locator:       "claude/session@1",
 			},
 		},
 		{
 			name: "keychain_ref directory traversal",
 			ref: protocol.CredentialRef{
-				RefID:   "cred-1",
-				Kind:    protocol.CredRefKeychainRef,
-				Locator: "../../etc/shadow",
+				SchemaVersion: protocol.SchemaVersion1,
+				RefID:         "cred-1",
+				Kind:          protocol.CredRefKeychainRef,
+				Locator:       "../../etc/shadow",
 			},
 		},
 	}
@@ -165,9 +176,10 @@ func TestCredentialRefValidation_SecretLookingLocatorsRejected(t *testing.T) {
 		t.Run("secret_"+secret[:min(10, len(secret))], func(t *testing.T) {
 			// Secret in locator
 			refLocator := protocol.CredentialRef{
-				RefID:   "cred-valid-id",
-				Kind:    protocol.CredRefCLISession,
-				Locator: secret,
+				SchemaVersion: protocol.SchemaVersion1,
+				RefID:         "cred-valid-id",
+				Kind:          protocol.CredRefCLISession,
+				Locator:       secret,
 			}
 			if err := refLocator.Validate(); err == nil {
 				t.Fatalf("expected secret-looking locator %q to be rejected, got nil", secret)
@@ -175,9 +187,10 @@ func TestCredentialRefValidation_SecretLookingLocatorsRejected(t *testing.T) {
 
 			// Secret in ref_id
 			refID := protocol.CredentialRef{
-				RefID:   secret,
-				Kind:    protocol.CredRefCLISession,
-				Locator: "claude",
+				SchemaVersion: protocol.SchemaVersion1,
+				RefID:         secret,
+				Kind:          protocol.CredRefCLISession,
+				Locator:       "claude",
 			}
 			if err := refID.Validate(); err == nil {
 				t.Fatalf("expected secret-looking ref_id %q to be rejected, got nil", secret)
@@ -190,14 +203,15 @@ func TestAuthEvidenceValidation(t *testing.T) {
 	ts := validTestTimestamp()
 
 	valid := protocol.AuthEvidence{
-		RefID:       "cred-001",
-		Kind:        protocol.CredRefCLISession,
-		Status:      protocol.AuthStatusAuthenticated,
-		ProbeKind:   protocol.AuthProbeCLIAuthCall,
-		ObservedAt:  ts,
-		ProbeTarget: "claude",
-		AdapterID:   "claude-auth-probe",
-		Detail:      "session authenticated via CLI auth probe",
+		SchemaVersion: protocol.SchemaVersion1,
+		RefID:         "cred-001",
+		Kind:          protocol.CredRefCLISession,
+		Status:        protocol.AuthStatusAuthenticated,
+		ProbeKind:     protocol.AuthProbeCLIAuthCall,
+		ObservedAt:    ts,
+		ProbeTarget:   "claude",
+		AdapterID:     "claude-auth-probe",
+		Detail:        "session authenticated via CLI auth probe",
 	}
 
 	if err := valid.Validate(); err != nil {
@@ -235,9 +249,10 @@ func TestSchemaParity(t *testing.T) {
 
 	// Test valid CredentialRef
 	cred := protocol.CredentialRef{
-		RefID:   "cred-001",
-		Kind:    protocol.CredRefEnvVar,
-		Locator: "ANTHROPIC_API_KEY",
+		SchemaVersion: protocol.SchemaVersion1,
+		RefID:         "cred-001",
+		Kind:          protocol.CredRefEnvVar,
+		Locator:       "ANTHROPIC_API_KEY",
 	}
 	if err := cred.Validate(); err != nil {
 		t.Fatalf("Go Validate failed: %v", err)
@@ -255,14 +270,15 @@ func TestSchemaParity(t *testing.T) {
 
 	// Test valid AuthEvidence
 	ev := protocol.AuthEvidence{
-		RefID:       "cred-001",
-		Kind:        protocol.CredRefCLISession,
-		Status:      protocol.AuthStatusAuthenticated,
-		ProbeKind:   protocol.AuthProbeCLIAuthCall,
-		ObservedAt:  validTestTimestamp(),
-		ProbeTarget: "claude",
-		AdapterID:   "claude-auth-adapter",
-		Detail:      "session valid",
+		SchemaVersion: protocol.SchemaVersion1,
+		RefID:         "cred-001",
+		Kind:          protocol.CredRefCLISession,
+		Status:        protocol.AuthStatusAuthenticated,
+		ProbeKind:     protocol.AuthProbeCLIAuthCall,
+		ObservedAt:    validTestTimestamp(),
+		ProbeTarget:   "claude",
+		AdapterID:     "claude-auth-adapter",
+		Detail:        "session valid",
 	}
 	if err := ev.Validate(); err != nil {
 		t.Fatalf("Go Validate failed on AuthEvidence: %v", err)
@@ -282,6 +298,185 @@ func TestSchemaParity(t *testing.T) {
 	}`)
 	if err := schemas.ValidateBytes(schema.NameAuthEvidence, invalidEvBytes); err == nil {
 		t.Fatal("Schema expected to reject cli_version_only with authenticated status, but accepted")
+	}
+}
+
+func TestAuthEvidenceKindProbeKindBinding(t *testing.T) {
+	ts := validTestTimestamp()
+	base := protocol.AuthEvidence{
+		SchemaVersion: protocol.SchemaVersion1,
+		RefID:         "cred-001",
+		ObservedAt:    ts,
+		Status:        protocol.AuthStatusIndeterminate,
+	}
+
+	cases := []struct {
+		name  string
+		kind  protocol.CredentialRefKind
+		probe protocol.AuthProbeKind
+		valid bool
+	}{
+		{"env_var + env_presence", protocol.CredRefEnvVar, protocol.AuthProbeEnvPresence, true},
+		{"env_var + cli_auth_call mismatched", protocol.CredRefEnvVar, protocol.AuthProbeCLIAuthCall, false},
+		{"keychain_ref + keychain_presence", protocol.CredRefKeychainRef, protocol.AuthProbeKeychainPresence, true},
+		{"keychain_ref + env_presence mismatched", protocol.CredRefKeychainRef, protocol.AuthProbeEnvPresence, false},
+		{"cli_session + cli_auth_call", protocol.CredRefCLISession, protocol.AuthProbeCLIAuthCall, true},
+		{"cli_session + cli_version_only", protocol.CredRefCLISession, protocol.AuthProbeCLIVersionOnly, true},
+		{"cli_session + env_presence mismatched", protocol.CredRefCLISession, protocol.AuthProbeEnvPresence, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ev := base
+			ev.Kind = tc.kind
+			ev.ProbeKind = tc.probe
+			err := ev.Validate()
+			if tc.valid && err != nil {
+				t.Fatalf("expected valid kind/probe_kind pairing, got error: %v", err)
+			}
+			if !tc.valid && err == nil {
+				t.Fatal("expected kind/probe_kind mismatch to be rejected, got nil")
+			}
+		})
+	}
+}
+
+func TestAuthEvidencePresenceProbesCannotEstablishAuthenticated(t *testing.T) {
+	ts := validTestTimestamp()
+	cases := []struct {
+		name  string
+		kind  protocol.CredentialRefKind
+		probe protocol.AuthProbeKind
+	}{
+		{"env_presence", protocol.CredRefEnvVar, protocol.AuthProbeEnvPresence},
+		{"keychain_presence", protocol.CredRefKeychainRef, protocol.AuthProbeKeychainPresence},
+		{"cli_version_only", protocol.CredRefCLISession, protocol.AuthProbeCLIVersionOnly},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ev := protocol.AuthEvidence{
+				SchemaVersion: protocol.SchemaVersion1,
+				RefID:         "cred-001",
+				Kind:          tc.kind,
+				Status:        protocol.AuthStatusAuthenticated,
+				ProbeKind:     tc.probe,
+				ObservedAt:    ts,
+			}
+			if err := ev.Validate(); err == nil {
+				t.Fatalf("expected %s probe kind to be rejected with status authenticated, got nil", tc.probe)
+			}
+		})
+	}
+}
+
+func TestAuthEvidenceRefIDAndAdapterIDShareTheOpaqueIDContract(t *testing.T) {
+	ts := validTestTimestamp()
+	base := protocol.AuthEvidence{
+		SchemaVersion: protocol.SchemaVersion1,
+		Kind:          protocol.CredRefCLISession,
+		Status:        protocol.AuthStatusIndeterminate,
+		ProbeKind:     protocol.AuthProbeCLIVersionOnly,
+		ObservedAt:    ts,
+	}
+
+	// ref_id must reject the same secret-shaped/oversized/malformed values
+	// CredentialRef.RefID does — previously AuthEvidence.RefID was only
+	// checked non-empty.
+	badRefIDs := []string{
+		"", "bad ref id", "sk-ant-api03-abcdefghijklmnop", strings.Repeat("a", 130),
+	}
+	for _, refID := range badRefIDs {
+		ev := base
+		ev.RefID = refID
+		if refID != "" {
+			ev.RefID = refID
+		}
+		if err := ev.Validate(); err == nil {
+			t.Fatalf("expected ref_id %q to be rejected, got nil", refID)
+		}
+	}
+
+	// adapter_id must reject secret-shaped content — previously it only
+	// had a max-length check.
+	secretAdapterID := base
+	secretAdapterID.RefID = "cred-001"
+	secretAdapterID.AdapterID = "sk-ant-api03-abcdefghijklmnop"
+	if err := secretAdapterID.Validate(); err == nil {
+		t.Fatal("expected secret-looking adapter_id to be rejected, got nil")
+	}
+
+	// A valid adapter_id (or none at all) still passes.
+	valid := base
+	valid.RefID = "cred-001"
+	valid.AdapterID = "claude-version-probe"
+	if err := valid.Validate(); err != nil {
+		t.Fatalf("expected valid adapter_id to pass, got %v", err)
+	}
+}
+
+// TestSchemaSecretPatternParity is the table-driven Go/JSON-Schema parity
+// test requested against the mismatches a review found: keychain ".."
+// traversal, secret-shaped ref_id/locator/adapter_id/probe_target/detail,
+// and the kind/probe_kind structural matrix. Each case is run through both
+// Go validation and schema validation; the two must agree on accept/reject.
+func TestSchemaSecretPatternParity(t *testing.T) {
+	schemas, err := schema.Default()
+	if err != nil {
+		t.Fatalf("failed to compile schemas: %v", err)
+	}
+
+	type credCase struct {
+		name string
+		ref  protocol.CredentialRef
+	}
+	credCases := []credCase{
+		{"valid env_var", protocol.CredentialRef{SchemaVersion: protocol.SchemaVersion1, RefID: "cred-001", Kind: protocol.CredRefEnvVar, Locator: "ANTHROPIC_API_KEY"}},
+		{"keychain traversal", protocol.CredentialRef{SchemaVersion: protocol.SchemaVersion1, RefID: "cred-001", Kind: protocol.CredRefKeychainRef, Locator: "../../etc/shadow"}},
+		{"keychain valid dotted locator", protocol.CredentialRef{SchemaVersion: protocol.SchemaVersion1, RefID: "cred-001", Kind: protocol.CredRefKeychainRef, Locator: "com.devcadence.service"}},
+		{"secret-shaped ref_id", protocol.CredentialRef{SchemaVersion: protocol.SchemaVersion1, RefID: "sk-ant-api03-abcdefghijklmnop", Kind: protocol.CredRefCLISession, Locator: "claude"}},
+		{"secret-shaped locator", protocol.CredentialRef{SchemaVersion: protocol.SchemaVersion1, RefID: "cred-001", Kind: protocol.CredRefCLISession, Locator: "sk-ant-api03-abcdefghijklmnop"}},
+		{"token= keyword in locator", protocol.CredentialRef{SchemaVersion: protocol.SchemaVersion1, RefID: "cred-001", Kind: protocol.CredRefCLISession, Locator: "token=abcdef123456"}},
+	}
+	for _, tc := range credCases {
+		t.Run("CredentialRef/"+tc.name, func(t *testing.T) {
+			goErr := tc.ref.Validate()
+			data, err := json.Marshal(tc.ref)
+			if err != nil {
+				t.Fatalf("marshal: %v", err)
+			}
+			schemaErr := schemas.ValidateBytes(schema.NameCredentialRef, data)
+			if (goErr == nil) != (schemaErr == nil) {
+				t.Fatalf("parity mismatch: go accepted=%v (err=%v), schema accepted=%v (err=%v)",
+					goErr == nil, goErr, schemaErr == nil, schemaErr)
+			}
+		})
+	}
+
+	ts := validTestTimestamp()
+	type evCase struct {
+		name string
+		ev   protocol.AuthEvidence
+	}
+	evCases := []evCase{
+		{"valid", protocol.AuthEvidence{SchemaVersion: protocol.SchemaVersion1, RefID: "cred-001", Kind: protocol.CredRefCLISession, Status: protocol.AuthStatusAuthenticated, ProbeKind: protocol.AuthProbeCLIAuthCall, ObservedAt: ts}},
+		{"secret-shaped adapter_id", protocol.AuthEvidence{SchemaVersion: protocol.SchemaVersion1, RefID: "cred-001", Kind: protocol.CredRefCLISession, Status: protocol.AuthStatusIndeterminate, ProbeKind: protocol.AuthProbeCLIVersionOnly, ObservedAt: ts, AdapterID: "sk-ant-api03-abcdefghijklmnop"}},
+		{"secret-shaped probe_target", protocol.AuthEvidence{SchemaVersion: protocol.SchemaVersion1, RefID: "cred-001", Kind: protocol.CredRefCLISession, Status: protocol.AuthStatusIndeterminate, ProbeKind: protocol.AuthProbeCLIVersionOnly, ObservedAt: ts, ProbeTarget: "sk-ant-api03-abcdefghijklmnop"}},
+		{"secret-shaped detail", protocol.AuthEvidence{SchemaVersion: protocol.SchemaVersion1, RefID: "cred-001", Kind: protocol.CredRefCLISession, Status: protocol.AuthStatusIndeterminate, ProbeKind: protocol.AuthProbeCLIVersionOnly, ObservedAt: ts, Detail: "token=abcdef123456"}},
+		{"mismatched kind/probe_kind", protocol.AuthEvidence{SchemaVersion: protocol.SchemaVersion1, RefID: "cred-001", Kind: protocol.CredRefEnvVar, Status: protocol.AuthStatusIndeterminate, ProbeKind: protocol.AuthProbeCLIAuthCall, ObservedAt: ts}},
+		{"presence probe claims authenticated", protocol.AuthEvidence{SchemaVersion: protocol.SchemaVersion1, RefID: "cred-001", Kind: protocol.CredRefEnvVar, Status: protocol.AuthStatusAuthenticated, ProbeKind: protocol.AuthProbeEnvPresence, ObservedAt: ts}},
+	}
+	for _, tc := range evCases {
+		t.Run("AuthEvidence/"+tc.name, func(t *testing.T) {
+			goErr := tc.ev.Validate()
+			data, err := json.Marshal(tc.ev)
+			if err != nil {
+				t.Fatalf("marshal: %v", err)
+			}
+			schemaErr := schemas.ValidateBytes(schema.NameAuthEvidence, data)
+			if (goErr == nil) != (schemaErr == nil) {
+				t.Fatalf("parity mismatch: go accepted=%v (err=%v), schema accepted=%v (err=%v)",
+					goErr == nil, goErr, schemaErr == nil, schemaErr)
+			}
+		})
 	}
 }
 

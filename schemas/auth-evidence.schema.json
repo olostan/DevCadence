@@ -6,18 +6,56 @@
   "type": "object",
   "additionalProperties": false,
   "required": [
+    "schema_version",
     "ref_id",
     "kind",
     "status",
     "probe_kind",
     "observed_at"
   ],
+  "$defs": {
+    "noSecretLike": {
+      "description": "Mirrors internal/protocol.LooksLikeSecret's prefix/keyword checks exactly (see that function's doc comment) — kept in sync by TestSchemaSecretPatternParity.",
+      "not": {
+        "anyOf": [
+          { "pattern": "(?i)^sk-" },
+          { "pattern": "(?i)^sk_" },
+          { "pattern": "(?i)^pat_" },
+          { "pattern": "(?i)^ghp_" },
+          { "pattern": "(?i)^gho_" },
+          { "pattern": "(?i)^ghu_" },
+          { "pattern": "(?i)^ghs_" },
+          { "pattern": "(?i)^ghr_" },
+          { "pattern": "(?i)^github_pat_" },
+          { "pattern": "(?i)^bearer " },
+          { "pattern": "(?i)^xoxb-" },
+          { "pattern": "(?i)^xoxp-" },
+          { "pattern": "(?i)^glpat-" },
+          { "pattern": "(?i)^npm_" },
+          { "pattern": "(?i)^aiza" },
+          { "pattern": "^AKIA" },
+          { "pattern": "^ASIA" },
+          { "pattern": "(?i)secret=" },
+          { "pattern": "(?i)token=" },
+          { "pattern": "(?i)password=" },
+          { "pattern": "(?i)api_key=" },
+          { "pattern": "(?i)apikey=" }
+        ]
+      }
+    }
+  },
   "properties": {
+    "schema_version": { "const": "1.0" },
     "ref_id": {
-      "type": "string",
-      "minLength": 1,
-      "maxLength": 128,
-      "pattern": "^[a-zA-Z0-9_\\-:]+$"
+      "allOf": [
+        { "$ref": "#/$defs/noSecretLike" },
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-:]+$"
+        }
+      ]
     },
     "kind": {
       "enum": [
@@ -47,22 +85,50 @@
       "format": "date-time"
     },
     "probe_target": {
-      "type": "string",
-      "maxLength": 256
+      "allOf": [
+        { "$ref": "#/$defs/noSecretLike" },
+        { "type": "string", "maxLength": 256 }
+      ]
     },
     "adapter_id": {
-      "type": "string",
-      "maxLength": 128
+      "allOf": [
+        { "$ref": "#/$defs/noSecretLike" },
+        {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-:]+$"
+        }
+      ]
     },
     "detail": {
-      "type": "string",
-      "maxLength": 512
+      "allOf": [
+        { "$ref": "#/$defs/noSecretLike" },
+        { "type": "string", "maxLength": 512 }
+      ]
     }
   },
   "allOf": [
     {
+      "if": { "properties": { "kind": { "const": "env_var" } } },
+      "then": { "properties": { "probe_kind": { "const": "env_presence" } } }
+    },
+    {
+      "if": { "properties": { "kind": { "const": "keychain_ref" } } },
+      "then": { "properties": { "probe_kind": { "const": "keychain_presence" } } }
+    },
+    {
+      "if": { "properties": { "kind": { "const": "cli_session" } } },
+      "then": {
+        "properties": {
+          "probe_kind": { "enum": ["cli_auth_call", "cli_version_only"] }
+        }
+      }
+    },
+    {
       "if": {
-        "properties": { "probe_kind": { "const": "cli_version_only" } }
+        "properties": {
+          "probe_kind": { "enum": ["cli_version_only", "env_presence", "keychain_presence"] }
+        }
       },
       "then": {
         "properties": {

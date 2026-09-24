@@ -440,6 +440,10 @@ func NewRecord(kind string) (Record, error) {
 		return &SetupExecutionReport{}, nil
 	case "SetupLedgerEvent":
 		return &SetupLedgerEvent{}, nil
+	case "CredentialRef":
+		return &CredentialRef{}, nil
+	case "AuthEvidence":
+		return &AuthEvidence{}, nil
 	}
 	return nil, errs.New(errs.CategoryInvalidArgument, "unknown record kind %q", kind)
 }
