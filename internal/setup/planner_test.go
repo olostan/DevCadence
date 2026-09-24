@@ -1,6 +1,7 @@
 package setup
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -61,6 +62,112 @@ func TestEnsureLocalModelActionRejectsMutableRevisionEvenWithTrustworthyIdentity
 	}
 	if action.Operation != nil {
 		t.Error("Operation is non-nil, want nil for a manual action forced by a mutable revision")
+	}
+}
+
+// TestPlannerReachesAutomatedMLXRecipeFromDefaultInventory is an
+// integration-style regression proving the automated MLX path is actually
+// reachable through the real product discovery pipeline
+// (environment.DefaultInventory(), not hand-constructed facts) — a
+// planner-level unit test using facts built by hand could pass even if
+// DefaultInventory() never inventories the "hf" CLI at all, silently
+// leaving Ollama the only runtime with an automated peer in practice.
+func TestPlannerReachesAutomatedMLXRecipeFromDefaultInventory(t *testing.T) {
+	clk := clock.NewFake(time.Date(2026, 9, 24, 12, 0, 0, 0, time.UTC), 0)
+
+	fixture := environment.DarwinAppleSilicon()
+	fixture.Commands.Installed["hf"] = "/usr/local/bin/hf"
+	fixture.Commands.Outputs[environment.Key("hf", "version")] = environment.Observed("hf-hub 1.0.0")
+	fixture.Commands.Installed["mlx_lm.generate"] = "/usr/local/bin/mlx_lm.generate"
+
+	facts, err := fixture.Discover(context.Background(), clk, protocol.DepthHealth)
+	if err != nil {
+		t.Fatalf("Discover: %v", err)
+	}
+
+	var sawHF bool
+	for _, sw := range facts.Software {
+		if sw.ID == "hf" {
+			sawHF = true
+			if !sw.Installed || sw.Path == "" || sw.Version == "" {
+				t.Fatalf("discovered hf software presence is incomplete: %+v", sw)
+			}
+		}
+	}
+	if !sawHF {
+		t.Fatal("DefaultInventory() did not discover an \"hf\" software presence at all — the automated MLX path can never be reached from the real discovery pipeline")
+	}
+
+	fp, err := environment.Fingerprint(facts)
+	if err != nil {
+		t.Fatalf("Fingerprint: %v", err)
+	}
+
+	planner, err := NewPlanner(PlannerOptions{Clock: clk, IDs: ids.NewSequential(), Facts: &facts})
+	if err != nil {
+		t.Fatalf("NewPlanner: %v", err)
+	}
+
+	profile := protocol.ProfileLocalHeavy
+	report := &protocol.DoctorReport{
+		SchemaVersion:      protocol.SchemaVersion1,
+		ReportID:           "doc_000000000000000000000099",
+		MachineFingerprint: fp,
+		ObservedAt:         protocol.NewTimestamp(clk.Now()),
+		Readiness:          protocol.ReadinessReady,
+		EvaluationScope: protocol.ReadinessEvaluationScope{
+			TargetProfile:  &profile,
+			RequiredRoles:  []string{"implementation"},
+			EvidenceStatus: "live",
+		},
+		DiscoveredEndpoints: []protocol.CognitionEndpointSummary{
+			{
+				ID:                     "mlx_local",
+				Kind:                   protocol.EndpointLocalRuntime,
+				Locality:               protocol.LocalityLocal,
+				Health:                 protocol.EndpointHealthReady,
+				Auth:                   protocol.AuthNotApplicable,
+				CostClass:              protocol.CostLocalCompute,
+				RequiredSourceExposure: protocol.ExposureLocalOnly,
+				AccelerationVerified:   true,
+			},
+		},
+	}
+
+	plan, err := planner.Plan(report, protocol.TargetAll, profile)
+	if err != nil {
+		t.Fatalf("Plan: %v", err)
+	}
+
+	var mlxAction *protocol.SetupAction
+	for i := range plan.Actions {
+		if plan.Actions[i].RecipeID == "recipe.mlx.download_model" {
+			mlxAction = &plan.Actions[i]
+		}
+		if plan.Actions[i].RecipeID == "recipe.manual.pull_mlx_model" {
+			t.Fatalf("planner fell back to the manual MLX recipe despite a fully discovered, trustworthy hf identity: %+v", plan.Actions[i])
+		}
+	}
+	if mlxAction == nil {
+		t.Fatal("no recipe.mlx.download_model action found — MLX did not reach the automated path")
+	}
+	if mlxAction.Operation == nil || mlxAction.Operation.Kind != protocol.OpKindEnsureLocalModel {
+		t.Fatalf("mlxAction.Operation = %+v, want a non-nil ensure_local_model operation", mlxAction.Operation)
+	}
+	var sawExecutableVerified bool
+	for _, c := range mlxAction.Preconditions {
+		if c.Kind == protocol.CondKindExecutableVerified && c.ExecutableVerified != nil {
+			sawExecutableVerified = true
+			if c.ExecutableVerified.CanonicalPath != "/usr/local/bin/hf" {
+				t.Errorf("executable_verified.canonical_path = %q, want the discovered hf path", c.ExecutableVerified.CanonicalPath)
+			}
+		}
+	}
+	if !sawExecutableVerified {
+		t.Error("mlxAction has no executable_verified precondition binding the discovered hf identity")
+	}
+	if err := plan.Validate(); err != nil {
+		t.Fatalf("generated plan failed validation: %v", err)
 	}
 }
 

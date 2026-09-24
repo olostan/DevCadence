@@ -435,6 +435,17 @@ type ExecutableVerifiedOperand struct {
 	CanonicalPath   string `json:"canonical_path"`
 	ExpectedVersion string `json:"expected_version"`
 	ExpectedDigest  string `json:"expected_digest,omitempty"`
+	// VersionArgs is the argv that makes CanonicalPath print its version,
+	// checked against ExpectedVersion. Empty means ["--version"] — the
+	// common case, but not universal: e.g. the current Hugging Face Hub
+	// CLI exposes a "version" subcommand rather than a "--version" flag
+	// (https://huggingface.co/docs/huggingface_hub/main/package_reference/cli).
+	// This mirrors internal/environment.SoftwareDescriptor.VersionArgs,
+	// which the same per-tool variation already required at discovery
+	// time — this field lets a setup plan's own executable_verified
+	// precondition agree with however that tool was actually discovered,
+	// instead of hardcoding one flag convention for every tool.
+	VersionArgs []string `json:"version_args,omitempty"`
 }
 
 type ManagedDirOperand struct {

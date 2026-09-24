@@ -122,13 +122,17 @@ func evaluateExecutableVerified(ctx context.Context, deps EvaluatorDeps, op *pro
 		if dir == "" {
 			dir = os.TempDir()
 		}
-		result, err := deps.Runner.Run(ctx, processSpecFor(op.CanonicalPath, []string{"--version"}, dir))
+		versionArgs := op.VersionArgs
+		if len(versionArgs) == 0 {
+			versionArgs = []string{"--version"}
+		}
+		result, err := deps.Runner.Run(ctx, processSpecFor(op.CanonicalPath, versionArgs, dir))
 		if err != nil {
 			return false, "", err
 		}
 		output := string(result.Stdout) + string(result.Stderr)
 		if !result.Success() || !strings.Contains(output, op.ExpectedVersion) {
-			return false, fmt.Sprintf("%s --version did not report expected version %q", op.CanonicalPath, op.ExpectedVersion), nil
+			return false, fmt.Sprintf("%s %s did not report expected version %q", op.CanonicalPath, strings.Join(versionArgs, " "), op.ExpectedVersion), nil
 		}
 	}
 

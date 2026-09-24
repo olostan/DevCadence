@@ -28,6 +28,7 @@ package mlx
 import (
 	"context"
 	"encoding/json"
+	"os"
 	"path"
 	"sort"
 	"strings"
@@ -144,10 +145,18 @@ type Options struct {
 	Commands environment.CommandProbe
 	// Sys reads the model cache.
 	Sys environment.SysProbe
-	// HomeDir is the user's home directory, used to locate the Hugging Face
-	// cache. It is passed in rather than read here so a test can describe a
-	// cache without touching the real one.
+	// HomeDir is the user's home directory, used (via
+	// environment.HuggingFaceCacheDir) to locate the Hugging Face cache
+	// when no cache-location environment variable is set. It is passed in
+	// rather than read here so a test can describe a cache without
+	// touching the real one.
 	HomeDir string
+	// Getenv looks up environment variables for Hugging Face cache-location
+	// resolution (HF_HUB_CACHE, HF_HOME, XDG_CACHE_HOME) — see
+	// environment.HuggingFaceCacheDir. Nil selects os.Getenv. Tests supply
+	// a fake so cache-location precedence can be tested without mutating
+	// real process environment variables.
+	Getenv func(string) string
 	// Interpreter is the Python executable. Empty selects "python3".
 	Interpreter string
 	// HealthTimeout bounds introspection.
@@ -159,6 +168,7 @@ type Adapter struct {
 	commands      environment.CommandProbe
 	sys           environment.SysProbe
 	homeDir       string
+	getenv        func(string) string
 	interpreter   string
 	healthTimeout time.Duration
 }
@@ -176,8 +186,12 @@ func New(opts Options) (*Adapter, error) {
 	if timeout <= 0 {
 		timeout = 30 * time.Second
 	}
+	getenv := opts.Getenv
+	if getenv == nil {
+		getenv = os.Getenv
+	}
 	return &Adapter{
-		commands: opts.Commands, sys: opts.Sys, homeDir: opts.HomeDir,
+		commands: opts.Commands, sys: opts.Sys, homeDir: opts.HomeDir, getenv: getenv,
 		interpreter: interpreter, healthTimeout: timeout,
 	}, nil
 }
@@ -321,7 +335,7 @@ func (a *Adapter) cachedModels(_ context.Context, endpointID string, base *proto
 			"no filesystem probe or home directory was configured, so the model cache was not inspected"))
 		return nil
 	}
-	hub := path.Join(a.homeDir, ".cache", "huggingface", "hub")
+	hub := environment.HuggingFaceCacheDir("", a.getenv, a.homeDir)
 	entries, err := a.sys.ReadDir(hub)
 	if err != nil {
 		base.Findings = append(base.Findings, finding(endpointID, "models", classify(err),

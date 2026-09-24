@@ -217,6 +217,37 @@ func TestEvaluateConditionModelPresentMLX(t *testing.T) {
 	}
 }
 
+// TestEvaluateConditionModelPresentMLXHonorsHFHubCacheEnvVar proves
+// MLXAdapter resolves its cache location through the same
+// environment.HuggingFaceCacheDir precedence internal/cognition/mlx's
+// discovery adapter uses (verified from that package's own test) —
+// without an explicit CacheDir, an HF_HUB_CACHE override in the process
+// environment must be honored, not silently ignored in favor of the
+// ~/.cache/huggingface/hub default.
+func TestEvaluateConditionModelPresentMLXHonorsHFHubCacheEnvVar(t *testing.T) {
+	overrideCache := t.TempDir()
+	t.Setenv("HF_HUB_CACHE", overrideCache)
+	modelRef := "mlx-community/Qwen2.5-Coder-7B-Instruct-4bit"
+	revision := "019cc73c45c770444708a6dd8690c66243cc5c80"
+	writeFakeHFSnapshot(t, overrideCache, modelRef, revision, 1024)
+
+	deps := EvaluatorDeps{ModelRuntimes: NewModelRuntimeRegistry(OllamaAdapter{}, MLXAdapter{})} // no explicit CacheDir
+	passed, detail, err := EvaluateCondition(context.Background(), deps, protocol.Condition{
+		Kind: protocol.CondKindModelPresent,
+		ModelPresent: &protocol.ModelPresentOperand{
+			Runtime:          "mlx",
+			ModelRef:         modelRef,
+			ResolvedRevision: revision,
+		},
+	})
+	if err != nil {
+		t.Fatalf("EvaluateCondition: %v", err)
+	}
+	if !passed {
+		t.Errorf("passed = false (detail: %s), want true — MLXAdapter must resolve HF_HUB_CACHE from the environment", detail)
+	}
+}
+
 func TestEvaluateConditionModelPresentMLXAbsent(t *testing.T) {
 	deps := EvaluatorDeps{ModelRuntimes: NewModelRuntimeRegistry(OllamaAdapter{}, MLXAdapter{CacheDir: t.TempDir()})}
 	passed, _, err := EvaluateCondition(context.Background(), deps, protocol.Condition{

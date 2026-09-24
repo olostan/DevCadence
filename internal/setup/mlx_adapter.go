@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/olostan/DevCadence/internal/environment"
 	"github.com/olostan/DevCadence/internal/errs"
 	"github.com/olostan/DevCadence/internal/process"
 	"github.com/olostan/DevCadence/internal/protocol"
@@ -43,8 +44,13 @@ type MLXAdapter struct {
 	// reads from AND passes to `hf download --cache-dir` for the actual
 	// download — the same resolved value binds both, so the two can never
 	// disagree about where the cache is (see EnsureModel's doc comment).
-	// Empty means the real default (HF_HOME/hub, or
-	// ~/.cache/huggingface/hub). Tests set this to a t.TempDir().
+	// Empty means the real default resolved by
+	// environment.HuggingFaceCacheDir (HF_HUB_CACHE, then HF_HOME/hub,
+	// then XDG_CACHE_HOME/huggingface/hub, then
+	// ~/.cache/huggingface/hub) — the same resolver
+	// internal/cognition/mlx's discovery Adapter uses, so setup and
+	// cognition can never disagree about where "the" cache is. Tests set
+	// this to a t.TempDir().
 	CacheDir string
 }
 
@@ -52,20 +58,18 @@ type MLXAdapter struct {
 func (MLXAdapter) Runtime() string { return "mlx" }
 
 // cacheDir resolves the Hugging Face Hub cache root this adapter reads
-// from, matching the Hugging Face Hub client libraries' own resolution
-// order (HF_HOME, then ~/.cache/huggingface).
+// from and downloads into — see environment.HuggingFaceCacheDir's doc
+// comment for the precedence and why it is shared with
+// internal/cognition/mlx rather than duplicated here.
 func (a MLXAdapter) cacheDir() (string, error) {
 	if a.CacheDir != "" {
 		return a.CacheDir, nil
-	}
-	if hfHome := os.Getenv("HF_HOME"); hfHome != "" {
-		return filepath.Join(hfHome, "hub"), nil
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", errs.Wrap(errs.CategoryInternal, err, "MLXAdapter: resolve user home directory for the default Hugging Face cache")
 	}
-	return filepath.Join(home, ".cache", "huggingface", "hub"), nil
+	return environment.HuggingFaceCacheDir("", os.Getenv, home), nil
 }
 
 // hfRepoCacheName converts a Hugging Face repo id ("org/repo") into the

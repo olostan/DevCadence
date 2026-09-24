@@ -338,6 +338,7 @@ func (p *Planner) Plan(report *protocol.DoctorReport, target protocol.SetupTarge
 				recipeIDAuto:        "recipe.mlx.download_model",
 				recipeIDManual:      "recipe.manual.pull_mlx_model",
 				revisionIsImmutable: isImmutableHFRevision,
+				versionCheckArgs:    []string{"version"},
 				manualSteps: []string{
 					"Install mlx-lm and huggingface_hub in a dedicated Python environment (e.g., pip install mlx-lm huggingface_hub)",
 					fmt.Sprintf("Run: hf download %s --revision %s", DefaultMLXModelRef, DefaultMLXRevision),
@@ -471,6 +472,11 @@ type localModelRecipe struct {
 	// already inherently immutable (e.g. Ollama's sha256 digest) and
 	// needs no separate check.
 	revisionIsImmutable func(string) bool
+	// versionCheckArgs is the argv that makes commandName print its
+	// version, mirrored into the automated action's executable_verified
+	// precondition — see protocol.ExecutableVerifiedOperand.VersionArgs's
+	// doc comment. Empty means the protocol default (["--version"]).
+	versionCheckArgs []string
 }
 
 // ensureLocalModelAction builds the action for one localModelRecipe: an
@@ -527,6 +533,7 @@ func (p *Planner) ensureLocalModelAction(actionIndex *int, dependsOn []string, r
 				ExecutableVerified: &protocol.ExecutableVerifiedOperand{
 					CanonicalPath:   r.executablePath,
 					ExpectedVersion: r.executableVersion,
+					VersionArgs:     r.versionCheckArgs,
 				},
 			},
 		}, r.extraPreconditions...)
