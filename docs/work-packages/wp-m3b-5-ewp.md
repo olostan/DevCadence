@@ -5,7 +5,7 @@
 - **Base commit:** `e2e0849` (`feat/m3b-guided-bootstrap`, includes accepted WP-M3B-1 through WP-M3B-4 checkpoints)
 - **Branch:** `feat/m3b-guided-bootstrap`
 - **Depends on:** WP-M3B-1 (`SetupPlan`/`SetupAction`/`TypedOperation`, accepted), WP-M3B-2 (ledger/home layout, accepted), WP-M3B-3 (executor, accepted), WP-M3B-4 (`CredentialRef`/`AuthEvidence`/`Manager`, accepted).
-- **Status:** EWP drafted, not yet implemented.
+- **Status:** Implemented, deterministic verification complete; independent review pending. See §11.
 
 ---
 
@@ -182,3 +182,33 @@ Credential checking reuses `credentials.Manager.CheckCredential` exactly as WP-M
 ## 10. Base revision
 
 Base commit: `e2e0849` on `feat/m3b-guided-bootstrap` (WP-M3B-4 accepted at `75e65a7`; this commit records that acceptance plus the corrected pre-check, §0a).
+
+## 11. Implementation and deterministic verification summary
+
+Implemented against §6 exactly, with one design refinement made during implementation (§11.1) and one clarification of how `Doctor.Run`'s existing callers were checked (§9's escalation condition never fired — `grep -rln "\.Run(ctx" internal/setup cmd/ --include=*.go` found no caller outside tests, so `BuildResourceInventory` was added as a fully additive new method rather than folded into `Run`/`DoctorReport` itself, keeping the change minimal and reversible).
+
+**New:** `internal/protocol/resource_inventory.go` (`HardwareSummary`, `CredentialInventoryEntry`, `PolicySummary`, `ResourceInventory`, all as specified in §5.1, with `CredentialInventoryEntry.Validate()` additionally enforcing that `Evidence.RefID`/`Evidence.Kind` match `Ref.RefID`/`Ref.Kind` — an integrity check not explicitly spelled out in §5.1 but a direct consequence of "the inventory must not lie about which credential a piece of evidence describes"). `schemas/resource-inventory.schema.json` (Draft 2020-12, `$defs` mirror `credential-ref.schema.json`/`auth-evidence.schema.json` inline, matching `doctor-report.schema.json`'s own precedent of duplicating endpoint/host shapes inline rather than cross-file `$ref`). `internal/schema/schema.go`'s `RecordKindToSchema` and `AllNames()` updated together in the same commit (closing the exact gap WP-M3B-4's follow-up review caught for `CredentialRef`/`AuthEvidence`, this time proactively). `internal/protocol/protocol.go`'s `NewRecord` gained the `ResourceInventory` case. `fixtures/protocol/resource-inventory.valid.json` wired into `tests/schema_fixtures_test.go`'s generic round-trip suite.
+
+**New:** `Doctor.BuildResourceInventory` (`internal/setup/doctor.go`) — a pure projection over `Run`'s own inputs/outputs (facts, fingerprint, endpoints, hosts), plus `DoctorOptions.CredentialManager`/`CredentialRefs`.
+
+**New:** two `Planner.Plan` finding-code blocks (`internal/setup/planner.go`) — `FindingCodeAuthExpired` → one `recipe.manual.reauthenticate` action per affected `DiscoveredEndpoints` entry (not parsed from `Findings` text — sourced directly from the endpoint list, the same source of truth the existing Ollama/MLX blocks already use), gated on `target == TargetAll || target == TargetAuth`; `FindingCodeNoCodingEndpoint` deliberately produces nothing, per §3/§5.3.
+
+### 11.1 Design refinement: malformed configured credential references fail closed, not degrade
+
+§5.2's sketch said a `CheckCredential` error would be "reported as Unavailable evidence rather than dropping the reference silently." Implementing it against `Manager.CheckCredential`'s actual behavior showed this was the wrong choice: `CheckCredential` only ever returns an error for a structurally malformed `CredentialRef` or an unknown `CredentialRefKind` — never for "the credential isn't there" or "the check couldn't be completed," both of which it already reports as a valid `Unavailable`/`Unauthenticated`/`Indeterminate` `AuthEvidence`, not a Go error (WP-M3B-4's own design). A `CheckCredential` error therefore means `DoctorOptions.CredentialRefs` itself is misconfigured — a real bug in whoever constructed the `Doctor`, not a live-environment condition to degrade gracefully around. Fabricating a plausible-looking `Unavailable` evidence entry for a reference that was never actually valid would hide that bug inside data that looks like a normal, successfully-produced observation. `BuildResourceInventory` now returns the error directly (wrapped with the offending `RefID`) instead, per AGENTS.md §16 ("never hide uncertainty... fail closed"). Tests renamed/updated accordingly (`TestBuildResourceInventoryMalformedRefFailsClosed`).
+
+### Deterministic verification results
+
+| Command | Result |
+|---|---|
+| `go build ./...` | PASS |
+| `go vet ./...` | PASS |
+| `gofmt -l` (every changed file) | clean |
+| `go test -count=1 ./...` | PASS (all 29 packages) |
+| `go test -race ./internal/setup/... ./internal/protocol/... ./internal/credentials/... ./internal/schema/... ./tests/...` | PASS (no races) |
+| `GOOS=windows GOARCH=amd64 go build ./...` | PASS |
+| `GOOS=linux GOARCH=amd64 go build ./...` | PASS |
+
+New tests: `TestResourceInventoryValidation`, `TestResourceInventoryValidation_MissingFields`, `TestResourceInventoryValidation_CognitionEndpoints`, `TestResourceInventoryValidation_PrincipalHosts`, `TestResourceInventoryValidation_Policy`, `TestResourceInventoryValidation_CredentialEntryBinding`, `TestResourceInventorySchemaParity` (`internal/protocol`); `TestBuildResourceInventoryNilCredentialManagerDegradesGracefully`, `TestBuildResourceInventoryChecksConfiguredCredentials`, `TestBuildResourceInventoryMalformedRefFailsClosed`, `TestBuildResourceInventoryProjectsPolicy` (`internal/setup`); `TestPlannerGeneratesReauthenticateActionForExpiredEndpoint`, `TestPlannerDoesNotActionNoCodingEndpointFinding` (`internal/setup`).
+
+**Disposition:** implemented, not yet independently reviewed. Not marking `accepted`.

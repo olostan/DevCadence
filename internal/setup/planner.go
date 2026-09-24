@@ -222,6 +222,59 @@ func (p *Planner) Plan(report *protocol.DoctorReport, target protocol.SetupTarge
 		})
 	}
 
+	// Check auth: one manual re-authenticate action per endpoint whose
+	// auth status is expired (WP-M3B-5 §5.3). Endpoints, not Findings text,
+	// are the source of truth here — the same DiscoveredEndpoints the
+	// Cognition block below already iterates — so this needs no fragile
+	// parsing of a finding's free-text Title/Detail to recover which
+	// endpoint it was about.
+	//
+	// Deliberately asymmetric with FindingCodeNoCodingEndpoint (no action
+	// generated for that finding at all): AuthExpired names a concrete,
+	// already-configured endpoint a human can re-authenticate with a
+	// generic instruction; NoCodingEndpoint does not name anything to act
+	// on, and inventing a generic "install and authenticate some coding
+	// CLI" action would mean recommending a specific provider, which the
+	// WP-M3B-5 MUST constraint forbids (see that EWP's §3).
+	if target == protocol.TargetAll || target == protocol.TargetAuth {
+		for _, ep := range report.DiscoveredEndpoints {
+			if ep.Auth != protocol.AuthExpired {
+				continue
+			}
+			actID := fmt.Sprintf("act_auth_%04d", actionIndex)
+			actionIndex++
+			actions = append(actions, protocol.SetupAction{
+				ActionID:      actID,
+				RecipeID:      "recipe.manual.reauthenticate",
+				RecipeVersion: p.recipeSetVersion,
+				Title:         fmt.Sprintf("Re-authenticate: %s", ep.ID),
+				Description:   fmt.Sprintf("Authentication for endpoint %s has expired", ep.ID),
+				Authority:     protocol.AuthorityHighImpactManual,
+				Effects:       []protocol.EffectCategory{protocol.EffectAuthentication},
+				ManualInstructions: &protocol.ManualGuide{
+					Summary: fmt.Sprintf("Re-authenticate the CLI or update credentials for %s", ep.ID),
+					Steps: []string{
+						fmt.Sprintf("Run the login/authentication command for %s (e.g. its CLI's own login subcommand)", ep.ID),
+						"Re-run devcadence doctor to confirm the endpoint reports authenticated",
+					},
+					VerificationCheck: []protocol.Condition{
+						{
+							Kind:            protocol.CondKindEndpointHealthy,
+							EndpointHealthy: &protocol.EndpointOperand{EndpointID: ep.ID},
+						},
+					},
+				},
+				Postconditions: []protocol.Condition{
+					{
+						Kind:            protocol.CondKindEndpointHealthy,
+						EndpointHealthy: &protocol.EndpointOperand{EndpointID: ep.ID},
+					},
+				},
+				IdempotencyKey: fmt.Sprintf("reauthenticate_%s", ep.ID),
+			})
+		}
+	}
+
 	// Check Cognition: ensure a local model for whichever local runtime(s)
 	// are relevant, treating every runtime the planner knows about as an
 	// equal peer (INVARIANTS.md DCI-055, docs/MODEL_RUNTIME.md) — neither

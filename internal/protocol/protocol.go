@@ -444,6 +444,8 @@ func NewRecord(kind string) (Record, error) {
 		return &CredentialRef{}, nil
 	case "AuthEvidence":
 		return &AuthEvidence{}, nil
+	case "ResourceInventory":
+		return &ResourceInventory{}, nil
 	}
 	return nil, errs.New(errs.CategoryInvalidArgument, "unknown record kind %q", kind)
 }

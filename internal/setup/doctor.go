@@ -10,6 +10,7 @@ import (
 
 	"github.com/olostan/DevCadence/internal/clock"
 	"github.com/olostan/DevCadence/internal/cognition"
+	"github.com/olostan/DevCadence/internal/credentials"
 	"github.com/olostan/DevCadence/internal/environment"
 	"github.com/olostan/DevCadence/internal/errs"
 	"github.com/olostan/DevCadence/internal/ids"
@@ -49,6 +50,14 @@ type DoctorOptions struct {
 	VerifyEndpointID string // If non-empty, authorizes targeted inference probe for this endpoint only
 	Cache            *CacheManager
 	Policy           *cognition.Policy
+	// CredentialManager checks the CredentialRefs below and reports
+	// AuthEvidence for BuildResourceInventory's credentials section. Nil
+	// is a supported state (no credential checking performed, same
+	// nil-safe pattern CognitionService already uses) — WP-M3B-5.
+	CredentialManager *credentials.Manager
+	// CredentialRefs are the operator-configured references to check.
+	// Doctor never invents credential references of its own.
+	CredentialRefs []protocol.CredentialRef
 }
 
 // Doctor executes non-invasive diagnostic checks across the environment, state root,
@@ -62,6 +71,8 @@ type Doctor struct {
 	verifyEndpointID string
 	cache            *CacheManager
 	policy           *cognition.Policy
+	credManager      *credentials.Manager
+	credRefs         []protocol.CredentialRef
 }
 
 // NewDoctor returns a Doctor engine.
@@ -100,6 +111,8 @@ func NewDoctor(opts DoctorOptions) (*Doctor, error) {
 		verifyEndpointID: opts.VerifyEndpointID,
 		cache:            cache,
 		policy:           policy,
+		credManager:      opts.CredentialManager,
+		credRefs:         opts.CredentialRefs,
 	}, nil
 }
 
@@ -173,6 +186,93 @@ func (d *Doctor) Run(ctx context.Context, scope protocol.ReadinessEvaluationScop
 	}
 
 	return report, nil
+}
+
+// BuildResourceInventory projects the facts, discovered endpoints, and
+// principal hosts a call to Run already gathered into a
+// protocol.ResourceInventory, and additionally checks any configured
+// CredentialRefs. It performs no new hardware/endpoint discovery of its
+// own — it is a pure projection over data the caller supplies, so it can
+// be called with Run's own outputs without re-probing anything
+// (WP-M3B-5 §5.2).
+//
+// A nil credManager produces an empty Credentials section, the same
+// nil-safe degradation discoverEndpoints already uses for a nil
+// cognitionService.
+func (d *Doctor) BuildResourceInventory(
+	ctx context.Context,
+	facts protocol.EnvironmentFacts,
+	fingerprint string,
+	endpoints []protocol.CognitionEndpointSummary,
+	hosts []protocol.PrincipalHostSummary,
+) (*protocol.ResourceInventory, error) {
+	logicalCores := 0
+	if facts.CPU.LogicalCores != nil {
+		logicalCores = *facts.CPU.LogicalCores
+	}
+	var totalMem *int64
+	if facts.Memory.TotalBytes != nil {
+		totalMem = facts.Memory.TotalBytes
+	}
+
+	var backends []protocol.BackendKind
+	for _, c := range environment.AssessBackends(facts) {
+		if c.Support == protocol.SupportSupported {
+			backends = append(backends, c.Backend)
+		}
+	}
+
+	inv := &protocol.ResourceInventory{
+		SchemaVersion:      protocol.SchemaVersion1,
+		InventoryID:        d.ids.New("inv"),
+		MachineFingerprint: fingerprint,
+		ObservedAt:         protocol.NewTimestamp(d.clock.Now()),
+		Hardware: protocol.HardwareSummary{
+			OSFamily:            facts.Host.Family,
+			Arch:                facts.Host.Arch,
+			LogicalCores:        logicalCores,
+			TotalMemoryBytes:    totalMem,
+			AcceleratorBackends: backends,
+		},
+		CognitionEndpoints: endpoints,
+		PrincipalHosts:     hosts,
+	}
+
+	if d.credManager != nil {
+		for _, ref := range d.credRefs {
+			// CheckCredential errors only on a structurally malformed ref
+			// or an unknown CredentialRefKind — never on "the credential
+			// isn't there", which is already a valid
+			// Unavailable/Unauthenticated AuthEvidence, not a Go error.
+			// A malformed *configured* reference is a real bug in
+			// DoctorOptions.CredentialRefs, so it propagates and fails
+			// BuildResourceInventory rather than being papered over with
+			// a fabricated evidence entry (fail closed, AGENTS.md §16;
+			// DCI-104).
+			evidence, err := d.credManager.CheckCredential(ctx, ref)
+			if err != nil {
+				return nil, errs.Wrap(errs.CategoryInvalidArgument, err,
+					"resource inventory: configured credential reference %q is invalid", ref.RefID)
+			}
+			inv.Credentials = append(inv.Credentials, protocol.CredentialInventoryEntry{
+				Ref:      ref,
+				Evidence: evidence,
+			})
+		}
+	}
+
+	if d.policy != nil {
+		inv.Policy = &protocol.PolicySummary{
+			MaxSourceExposure: d.policy.MaxSourceExposure,
+			MaxCostClass:      d.policy.MaxCostClass,
+		}
+	}
+
+	if err := inv.Validate(); err != nil {
+		return nil, errs.Wrap(errs.CategoryInternal, err, "resource inventory validation failed")
+	}
+
+	return inv, nil
 }
 
 func (d *Doctor) checkStateRoot() []protocol.DiagnosticFinding {

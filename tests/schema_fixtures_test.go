@@ -169,6 +169,7 @@ func TestFixturesRoundTripWithoutSemanticLoss(t *testing.T) {
 		{"setup-ledger-event.valid.json", decodeInto[protocol.SetupLedgerEvent]},
 		{"credential-ref.valid.json", decodeInto[protocol.CredentialRef]},
 		{"auth-evidence.valid.json", decodeInto[protocol.AuthEvidence]},
+		{"resource-inventory.valid.json", decodeInto[protocol.ResourceInventory]},
 	}
 	for _, tc := range cases {
 		t.Run(tc.file, func(t *testing.T) {

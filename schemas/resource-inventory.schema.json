@@ -1,0 +1,201 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/olostan/DevCadence/schemas/resource-inventory.schema.json",
+  "title": "DevCadence ResourceInventory",
+  "description": "Deterministic, point-in-time snapshot of hardware, cognition endpoints, principal hosts, credential references and policy metadata (ADR-0014 §92, ADR-0018). Never a decision or recommendation itself.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "inventory_id",
+    "machine_fingerprint",
+    "observed_at",
+    "hardware"
+  ],
+  "$defs": {
+    "noSecretLike": {
+      "description": "Mirrors internal/protocol.LooksLikeSecret's prefix/keyword checks exactly (see that function's doc comment) — kept in sync by TestSchemaSecretPatternParity.",
+      "not": {
+        "anyOf": [
+          { "pattern": "(?i)^sk-" },
+          { "pattern": "(?i)^sk_" },
+          { "pattern": "(?i)^pat_" },
+          { "pattern": "(?i)^ghp_" },
+          { "pattern": "(?i)^gho_" },
+          { "pattern": "(?i)^ghu_" },
+          { "pattern": "(?i)^ghs_" },
+          { "pattern": "(?i)^ghr_" },
+          { "pattern": "(?i)^github_pat_" },
+          { "pattern": "(?i)^bearer " },
+          { "pattern": "(?i)^xoxb-" },
+          { "pattern": "(?i)^xoxp-" },
+          { "pattern": "(?i)^glpat-" },
+          { "pattern": "(?i)^npm_" },
+          { "pattern": "(?i)^aiza" },
+          { "pattern": "^AKIA" },
+          { "pattern": "^ASIA" },
+          { "pattern": "(?i)secret=" },
+          { "pattern": "(?i)token=" },
+          { "pattern": "(?i)password=" },
+          { "pattern": "(?i)api_key=" },
+          { "pattern": "(?i)apikey=" }
+        ]
+      }
+    },
+    "credential_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "ref_id", "kind", "locator"],
+      "properties": {
+        "schema_version": { "const": "1.0" },
+        "ref_id": {
+          "allOf": [
+            { "$ref": "#/$defs/noSecretLike" },
+            { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-:]+$" }
+          ]
+        },
+        "kind": { "enum": ["env_var", "cli_session", "keychain_ref"] },
+        "locator": {
+          "allOf": [
+            { "$ref": "#/$defs/noSecretLike" },
+            { "type": "string", "minLength": 1, "maxLength": 128 }
+          ]
+        }
+      }
+    },
+    "auth_evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "ref_id", "kind", "status", "probe_kind", "observed_at"],
+      "properties": {
+        "schema_version": { "const": "1.0" },
+        "ref_id": {
+          "allOf": [
+            { "$ref": "#/$defs/noSecretLike" },
+            { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-:]+$" }
+          ]
+        },
+        "kind": { "enum": ["env_var", "cli_session", "keychain_ref"] },
+        "status": { "enum": ["authenticated", "unauthenticated", "unavailable", "indeterminate"] },
+        "probe_kind": { "enum": ["env_presence", "cli_auth_call", "cli_version_only", "keychain_presence"] },
+        "observed_at": { "type": "string", "format": "date-time" },
+        "probe_target": {
+          "allOf": [{ "$ref": "#/$defs/noSecretLike" }, { "type": "string", "maxLength": 256 }]
+        },
+        "adapter_id": {
+          "allOf": [
+            { "$ref": "#/$defs/noSecretLike" },
+            { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-:]+$" }
+          ]
+        },
+        "detail": {
+          "allOf": [{ "$ref": "#/$defs/noSecretLike" }, { "type": "string", "maxLength": 512 }]
+        }
+      }
+    },
+    "credential_inventory_entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ref", "evidence"],
+      "properties": {
+        "ref": { "$ref": "#/$defs/credential_ref" },
+        "evidence": { "$ref": "#/$defs/auth_evidence" }
+      }
+    },
+    "cognition_endpoint_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "kind",
+        "locality",
+        "health",
+        "auth_status",
+        "cost_class",
+        "required_source_exposure"
+      ],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "kind": { "enum": ["local_runtime", "authenticated_cli", "remote_api"] },
+        "locality": { "enum": ["local", "remote_inference_local_tools", "remote"] },
+        "health": {
+          "enum": [
+            "not_installed", "installed", "not_configured", "unhealthy",
+            "unverified", "ready", "unsupported", "unknown"
+          ]
+        },
+        "auth_status": {
+          "enum": ["not_applicable", "authenticated", "unauthenticated", "expired", "unknown", "error"]
+        },
+        "cost_class": {
+          "enum": ["local_compute", "subscription_included", "remote_economy", "remote_strong", "frontier_expensive", "unknown"]
+        },
+        "required_source_exposure": {
+          "enum": ["local_only", "semantic_evidence_only", "focused_snippets", "selected_files", "tool_mediated_worktree", "unrestricted_authorized"]
+        },
+        "acceleration_verified": { "type": "boolean" },
+        "acceleration_backend": {
+          "type": ["string", "null"],
+          "enum": ["cpu", "metal", "cuda", "rocm", "vulkan", "unknown", null]
+        }
+      }
+    },
+    "principal_host_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["host_id", "installed"],
+      "properties": {
+        "host_id": { "enum": ["antigravity", "cursor", "vscode"] },
+        "installed": { "type": "boolean" },
+        "path": { "type": "string" },
+        "version": { "type": "string" }
+      }
+    }
+  },
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "inventory_id": { "type": "string", "minLength": 1 },
+    "machine_fingerprint": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "observed_at": { "type": "string", "format": "date-time" },
+    "hardware": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["os_family", "arch", "logical_cores"],
+      "properties": {
+        "os_family": { "enum": ["linux", "darwin", "windows", "unknown"] },
+        "arch": { "type": "string", "minLength": 1 },
+        "logical_cores": { "type": "integer", "minimum": 0 },
+        "total_memory_bytes": { "type": "integer", "minimum": 0 },
+        "accelerator_backends": {
+          "type": "array",
+          "items": { "enum": ["cpu", "metal", "cuda", "rocm", "vulkan", "unknown"] }
+        }
+      }
+    },
+    "cognition_endpoints": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/cognition_endpoint_summary" }
+    },
+    "principal_hosts": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/principal_host_summary" }
+    },
+    "credentials": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/credential_inventory_entry" }
+    },
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max_source_exposure", "max_cost_class"],
+      "properties": {
+        "max_source_exposure": {
+          "enum": ["local_only", "semantic_evidence_only", "focused_snippets", "selected_files", "tool_mediated_worktree", "unrestricted_authorized"]
+        },
+        "max_cost_class": {
+          "enum": ["local_compute", "subscription_included", "remote_economy", "remote_strong", "frontier_expensive", "unknown"]
+        }
+      }
+    }
+  }
+}

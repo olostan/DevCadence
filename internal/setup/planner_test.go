@@ -810,3 +810,149 @@ func TestPlannerMLXSelectedOnDarwinCreatesSetupMLX(t *testing.T) {
 		t.Fatalf("absent-but-selected MLX on Darwin arm64 must create recipe.manual.pull_mlx_model")
 	}
 }
+
+// TestPlannerGeneratesReauthenticateActionForExpiredEndpoint proves an
+// endpoint with Auth == AuthExpired produces exactly one manual
+// re-authenticate SetupAction (WP-M3B-5 §5.3).
+func TestPlannerGeneratesReauthenticateActionForExpiredEndpoint(t *testing.T) {
+	clk := clock.NewFake(time.Date(2026, 9, 22, 12, 0, 0, 0, time.UTC), 0)
+	seq := ids.NewSequential()
+
+	planner, err := NewPlanner(PlannerOptions{Clock: clk, IDs: seq})
+	if err != nil {
+		t.Fatalf("NewPlanner: %v", err)
+	}
+
+	profile := protocol.ProfileCloudCognition
+	report := &protocol.DoctorReport{
+		SchemaVersion:      protocol.SchemaVersion1,
+		ReportID:           "doc_000000000000000000000009",
+		MachineFingerprint: "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+		ObservedAt:         protocol.NewTimestamp(clk.Now()),
+		Readiness:          protocol.ReadinessActionRequired,
+		EvaluationScope: protocol.ReadinessEvaluationScope{
+			TargetProfile:  &profile,
+			RequiredRoles:  []string{"implementation"},
+			EvidenceStatus: "live",
+		},
+		Findings: []protocol.DiagnosticFinding{
+			{
+				Category: "auth",
+				Severity: SeverityWarning,
+				Code:     FindingCodeAuthExpired,
+				Title:    "Authentication expired: claude-cli",
+				Detail:   "Endpoint claude-cli auth status is expired",
+			},
+		},
+		DiscoveredEndpoints: []protocol.CognitionEndpointSummary{
+			{
+				ID:                     "claude-cli",
+				Kind:                   protocol.EndpointAuthenticatedCLI,
+				Locality:               protocol.LocalityRemote,
+				Health:                 protocol.EndpointHealthUnhealthy,
+				Auth:                   protocol.AuthExpired,
+				CostClass:              protocol.CostSubscriptionIncluded,
+				RequiredSourceExposure: protocol.ExposureFocusedSnippets,
+			},
+			{
+				ID:                     "still-fine-endpoint",
+				Kind:                   protocol.EndpointRemoteAPI,
+				Locality:               protocol.LocalityRemote,
+				Health:                 protocol.EndpointHealthReady,
+				Auth:                   protocol.AuthAuthenticated,
+				CostClass:              protocol.CostRemoteEconomy,
+				RequiredSourceExposure: protocol.ExposureFocusedSnippets,
+			},
+		},
+	}
+
+	plan, err := planner.Plan(report, protocol.TargetAll, protocol.ProfileCloudCognition)
+	if err != nil {
+		t.Fatalf("planner.Plan: %v", err)
+	}
+	if err := plan.Validate(); err != nil {
+		t.Fatalf("plan.Validate: %v", err)
+	}
+
+	var reauthActions []protocol.SetupAction
+	for _, act := range plan.Actions {
+		if act.RecipeID == "recipe.manual.reauthenticate" {
+			reauthActions = append(reauthActions, act)
+		}
+	}
+	if len(reauthActions) != 1 {
+		t.Fatalf("expected exactly 1 reauthenticate action, got %d", len(reauthActions))
+	}
+	act := reauthActions[0]
+	if act.Authority != protocol.AuthorityHighImpactManual {
+		t.Errorf("authority = %q, want %q", act.Authority, protocol.AuthorityHighImpactManual)
+	}
+	if act.Operation != nil || act.ManualInstructions == nil {
+		t.Error("reauthenticate action must be manual (no Operation, has ManualInstructions)")
+	}
+	if act.Postconditions[0].Kind != protocol.CondKindEndpointHealthy || act.Postconditions[0].EndpointHealthy.EndpointID != "claude-cli" {
+		t.Errorf("postcondition does not target the expired endpoint: %+v", act.Postconditions)
+	}
+
+	// Targeting only TargetHardware must not produce the auth action.
+	planHW, err := planner.Plan(report, protocol.TargetHardware, protocol.ProfileCloudCognition)
+	if err != nil {
+		t.Fatalf("planner.Plan (hardware target): %v", err)
+	}
+	for _, act := range planHW.Actions {
+		if act.RecipeID == "recipe.manual.reauthenticate" {
+			t.Fatal("TargetHardware must not generate a reauthenticate action")
+		}
+	}
+}
+
+// TestPlannerDoesNotActionNoCodingEndpointFinding proves
+// FindingCodeNoCodingEndpoint never produces a SetupAction — there is no
+// endpoint to name in a remediation, and inventing a generic
+// "install/authenticate some coding CLI" action would mean recommending a
+// specific provider (WP-M3B-5 §3/§5.3's MUST-constraint boundary).
+func TestPlannerDoesNotActionNoCodingEndpointFinding(t *testing.T) {
+	clk := clock.NewFake(time.Date(2026, 9, 22, 12, 0, 0, 0, time.UTC), 0)
+	seq := ids.NewSequential()
+
+	planner, err := NewPlanner(PlannerOptions{Clock: clk, IDs: seq})
+	if err != nil {
+		t.Fatalf("NewPlanner: %v", err)
+	}
+
+	profile := protocol.ProfileCustom
+	report := &protocol.DoctorReport{
+		SchemaVersion:      protocol.SchemaVersion1,
+		ReportID:           "doc_000000000000000000000010",
+		MachineFingerprint: "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+		ObservedAt:         protocol.NewTimestamp(clk.Now()),
+		Readiness:          protocol.ReadinessActionRequired,
+		EvaluationScope: protocol.ReadinessEvaluationScope{
+			TargetProfile:  &profile,
+			RequiredRoles:  []string{"implementation"},
+			EvidenceStatus: "live",
+		},
+		Findings: []protocol.DiagnosticFinding{
+			{
+				Category: "cognition",
+				Severity: SeverityWarning,
+				Code:     FindingCodeNoCodingEndpoint,
+				Title:    "No healthy coding endpoint found",
+				Detail:   "DevCadence requires at least one healthy cognition endpoint for code execution",
+			},
+		},
+	}
+
+	plan, err := planner.Plan(report, protocol.TargetAll, protocol.ProfileCustom)
+	if err != nil {
+		t.Fatalf("planner.Plan: %v", err)
+	}
+	if err := plan.Validate(); err != nil {
+		t.Fatalf("plan.Validate: %v", err)
+	}
+	for _, act := range plan.Actions {
+		if act.RecipeID == "recipe.manual.reauthenticate" {
+			t.Fatalf("a NoCodingEndpoint finding must never produce a reauthenticate (or any coding-endpoint-specific) action, got: %+v", act)
+		}
+	}
+}

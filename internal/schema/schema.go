@@ -65,6 +65,7 @@ const (
 	NameSetupLedgerEvent     Name = "setup-ledger-event"
 	NameCredentialRef        Name = "credential-ref"
 	NameAuthEvidence         Name = "auth-evidence"
+	NameResourceInventory    Name = "resource-inventory"
 )
 
 // Names of the review-convergence schemas published ahead of their M6 Go
@@ -100,6 +101,7 @@ var RecordKindToSchema = map[string]Name{
 	"SetupLedgerEvent":          NameSetupLedgerEvent,
 	"CredentialRef":             NameCredentialRef,
 	"AuthEvidence":              NameAuthEvidence,
+	"ResourceInventory":         NameResourceInventory,
 }
 
 // Set is a compiled collection of schemas.
@@ -244,7 +246,7 @@ func AllNames() []Name {
 		NameSpecificationReadiness, NameReviewCampaign, NameFindingDisposition,
 		NameClosureDecision, NameMachineCapabilityProfile,
 		NameDoctorReport, NameSetupPlan, NameSetupExecutionReport, NameSetupLedgerEvent,
-		NameCredentialRef, NameAuthEvidence,
+		NameCredentialRef, NameAuthEvidence, NameResourceInventory,
 	}
 	sort.Slice(names, func(i, j int) bool {
 		if len(names[i]) != len(names[j]) {
