@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 
 	"github.com/olostan/DevCadence/internal/errs"
+	"github.com/olostan/DevCadence/internal/protocol"
 )
 
 // homeEnvVar names the environment variable that overrides the default
@@ -31,13 +32,37 @@ func ResolveHome() (string, error) {
 	return home, nil
 }
 
-// layoutDirs are the directories EnsureLayout creates under $DEVCADENCE_HOME,
-// matching the names internal/setup/doctor.go's checkStateRoot already
-// checks for.
-var layoutDirs = []string{
-	"state",
-	filepath.Join("artifacts", "setup"),
-	"tmp",
+// managedDirLocations lists every ManagedDirectoryLocation LocationPath
+// knows how to resolve, in the order EnsureLayout creates them. Kept as an
+// explicit list (rather than iterating protocol constants) so a new
+// location added to the protocol package fails LocationPath loudly instead
+// of silently being skipped by EnsureLayout.
+var managedDirLocations = []protocol.ManagedDirectoryLocation{
+	protocol.LocationState,
+	protocol.LocationArtifactsSetup,
+	protocol.LocationTmp,
+}
+
+// LocationPath resolves an allowlisted ManagedDirectoryLocation to its
+// absolute path under home. This is the single mapping every caller that
+// needs a location's real path uses — EnsureLayout, the condition
+// evaluator's managed_dir_exists check, and the create_directory operation
+// applier — so the three can never silently disagree about where a
+// location actually is.
+func LocationPath(home string, loc protocol.ManagedDirectoryLocation) (string, error) {
+	if !filepath.IsAbs(home) {
+		return "", errs.New(errs.CategoryInvalidArgument, "LocationPath: home must be an absolute path, got %q", home)
+	}
+	switch loc {
+	case protocol.LocationState:
+		return filepath.Join(home, "state"), nil
+	case protocol.LocationArtifactsSetup:
+		return filepath.Join(home, "artifacts", "setup"), nil
+	case protocol.LocationTmp:
+		return filepath.Join(home, "tmp"), nil
+	default:
+		return "", errs.New(errs.CategoryInvalidArgument, "LocationPath: unhandled location %q", loc)
+	}
 }
 
 // EnsureLayout idempotently creates the $DEVCADENCE_HOME directory layout
@@ -46,11 +71,12 @@ var layoutDirs = []string{
 // as-is: ADR-0014's owner-only requirement is a property of the path, not
 // just of paths this call happens to create.
 func EnsureLayout(home string) error {
-	if !filepath.IsAbs(home) {
-		return errs.New(errs.CategoryInvalidArgument, "EnsureLayout: home must be an absolute path, got %q", home)
-	}
-	for _, dir := range layoutDirs {
-		if err := ensureDirMode(filepath.Join(home, dir), 0700); err != nil {
+	for _, loc := range managedDirLocations {
+		path, err := LocationPath(home, loc)
+		if err != nil {
+			return err
+		}
+		if err := ensureDirMode(path, 0700); err != nil {
 			return err
 		}
 	}

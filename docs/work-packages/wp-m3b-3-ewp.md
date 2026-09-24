@@ -5,7 +5,7 @@
 - **Base commit:** `5bac450` (`feat/m3b-guided-bootstrap`, includes accepted WP-M3B-1 and WP-M3B-2 checkpoints)
 - **Branch:** `feat/m3b-guided-bootstrap`
 - **Depends on:** WP-M3B-1 (types), WP-M3B-2 (`Ledger`, `PostconditionChecker`, `ReconcileInterrupted`) — both accepted.
-- **Status:** Draft — implementation not yet written as of this commit.
+- **Status:** Implemented, pending independent review. See §12 for one interface refinement made during implementation (`ApplyOperation` also returns `*process.Result`) and §13 for deterministic evidence.
 
 ## 0. What already exists (pre-check, same pattern as WP-M3B-1/2)
 
@@ -105,7 +105,9 @@ type ApplierDeps struct {
     Home   string
     Cache  *CacheManager // WP-M3B-1/Phase-2, reused for remove_stale_cache
 }
-func ApplyOperation(ctx context.Context, deps ApplierDeps, op protocol.TypedOperation) (mutated bool, detail string, artifact *protocol.ArtifactRef, err error)
+// procResult is non-nil only when this operation kind actually ran a
+// subprocess — see §12 for why this return was added during implementation.
+func ApplyOperation(ctx context.Context, deps ApplierDeps, op protocol.TypedOperation, captureOutput bool) (mutated bool, detail string, procResult *process.Result, artifact *protocol.ArtifactRef, err error)
 func LocationPath(home string, loc protocol.ManagedDirectoryLocation) (string, error) // shared by home.go's EnsureLayout and this WP
 
 // internal/setup/executor.go
@@ -201,8 +203,39 @@ function Apply(ctx, plan, approvedDigest, yesScope):
 
 ## 10. Escalation conditions
 
-None anticipated at draft time. If implementation reveals `internal/artifacts.Store` cannot safely be reused rooted outside a project (e.g. an assumption this EWP's §3 verification missed), that is escalated as a revision to this EWP before falling back to a bespoke content-addressed store, not silently done.
+None triggered. `internal/artifacts.Store`'s reuse (§3) held exactly as verified — no revision needed.
 
 ## 11. Disposition
 
-Draft. To be updated to `implemented, pending review` once the code lands, and `accepted` once independently reviewed, matching the WP-M3B-1/2 checkpoint pattern.
+Implemented; pending independent review, matching the WP-M3B-1/2 checkpoint pattern (this checkpoint is only marked `accepted` once that review's findings, if any, are closed).
+
+## 12. Interface refinement made during implementation: `ApplyOperation` also returns `*process.Result`
+
+§5's original sketch had `ApplyOperation` return `(mutated bool, detail string, artifact *protocol.ArtifactRef, err error)`. While wiring `Executor.walk`, it became clear the executor needs `ExitCode`/`Signal`/output-truncation state to build a correct `ActionProcessCompletedPayload` ledger event (ADR-0014 §3) — and that event should only ever be appended for an action whose operation actually ran a subprocess (`create_directory`/`write_managed_config`/`remove_stale_cache` and three of the four diagnostic checks never do). `ApplyOperation`'s signature gained a fifth return, `procResult *process.Result`, non-nil exactly when a subprocess ran; `Executor.walk` appends `ActionProcessCompleted` if and only if it is non-nil. This is a local, non-breaking signature refinement within this WP's own new code (no other WP calls `ApplyOperation` yet) — recorded here per AGENTS.md §7's "local discretion" (mechanically necessary adaptation), not an architectural change requiring escalation.
+
+## 13. Deterministic evidence (base commit `0fecafd`, Go toolchain `go1.25.0`, linux/amd64)
+
+```
+$ go build ./...
+(clean, exit 0)
+
+$ go vet ./...
+(clean, exit 0)
+
+$ gofmt -l internal/setup/
+(no output — all formatted)
+
+$ go test -count=1 ./...
+ok  	github.com/olostan/DevCadence/internal/setup	0.461s
+... (all 26 packages ok, 0 failures)
+
+$ go test -race ./internal/setup/...
+ok  	github.com/olostan/DevCadence/internal/setup	3.999s
+
+$ GOOS=windows GOARCH=amd64 go build ./...
+(clean, exit 0)
+```
+
+New test files: `commandrunner.go` has no direct tests (it is a one-method interface declaration; its sole real implementation, `*process.Runner`, is already tested in `internal/process`). `conditions_test.go` (9 tests: command_available, managed_dir_exists before/after creation, port_listening, executable_verified digest mismatch/match/version-via-runner, endpoint_healthy fail-closed/configured, model_digest_present unsupported-runtime rejection). `operations_test.go` (7 tests: one per operation kind's applier, plus an invalid-managed-config-value rejection and an unhandled-kind rejection). `executor_test.go` (9 tests, directly mapping to §8's acceptance criteria plus manual-action-halts-the-walk and the `PostconditionChecker` interface-satisfaction check).
+
+Each §8 acceptance criterion maps to a specific test: `TestExecutorRejectsWrongDigest`, `TestExecutorHaltsOnPreconditionDrift`, `TestExecutorRejectsYesScopeOnPrivilegedPlan` (plus `TestExecutorYesScopeAllowsUserConfirmationPlan` proving the restriction is exactly "no more than user_confirmation," not "yesScope always rejected"), `TestExecutorBoundsOutputArtifacts` and `TestExecutorNeverArtifactsAuthenticationActions`.
