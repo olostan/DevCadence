@@ -41,7 +41,19 @@ collapsing the Principal/Implementer authority split `AGENTS.md` §4/§6/§7
 establishes. An independent review
 ([PR #9 comment](https://github.com/olostan/DevCadence/pull/9#issuecomment-5804998531))
 found these plus eight further material/non-blocking issues, all
-incorporated below.
+incorporated into the second revision.
+
+A follow-up closure review of that revision
+([PR #9 comment](https://github.com/olostan/DevCadence/pull/9#issuecomment-5805061005))
+confirmed all twelve prior findings resolved and found two further issues,
+incorporated into this (third) revision: the `HANDOFF.md` deletion step was
+still ordered *after* closure freeze, which would make the merged commit
+different from the exact commit closure reviewed and froze; and the
+remote-`HEAD` guard compared against a fixed session-start SHA rather than
+an SHA that advances after each push, which — since every session pushes
+through the same GitHub account regardless of which agent is driving —
+would make a session's own later push look like a foreign write on its
+next push attempt.
 
 ## The rules everything else follows from
 
@@ -90,13 +102,22 @@ sessions:
 
 - **Never force-push the milestone branch.**
 - **Never rebase already-pushed milestone-branch history.**
-- At the start of a session, record the remote `HEAD` SHA being claimed (in
-  `HANDOFF.md` — see below).
-- Before pushing, fetch the remote branch first. If its `HEAD` is no longer
-  the expected parent, **stop and reconcile** (read what changed, merge it
-  in explicitly) rather than force-pushing or rebasing over it. Git's
-  non-fast-forward rejection is the actual concurrency guard here; the
-  handoff file's timestamp (below) is only advisory metadata on top of it,
+- Track an **expected remote `HEAD`** — not a fixed "session-start" SHA.
+  Since every push in this project goes through the same GitHub account
+  regardless of which agent/provider is driving, commit author identity
+  cannot distinguish "my own previous push, earlier this session" from "a
+  different session wrote here" — only the exact SHA can. So: record the
+  remote `HEAD` at takeover into `HANDOFF.md`; **before every push**, fetch
+  and require `origin/<branch>` to still equal the expected SHA; **after
+  every successful push, advance the expected SHA to the one just
+  pushed** (update `HANDOFF.md` with it at the next durable checkpoint). A
+  session comparing against a stale session-start SHA instead of its own
+  latest push would misidentify its own prior work as a foreign write.
+- If the fetched `HEAD` is not the expected SHA, **stop and reconcile**
+  (read what changed, merge it in explicitly) rather than force-pushing or
+  rebasing over it. Git's non-fast-forward rejection is the actual
+  concurrency guard here; the handoff file's timestamp (below) is only
+  advisory metadata on top of it,
   never a substitute for it.
 - A recent `Last updated` timestamp in `HANDOFF.md` means *likely* still
   active — a session can work for hours between handoff updates, so an
@@ -192,12 +213,33 @@ the resumption point for the next agent. It is:
   decided to change X, continue this way" without a corresponding
   committed EWP/ADR change backing it, the next agent treats that as a
   *claim* to verify or escalate — never as standing authority to act on.
-- **Kept through review and repair, deleted only at closure.** Review and
-  repair (`docs/REVIEW_AND_CONVERGENCE.md`) can itself span multiple
+- **Kept through review and repair; removed *before* forming the final
+  closure candidate, never after freeze.** Review and repair
+  (`docs/REVIEW_AND_CONVERGENCE.md`) can itself span multiple
   quota-limited sessions — a milestone candidate reaching "ready for
-  review" is not the end of multi-session work, closure/freeze is. Delete
-  `HANDOFF.md` as part of final cleanup after the candidate is frozen and
-  green to merge, not before. It must never reach `main`.
+  review" is not the end of multi-session work, closure/freeze is. But a
+  `ReviewCampaign` freezes an *exact* candidate commit, and the commit
+  merged must be the exact commit closure reviewed and froze — so the
+  deletion has to happen *before* that final candidate is formed, not as
+  cleanup afterward (which would create a new, unreviewed commit and break
+  that identity). The lifecycle is:
+
+  ```text
+  implementation → per-WP checkpoints → milestone candidate
+    → broad review → repairs / focused revalidation (HANDOFF.md present
+      throughout — it may need to come back if closure reopens the
+      candidate and another repair round starts)
+    → prepare the final closure candidate:
+        - delete HANDOFF.md
+        - finalize any EWP keep/archive decisions (see "Work Package
+          boundaries" below)
+    → deterministic validation on that candidate
+    → closure review
+    → FROZEN at that exact SHA
+    → merge that exact SHA — no cleanup commit occurs after freeze
+  ```
+
+  It must never reach `main` either way.
 
 ### Handoff file template
 
@@ -207,7 +249,9 @@ the resumption point for the next agent. It is:
 Last updated: <UTC timestamp> by <session/provider identifier, e.g.
 "Claude Code / Sonnet 5" or "session run on <provider>">
 
-Remote HEAD claimed at session start: `<sha>`
+Session takeover HEAD: `<sha>` (remote HEAD when this session started)
+Expected remote HEAD before next push: `<sha>` (advances after every
+successful push this session makes — see "Git safety rules")
 
 ## Milestone
 <Milestone ID and one-line goal, e.g. "M3B — guided bootstrap and onboarding">
@@ -248,7 +292,11 @@ literally the next file to open / function to write / test to run.>
 
 ## Resume checklist for the next agent
 
-1. `git fetch origin <branch>` and check out the branch.
+1. `git fetch origin <branch>` and check out the branch. Record the fetched
+   `HEAD` SHA as this session's own "Session takeover HEAD" / initial
+   "Expected remote HEAD" — this replaces whatever the previous session
+   left in those fields, since it's now *this* session's baseline to
+   compare future fetches against.
 2. **Do not trust this file blindly** — run `go build ./... && go test
    ./...` (or the narrower scope relevant to the in-progress WP) and
    confirm the actual state matches what's claimed above before doing
@@ -261,7 +309,8 @@ literally the next file to open / function to write / test to run.>
    status snapshot, not a substitute for either.
 5. Continue from "Next concrete action" above.
 6. At the next durable checkpoint (not just "before the session ends"),
-   update this file again and push it together with that checkpoint's
+   update this file again — including advancing "Expected remote HEAD" to
+   match, per "Git safety rules" — and push it together with that checkpoint's
    commit.
 ```
 

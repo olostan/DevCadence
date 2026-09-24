@@ -326,9 +326,10 @@ misleading is not done").
 - `README.md`/`INVARIANTS.md`: spot-check for anything M3B changes that
   needs reflecting there.
 - `HANDOFF.md` stays through review/repair per `AGENT_HANDOFF_PROTOCOL.md`
-  and is deleted only once the milestone candidate is frozen/closed and
-  green to merge — not as part of this WP, which only gets the candidate
-  to "ready for review."
+  — this WP only gets the candidate to "ready for review." It is removed
+  later, as part of preparing the final closure candidate (*before* that
+  candidate is frozen, not as post-freeze cleanup), which is closure work,
+  not this WP's.
 
 **Acceptance criteria:** every fixture above passes; `go test -count=1
 ./... && go test -race ./... && go vet ./...` clean; the milestone's own
