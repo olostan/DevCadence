@@ -1,37 +1,56 @@
 # Handoff — M3B guided bootstrap (feat/m3b-guided-bootstrap)
 
-Last updated: 2026-09-24T03:15:00Z by Claude Code / Sonnet 5 (cloud session, olostan@gmail.com)
+Last updated: 2026-09-24T05:00:00Z by Claude Code / Sonnet 5 (cloud session, olostan@gmail.com)
 
 Session takeover HEAD: `a38b293` (origin/main HEAD when this session started — branch did not exist yet)
-Expected remote HEAD before next push: `d0bc994` (the actual current pushed HEAD — this field always tracks the real remote tip, which is not necessarily the same commit as a WP's own immutable checkpoint SHA in the table below; advance this after every successful push — see "Git safety rules" in AGENT_HANDOFF_PROTOCOL.md)
+Expected remote HEAD before next push: `548b38e` (the actual current pushed HEAD — this field always tracks the real remote tip, which is not necessarily the same commit as a WP's own immutable checkpoint SHA in the table below; advance this after every successful push — see "Git safety rules" in AGENT_HANDOFF_PROTOCOL.md)
 
-## STOP — read this before doing anything else on WP-M3B-3
+## Architecture question from WP-M3B-3 §16 is resolved — MLX-LM/Ollama redesign implemented
 
-WP-M3B-3 is **not accepted** and has an **unresolved architecture question**
-that the next session must not route around. The 10-finding independent
-review round is fixed and verified (see the WP table below, EWP §15), but a
-**second** review comment
-([PR #10](https://github.com/olostan/DevCadence/pull/10#issuecomment-5806753036),
-owner) landed while those fixes were being finished, identifying that this
-WP's design is Ollama-specific in a way that conflicts with this
-repository's own canonical architecture (`docs/MODEL_RUNTIME.md`,
-`INVARIANTS.md` DCI-055: model runtimes must be replaceable adapters, not
-core-domain dependencies; MLX-LM must be a first-class peer to Ollama, not
-a later manual path). Full detail in
-`docs/work-packages/wp-m3b-3-ewp.md` §16 — **read it before writing any
-more setup/executor code**.
+The previous STOP banner (option (a)/(b) decision on EWP §16) is resolved:
+the project owner gave an explicit instruction directly in-session —
+`ollama_pull_model`/`model_digest_present` are **not** frozen on this
+unmerged branch, and MLX-LM must be treated as a fully equal peer to
+Ollama, "in absolutely equal way." This session implemented that redesign
+at commit `548b38e`:
 
-This session did not implement the redesign (a generic
-`ensure_local_model`-shaped operation behind a `LocalModelRuntimeAdapter`
-boundary, spanning WP-M3B-1's frozen `TypedOperation` union as much as this
-WP's executor) — it's a genuine architectural change, not a checkpoint fix,
-and this session ran low on budget after the 10-finding round. **The next
-session's first job is to get an explicit answer** (from the owner, or by
-reading further PR activity if one already arrived) on EWP §16's two
-options: (a) implement the runtime-agnostic redesign with MLX-LM as a real
-peer adapter before WP-M3B-3 is accepted, or (b) defer it explicitly to a
-later WP and accept this checkpoint as an interim Ollama-only state. Do
-not silently pick either option.
+- `internal/protocol/setup.go`: `OpKindOllamaPullModel`/`OllamaPullModelParams`
+  → `OpKindEnsureLocalModel`/`EnsureLocalModelParams{Runtime,ModelRef,
+  ResolvedRevision,...}`; `CondKindModelDigestPresent`/`ModelDigestOperand`
+  → `CondKindModelPresent`/`ModelPresentOperand{Runtime,ModelRef,
+  ResolvedRevision}`. No more sha256-format constraint on the revision
+  field (MLX/HF revisions aren't sha256 digests).
+- New `internal/setup/modelruntime.go` (`LocalModelRuntimeAdapter`
+  interface, `ModelRuntimeRegistry`, `DefaultModelRuntimeAdapters()` =
+  `{OllamaAdapter{}, MLXAdapter{}}`, no default/preferred runtime),
+  `ollama_adapter.go` (extracted, unchanged behavior), `mlx_adapter.go`
+  (new, real: `huggingface-cli download`/`--local-files-only` verify).
+- `internal/setup/{conditions,operations,executor,planner}.go` updated to
+  dispatch through the registry — no runtime name appears in any of those
+  three files' dispatch logic anymore. `planner.go` gained a shared
+  `localModelRecipe`/`ensureLocalModelAction` helper so Ollama and MLX
+  build their actions identically, differing only in recipe inputs.
+- Schemas (`schemas/setup-plan.schema.json`,
+  `schemas/setup-ledger-event.schema.json`) and
+  `fixtures/protocol/setup-plan.valid.json` (renamed fields, recomputed
+  `plan_digest`) updated to match.
+- `docs/work-packages/wp-m3b-1-ewp.md` §13 and
+  `docs/work-packages/wp-m3b-3-ewp.md` §16 amendment record the change
+  with full rationale and file list.
+
+**Verified:** `go build ./...`, `go vet ./...`, `gofmt -l` (setup +
+protocol/setup*.go), `go test -count=1 ./...` (all packages, including the
+`tests` schema-fixture round-trip), `go test -race
+./internal/setup/...`, `GOOS=windows GOARCH=amd64 go build ./...` — all
+clean.
+
+**Not yet done:** a fresh independent review round of this redesign
+specifically (post it to PR #10 and watch for the owner's response — the
+review question now is whether the adapter boundary genuinely eliminates
+runtime-specific code from the three dispatch files, and whether MLX gets
+Ollama-equivalent rigor, not whether Ollama regressed). WP-M3B-3 should
+stay `implemented, pending fresh review` until that lands, not flipped to
+`accepted` unilaterally.
 
 ## Milestone
 
@@ -88,7 +107,7 @@ executor}.go` — see that WP's row above and
 |----|--------|------------|------------|--------|
 | WP-M3B-1 | accepted | `6833219` | `go build ./...`, `go vet ./...`, `go test -count=1 ./...` all PASS (see EWP §8) | independent review complete — [PR #10 comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5805285148) (owner), 3 findings, all addressed in EWP §12; verified in [follow-up comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5805447822) |
 | WP-M3B-2 | accepted | `bb01bc9` | `go build ./...`, `go vet ./...`, `go test -count=1 ./...`, `go test -race ./internal/setup/...`, `GOOS=windows GOARCH=amd64 go build ./...` all PASS (see EWP §13) | independent review complete — [PR #10 comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5805603916) (owner), 7 findings, all addressed in EWP §14 |
-| WP-M3B-3 | implemented, NOT accepted — architecture question open | `d0bc994` | `go build ./...`, `go vet ./...`, `go test -count=1 ./...`, `go test -race ./internal/setup/...`, `GOOS=windows GOARCH=amd64 go build ./...` all PASS (see EWP §13) | 10-finding round complete and addressed ([review](https://github.com/olostan/DevCadence/pull/10#issuecomment-5806276805), [fixes in EWP §15](docs/work-packages/wp-m3b-3-ewp.md)); **second review raised an unresolved architecture question** ([comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5806753036), EWP §16) — not yet answered or implemented |
+| WP-M3B-3 | implemented, pending fresh review of the runtime-agnostic redesign | `548b38e` | `go build ./...`, `go vet ./...`, `go test -count=1 ./...`, `go test -race ./internal/setup/...`, `GOOS=windows GOARCH=amd64 go build ./...` all PASS (see EWP §13, §16 amendment) | 10-finding round complete and addressed ([review](https://github.com/olostan/DevCadence/pull/10#issuecomment-5806276805), [fixes in EWP §15](docs/work-packages/wp-m3b-3-ewp.md)); architecture question from second review ([comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5806753036), EWP §16) resolved by explicit owner instruction and **implemented** (EWP §16 amendment) — a fresh review round of the redesign itself has not yet happened |
 | WP-M3B-4 | not started | — | — | blocked on WP-M3B-3 review |
 | WP-M3B-5 | unknown — likely partially pre-existing, unverified | — | — | assess `internal/setup/doctor.go`, `profiles.go` first |
 | WP-M3B-6 | unknown — likely partially pre-existing, unverified | — | — | assess `internal/setup/planner.go`, `cache.go` first |
@@ -189,21 +208,13 @@ reviewed, findings resolved) — see their rows above.
 
 ## Next concrete action
 
-**First**, per the STOP banner: get an explicit answer on EWP §16 before
-writing more executor/setup code — check for further PR activity on #10
-(the owner may have already replied with a decision), and if none has
-arrived, treat this as a genuine blocking question, not something to
-resolve unilaterally. If the answer is "implement the redesign": that
-spans a WP-M3B-1 EWP amendment (a generic `ensure_local_model`-shaped
-`TypedOperation`, or equivalent) and a real MLX-LM adapter under
-`internal/setup` (or wherever the EWP amendment places it), with
-service-level end-to-end coverage on an MLX-capable profile — budget this
-as its own substantial session, not a quick follow-up. If the answer is
-"defer explicitly": update EWP §16's disposition to record that decision
-with attribution, flip WP-M3B-3 to `accepted` at that point, and proceed
-to WP-M3B-4/5/6 per the dependency chain in `docs/WORK_PACKAGES.md` (any
-order, not concurrently — see `AGENT_HANDOFF_PROTOCOL.md`'s "Concurrency
-model"), starting each with the same pre-check pattern against
+Post a PR comment on #10 summarizing the redesign at `548b38e` (this
+session's own job, next) and continue watching for the owner's response.
+Once a fresh review round on the redesign lands and its findings (if any)
+are addressed, flip WP-M3B-3 to `accepted` and proceed to WP-M3B-4/5/6 per
+the dependency chain in `docs/WORK_PACKAGES.md` (any order, not
+concurrently — see `AGENT_HANDOFF_PROTOCOL.md`'s "Concurrency model"),
+starting each with the same pre-check pattern against
 `internal/setup/{doctor,planner,profiles,cache}.go`.
 
 ## Resume checklist for the next agent
