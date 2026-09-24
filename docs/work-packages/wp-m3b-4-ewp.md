@@ -5,7 +5,7 @@
 - **Base commit:** `9b8c809615bc2f5c961f2cacf14e0de4110b0ad4` (`feat/m3b-guided-bootstrap`, post-merge of PR #12 roadmap rebaseline; includes accepted WP-M3B-1, WP-M3B-2, and WP-M3B-3 checkpoints)
 - **Branch:** `feat/m3b-guided-bootstrap`
 - **Depends on:** WP-M3B-1 (accepted at `6833219`, amended §13), WP-M3B-2 (accepted at `bb01bc9`), WP-M3B-3 (accepted at `cc799cd`).
-- **Status:** Implementation complete; independent review found 6 substantive blockers (presence-vs-authenticated conflation, unenforced secret guard, AuthEvidence validation gaps, Go/schema parity mismatches, an incoherent Record integration, and over-confident CLI failure semantics) plus bookkeeping issues — all fixed; see §13 below.
+- **Status:** **Accepted** ([acceptance review](https://github.com/olostan/DevCadence/pull/10#issuecomment-5819033678), owner, 2026-09-24, at head `75e65a7`). Three independent-review rounds (§13, §14, §15 below) found and closed 6+3+2 findings across presence-vs-authenticated conflation, an unenforced secret guard, AuthEvidence validation gaps, Go/schema parity (ASCII and Unicode), an incoherent Record integration, over-confident CLI failure semantics, real-runner execution/Handle-vs-ExecutablePath separation, and — the final round — a positive structural authority boundary for `BoundedCLIAuthAdapter`'s auth probe via the closed `AuthProbeDefinition` type.
 
 ---
 
@@ -472,4 +472,8 @@ A third review round ([PR #10 comment](https://github.com/olostan/DevCadence/pul
 **Verification (this revision):** `go build ./...`, `go vet ./...`, `go test -count=1 ./...` (all packages, including the new `AuthProbeDefinition` construction tests and Unicode boundary parity cases), `go test -race ./internal/credentials/... ./internal/protocol/... ./internal/cognition/...`, `GOOS=windows GOARCH=amd64 go build ./...`, `GOOS=linux GOARCH=amd64 go build ./...` — all clean.
 
 **Disposition:** both third-round findings fixed; per the reviewer, "the next round [is expected to] be an acceptance review rather than another architecture round" — awaiting that review before WP-M3B-4 can be marked `accepted`.
+
+## 16. Acceptance
+
+The [acceptance review](https://github.com/olostan/DevCadence/pull/10#issuecomment-5819033678) (owner, 2026-09-24, head `75e65a7`) accepted both §15 findings and ran a regression sweep over every finding closed across §13/§14/§15, finding no substantive regression. Disposition: **"WP-M3B-4 is accepted. GREEN to proceed to WP-M3B-5."** PR #10 itself remains open as the draft milestone PR for the rest of M3B.
 
