@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -16,15 +17,39 @@ func ledgerTestTime(offsetSeconds int) protocol.Timestamp {
 	return protocol.NewTimestamp(time.Date(2026, 9, 24, 12, 0, offsetSeconds, 0, time.UTC))
 }
 
-const testPlanDigest = "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+const testMachineFingerprint = "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 
-func executionCreatedEvent(eventID, executionID, planID string) *protocol.SetupLedgerEvent {
+// testPlan returns a minimal SetupPlan whose digest can be computed
+// (ComputePlanDigest only needs the fields it hashes, not a fully
+// Validate()-passing plan) for use as the "approved plan" ledger events
+// and ProjectExecutionReport calls are anchored to.
+func testPlan(planID string) *protocol.SetupPlan {
+	return &protocol.SetupPlan{
+		SchemaVersion:      protocol.SchemaVersion1,
+		PlanID:             planID,
+		RecipeSetVersion:   "1.0",
+		MachineFingerprint: testMachineFingerprint,
+		CreatedAt:          ledgerTestTime(0),
+		Target:             protocol.TargetAll,
+	}
+}
+
+func testPlanDigest(t *testing.T, plan *protocol.SetupPlan) string {
+	t.Helper()
+	digest, err := protocol.ComputePlanDigest(plan)
+	if err != nil {
+		t.Fatalf("ComputePlanDigest: %v", err)
+	}
+	return digest
+}
+
+func executionCreatedEvent(eventID, executionID, planID, planDigest string) *protocol.SetupLedgerEvent {
 	return &protocol.SetupLedgerEvent{
 		SchemaVersion: protocol.SchemaVersion1,
 		EventID:       eventID,
 		ExecutionID:   executionID,
 		PlanID:        planID,
-		PlanDigest:    testPlanDigest,
+		PlanDigest:    planDigest,
 		Timestamp:     ledgerTestTime(0),
 		Type:          protocol.EventExecutionCreated,
 		Payload: protocol.EventPayload{
@@ -36,13 +61,13 @@ func executionCreatedEvent(eventID, executionID, planID string) *protocol.SetupL
 	}
 }
 
-func planApprovedEvent(eventID, executionID, planID string) *protocol.SetupLedgerEvent {
+func planApprovedEvent(eventID, executionID, planID, planDigest string) *protocol.SetupLedgerEvent {
 	return &protocol.SetupLedgerEvent{
 		SchemaVersion: protocol.SchemaVersion1,
 		EventID:       eventID,
 		ExecutionID:   executionID,
 		PlanID:        planID,
-		PlanDigest:    testPlanDigest,
+		PlanDigest:    planDigest,
 		Timestamp:     ledgerTestTime(1),
 		Type:          protocol.EventPlanApproved,
 		Payload: protocol.EventPayload{
@@ -54,14 +79,14 @@ func planApprovedEvent(eventID, executionID, planID string) *protocol.SetupLedge
 	}
 }
 
-func actionStartingEvent(eventID, executionID, planID, actionID string) *protocol.SetupLedgerEvent {
+func actionStartingEvent(eventID, executionID, planID, planDigest, actionID string) *protocol.SetupLedgerEvent {
 	opKind := protocol.OpKindCreateDirectory
 	return &protocol.SetupLedgerEvent{
 		SchemaVersion: protocol.SchemaVersion1,
 		EventID:       eventID,
 		ExecutionID:   executionID,
 		PlanID:        planID,
-		PlanDigest:    testPlanDigest,
+		PlanDigest:    planDigest,
 		ActionID:      actionID,
 		Timestamp:     ledgerTestTime(2),
 		Type:          protocol.EventActionStarting,
@@ -77,15 +102,34 @@ func actionStartingEvent(eventID, executionID, planID, actionID string) *protoco
 	}
 }
 
-func actionTerminatedEvent(eventID, executionID, planID, actionID string, status protocol.ActionStatus) *protocol.SetupLedgerEvent {
+func actionProcessCompletedEvent(eventID, executionID, planID, planDigest, actionID string, exitCode int) *protocol.SetupLedgerEvent {
 	return &protocol.SetupLedgerEvent{
 		SchemaVersion: protocol.SchemaVersion1,
 		EventID:       eventID,
 		ExecutionID:   executionID,
 		PlanID:        planID,
-		PlanDigest:    testPlanDigest,
+		PlanDigest:    planDigest,
 		ActionID:      actionID,
 		Timestamp:     ledgerTestTime(3),
+		Type:          protocol.EventActionProcessCompleted,
+		Payload: protocol.EventPayload{
+			ActionProcessCompleted: &protocol.ActionProcessCompletedPayload{
+				ActionID: actionID,
+				ExitCode: exitCode,
+			},
+		},
+	}
+}
+
+func actionTerminatedEvent(eventID, executionID, planID, planDigest, actionID string, status protocol.ActionStatus) *protocol.SetupLedgerEvent {
+	return &protocol.SetupLedgerEvent{
+		SchemaVersion: protocol.SchemaVersion1,
+		EventID:       eventID,
+		ExecutionID:   executionID,
+		PlanID:        planID,
+		PlanDigest:    planDigest,
+		ActionID:      actionID,
+		Timestamp:     ledgerTestTime(4),
 		Type:          protocol.EventActionTerminated,
 		Payload: protocol.EventPayload{
 			ActionTerminated: &protocol.ActionTerminatedPayload{
@@ -96,14 +140,14 @@ func actionTerminatedEvent(eventID, executionID, planID, actionID string, status
 	}
 }
 
-func executionFinishedEvent(eventID, executionID, planID string, status protocol.ExecutionStatus) *protocol.SetupLedgerEvent {
+func executionFinishedEvent(eventID, executionID, planID, planDigest string, status protocol.ExecutionStatus) *protocol.SetupLedgerEvent {
 	return &protocol.SetupLedgerEvent{
 		SchemaVersion: protocol.SchemaVersion1,
 		EventID:       eventID,
 		ExecutionID:   executionID,
 		PlanID:        planID,
-		PlanDigest:    testPlanDigest,
-		Timestamp:     ledgerTestTime(4),
+		PlanDigest:    planDigest,
+		Timestamp:     ledgerTestTime(5),
 		Type:          protocol.EventExecutionFinished,
 		Payload: protocol.EventPayload{
 			ExecutionFinished: &protocol.ExecutionFinishedPayload{
@@ -113,23 +157,34 @@ func executionFinishedEvent(eventID, executionID, planID string, status protocol
 	}
 }
 
+func mustEvents(t *testing.T, l *Ledger) []*protocol.SetupLedgerEvent {
+	t.Helper()
+	events, err := l.Events()
+	if err != nil {
+		t.Fatalf("Events: %v", err)
+	}
+	return events
+}
+
 func TestLedgerAppendAndReload(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "setup-ledger.jsonl")
+	plan := testPlan("plan-001")
+	digest := testPlanDigest(t, plan)
 
 	l, err := OpenLedger(path)
 	if err != nil {
 		t.Fatalf("OpenLedger (new): %v", err)
 	}
-	if got := l.Events(); len(got) != 0 {
+	if got := mustEvents(t, l); len(got) != 0 {
 		t.Fatalf("new ledger has %d events, want 0", len(got))
 	}
 
 	events := []*protocol.SetupLedgerEvent{
-		executionCreatedEvent("evt-001", "exec-001", "plan-001"),
-		planApprovedEvent("evt-002", "exec-001", "plan-001"),
-		actionStartingEvent("evt-003", "exec-001", "plan-001", "act-001"),
-		actionTerminatedEvent("evt-004", "exec-001", "plan-001", "act-001", protocol.ActionStatusSucceeded),
-		executionFinishedEvent("evt-005", "exec-001", "plan-001", protocol.ExecutionStatusSucceeded),
+		executionCreatedEvent("evt-001", "exec-001", "plan-001", digest),
+		planApprovedEvent("evt-002", "exec-001", "plan-001", digest),
+		actionStartingEvent("evt-003", "exec-001", "plan-001", digest, "act-001"),
+		actionTerminatedEvent("evt-004", "exec-001", "plan-001", digest, "act-001", protocol.ActionStatusSucceeded),
+		executionFinishedEvent("evt-005", "exec-001", "plan-001", digest, protocol.ExecutionStatusSucceeded),
 	}
 	for i, e := range events {
 		appended, err := l.Append(e)
@@ -145,7 +200,7 @@ func TestLedgerAppendAndReload(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenLedger (reload): %v", err)
 	}
-	got := reopened.Events()
+	got := mustEvents(t, reopened)
 	if len(got) != len(events) {
 		t.Fatalf("reloaded ledger has %d events, want %d", len(got), len(events))
 	}
@@ -160,7 +215,7 @@ func TestLedgerAppendAndReload(t *testing.T) {
 
 	// Appending further from the reloaded ledger must continue the chain,
 	// not restart it.
-	next, err := reopened.Append(executionCreatedEvent("evt-006", "exec-002", "plan-002"))
+	next, err := reopened.Append(executionCreatedEvent("evt-006", "exec-002", "plan-002", digest))
 	if err != nil {
 		t.Fatalf("Append after reload: %v", err)
 	}
@@ -174,22 +229,25 @@ func TestLedgerAppendAndReload(t *testing.T) {
 
 func TestLedgerFailsClosedOnNonFinalCorruption(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "setup-ledger.jsonl")
+	plan := testPlan("plan-001")
+	digest := testPlanDigest(t, plan)
 
 	l, err := OpenLedger(path)
 	if err != nil {
 		t.Fatalf("OpenLedger: %v", err)
 	}
 	for _, e := range []*protocol.SetupLedgerEvent{
-		executionCreatedEvent("evt-001", "exec-001", "plan-001"),
-		planApprovedEvent("evt-002", "exec-001", "plan-001"),
-		actionStartingEvent("evt-003", "exec-001", "plan-001", "act-001"),
+		executionCreatedEvent("evt-001", "exec-001", "plan-001", digest),
+		planApprovedEvent("evt-002", "exec-001", "plan-001", digest),
+		actionStartingEvent("evt-003", "exec-001", "plan-001", digest, "act-001"),
 	} {
 		if _, err := l.Append(e); err != nil {
 			t.Fatalf("Append: %v", err)
 		}
 	}
 
-	// Corrupt the first (non-final) line in place, preserving line count.
+	// Corrupt the first (non-final) line in place, preserving line count
+	// and keeping every line newline-terminated.
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read ledger file: %v", err)
@@ -204,113 +262,190 @@ func TestLedgerFailsClosedOnNonFinalCorruption(t *testing.T) {
 	}
 
 	_, err = OpenLedger(path)
-	if err == nil {
-		t.Fatal("OpenLedger accepted a ledger with a corrupt non-final line; expected an error")
+	requireIntegrityError(t, err, "OpenLedger accepted a ledger with a corrupt non-final line")
+}
+
+func TestLedgerFailsClosedOnCorruptNewlineTerminatedFinalLine(t *testing.T) {
+	// A complete, newline-terminated final record that is invalid must
+	// fail closed, not be silently truncated away — only an unterminated
+	// (genuinely torn) final write is ever recoverable.
+	path := filepath.Join(t.TempDir(), "setup-ledger.jsonl")
+	plan := testPlan("plan-001")
+	digest := testPlanDigest(t, plan)
+
+	l, err := OpenLedger(path)
+	if err != nil {
+		t.Fatalf("OpenLedger: %v", err)
 	}
-	var appErr *errs.Error
-	if !errors.As(err, &appErr) || appErr.Category != errs.CategoryIntegrity {
-		t.Fatalf("OpenLedger error = %v, want a CategoryIntegrity error", err)
+	if _, err := l.Append(executionCreatedEvent("evt-001", "exec-001", "plan-001", digest)); err != nil {
+		t.Fatalf("Append: %v", err)
 	}
+
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND, 0600)
+	if err != nil {
+		t.Fatalf("open for append: %v", err)
+	}
+	if _, err := f.Write([]byte(`{"this_is": "a complete, newline-terminated, but invalid record"}` + "\n")); err != nil {
+		t.Fatalf("write corrupt terminated line: %v", err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+
+	_, err = OpenLedger(path)
+	requireIntegrityError(t, err, "OpenLedger accepted a ledger whose newline-terminated final line is corrupt")
 }
 
 func TestLedgerRecoversTornFinalWrite(t *testing.T) {
-	cases := []struct {
-		name    string
-		corrupt func(lastLine []byte) []byte
-	}{
-		{
-			name: "truncated mid-write",
-			corrupt: func(lastLine []byte) []byte {
-				return lastLine[:len(lastLine)/2]
-			},
-		},
-		{
-			name: "complete but invalid JSON",
-			corrupt: func(lastLine []byte) []byte {
-				return []byte(`{"this_is": "not a setup ledger event at all"}`)
-			},
-		},
+	path := filepath.Join(t.TempDir(), "setup-ledger.jsonl")
+	plan := testPlan("plan-001")
+	digest := testPlanDigest(t, plan)
+
+	l, err := OpenLedger(path)
+	if err != nil {
+		t.Fatalf("OpenLedger: %v", err)
+	}
+	good := []*protocol.SetupLedgerEvent{
+		executionCreatedEvent("evt-001", "exec-001", "plan-001", digest),
+		planApprovedEvent("evt-002", "exec-001", "plan-001", digest),
+	}
+	for _, e := range good {
+		if _, err := l.Append(e); err != nil {
+			t.Fatalf("Append: %v", err)
+		}
 	}
 
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			path := filepath.Join(t.TempDir(), "setup-ledger.jsonl")
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read ledger file: %v", err)
+	}
+	lines := splitLines(t, raw)
+	if len(lines) != 2 {
+		t.Fatalf("expected 2 lines, got %d", len(lines))
+	}
 
-			l, err := OpenLedger(path)
-			if err != nil {
-				t.Fatalf("OpenLedger: %v", err)
-			}
-			good := []*protocol.SetupLedgerEvent{
-				executionCreatedEvent("evt-001", "exec-001", "plan-001"),
-				planApprovedEvent("evt-002", "exec-001", "plan-001"),
-			}
-			for _, e := range good {
-				if _, err := l.Append(e); err != nil {
-					t.Fatalf("Append: %v", err)
-				}
-			}
+	// Build what a complete third event's line would have been, then write
+	// only a truncated, NOT newline-terminated prefix of it — the
+	// unambiguous signature of a write cut off mid-append.
+	third := actionStartingEvent("evt-003", "exec-001", "plan-001", digest, "act-001")
+	third.Sequence = 3
+	third.PreviousEventDigest = mustDigest(t, lines[1])
+	digest3, err := protocol.ComputeLedgerEventDigest(third)
+	if err != nil {
+		t.Fatalf("ComputeLedgerEventDigest: %v", err)
+	}
+	third.EventDigest = digest3
+	thirdBytes, err := protocol.Marshal(third)
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	torn := thirdBytes[:len(thirdBytes)/2] // no trailing '\n': unterminated
 
-			raw, err := os.ReadFile(path)
-			if err != nil {
-				t.Fatalf("read ledger file: %v", err)
-			}
-			lines := splitLines(t, raw)
-			if len(lines) != 2 {
-				t.Fatalf("expected 2 lines, got %d", len(lines))
-			}
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND, 0600)
+	if err != nil {
+		t.Fatalf("open for append: %v", err)
+	}
+	if _, err := f.Write(torn); err != nil {
+		t.Fatalf("write torn line: %v", err)
+	}
+	f.Close()
 
-			// Simulate a crash mid-write of a third event: append a torn
-			// final line directly to the file, bypassing Append.
-			third := actionStartingEvent("evt-003", "exec-001", "plan-001", "act-001")
-			third.Sequence = 3
-			third.PreviousEventDigest = mustDigest(t, lines[1])
-			digest, err := protocol.ComputeLedgerEventDigest(third)
-			if err != nil {
-				t.Fatalf("ComputeLedgerEventDigest: %v", err)
-			}
-			third.EventDigest = digest
-			thirdBytes, err := protocol.Marshal(third)
-			if err != nil {
-				t.Fatalf("Marshal: %v", err)
-			}
-			torn := tc.corrupt(append(thirdBytes, '\n'))
+	reopened, err := OpenLedger(path)
+	if err != nil {
+		t.Fatalf("OpenLedger recovering torn write: %v", err)
+	}
+	recovered := mustEvents(t, reopened)
+	if len(recovered) != 2 {
+		t.Fatalf("recovered %d events, want 2 (torn write dropped)", len(recovered))
+	}
 
-			f, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND, 0600)
-			if err != nil {
-				t.Fatalf("open for append: %v", err)
-			}
-			if _, err := f.Write(torn); err != nil {
-				t.Fatalf("write torn line: %v", err)
-			}
-			f.Close()
+	// The next Append must continue the chain at sequence 3, proving the
+	// file was actually truncated, not just skipped in memory.
+	next, err := reopened.Append(actionStartingEvent("evt-003b", "exec-001", "plan-001", digest, "act-001"))
+	if err != nil {
+		t.Fatalf("Append after recovery: %v", err)
+	}
+	if next.Sequence != 3 {
+		t.Fatalf("Append after recovery: sequence = %d, want 3", next.Sequence)
+	}
 
-			reopened, err := OpenLedger(path)
-			if err != nil {
-				t.Fatalf("OpenLedger recovering torn write: %v", err)
-			}
-			recovered := reopened.Events()
-			if len(recovered) != 2 {
-				t.Fatalf("recovered %d events, want 2 (torn write dropped)", len(recovered))
-			}
+	rereopened, err := OpenLedger(path)
+	if err != nil {
+		t.Fatalf("OpenLedger after recovery append: %v", err)
+	}
+	if got := len(mustEvents(t, rereopened)); got != 3 {
+		t.Fatalf("final ledger has %d events, want 3", got)
+	}
+}
 
-			// The next Append must continue the chain at sequence 3, proving
-			// the file was actually truncated, not just skipped in memory.
-			next, err := reopened.Append(actionStartingEvent("evt-003b", "exec-001", "plan-001", "act-001"))
-			if err != nil {
-				t.Fatalf("Append after recovery: %v", err)
-			}
-			if next.Sequence != 3 {
-				t.Fatalf("Append after recovery: sequence = %d, want 3", next.Sequence)
-			}
+func TestLedgerAcceptsCompleteUnterminatedFinalRecordAsTorn(t *testing.T) {
+	// A complete, valid-looking JSON record with NO trailing newline is
+	// still treated as torn (never accepted as-is), because there is no
+	// way to distinguish "the write finished but the newline is still
+	// pending" from "this happens to be valid JSON but the write was cut
+	// off before whatever was meant to follow." Termination, not
+	// parseability, is what proves a write committed.
+	path := filepath.Join(t.TempDir(), "setup-ledger.jsonl")
+	plan := testPlan("plan-001")
+	digest := testPlanDigest(t, plan)
 
-			rereopened, err := OpenLedger(path)
-			if err != nil {
-				t.Fatalf("OpenLedger after recovery append: %v", err)
-			}
-			if got := len(rereopened.Events()); got != 3 {
-				t.Fatalf("final ledger has %d events, want 3", got)
-			}
-		})
+	l, err := OpenLedger(path)
+	if err != nil {
+		t.Fatalf("OpenLedger: %v", err)
+	}
+	if _, err := l.Append(executionCreatedEvent("evt-001", "exec-001", "plan-001", digest)); err != nil {
+		t.Fatalf("Append: %v", err)
+	}
+
+	second := planApprovedEvent("evt-002", "exec-001", "plan-001", digest)
+	second.Sequence = 2
+	firstEvents := mustEvents(t, l)
+	second.PreviousEventDigest = firstEvents[0].EventDigest
+	digest2, err := protocol.ComputeLedgerEventDigest(second)
+	if err != nil {
+		t.Fatalf("ComputeLedgerEventDigest: %v", err)
+	}
+	second.EventDigest = digest2
+	secondBytes, err := protocol.Marshal(second)
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND, 0600)
+	if err != nil {
+		t.Fatalf("open for append: %v", err)
+	}
+	if _, err := f.Write(secondBytes); err != nil { // deliberately no trailing '\n'
+		t.Fatalf("write unterminated complete record: %v", err)
+	}
+	f.Close()
+
+	reopened, err := OpenLedger(path)
+	if err != nil {
+		t.Fatalf("OpenLedger: %v", err)
+	}
+	recovered := mustEvents(t, reopened)
+	if len(recovered) != 1 {
+		t.Fatalf("recovered %d events, want 1 (unterminated complete record dropped)", len(recovered))
+	}
+
+	next, err := reopened.Append(planApprovedEvent("evt-002b", "exec-001", "plan-001", digest))
+	if err != nil {
+		t.Fatalf("Append after recovery: %v", err)
+	}
+	if next.Sequence != 2 {
+		t.Fatalf("Append after recovery: sequence = %d, want 2", next.Sequence)
+	}
+}
+
+func requireIntegrityError(t *testing.T, err error, msgIfNil string) {
+	t.Helper()
+	if err == nil {
+		t.Fatal(msgIfNil + "; expected an error")
+	}
+	var appErr *errs.Error
+	if !errors.As(err, &appErr) || appErr.Category != errs.CategoryIntegrity {
+		t.Fatalf("error = %v, want a CategoryIntegrity error", err)
 	}
 }
 
@@ -325,8 +460,10 @@ func (s stubPostconditionChecker) CheckPostconditions(ctx context.Context, condi
 	return s.passed, s.detail, s.err
 }
 
-func TestLedgerRecoversInterruptedAction(t *testing.T) {
+func TestLedgerReconcilesInterruptedActionDurably(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "setup-ledger.jsonl")
+	plan := testPlan("plan-001")
+	digest := testPlanDigest(t, plan)
 
 	l, err := OpenLedger(path)
 	if err != nil {
@@ -335,9 +472,9 @@ func TestLedgerRecoversInterruptedAction(t *testing.T) {
 	// Simulate a crash: ActionStarting was durably written, but the process
 	// died before any terminal event for it.
 	for _, e := range []*protocol.SetupLedgerEvent{
-		executionCreatedEvent("evt-001", "exec-001", "plan-001"),
-		planApprovedEvent("evt-002", "exec-001", "plan-001"),
-		actionStartingEvent("evt-003", "exec-001", "plan-001", "act-001"),
+		executionCreatedEvent("evt-001", "exec-001", "plan-001", digest),
+		planApprovedEvent("evt-002", "exec-001", "plan-001", digest),
+		actionStartingEvent("evt-003", "exec-001", "plan-001", digest, "act-001"),
 	} {
 		if _, err := l.Append(e); err != nil {
 			t.Fatalf("Append: %v", err)
@@ -349,12 +486,31 @@ func TestLedgerRecoversInterruptedAction(t *testing.T) {
 		t.Fatalf("OpenLedger (restart): %v", err)
 	}
 
-	interrupted := FindInterrupted(reopened.Events())
+	events := mustEvents(t, reopened)
+	interrupted := FindInterrupted(events)
 	if len(interrupted) != 1 {
 		t.Fatalf("FindInterrupted returned %d actions, want 1", len(interrupted))
 	}
-	if interrupted[0].ActionID != "act-001" || interrupted[0].ExecutionID != "exec-001" {
-		t.Fatalf("FindInterrupted returned %+v, want exec-001/act-001", interrupted[0])
+	action := interrupted[0]
+	if action.ActionID != "act-001" || action.ExecutionID != "exec-001" {
+		t.Fatalf("FindInterrupted returned %+v, want exec-001/act-001", action)
+	}
+	if action.PlanID != "plan-001" || action.PlanDigest != digest {
+		t.Fatalf("FindInterrupted did not carry plan_id/plan_digest through: %+v", action)
+	}
+
+	// Before reconciliation, the projected report must show the action (and
+	// the execution as a whole) interrupted, not "running" — a crash is not
+	// still in progress.
+	report, err := ProjectExecutionReport(events, "exec-001", plan)
+	if err != nil {
+		t.Fatalf("ProjectExecutionReport (pre-reconcile): %v", err)
+	}
+	if report.Status != protocol.ExecutionStatusInterrupted {
+		t.Errorf("pre-reconcile report.Status = %q, want interrupted", report.Status)
+	}
+	if len(report.Results) != 1 || report.Results[0].Status != protocol.ActionStatusInterrupted {
+		t.Fatalf("pre-reconcile report.Results = %+v, want one interrupted act-001", report.Results)
 	}
 
 	ctx := context.Background()
@@ -363,71 +519,118 @@ func TestLedgerRecoversInterruptedAction(t *testing.T) {
 		CommandAvailable: &protocol.CommandAvailableOperand{CommandName: "git"},
 	}}
 
-	status, _, err := ResolveInterrupted(ctx, stubPostconditionChecker{passed: true, detail: "postcondition holds"}, postconditions)
+	status, err := reopened.ReconcileInterrupted(ctx, stubPostconditionChecker{passed: true, detail: "postcondition holds"},
+		action, postconditions, "evt-004", "evt-005", ledgerTestTime(10))
 	if err != nil {
-		t.Fatalf("ResolveInterrupted (passed): %v", err)
+		t.Fatalf("ReconcileInterrupted: %v", err)
 	}
 	if status != protocol.ActionStatusSucceeded {
-		t.Fatalf("ResolveInterrupted (passed) = %q, want succeeded", status)
+		t.Fatalf("ReconcileInterrupted status = %q, want succeeded", status)
 	}
 
-	status, _, err = ResolveInterrupted(ctx, stubPostconditionChecker{passed: false, detail: "postcondition still fails"}, postconditions)
+	// The reconciliation must be durable: read the ledger back (a fresh
+	// Open, not the in-memory Ledger) and confirm the resolution actually
+	// landed on disk, with no manual/hand-written terminal-event append.
+	rereopened, err := OpenLedger(path)
 	if err != nil {
-		t.Fatalf("ResolveInterrupted (failed): %v", err)
+		t.Fatalf("OpenLedger after reconciliation: %v", err)
 	}
-	if status != protocol.ActionStatusBlocked {
-		t.Fatalf("ResolveInterrupted (failed) = %q, want blocked", status)
+	finalEvents := mustEvents(t, rereopened)
+	if got := FindInterrupted(finalEvents); len(got) != 0 {
+		t.Fatalf("FindInterrupted after durable reconciliation returned %d actions, want 0", len(got))
 	}
 
-	// Once resolved, appending the terminal event must remove it from the
-	// interrupted set — reconciliation never leaves a resolved action
-	// looking interrupted forever.
-	if _, err := reopened.Append(actionTerminatedEvent("evt-004", "exec-001", "plan-001", "act-001", protocol.ActionStatusBlocked)); err != nil {
-		t.Fatalf("Append terminal event: %v", err)
+	finalReport, err := ProjectExecutionReport(finalEvents, "exec-001", plan)
+	if err != nil {
+		t.Fatalf("ProjectExecutionReport (post-reconcile): %v", err)
 	}
-	if got := FindInterrupted(reopened.Events()); len(got) != 0 {
-		t.Fatalf("FindInterrupted after resolution returned %d actions, want 0", len(got))
+	if len(finalReport.Results) != 1 || finalReport.Results[0].Status != protocol.ActionStatusSucceeded {
+		t.Fatalf("post-reconcile report.Results = %+v, want one succeeded act-001", finalReport.Results)
 	}
 }
 
-func TestFindInterruptedIgnoresFinishedExecutions(t *testing.T) {
-	events := []*protocol.SetupLedgerEvent{
-		executionCreatedEvent("evt-001", "exec-001", "plan-001"),
-		actionStartingEvent("evt-002", "exec-001", "plan-001", "act-001"),
-		executionFinishedEvent("evt-003", "exec-001", "plan-001", protocol.ExecutionStatusFailed),
-	}
-	if got := FindInterrupted(events); len(got) != 0 {
-		t.Fatalf("FindInterrupted returned %d actions for a finished execution, want 0", len(got))
-	}
-}
-
-func TestProjectExecutionReport(t *testing.T) {
+func TestLedgerReconcilesInterruptedActionAsBlockedWhenPostconditionsFail(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "setup-ledger.jsonl")
+	plan := testPlan("plan-001")
+	digest := testPlanDigest(t, plan)
+
 	l, err := OpenLedger(path)
 	if err != nil {
 		t.Fatalf("OpenLedger: %v", err)
 	}
 	for _, e := range []*protocol.SetupLedgerEvent{
-		executionCreatedEvent("evt-001", "exec-001", "plan-001"),
-		planApprovedEvent("evt-002", "exec-001", "plan-001"),
-		actionStartingEvent("evt-003", "exec-001", "plan-001", "act-001"),
-		actionTerminatedEvent("evt-004", "exec-001", "plan-001", "act-001", protocol.ActionStatusSucceeded),
-		executionFinishedEvent("evt-005", "exec-001", "plan-001", protocol.ExecutionStatusSucceeded),
+		executionCreatedEvent("evt-001", "exec-001", "plan-001", digest),
+		actionStartingEvent("evt-002", "exec-001", "plan-001", digest, "act-001"),
 	} {
 		if _, err := l.Append(e); err != nil {
 			t.Fatalf("Append: %v", err)
 		}
 	}
 
-	report, err := ProjectExecutionReport(l.Events(), "exec-001", testPlanDigest)
+	action := FindInterrupted(mustEvents(t, l))[0]
+	ctx := context.Background()
+	postconditions := []protocol.Condition{{
+		Kind:             protocol.CondKindCommandAvailable,
+		CommandAvailable: &protocol.CommandAvailableOperand{CommandName: "git"},
+	}}
+	status, err := l.ReconcileInterrupted(ctx, stubPostconditionChecker{passed: false, detail: "still missing"},
+		action, postconditions, "evt-003", "evt-004", ledgerTestTime(10))
+	if err != nil {
+		t.Fatalf("ReconcileInterrupted: %v", err)
+	}
+	if status != protocol.ActionStatusBlocked {
+		t.Fatalf("ReconcileInterrupted status = %q, want blocked", status)
+	}
+}
+
+func TestFindInterruptedSurfacesInconsistencyEvenAfterExecutionFinished(t *testing.T) {
+	// An execution that finished while one of its own actions never
+	// reached a terminal event is an inconsistency to surface, not a
+	// reason to hide the interrupted action.
+	digest := "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+	events := []*protocol.SetupLedgerEvent{
+		executionCreatedEvent("evt-001", "exec-001", "plan-001", digest),
+		actionStartingEvent("evt-002", "exec-001", "plan-001", digest, "act-001"),
+		executionFinishedEvent("evt-003", "exec-001", "plan-001", digest, protocol.ExecutionStatusFailed),
+	}
+	got := FindInterrupted(events)
+	if len(got) != 1 || got[0].ActionID != "act-001" {
+		t.Fatalf("FindInterrupted = %+v, want one interrupted act-001 despite ExecutionFinished", got)
+	}
+}
+
+func TestProjectExecutionReport(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "setup-ledger.jsonl")
+	plan := testPlan("plan-001")
+	digest := testPlanDigest(t, plan)
+
+	l, err := OpenLedger(path)
+	if err != nil {
+		t.Fatalf("OpenLedger: %v", err)
+	}
+	for _, e := range []*protocol.SetupLedgerEvent{
+		executionCreatedEvent("evt-001", "exec-001", "plan-001", digest),
+		planApprovedEvent("evt-002", "exec-001", "plan-001", digest),
+		actionStartingEvent("evt-003", "exec-001", "plan-001", digest, "act-001"),
+		actionProcessCompletedEvent("evt-004", "exec-001", "plan-001", digest, "act-001", 0),
+		actionTerminatedEvent("evt-005", "exec-001", "plan-001", digest, "act-001", protocol.ActionStatusSucceeded),
+		executionFinishedEvent("evt-006", "exec-001", "plan-001", digest, protocol.ExecutionStatusSucceeded),
+	} {
+		if _, err := l.Append(e); err != nil {
+			t.Fatalf("Append: %v", err)
+		}
+	}
+	events := mustEvents(t, l)
+
+	report, err := ProjectExecutionReport(events, "exec-001", plan)
 	if err != nil {
 		t.Fatalf("ProjectExecutionReport: %v", err)
 	}
 	if report.PlanID != "plan-001" {
 		t.Errorf("PlanID = %q, want plan-001", report.PlanID)
 	}
-	if report.MachineFingerprint != testPlanDigest {
-		t.Errorf("MachineFingerprint = %q, want %q", report.MachineFingerprint, testPlanDigest)
+	if report.MachineFingerprint != testMachineFingerprint {
+		t.Errorf("MachineFingerprint = %q, want %q", report.MachineFingerprint, testMachineFingerprint)
 	}
 	if report.Status != protocol.ExecutionStatusSucceeded {
 		t.Errorf("Status = %q, want succeeded", report.Status)
@@ -435,12 +638,115 @@ func TestProjectExecutionReport(t *testing.T) {
 	if len(report.Results) != 1 || report.Results[0].Status != protocol.ActionStatusSucceeded {
 		t.Fatalf("Results = %+v, want one succeeded act-001 result", report.Results)
 	}
+	if report.Results[0].ExitCode == nil || *report.Results[0].ExitCode != 0 {
+		t.Errorf("Results[0].ExitCode = %v, want a pointer to 0", report.Results[0].ExitCode)
+	}
 	if report.CompletedAt == nil {
 		t.Error("CompletedAt is nil, want set from execution_finished event")
 	}
 
-	if _, err := ProjectExecutionReport(l.Events(), "exec-nonexistent", testPlanDigest); err == nil {
+	if _, err := ProjectExecutionReport(events, "exec-nonexistent", plan); err == nil {
 		t.Fatal("ProjectExecutionReport for an unknown execution_id succeeded; expected an error")
+	}
+}
+
+func TestProjectExecutionReportRejectsPlanNotMatchingTheLedger(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "setup-ledger.jsonl")
+	plan := testPlan("plan-001")
+	digest := testPlanDigest(t, plan)
+
+	l, err := OpenLedger(path)
+	if err != nil {
+		t.Fatalf("OpenLedger: %v", err)
+	}
+	if _, err := l.Append(executionCreatedEvent("evt-001", "exec-001", "plan-001", digest)); err != nil {
+		t.Fatalf("Append: %v", err)
+	}
+	events := mustEvents(t, l)
+
+	t.Run("wrong plan_id", func(t *testing.T) {
+		wrongPlan := testPlan("plan-999")
+		if _, err := ProjectExecutionReport(events, "exec-001", wrongPlan); err == nil {
+			t.Fatal("ProjectExecutionReport accepted a plan whose plan_id does not match the ledger; expected an error")
+		}
+	})
+
+	t.Run("wrong content, same plan_id (digest mismatch)", func(t *testing.T) {
+		tamperedPlan := testPlan("plan-001")
+		tamperedPlan.RecipeSetVersion = "2.0" // changes the computed digest without changing plan_id
+		if _, err := ProjectExecutionReport(events, "exec-001", tamperedPlan); err == nil {
+			t.Fatal("ProjectExecutionReport accepted a plan whose digest does not match the ledger; expected an error")
+		}
+	})
+
+	t.Run("nil plan", func(t *testing.T) {
+		if _, err := ProjectExecutionReport(events, "exec-001", nil); err == nil {
+			t.Fatal("ProjectExecutionReport accepted a nil plan; expected an error")
+		}
+	})
+}
+
+func TestEventsFailsClosedOnCorruption(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "setup-ledger.jsonl")
+	plan := testPlan("plan-001")
+	digest := testPlanDigest(t, plan)
+
+	l, err := OpenLedger(path)
+	if err != nil {
+		t.Fatalf("OpenLedger: %v", err)
+	}
+	for _, e := range []*protocol.SetupLedgerEvent{
+		executionCreatedEvent("evt-001", "exec-001", "plan-001", digest),
+		planApprovedEvent("evt-002", "exec-001", "plan-001", digest),
+	} {
+		if _, err := l.Append(e); err != nil {
+			t.Fatalf("Append: %v", err)
+		}
+	}
+
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read ledger file: %v", err)
+	}
+	lines := splitLines(t, raw)
+	lines[0] = []byte(`{"not":"a valid setup ledger event"}`)
+	if err := os.WriteFile(path, joinLines(lines), 0600); err != nil {
+		t.Fatalf("rewrite corrupted ledger: %v", err)
+	}
+
+	// Events() must surface the integrity error, not silently return an
+	// empty (or otherwise misleadingly small) slice — a corrupt ledger must
+	// never look indistinguishable from an empty one to a recovery caller.
+	_, err = l.Events()
+	requireIntegrityError(t, err, "Events() accepted a corrupted ledger file")
+}
+
+func TestLedgerFileModeIsHardenedOnExistingPermissiveFile(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX file mode semantics do not apply on Windows")
+	}
+	dir := t.TempDir()
+	path := filepath.Join(dir, "setup-ledger.jsonl")
+	if err := os.WriteFile(path, nil, 0644); err != nil {
+		t.Fatalf("pre-create permissive ledger file: %v", err)
+	}
+
+	l, err := OpenLedger(path)
+	if err != nil {
+		t.Fatalf("OpenLedger: %v", err)
+	}
+	plan := testPlan("plan-001")
+	digest := testPlanDigest(t, plan)
+	if _, err := l.Append(executionCreatedEvent("evt-001", "exec-001", "plan-001", digest)); err != nil {
+		t.Fatalf("Append: %v", err)
+	}
+
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat: %v", err)
+	}
+	if perm := info.Mode().Perm(); perm != 0600 {
+		t.Errorf("ledger file mode = %o, want 0600 (pre-existing 0644 must be tightened)", perm)
 	}
 }
 

@@ -3,6 +3,7 @@ package setup
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -72,5 +73,34 @@ func TestEnsureLayoutIsIdempotentAndCreatesExpectedDirs(t *testing.T) {
 func TestEnsureLayoutRejectsRelativeHome(t *testing.T) {
 	if err := EnsureLayout("relative/home"); err == nil {
 		t.Fatal("EnsureLayout accepted a relative home path; expected an error")
+	}
+}
+
+func TestEnsureLayoutTightensPreExistingPermissiveDirs(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX file mode semantics do not apply on Windows")
+	}
+	home := t.TempDir()
+
+	for _, dir := range []string{"state", filepath.Join("artifacts", "setup"), "tmp"} {
+		path := filepath.Join(home, dir)
+		if err := os.MkdirAll(path, 0755); err != nil {
+			t.Fatalf("pre-create %s: %v", path, err)
+		}
+	}
+
+	if err := EnsureLayout(home); err != nil {
+		t.Fatalf("EnsureLayout: %v", err)
+	}
+
+	for _, dir := range []string{"state", filepath.Join("artifacts", "setup"), "tmp"} {
+		path := filepath.Join(home, dir)
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Fatalf("stat %s: %v", path, err)
+		}
+		if perm := info.Mode().Perm(); perm != 0700 {
+			t.Errorf("%s has mode %o after EnsureLayout, want 0700 (pre-existing 0755 must be tightened)", path, perm)
+		}
 	}
 }

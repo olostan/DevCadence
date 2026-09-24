@@ -41,16 +41,40 @@ var layoutDirs = []string{
 }
 
 // EnsureLayout idempotently creates the $DEVCADENCE_HOME directory layout
-// (state/, artifacts/setup/, tmp/) with mode 0700, per ADR-0014 §4.
+// (state/, artifacts/setup/, tmp/) with mode 0700, per ADR-0014 §4. A
+// directory that already existed with a looser mode is tightened, not left
+// as-is: ADR-0014's owner-only requirement is a property of the path, not
+// just of paths this call happens to create.
 func EnsureLayout(home string) error {
 	if !filepath.IsAbs(home) {
 		return errs.New(errs.CategoryInvalidArgument, "EnsureLayout: home must be an absolute path, got %q", home)
 	}
 	for _, dir := range layoutDirs {
-		path := filepath.Join(home, dir)
-		if err := os.MkdirAll(path, 0700); err != nil {
-			return errs.Wrap(errs.CategoryInternal, err, "create %s", path)
+		if err := ensureDirMode(filepath.Join(home, dir), 0700); err != nil {
+			return err
 		}
+	}
+	return nil
+}
+
+// ensureDirMode creates path (and parents) if absent, then enforces mode on
+// it whether it was just created or already existed.
+func ensureDirMode(path string, mode os.FileMode) error {
+	if err := os.MkdirAll(path, mode); err != nil {
+		return errs.Wrap(errs.CategoryInternal, err, "create %s", path)
+	}
+	if err := os.Chmod(path, mode); err != nil {
+		return errs.Wrap(errs.CategoryInternal, err, "chmod %s", path)
+	}
+	return nil
+}
+
+// ensureFileMode enforces mode on an already-open/created file path,
+// covering the case where OpenFile's perm argument was ignored because the
+// file already existed with a looser mode.
+func ensureFileMode(path string, mode os.FileMode) error {
+	if err := os.Chmod(path, mode); err != nil {
+		return errs.Wrap(errs.CategoryInternal, err, "chmod %s", path)
 	}
 	return nil
 }

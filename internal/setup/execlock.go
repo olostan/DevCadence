@@ -22,13 +22,17 @@ func AcquireExecutionLock(home string) (*ExecutionLock, error) {
 		return nil, errs.New(errs.CategoryInvalidArgument, "AcquireExecutionLock: home must be an absolute path, got %q", home)
 	}
 	stateDir := filepath.Join(home, "state")
-	if err := os.MkdirAll(stateDir, 0700); err != nil {
-		return nil, errs.Wrap(errs.CategoryInternal, err, "create %s", stateDir)
+	if err := ensureDirMode(stateDir, 0700); err != nil {
+		return nil, err
 	}
 	lockPath := filepath.Join(stateDir, "setup.lock")
 	f, err := os.OpenFile(lockPath, os.O_RDWR|os.O_CREATE, 0600)
 	if err != nil {
 		return nil, errs.Wrap(errs.CategoryInternal, err, "open %s", lockPath)
+	}
+	if err := ensureFileMode(lockPath, 0600); err != nil {
+		_ = f.Close()
+		return nil, err
 	}
 	if err := lockExclusive(f); err != nil {
 		_ = f.Close()

@@ -1,6 +1,9 @@
 package setup
 
 import (
+	"os"
+	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 )
@@ -60,5 +63,37 @@ func TestExecutionLockReleaseIsIdempotent(t *testing.T) {
 	}
 	if err := l.Release(); err != nil {
 		t.Fatalf("Release (second, must be a no-op): %v", err)
+	}
+}
+
+func TestExecutionLockFileModeIsHardenedOnExistingPermissiveFile(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX file mode semantics do not apply on Windows")
+	}
+	home := t.TempDir()
+	stateDir := filepath.Join(home, "state")
+	if err := os.MkdirAll(stateDir, 0755); err != nil {
+		t.Fatalf("pre-create state dir: %v", err)
+	}
+	lockPath := filepath.Join(stateDir, "setup.lock")
+	if err := os.WriteFile(lockPath, nil, 0644); err != nil {
+		t.Fatalf("pre-create permissive lock file: %v", err)
+	}
+
+	l, err := AcquireExecutionLock(home)
+	if err != nil {
+		t.Fatalf("AcquireExecutionLock: %v", err)
+	}
+	defer l.Release()
+
+	info, err := os.Stat(lockPath)
+	if err != nil {
+		t.Fatalf("stat: %v", err)
+	}
+	if perm := info.Mode().Perm(); perm != 0600 {
+		t.Errorf("lock file mode = %o, want 0600 (pre-existing 0644 must be tightened)", perm)
+	}
+	if info, err := os.Stat(stateDir); err == nil && info.Mode().Perm() != 0700 {
+		t.Errorf("state dir mode = %o, want 0700 (pre-existing 0755 must be tightened)", info.Mode().Perm())
 	}
 }
