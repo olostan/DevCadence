@@ -156,6 +156,8 @@ hierarchy below.
 | [0012](adr/0012-mandatory-brownfield-adoption-baseline.md) | Mandatory version-controlled canonical baseline before brownfield managed work |
 | [0013](adr/0013-environment-intelligence-and-cognition-contracts.md) | Environment facts vs assessment, evidenced acceleration, capability provenance, cognition persistence boundaries and explainable routing |
 | [0014](adr/0014-guided-bootstrap-and-remediation.md) | Safe guided bootstrap, explicit setup authority, crash-safe ledger and bounded remediation |
+| [0015](adr/0015-declarative-modules-and-scoped-worktrees.md) | Declarative monorepo modules, scoped worktree execution, and reproducible state reduction |
+| [0016](adr/0016-validation-services-bounded-tools-and-context-compaction.md) | Supervised validation services, bounded execution tools, asynchronous operations, and multi-tier context compaction |
 | [0018](adr/0018-adaptive-cognition-portfolio-and-workflow-synthesis.md) | Adaptive cognition portfolios, economics/budget pools, AI-assisted recommendation and adaptive workflow topology |
 
 ## Normative hierarchy

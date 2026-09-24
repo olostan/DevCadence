@@ -77,7 +77,7 @@ A session driver advertises capabilities instead of forcing core code to underst
 - MCP/tool configuration;
 - usage and quota/rate-limit reporting.
 
-Unsupported features fail closed. Principal hosts remain separate human-facing adapters even when one product exposes both a host and a session interface.
+Unsupported features fail closed when a role or workflow strictly requires them; progressive features (such as live streaming or dynamic quota visibility) degrade gracefully where a non-interactive batch contract satisfies the role. Principal hosts remain separate human-facing adapters even when one product exposes both a host and a session interface.
 
 ## 5. Economics
 
