@@ -338,7 +338,7 @@ If that hypothesis fails, the architecture must be revised before adding autonom
 M1, M2 and M3A are implemented, so the control plane can be built, can safely
 operate on real repositories, and can describe the machine and its cognition
 endpoints from observed evidence — all without requiring any model runtime.
-M3B will add guided setup, remediation planning and the terminal UX.
+M3B will add guided setup, remediation planning, credential-safe ResourceInventory/readiness and a safe plain/JSON/basic-terminal surface; richer adaptive onboarding is deliberately deferred to M3D.
 
 ```bash
 go build -o bin/devcadence ./cmd/devcadence
@@ -456,10 +456,13 @@ See [docs/adr/0013-environment-intelligence-and-cognition-contracts.md](docs/adr
 for the durable contracts this settled.
 
 The active roadmap now proceeds through:
-- **M3B:** guided blank-machine setup/doctor/auth/TUI;
-- **M4A:** semantic MCP + Antigravity/Cursor/VS Code principal-host integration;
-- **M4B:** brownfield Project Adoption & Retrospective Reconstruction;
-- **M5:** end-to-end proof across strong-local, hybrid-thin and no-local-model profiles, including a brownfield adoption path.
+- **M3B:** deterministic bootstrap, doctor/setup/auth, ResourceInventory and a safe plain/JSON CLI;
+- **M3C:** cognition resource/session/economic substrate and deterministic portfolio validation;
+- **M3D:** AI-assisted cognition portfolio + adaptive workflow synthesis and richer setup/explanation UX;
+- **M4:** adaptive-cognition vertical-slice evidence gate against simpler baselines;
+- **M5:** semantic MCP + Antigravity/Cursor/VS Code principal-host portability;
+- **M6:** brownfield Project Adoption & Retrospective Reconstruction;
+- **M7–M10:** bounded review/consultants, engineering health, evaluated learning, then long-running campaigns.
 
 See [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md).
 

@@ -327,33 +327,41 @@ facts are separate from assessment, a capability grade requires provenance,
 validation without it, machine profiles are computed rather than persisted, and
 routing is a filter plus an explicit ordering with no score.
 
-The next milestone is **M3B — guided bootstrap**: `setup`/`doctor`, remediation
-planning, installation recipes, credential references, deterministic `ResourceInventory`,
-readiness projection, and a restrained terminal UI suitable for local terminals, SSH and
-non-interactive use. M3B computes factual readiness and resource inventory without
-embedding a static deployment-profile chooser.
+The next milestone is **M3B — guided deterministic bootstrap**:
+`setup`/`doctor`, remediation planning, installation recipes, credential
+references, deterministic `ResourceInventory`, readiness projection, and a
+plain/JSON/basic-terminal surface. M3B computes factual readiness and resource
+inventory without embedding a static deployment-profile chooser. A rich
+adaptive setup TUI is deliberately not an M3B exit criterion.
 
-Following M3B, **M3C — adaptive cognition portfolio and workflow synthesis**:
-implements the provider-neutral session-driver abstraction, `EconomicRegime` / `BudgetPool` / `BudgetState`,
-versioned `CognitionPortfolio`, AI-assisted Portfolio Planner, deterministic recommendation
-validator, and adaptive task `WorkflowPlan` synthesis.
+Following M3B:
+- **M3C — cognition resource and session substrate** implements provider-neutral
+  session drivers, access-channel capability contracts, `EconomicRegime`,
+  `BudgetPool` / dynamic resource state, portfolio protocol shapes, and the
+  deterministic portfolio validator/activation boundary.
+- **M3D — adaptive portfolio and workflow synthesis** implements the
+  AI-assisted Portfolio Planner, adaptive `WorkflowPlan` topology,
+  re-recommendation/versioning/rollback, and the richer explain/setup UX.
 
 Do not reintroduce the old assumption that M3 means "install one local model."
 A strong local model—and even a local LLM at all—is optional capability.
 
 After M3:
-- **M4A** implements the semantic MCP principal interface and first-class
-  principal-host integrations for Antigravity, Cursor and Visual Studio Code.
-  Antigravity is the reference host, not a core dependency.
-- **M4B** implements Project Adoption and Retrospective Reconstruction for
-  existing repositories. Brownfield projects are not READY until the required
-  canonical documentation baseline is committed and Adoption Readiness passes.
-- **M5** validates adaptive allocation of heterogeneous cognition resources,
-  compressed engineering artifacts, and adaptive workflow topologies across
-  strong-local, subscription-only, metered-API, and mixed portfolios, and
-  across greenfield plus brownfield project entry paths.
+- **M4** is the adaptive-cognition vertical-slice **evidence gate**. It compares
+  DevCadence allocation/workflow decisions against simpler baselines before
+  broad productization; if the evidence is weak, revise M3D rather than
+  preserving orchestration for its own sake.
+- **M5** productizes the semantic MCP principal interface and first-class host
+  portability for Antigravity, Cursor and Visual Studio Code.
+- **M6** owns Project Adoption and Retrospective Reconstruction as a full
+  brownfield milestone.
+- **M7** implements bounded multi-review and consultant cognition.
+- **M8** implements engineering health/refactoring epochs.
+- **M9** implements evaluated learning and promotion/rollback.
+- **M10** implements long-running autonomous campaigns.
 
-ADRs 0011, 0012, 0013, 0014, and 0018 are accepted and normative for this direction.
+ADRs 0011, 0012, 0013, 0014, and 0018 are accepted and normative for this
+direction; `docs/IMPLEMENTATION_PLAN.md` is the canonical milestone sequence.
 
 The overall implementation objective is still to prove the central hypothesis
 without prematurely adding dashboard complexity, generalized distributed

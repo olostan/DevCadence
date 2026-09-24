@@ -106,7 +106,7 @@ Staleness (`StaleBase` / `Worktree.IsStale`) is a plain equality check
 between a candidate's recorded base commit and the currently accepted
 commit. It is deliberately not a rebase, a fast-forward attempt, or any
 other mutation — M2 answers the question; policy for what to do about a
-stale candidate belongs to the caller (eventually M6/M9 orchestration).
+stale candidate belongs to the caller (eventually M7/M10 orchestration).
 
 ## Consequences
 

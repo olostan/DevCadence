@@ -360,7 +360,7 @@ Different model families/providers may be useful for independent reviews/consult
 
 Diversity is an experimental variable, not a correctness guarantee.
 
-M6 review convergence still adjudicates evidence; it does not majority-vote model opinions.
+M7 review convergence still adjudicates evidence; it does not majority-vote model opinions.
 
 ## 17. Smaller local models
 

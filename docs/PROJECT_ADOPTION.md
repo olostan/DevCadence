@@ -560,12 +560,18 @@ Interactive onboarding should explain:
 This workflow depends on capabilities delivered across earlier milestones:
 
 - **M2** provides repository inspection, worktrees and deterministic execution;
-- **M3** provides environment/cognition capability routing;
-- **M4A** provides semantic principal-host integration;
-- **M4B** introduces Project Adoption and Retrospective Reconstruction;
-- **M5** should prove both greenfield and brownfield end-to-end operation.
+- **M3A-M3D** provide environment discovery, deterministic bootstrap, cognition
+  session/economic substrate and adaptive portfolio/workflow synthesis;
+- **M4** is the early adaptive-cognition evidence gate and intentionally does
+  not wait for the full brownfield reconstruction subsystem;
+- **M5** productizes semantic principal-host integration;
+- **M6** introduces Project Adoption and Retrospective Reconstruction as its
+  own full milestone.
 
-M4B should not delay basic M4A principal connectivity, but M5 should not claim the product hypothesis is proven only on a repository that was already perfectly documented.
+M6 should not delay the M4 evidence gate or basic M5 principal connectivity.
+Conversely, M4's adaptive-cognition result must not be misread as proof that
+arbitrary brownfield repositories are ready for managed work; that claim
+belongs to M6's Adoption Readiness verification.
 
 ## 20. Test strategy
 

@@ -452,43 +452,61 @@ Implementation notes that qualify the prose above:
 - Everything is **read-only**. Contracts are settled in
   [adr/0013-environment-intelligence-and-cognition-contracts.md](adr/0013-environment-intelligence-and-cognition-contracts.md).
 
-### M3B — Guided deterministic bootstrap — **not implemented**
+### M3B — Guided deterministic bootstrap — **in progress**
 
 - `setup` / `doctor`;
 - dry-run remediation plans;
 - installation/configuration recipes;
 - credential references/auth discovery;
 - deterministic ResourceInventory/readiness projection;
-- terminal UX;
+- plain/JSON/basic-terminal operation;
 - blank-machine flow.
 
-### M3C — Adaptive cognition portfolio — **planned**
+Rich adaptive terminal onboarding is not an M3B exit criterion.
 
-- EconomicRegime, BudgetPool and dynamic BudgetState contracts;
-- invocation/session driver capability model;
+### M3C — Cognition resource/session substrate — **planned**
+
+- AccessChannel/session-driver capability contracts;
+- EconomicRegime, BudgetPool and dynamic BudgetState/ResourceState;
+- explicit privacy/spending/source-exposure/reserve/preference policy;
+- CognitionPortfolio/PortfolioRecommendation/WorkflowPlan protocol shapes;
+- deterministic portfolio validation, activation/versioning and rollback
+  primitives;
+- materially different driver implementations plus fake future-driver
+  contract tests.
+
+### M3D — Adaptive portfolio/workflow synthesis — **planned**
+
 - AI-assisted PortfolioRecommendation over deterministic inventory + policy;
-- deterministic recommendation validation and activation;
-- CognitionPortfolio persistence/versioning;
-- workflow-topology planning and explanation;
-- incremental re-recommendation when resources/policy materially change.
+- adaptive WorkflowPlan topology, including deliberate topology collapse;
+- incremental re-recommendation when resources/policy materially change;
+- explicit diff/apply/rollback;
+- richer explain/setup UX after the semantics are stable;
+- cross-portfolio verification.
 
-M3B and M3C may be presented by one user-facing `devcadence setup` experience.
+M3B-M3D may be presented by one user-facing `devcadence setup` experience,
+but the implementation authority boundaries remain separate.
 
-### M4 — Principal host integration
+### M4 — Adaptive cognition evidence gate
 
-Consume M3 discovery to configure the semantic MCP/principal integration for supported hosts. Antigravity is the reference integration; Cursor and VS Code are first-class supported targets.
+Compare adaptive allocation/workflow decisions against simpler baselines across
+materially different resource portfolios. M4 is a go/revise gate before broad
+host/adoption productization.
 
-### M5 — Adaptability proof
+### M5 — Principal host integration
 
-The central experiment should include materially different environments, including:
+Consume M3 substrate/planning to configure the semantic MCP/principal
+integration for supported hosts. Antigravity is the reference integration;
+Cursor and VS Code are first-class supported targets.
 
-- strong local Apple Silicon;
-- thin 32 GB-class Linux/hybrid;
-- no-local-model/cloud-cognition.
+### M6 — Project adoption
 
-### M6 — Consultants
+Build the brownfield reconstruction/readiness subsystem as its own milestone.
 
-Consume discovered cognition endpoints. Consultant providers are optional; no particular commercial subscription is required.
+### M7 — Reviews and consultants
+
+Consume discovered cognition endpoints and active portfolio policy. Consultant
+providers are optional; no particular commercial subscription is required.
 
 ## 17. Test strategy
 
@@ -508,8 +526,8 @@ Important cases:
 - only one supported principal host installed;
 - privileged remediation declined;
 - setup interrupted and resumed;
-- TTY vs SSH vs non-interactive execution;
-- accessible/no-TUI mode.
+- plain terminal vs SSH vs non-interactive execution;
+- machine-readable output with no control sequences.
 
 Hardware-specific integration probes should be separable from the deterministic test suite.
 

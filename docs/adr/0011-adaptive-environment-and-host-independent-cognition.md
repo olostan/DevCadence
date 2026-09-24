@@ -94,7 +94,7 @@ The UI is not business logic. Non-interactive/plain/JSON operation remains suppo
 
 ADR-0018 refines the routing/economic layer without reversing this decision.
 
-M3A endpoint discovery remains the factual substrate. M3B safely bootstraps/configures resources. M3C adds explicit access-channel economics/budget pools, AI-assisted portfolio synthesis and adaptive workflow topology.
+M3A endpoint discovery remains the factual substrate. M3B safely bootstraps/configures resources. M3C adds the deterministic access-channel/session/economic substrate and portfolio-validation boundary. M3D adds AI-assisted portfolio synthesis, adaptive workflow topology and the richer explain/setup experience.
 
 Deployment labels such as strong-local/hybrid/no-local remain useful scenario descriptors, not the closed routing configuration.
 
@@ -106,8 +106,8 @@ Deployment labels such as strong-local/hybrid/no-local remain useful scenario de
 - Existing user subscriptions/tools can be reused.
 - Hardware/runtime misconfiguration such as CPU fallback becomes detectable.
 - M3 can route coding to economical remote cognition without weakening local repository authority.
-- M4 principal integration remains host-independent.
-- M6 consultants do not impose subscription prerequisites.
+- M5 principal integration remains host-independent.
+- M7 consultants do not impose subscription prerequisites.
 - Onboarding becomes approachable for users unfamiliar with local LLM stacks.
 
 ### Costs
@@ -116,7 +116,7 @@ Deployment labels such as strong-local/hybrid/no-local remain useful scenario de
 - Hardware-specific verification requires platform integration tests.
 - Credential/authentication discovery adds security-sensitive adapters.
 - Routing policy must account for privacy and monetary cost, not only model quality.
-- Three principal hosts create additional M4 integration/testing work.
+- Three principal hosts create additional M5 integration/testing work.
 
 ### Scope control
 
@@ -127,10 +127,12 @@ The bootstrap setup engine should not turn into a universal package manager or G
 ## Milestone mapping
 
 - **M2:** unchanged; deterministic repository/process substrate.
-- **M3A:** environment discovery, cognition endpoints, acceleration verification, capability routing.
-- **M3B:** guided setup/doctor/auth/deployment-profile recommendation and terminal UX.
-- **M4:** semantic MCP plus principal-host integration using the M3 discovery layer.
-- **M5:** prove operation on strong-local, hybrid-thin and no-local-model profiles.
-- **M6:** consultant orchestration over discovered optional cognition endpoints.
+- **M3A:** environment discovery, cognition endpoints, acceleration verification and capability evidence.
+- **M3B:** deterministic setup/doctor/auth/remediation + ResourceInventory with safe plain/JSON/basic-terminal operation.
+- **M3C:** provider-neutral cognition session/economic substrate and deterministic portfolio validation/activation.
+- **M3D:** AI-assisted portfolio recommendation, adaptive task topology and richer adaptive setup/explanation UX.
+- **M4:** early adaptive-cognition evidence gate against simpler baselines.
+- **M5:** semantic MCP plus principal-host integration using the M3 substrate.
+- **M7:** consultant/reviewer orchestration over discovered/validated cognition resources.
 
 This ADR refines later milestone scope without requiring changes to M2 implementation.
