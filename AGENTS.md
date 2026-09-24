@@ -367,7 +367,7 @@ The overall implementation objective is still to prove the central hypothesis
 without prematurely adding dashboard complexity, generalized distributed
 scheduling, fine-tuning, or autonomous policy mutation.
 
-## 17. Definition of done## 17. Definition of done
+## 17. Definition of done
 
 A change is done when:
 - its contract is satisfied;

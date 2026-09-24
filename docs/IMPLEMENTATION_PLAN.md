@@ -787,7 +787,7 @@ Run a multi-task milestone with parallel independent tasks, dependency blocks,
 local retry, principal escalation, integration conflict, refactoring trigger
 and daily summary.
 
-## Suggested bootstrap repository structure## Suggested bootstrap repository structure
+## Suggested bootstrap repository structure
 
 ```text
 cmd/
