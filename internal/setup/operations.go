@@ -150,7 +150,7 @@ func applyRunDiagnosticCheck(ctx context.Context, deps applierDeps, p *protocol.
 			return false, detail, nil, nil, diagnosticFailed(p.CheckName, detail)
 		}
 		if info.Mode().Perm()&0200 == 0 {
-			detail := fmt.Sprintf("%s: owner-write permission bit is not set (mode %o) — not writable", path, info.Mode().Perm())
+			detail := fmt.Sprintf("%s: owner-write permission bit is not set (mode %o) — writable access not established", path, info.Mode().Perm())
 			return false, detail, nil, nil, diagnosticFailed(p.CheckName, detail)
 		}
 		return false, fmt.Sprintf("%s: owner-write permission bit is set (mode %o) — appears writable; this mode-bit check cannot see ACLs, read-only mounts, or quota, so it is not a guarantee", path, info.Mode().Perm()), nil, nil, nil

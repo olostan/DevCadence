@@ -487,9 +487,10 @@ func (p *Planner) ensureLocalModelAction(actionIndex *int, dependsOn []string, r
 	postcondition := protocol.Condition{
 		Kind: protocol.CondKindModelPresent,
 		ModelPresent: &protocol.ModelPresentOperand{
-			Runtime:          r.runtime,
-			ModelRef:         r.modelRef,
-			ResolvedRevision: r.resolvedRevision,
+			Runtime:           r.runtime,
+			ModelRef:          r.modelRef,
+			ResolvedRevision:  r.resolvedRevision,
+			ExpectedSizeBytes: r.expectedSizeBytes,
 		},
 	}
 	mutation := protocol.ExpectedMutation{

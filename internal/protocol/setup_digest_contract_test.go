@@ -80,7 +80,8 @@ func digestFixturePlan() SetupPlan {
 			Kind: CondKindModelPresent,
 			ModelPresent: &ModelPresentOperand{
 				Runtime: "ollama", ModelRef: "smollm:135m",
-				ResolvedRevision: "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+				ResolvedRevision:  "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+				ExpectedSizeBytes: 145000000,
 			},
 		}},
 		ExpectedMutations: []ExpectedMutation{{Kind: MutationModelPulled, Target: "smollm:135m", Detail: "Diagnostic model pulled"}},

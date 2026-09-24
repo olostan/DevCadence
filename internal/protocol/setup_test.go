@@ -37,9 +37,10 @@ func validExecutableAction() protocol.SetupAction {
 			{
 				Kind: protocol.CondKindModelPresent,
 				ModelPresent: &protocol.ModelPresentOperand{
-					Runtime:          "ollama",
-					ModelRef:         "smollm:135m",
-					ResolvedRevision: "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+					Runtime:           "ollama",
+					ModelRef:          "smollm:135m",
+					ResolvedRevision:  "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+					ExpectedSizeBytes: 145000000,
 				},
 			},
 		},
@@ -193,6 +194,25 @@ func TestSetupActionEnsureLocalModelRequiresMatchingPostcondition(t *testing.T) 
 	missing.Postconditions = nil
 	if err := missing.Validate(); err == nil {
 		t.Fatal("ensure_local_model action with no model_present postcondition was accepted; expected error")
+	}
+
+	// Mismatched expected_size_bytes must also be rejected — a plan must
+	// not be able to approve one size while asking the postcondition (and
+	// therefore crash recovery) to accept a different one.
+	sizeMismatch := validExecutableAction()
+	sizeMismatch.Postconditions = []protocol.Condition{
+		{
+			Kind: protocol.CondKindModelPresent,
+			ModelPresent: &protocol.ModelPresentOperand{
+				Runtime:           sizeMismatch.Operation.EnsureLocalModel.Runtime,
+				ModelRef:          sizeMismatch.Operation.EnsureLocalModel.ModelRef,
+				ResolvedRevision:  sizeMismatch.Operation.EnsureLocalModel.ResolvedRevision,
+				ExpectedSizeBytes: sizeMismatch.Operation.EnsureLocalModel.ExpectedSizeBytes + 1,
+			},
+		},
+	}
+	if err := sizeMismatch.Validate(); err == nil {
+		t.Fatal("action with mismatched ensure_local_model/model_present expected_size_bytes was accepted; expected error")
 	}
 }
 

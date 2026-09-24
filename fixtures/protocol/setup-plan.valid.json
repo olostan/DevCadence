@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0",
   "plan_id": "plan_000000000000000000000001",
-  "plan_digest": "sha256:4057523a0ac148ed37da07202f5c3d0a08d943999ae480eb401edb24ebe24e66",
+  "plan_digest": "sha256:57fcefe1363c9580ee4817bbcbd246db02873261049bd915d51d34000edeeac4",
   "recipe_set_version": "1.0",
   "machine_fingerprint": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
   "created_at": "2026-09-22T12:00:00.000000Z",
@@ -39,7 +39,8 @@
           "model_present": {
             "runtime": "ollama",
             "model_ref": "smollm:135m",
-            "resolved_revision": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+            "resolved_revision": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            "expected_size_bytes": 145000000
           }
         }
       ],

@@ -238,9 +238,19 @@ type TypedOperation struct {
 //     protocol digests are: the whole point of a runtime-agnostic type is
 //     that this package does not get to assume every runtime's immutable
 //     pin looks like Ollama's.
-//   - ExpectedSizeBytes/AllowedSource/LicenseReference are the bounded
-//     supply-chain metadata ADR-0014 §7 requires, enforced by the
-//     executor-layer adapter for Runtime against what it actually fetches.
+//   - ExpectedSizeBytes/AllowedSource are bounded supply-chain metadata
+//     ADR-0014 §7 requires, and each runtime adapter enforces them against
+//     what it actually fetches (e.g. OllamaAdapter checks the pulled
+//     manifest's exact digest/size against the live registry; MLXAdapter
+//     checks the downloaded snapshot's measured size and rejects any
+//     AllowedSource other than "huggingface.co").
+//   - LicenseReference is approval/provenance metadata only — it records
+//     what license the plan was approved under, for audit purposes. No
+//     current adapter verifies it against the runtime's own fetched
+//     metadata (neither Ollama's registry API nor Hugging Face's model API
+//     response is treated as an authoritative license source here), so it
+//     must not be read as a runtime-enforced field the way
+//     ExpectedSizeBytes/AllowedSource are.
 type EnsureLocalModelParams struct {
 	Runtime           string `json:"runtime"`
 	ModelRef          string `json:"model_ref"`
@@ -441,14 +451,23 @@ type EndpointOperand struct {
 	EndpointID string `json:"endpoint_id"`
 }
 
-// ModelPresentOperand mirrors EnsureLocalModelParams's identity fields —
-// see that type's doc comment for why Runtime/ModelRef/ResolvedRevision
-// are opaque, adapter-interpreted strings rather than a fixed sha256-hex
-// digest.
+// ModelPresentOperand mirrors EnsureLocalModelParams's identity and size
+// fields — see that type's doc comment for why Runtime/ModelRef/
+// ResolvedRevision are opaque, adapter-interpreted strings rather than a
+// fixed sha256-hex digest. ExpectedSizeBytes matters here specifically
+// because this condition is also what Executor.Recover uses to decide
+// whether an interrupted ensure_local_model action actually succeeded: for
+// a runtime whose ResolvedRevision alone does not cryptographically prove
+// content completeness (e.g. MLX's snapshot-directory existence, unlike
+// Ollama's content-addressed manifest digest), the adapter needs the
+// approved size to distinguish a complete download from a partial or
+// corrupted one during recovery. 0 means "not checked" for adapters that
+// don't need it (e.g. Ollama, whose digest already proves completeness).
 type ModelPresentOperand struct {
-	Runtime          string `json:"runtime"`
-	ModelRef         string `json:"model_ref"`
-	ResolvedRevision string `json:"resolved_revision"`
+	Runtime           string `json:"runtime"`
+	ModelRef          string `json:"model_ref"`
+	ResolvedRevision  string `json:"resolved_revision"`
+	ExpectedSizeBytes int64  `json:"expected_size_bytes,omitempty"`
 }
 
 func (c Condition) Validate() error {
@@ -533,6 +552,9 @@ func (c Condition) Validate() error {
 		}
 		if c.ModelPresent.ResolvedRevision == "" {
 			return errs.New(errs.CategoryInvalidArgument, "%s: resolved_revision is required", kind)
+		}
+		if c.ModelPresent.ExpectedSizeBytes < 0 {
+			return errs.New(errs.CategoryInvalidArgument, "%s: expected_size_bytes must not be negative", kind)
 		}
 	}
 	return nil
@@ -692,16 +714,24 @@ func (a SetupAction) Validate() error {
 		}
 
 		// Structural identity binding: an ensure_local_model action's
-		// approved model identity must be exactly what its own
-		// model_present postcondition asks for. Without this, a plan could
-		// approve pulling model A in the operation while declaring success
-		// against model B's postcondition — the postcondition would then
-		// either never hold (masking the real failure behind a generic
+		// approved model identity — and approved size — must be exactly
+		// what its own model_present postcondition asks for. Without this,
+		// a plan could approve pulling model A (or a given size) in the
+		// operation while declaring success against model B's (or an
+		// unbounded) postcondition — the postcondition would then either
+		// never hold (masking the real failure behind a generic
 		// "postcondition failed" error) or, worse, a future adapter could
-		// satisfy it by coincidence. Requiring at least one matching
-		// model_present postcondition makes the binding structural rather
-		// than dependent on the adapter's own internal checks (which do
-		// still independently verify the pulled model, per-adapter).
+		// satisfy it by coincidence. ExpectedSizeBytes is included in the
+		// match (not just identity) because model_present's ExpectedSizeBytes
+		// is also what Executor.Recover relies on to tell a complete
+		// download from a partial/corrupted one during crash recovery for a
+		// runtime whose revision alone doesn't cryptographically prove
+		// completeness (see ModelPresentOperand's doc comment) — a plan
+		// approving one size but asking recovery to accept any size would
+		// silently weaken that recovery check. Requiring at least one
+		// matching model_present postcondition makes the binding structural
+		// rather than dependent on the adapter's own internal checks (which
+		// do still independently verify the pulled model, per-adapter).
 		if a.Operation.Kind == OpKindEnsureLocalModel && a.Operation.EnsureLocalModel != nil {
 			op := a.Operation.EnsureLocalModel
 			found := false
@@ -709,15 +739,16 @@ func (a SetupAction) Validate() error {
 				if c.Kind != CondKindModelPresent || c.ModelPresent == nil {
 					continue
 				}
-				if c.ModelPresent.Runtime == op.Runtime && c.ModelPresent.ModelRef == op.ModelRef && c.ModelPresent.ResolvedRevision == op.ResolvedRevision {
+				if c.ModelPresent.Runtime == op.Runtime && c.ModelPresent.ModelRef == op.ModelRef &&
+					c.ModelPresent.ResolvedRevision == op.ResolvedRevision && c.ModelPresent.ExpectedSizeBytes == op.ExpectedSizeBytes {
 					found = true
 					break
 				}
 			}
 			if !found {
 				return errs.New(errs.CategoryInvalidArgument,
-					"%s: ensure_local_model action requires a model_present postcondition with the identical identity (runtime=%q, model_ref=%q, resolved_revision=%q)",
-					kind, op.Runtime, op.ModelRef, op.ResolvedRevision)
+					"%s: ensure_local_model action requires a model_present postcondition with the identical identity and expected_size_bytes (runtime=%q, model_ref=%q, resolved_revision=%q, expected_size_bytes=%d)",
+					kind, op.Runtime, op.ModelRef, op.ResolvedRevision, op.ExpectedSizeBytes)
 			}
 		}
 

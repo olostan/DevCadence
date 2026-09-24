@@ -144,7 +144,8 @@
               "properties": {
                 "runtime": { "type": "string" },
                 "model_ref": { "type": "string" },
-                "resolved_revision": { "type": "string" }
+                "resolved_revision": { "type": "string" },
+                "expected_size_bytes": { "type": "integer", "minimum": 0 }
               }
             }
           },

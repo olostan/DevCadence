@@ -40,9 +40,11 @@ const mlxDownloadTimeout = ollamaPullTimeout
 // surface changes and (per ModelPresent's doc comment) more trustworthy.
 type MLXAdapter struct {
 	// CacheDir overrides the Hugging Face Hub cache root this adapter
-	// reads from and expects downloads to land in; empty means the real
-	// default (HF_HOME/hub, or ~/.cache/huggingface/hub). Tests set this
-	// to a t.TempDir().
+	// reads from AND passes to `hf download --cache-dir` for the actual
+	// download — the same resolved value binds both, so the two can never
+	// disagree about where the cache is (see EnsureModel's doc comment).
+	// Empty means the real default (HF_HOME/hub, or
+	// ~/.cache/huggingface/hub). Tests set this to a t.TempDir().
 	CacheDir string
 }
 
@@ -120,6 +122,16 @@ func hfSnapshotSize(dir string) (int64, error) {
 // the same PATH-substitution class of problem ADR-0014 §1 already
 // requires EnsureModel's own mutation to avoid. Reading a fixed,
 // well-known cache path from disk has no such trust dependency.
+// A snapshot directory existing is not, by itself, proof that every file
+// in it actually landed — an interrupted download can leave a partial
+// snapshot behind. Because this condition is also what Executor.Recover
+// uses to decide whether an interrupted ensure_local_model action actually
+// succeeded, presence alone is not strong enough evidence for that use:
+// when op.ExpectedSizeBytes is non-zero (the plan approved a specific
+// size — see SetupAction.Validate()'s structural binding, which requires
+// this to match the operation's own ExpectedSizeBytes), this also measures
+// the snapshot's real total size and rejects a mismatch, the same way
+// EnsureModel's own post-download check already does.
 func (a MLXAdapter) ModelPresent(_ context.Context, deps EvaluatorDeps, op *protocol.ModelPresentOperand) (bool, string, error) {
 	dir, err := a.cacheDir()
 	if err != nil {
@@ -132,6 +144,15 @@ func (a MLXAdapter) ModelPresent(_ context.Context, deps EvaluatorDeps, op *prot
 	}
 	if !info.IsDir() {
 		return false, fmt.Sprintf("%s exists but is not a directory", snapshot), nil
+	}
+	if op.ExpectedSizeBytes > 0 {
+		size, sizeErr := hfSnapshotSize(snapshot)
+		if sizeErr != nil {
+			return false, "", sizeErr
+		}
+		if size != op.ExpectedSizeBytes {
+			return false, fmt.Sprintf("%s@%s present but incomplete: measured %d bytes, expected %d", op.ModelRef, op.ResolvedRevision, size, op.ExpectedSizeBytes), nil
+		}
 	}
 	return true, fmt.Sprintf("%s@%s present in the local Hugging Face cache", op.ModelRef, op.ResolvedRevision), nil
 }
@@ -166,9 +187,24 @@ func (a MLXAdapter) EnsureModel(ctx context.Context, deps applierDeps, p *protoc
 			"MLXAdapter.EnsureModel: allowed_source %q is not a source this adapter can pull from (only \"huggingface.co\")", p.AllowedSource)
 	}
 
+	// The cache directory is resolved exactly once and passed explicitly
+	// to the subprocess via --cache-dir, rather than relying on hf itself
+	// to derive the same path this adapter's own verification reads from.
+	// process.BaseEnv() deliberately passes only PATH/HOME/locale — not
+	// HF_HOME/HF_HUB_CACHE — so without --cache-dir the subprocess could
+	// resolve a different cache than a.cacheDir() (e.g. this adapter
+	// configured with an explicit CacheDir, or a daemon environment with
+	// HF_HOME set but the subprocess env not inheriting it), letting a
+	// real download succeed while verification looks in the wrong place
+	// and reports the model missing.
+	cacheDir, cacheErr := a.cacheDir()
+	if cacheErr != nil {
+		return false, "", nil, nil, cacheErr
+	}
+
 	spec := process.Spec{
 		Executable: verifiedExecutablePath,
-		Args:       []string{"download", p.ModelRef, "--revision", p.ResolvedRevision},
+		Args:       []string{"download", p.ModelRef, "--revision", p.ResolvedRevision, "--cache-dir", cacheDir},
 		Dir:        homeOrTemp(deps.home),
 		Env:        process.BaseEnv(),
 		Timeout:    mlxDownloadTimeout,
@@ -185,10 +221,6 @@ func (a MLXAdapter) EnsureModel(ctx context.Context, deps applierDeps, p *protoc
 		return false, fmt.Sprintf("hf download %s failed (exit %d)", p.ModelRef, result.ExitCode), &result, artifact, nil
 	}
 
-	cacheDir, cacheErr := a.cacheDir()
-	if cacheErr != nil {
-		return false, "", &result, artifact, cacheErr
-	}
 	snapshot := hfSnapshotDir(cacheDir, p.ModelRef, p.ResolvedRevision)
 	if info, statErr := os.Stat(snapshot); statErr != nil || !info.IsDir() {
 		return false, fmt.Sprintf("hf download %s reported success but revision %s is not present in the local cache afterward (%s)", p.ModelRef, p.ResolvedRevision, snapshot), &result, artifact, nil

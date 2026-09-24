@@ -578,6 +578,63 @@ func TestExecutorRecoverReconcilesInterruptedAction(t *testing.T) {
 	}
 }
 
+func TestExecutorRecoverDoesNotReconcileIncompleteMLXSnapshotAsSucceeded(t *testing.T) {
+	home := t.TempDir()
+	if err := EnsureLayout(home); err != nil {
+		t.Fatalf("EnsureLayout: %v", err)
+	}
+	cacheDir := t.TempDir()
+	modelRef := "mlx-community/Qwen2.5-Coder-7B-Instruct-4bit"
+	const expectedSize = 4096
+	// Simulate a crash mid-download: the snapshot directory exists (so a
+	// presence-only check would wrongly call this complete) but its
+	// measured size does not match what the plan approved — an interrupted
+	// download, not a finished one.
+	writeFakeHFSnapshot(t, cacheDir, modelRef, mlxTestRevision, expectedSize/2)
+
+	op := protocol.TypedOperation{
+		Kind: protocol.OpKindEnsureLocalModel,
+		EnsureLocalModel: &protocol.EnsureLocalModelParams{
+			Runtime: "mlx", ModelRef: modelRef, ResolvedRevision: mlxTestRevision,
+			ExpectedSizeBytes: expectedSize, AllowedSource: "huggingface.co", LicenseReference: "apache-2.0",
+		},
+	}
+	effects, auth := protocol.IntrinsicPolicy(op)
+	action := protocol.SetupAction{
+		ActionID: "act-001", RecipeID: "recipe.mlx.download_model", RecipeVersion: "1.0",
+		Title: "Pull model", Description: "Pulls the model via MLX",
+		Authority: auth, Effects: effects, Operation: &op,
+		Postconditions: []protocol.Condition{{
+			Kind: protocol.CondKindModelPresent,
+			ModelPresent: &protocol.ModelPresentOperand{
+				Runtime: "mlx", ModelRef: modelRef, ResolvedRevision: mlxTestRevision,
+				ExpectedSizeBytes: expectedSize,
+			},
+		}},
+		IdempotencyKey: "mlx_pull_" + modelRef,
+	}
+	plan := buildActionPlan(t, protocol.TargetAll, action)
+	simulateCrash(t, home, plan, action)
+
+	exec, err := NewExecutor(ExecutorOptions{
+		Runner:        &fakeCommandRunner{results: map[string]process.Result{}},
+		Home:          home,
+		IDs:           ids.NewSequential(),
+		ModelRuntimes: NewModelRuntimeRegistry(OllamaAdapter{}, MLXAdapter{CacheDir: cacheDir}),
+	})
+	if err != nil {
+		t.Fatalf("NewExecutor: %v", err)
+	}
+
+	statuses, err := exec.Recover(context.Background(), plan)
+	if err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	if len(statuses) != 1 || statuses[0] == protocol.ActionStatusSucceeded {
+		t.Fatalf("Recover statuses = %+v, want the incomplete-snapshot action NOT reconciled as succeeded", statuses)
+	}
+}
+
 func TestExecutorEnsureLocalModelOllamaUsesTheVerifiedExecutablePath(t *testing.T) {
 	exec, home, _ := executorTestFixture(t)
 	ollamaPath := filepath.Join(home, "ollama-fake")
@@ -609,6 +666,7 @@ func TestExecutorEnsureLocalModelOllamaUsesTheVerifiedExecutablePath(t *testing.
 			Kind: protocol.CondKindModelPresent,
 			ModelPresent: &protocol.ModelPresentOperand{
 				Runtime: "ollama", ModelRef: "smollm:135m", ResolvedRevision: resolvedDigest,
+				ExpectedSizeBytes: 145000000,
 			},
 		}},
 		IdempotencyKey: "ollama_pull_smollm",

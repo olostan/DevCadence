@@ -1,31 +1,24 @@
 # Handoff — M3B guided bootstrap (feat/m3b-guided-bootstrap)
 
-Last updated: 2026-09-24T05:10:00Z by Claude Code / Sonnet 5 (cloud session, olostan@gmail.com)
+Last updated: 2026-09-24T05:25:00Z by Claude Code / Sonnet 5 (cloud session, olostan@gmail.com)
 
 Session takeover HEAD: `a38b293` (origin/main HEAD when this session started — branch did not exist yet)
-Expected remote HEAD before next push: `b83507c` (the actual current pushed HEAD — this field always tracks the real remote tip; advance it after every successful push — see "Git safety rules" in AGENT_HANDOFF_PROTOCOL.md).
+Expected remote HEAD before next push: update this to the real SHA `git log`/`git fetch` reports after the next push (this field's own self-reference lag is a known, accepted pattern in this repo per the reviewer's explicit instruction not to chase it with dedicated commits — see `docs/work-packages/wp-m3b-3-ewp.md` §18's "smaller follow-ups").
 
 ## Where WP-M3B-3 actually stands
 
-WP-M3B-3 is **implemented, not yet accepted**. Timeline, newest first:
+WP-M3B-3 is **implemented, not yet accepted**. Four independent review rounds so far, newest first:
 
-1. A first independent review found 10 blocking issues in the executor — all fixed (see `docs/work-packages/wp-m3b-3-ewp.md` §15).
-2. A second review found this WP's design was Ollama-specific, conflicting with `docs/MODEL_RUNTIME.md`/`INVARIANTS.md` DCI-055. The project owner explicitly authorized reopening WP-M3B-1's protocol types on this branch and required MLX-LM to be a fully equal peer to Ollama. A runtime-agnostic `LocalModelRuntimeAdapter` redesign was implemented (`ensure_local_model`/`model_present` protocol types, `ModelRuntimeRegistry`, `OllamaAdapter`/`MLXAdapter`) — see `docs/work-packages/wp-m3b-1-ewp.md` §13 and `wp-m3b-3-ewp.md` §16.
-3. **A third, follow-up independent review** ([PR #10 comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5807748158), owner) reviewed that redesign itself and found the *direction* correct but 8 further material gaps, all in the redesign's own implementation quality, not in the earlier 10-finding round (which it confirmed was "largely solid"):
-   1. `DefaultMLXRevision` was `"main"` — a mutable ref, defeating the immutable-plan property the redesign's own field documentation claimed.
-   2. The MLX adapter didn't enforce `ExpectedSizeBytes`/`AllowedSource` the way Ollama's adapter enforces its equivalents.
-   3. The MLX adapter was built against `huggingface-cli`/`--local-files-only`, which the reviewer verified (and this session independently re-verified against current Hugging Face docs) is deprecated/undocumented — `huggingface-cli` was removed in `huggingface_hub` v1.0 in favor of `hf`, and `hf download` has no documented `--local-files-only` flag.
-   4. `MLXAdapter.ModelPresent` re-resolved a bare `"huggingface-cli"`/`"hf"` from ambient PATH — used by `Executor.Recover` to decide whether an interrupted mutating action actually succeeded, reintroducing the PATH-substitution class of problem on the verification side.
-   5. Ollama-specific configuration (`OllamaBaseURL`) still lived on the generic `ExecutorOptions`/`EvaluatorDeps`/`applierDeps` structs rather than fully behind `OllamaAdapter`.
-   6. `ensure_local_model`'s operation identity wasn't structurally bound to its `model_present` postcondition — a plan could approve pulling model A while declaring success against model B.
-   7. `state_root_writable`'s mode-bit check claimed unqualified "is writable" wording it cannot actually establish.
-   8. This file (`HANDOFF.md`) had stale, contradictory sections describing the pre-redesign state as current.
+4. **Fourth review** ([PR #10 comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5808007255), owner): confirmed 6 of the third round's 8 findings substantively resolved, found 3 further material issues (MLX download/verification could read from two different Hugging Face caches; MLX's crash-recovery postcondition was presence-only and couldn't detect a partial/incomplete download; `LicenseReference` was documented as runtime-enforced but isn't) plus 4 smaller follow-ups. **All fixed this session** — see `docs/work-packages/wp-m3b-3-ewp.md` §18 for full detail.
+3. Third, follow-up independent review ([comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5807748158)): reviewed the runtime-agnostic redesign itself, confirmed the direction correct, found 8 implementation-quality gaps — all fixed (§17).
+2. Second review found this WP's design was Ollama-specific, conflicting with `docs/MODEL_RUNTIME.md`/`INVARIANTS.md` DCI-055. The project owner explicitly authorized reopening WP-M3B-1's protocol types on this branch and required MLX-LM to be a fully equal peer to Ollama. A runtime-agnostic `LocalModelRuntimeAdapter` redesign was implemented (`ensure_local_model`/`model_present` protocol types, `ModelRuntimeRegistry`, `OllamaAdapter`/`MLXAdapter`) — see `docs/work-packages/wp-m3b-1-ewp.md` §13 and `wp-m3b-3-ewp.md` §16.
+1. A first independent review found 10 blocking issues in the executor — all fixed (§15).
 
-**All 8 are now fixed in this same session**, in the commit(s) following `5c22d36` (see "What's implemented" below for the file-by-file detail). This is the current, accurate state — do not trust the "Currently in progress" wording from any older revision of this file.
+**Current state is accurate as of this line** — do not trust any "Currently in progress" or STOP-banner wording from an older revision of this file; git history has several now-superseded versions of this section.
 
 **Verified after all fixes:** `go build ./...`, `go vet ./...`, `gofmt -l internal/setup/*.go internal/protocol/setup*.go`, `go test -count=1 ./...` (all packages, including the `tests` schema-fixture round-trip), `go test -race ./internal/setup/...`, `GOOS=windows GOARCH=amd64 go build ./...` — all clean.
 
-**Not yet done:** a fourth independent review round confirming these 8 fixes. Post a PR comment summarizing them (this session's next job) and keep watching PR #10. Do not flip WP-M3B-3 to `accepted` unilaterally — that is the reviewer's call, per the established pattern for every WP in this milestone.
+**Not yet done:** a fifth independent review round confirming the §18 fixes. Post a PR comment summarizing them (this session's next job) and keep watching PR #10. Do not flip WP-M3B-3 to `accepted` unilaterally — that is the reviewer's call, per the established pattern for every WP in this milestone. The fourth reviewer noted they do not expect a further architectural redesign and expect the next round to be smaller.
 
 ## Milestone
 
@@ -68,7 +61,7 @@ implementing on top of it or rewriting it.
 |----|--------|------------|------------|--------|
 | WP-M3B-1 | accepted (amended §13) | see head of `internal/protocol/setup.go` history | `go build ./...`, `go vet ./...`, `go test -count=1 ./...` all PASS | independent review complete — [comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5805285148), findings addressed in EWP §12; §13 amendment (runtime-agnostic types) not yet independently re-reviewed on its own, but covered by the WP-M3B-3 review below since the two ship together |
 | WP-M3B-2 | accepted | `bb01bc9` | all PASS (see EWP §13) | independent review complete — [comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5805603916), 7 findings, all addressed in EWP §14 |
-| WP-M3B-3 | implemented, NOT accepted — awaiting review of the 8-finding follow-up fix round | current branch HEAD (see "Expected remote HEAD" above — update after pushing) | `go build ./...`, `go vet ./...`, `go test -count=1 ./...`, `go test -race ./internal/setup/...`, `GOOS=windows GOARCH=amd64 go build ./...` all PASS | first 10-finding round: addressed (EWP §15). Second review (architecture correction): resolved by owner instruction, redesign implemented (EWP §16 amendment). **Third review** ([comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5807748158)): 8 findings against the redesign's implementation quality — all fixed this session, not yet re-reviewed |
+| WP-M3B-3 | implemented, NOT accepted — awaiting review of the §18 fix round | current branch HEAD (see "Expected remote HEAD" above — update after pushing) | `go build ./...`, `go vet ./...`, `go test -count=1 ./...`, `go test -race ./internal/setup/...`, `GOOS=windows GOARCH=amd64 go build ./...` all PASS | first 10-finding round: addressed (EWP §15). Second review (architecture correction): resolved by owner instruction, redesign implemented (EWP §16). Third review (redesign quality): 8 findings, addressed (EWP §17). **Fourth review** ([comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5808007255)): 3 material findings (MLX cache-dir binding, MLX crash-recovery size verification, LicenseReference contract truthfulness) + 4 smaller items — all fixed this session (EWP §18), not yet re-reviewed |
 | WP-M3B-4 | not started | — | — | blocked on WP-M3B-3 acceptance |
 | WP-M3B-5 | unknown — likely partially pre-existing, unverified | — | — | assess `internal/setup/doctor.go`, `profiles.go` first |
 | WP-M3B-6 | unknown — likely partially pre-existing, unverified | — | — | assess `internal/setup/planner.go`, `cache.go` first |
@@ -104,18 +97,27 @@ until the whole milestone closes.)
   `EvaluatorDeps`/`applierDeps` — those structs no longer know Ollama
   exists). `EnsureModel`/`ModelPresent` verify exact digest + size against
   the live `/api/tags` response, same as before.
-- `mlx_adapter.go` — `MLXAdapter{CacheDir string}`: `EnsureModel` runs `hf
-  download <ref> --revision <rev>` via the verified executable path (never
-  `huggingface-cli`, which is deprecated), then verifies the result by
-  reading the local Hugging Face Hub cache directly from disk (never by
-  re-invoking the CLI) — checks the resolved-revision snapshot directory
-  exists and, when `ExpectedSizeBytes` was approved, that the snapshot's
-  measured total size matches exactly. `ModelPresent` is the same
-  filesystem-only check with no `ExpectedSizeBytes` requirement — and,
-  critically, **never spawns a subprocess at all**, so postcondition/
-  recovery evidence cannot depend on ambient PATH resolution. `EnsureModel`
-  also rejects any `AllowedSource` other than `"huggingface.co"` — the only
-  source this adapter can pull from.
+- `mlx_adapter.go` — `MLXAdapter{CacheDir string}`: `EnsureModel` resolves
+  the cache directory once (`CacheDir`/`HF_HOME`/`~/.cache/huggingface/hub`)
+  and runs `hf download <ref> --revision <rev> --cache-dir <that exact
+  dir>` via the verified executable path (never `huggingface-cli`, which
+  is deprecated) — the explicit `--cache-dir` binds the download to the
+  same path verification reads, since `process.BaseEnv()` deliberately
+  doesn't pass `HF_HOME`/`HF_HUB_CACHE` to the subprocess. Verification
+  reads the local Hugging Face Hub cache directly from disk (never by
+  re-invoking the CLI): the resolved-revision snapshot directory must
+  exist and, when `ExpectedSizeBytes` was approved (now required by
+  `ModelPresentOperand.ExpectedSizeBytes`, structurally bound to match the
+  operation's own value — see below), the snapshot's measured total size
+  must match exactly, in both `EnsureModel`'s post-download check and
+  `ModelPresent` itself (so a crash-recovery postcondition check can tell
+  a complete download from a partial one, not just "some directory
+  exists"). `ModelPresent` **never spawns a subprocess at all**, so
+  postcondition/recovery evidence cannot depend on ambient PATH
+  resolution. `EnsureModel` also rejects any `AllowedSource` other than
+  `"huggingface.co"` — the only source this adapter can pull from.
+  `LicenseReference` is documented (protocol-level) as approval/provenance
+  metadata only — no adapter verifies it against fetched metadata.
 - `executor.go` — unchanged in shape from the prior round (lock+ledger
   lifecycle owned by `Executor`, `Recover` for crash recovery,
   `verifiedExecutablePath` threading); `ExecutorOptions`/`Executor` no

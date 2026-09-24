@@ -10,6 +10,60 @@ import (
 	"github.com/olostan/DevCadence/internal/protocol"
 )
 
+func TestIsImmutableHFRevision(t *testing.T) {
+	cases := map[string]bool{
+		"019cc73c45c770444708a6dd8690c66243cc5c80": true, // real, 40 lowercase hex chars
+		"main":      false,
+		"refs/pr/1": false,
+		"HEAD":      false,
+		"":          false,
+		"019CC73C45C770444708A6DD8690C66243CC5C80": false, // uppercase is not the canonical form this checks for
+	}
+	for rev, want := range cases {
+		if got := isImmutableHFRevision(rev); got != want {
+			t.Errorf("isImmutableHFRevision(%q) = %v, want %v", rev, got, want)
+		}
+	}
+}
+
+// TestEnsureLocalModelActionRejectsMutableRevisionEvenWithTrustworthyIdentity
+// isolates the immutability gate from the trustworthy-identity gate: both
+// must independently force the manual fallback. A planner-level test using
+// a mutable DefaultMLXRevision would conflate "forced manual because the
+// revision is mutable" with "forced manual because no verified hf
+// identity was found" (the existing MLX planner tests never configure a
+// trustworthy identity, so they only ever exercise the latter). This test
+// supplies a valid executable identity but a mutable revision, so the only
+// possible cause of falling back to manual is the immutability gate.
+func TestEnsureLocalModelActionRejectsMutableRevisionEvenWithTrustworthyIdentity(t *testing.T) {
+	p, err := NewPlanner(PlannerOptions{Clock: clock.NewFake(time.Date(2026, 9, 22, 12, 0, 0, 0, time.UTC), 0), IDs: ids.NewSequential()})
+	if err != nil {
+		t.Fatalf("NewPlanner: %v", err)
+	}
+	actionIndex := 0
+	action := p.ensureLocalModelAction(&actionIndex, nil, localModelRecipe{
+		runtime:             "mlx",
+		modelRef:            DefaultMLXModelRef,
+		resolvedRevision:    "main", // mutable — must never reach the automated path
+		expectedSizeBytes:   DefaultMLXSizeBytes,
+		allowedSource:       DefaultMLXSource,
+		licenseReference:    DefaultMLXLicense,
+		commandName:         "hf",
+		executablePath:      "/usr/local/bin/hf", // a trustworthy identity IS present
+		executableVersion:   "1.0.0",
+		recipeIDAuto:        "recipe.mlx.download_model",
+		recipeIDManual:      "recipe.manual.pull_mlx_model",
+		revisionIsImmutable: isImmutableHFRevision,
+		manualSteps:         []string{"step"},
+	})
+	if action.RecipeID != "recipe.manual.pull_mlx_model" {
+		t.Errorf("RecipeID = %q, want the manual recipe — a mutable resolved_revision must force manual even with a trustworthy executable identity", action.RecipeID)
+	}
+	if action.Operation != nil {
+		t.Error("Operation is non-nil, want nil for a manual action forced by a mutable revision")
+	}
+}
+
 func TestPlannerGeneratesValidPlan(t *testing.T) {
 	clk := clock.NewFake(time.Date(2026, 9, 22, 12, 0, 0, 0, time.UTC), 0)
 	seq := ids.NewSequential()

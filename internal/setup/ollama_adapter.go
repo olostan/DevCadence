@@ -122,6 +122,14 @@ func (a OllamaAdapter) ModelPresent(ctx context.Context, deps EvaluatorDeps, op 
 	if normalizeDigest(entry.Digest) != normalizeDigest(op.ResolvedRevision) {
 		return false, fmt.Sprintf("model %s present but digest %s does not match expected %s", op.ModelRef, entry.Digest, op.ResolvedRevision), nil
 	}
+	// The digest match above already cryptographically proves complete,
+	// correct content, so this size check is redundant for Ollama in
+	// principle — it is honored anyway (when approved as non-zero) so
+	// model_present's size field is verified uniformly across every
+	// adapter, not silently ignored by whichever one happens not to need it.
+	if op.ExpectedSizeBytes > 0 && entry.Size != op.ExpectedSizeBytes {
+		return false, fmt.Sprintf("model %s present with matching digest but size %d does not match expected %d", op.ModelRef, entry.Size, op.ExpectedSizeBytes), nil
+	}
 	return true, fmt.Sprintf("model %s present with matching digest", op.ModelRef), nil
 }
 

@@ -462,6 +462,20 @@ func TestApplyOperationEnsureLocalModelMLX(t *testing.T) {
 	if runner.calls[0].Executable != hfPath || runner.calls[0].Args[0] != "download" {
 		t.Errorf("runner.calls[0] = %+v, want a download call to the verified path", runner.calls[0])
 	}
+	// The download must be bound to the exact same cache directory
+	// verification reads from — otherwise the subprocess (which does not
+	// inherit HF_HOME/HF_HUB_CACHE via process.BaseEnv()) could resolve a
+	// different cache than a.cacheDir(), letting a real download succeed
+	// while this adapter's own verification looks in the wrong place.
+	foundCacheDirFlag := false
+	for i, arg := range runner.calls[0].Args {
+		if arg == "--cache-dir" && i+1 < len(runner.calls[0].Args) && runner.calls[0].Args[i+1] == cacheDir {
+			foundCacheDirFlag = true
+		}
+	}
+	if !foundCacheDirFlag {
+		t.Errorf("runner.calls[0].Args = %v, want \"--cache-dir %s\" binding the download to the exact cache verification reads from", runner.calls[0].Args, cacheDir)
+	}
 }
 
 func TestApplyOperationEnsureLocalModelMLXRejectsSizeMismatch(t *testing.T) {
