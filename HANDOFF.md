@@ -1,9 +1,9 @@
 # Handoff — M3B guided bootstrap (feat/m3b-guided-bootstrap)
 
-Last updated: 2026-09-24T08:56:12Z by Codex (PR #12 roadmap synchronization)
+Last updated: 2026-09-24T09:12:00Z by Antigravity (WP-M3B-4 EWP expansion)
 
-Session takeover HEAD: `f6bdc6494a2f7a8d2b8fbc8902ab5fb209dd39f7`.
-Expected remote HEAD before next push: `f6bdc6494a2f7a8d2b8fbc8902ab5fb209dd39f7`
+Session takeover HEAD: `9b8c809615bc2f5c961f2cacf14e0de4110b0ad4`.
+Expected remote HEAD before next push: `9b8c809615bc2f5c961f2cacf14e0de4110b0ad4`
 (pre-push baseline for this checkpoint; after a successful push, advance the
 session guard to the pushed SHA and record it at the next durable checkpoint).
 
@@ -143,7 +143,7 @@ implementing on top of it or rewriting it.
 | WP-M3B-1 | accepted (amended §13) | see head of `internal/protocol/setup.go` history | `go build ./...`, `go vet ./...`, `go test -count=1 ./...` all PASS | independent review complete — [comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5805285148), findings addressed in EWP §12; §13 amendment (runtime-agnostic types) not yet independently re-reviewed on its own, but covered by the WP-M3B-3 review below since the two ship together |
 | WP-M3B-2 | accepted | `bb01bc9` | all PASS (see EWP §13) | independent review complete — [comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5805603916), 7 findings, all addressed in EWP §14 |
 | WP-M3B-3 | **accepted** (§21) | `cc799cd` | `go build ./...`, `go vet ./...`, `go test -count=1 ./...`, `go test -race ./internal/setup/... ./internal/cognition/mlx/... ./internal/environment/...`, `GOOS=windows GOARCH=amd64 go build ./...` all PASS | 7 independent review rounds, 25 findings total, all resolved — see EWP §15–§21. Final acceptance: [comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5809019161) |
-| WP-M3B-4 | not started | — | — | unblocked — WP-M3B-3 accepted |
+| WP-M3B-4 | in progress | EWP committed | — | EWP expanded and committed (`docs/work-packages/wp-m3b-4-ewp.md`) |
 | WP-M3B-5 | unknown — likely partially pre-existing, unverified; scope rebaselined by PR #11 | — | — | assess `internal/setup/doctor.go`, `profiles.go` against deterministic ResourceInventory/readiness scope first |
 | WP-M3B-6 | unknown — likely partially pre-existing, unverified | — | — | assess `internal/setup/planner.go`, `cache.go` first |
 | WP-M3B-7 | not started | — | — | blocked on WP-3/4/5/6 |
@@ -223,25 +223,24 @@ until the whole milestone closes.)
   can no longer approve pulling model A while declaring success against
   model B.
 
+## Currently in progress: WP-M3B-4 — Credential-reference abstraction
+
+- **EWP status:** expanded and committed at `docs/work-packages/wp-m3b-4-ewp.md`
+- **Base commit this WP started from:** `9b8c809615bc2f5c961f2cacf14e0de4110b0ad4`
+- **What's implemented so far:** EWP authored and committed with full threat model and interface specifications.
+- **What's verified:** Baseline verified clean (`go build ./...`, `go test -count=1 ./...`).
+- **What's left for this WP:**
+  1. Protocol types update (`internal/protocol/credentials.go`, `protocol.LooksLikeSecret`, `CredentialRef` without provider coupling, `AuthEvidence`).
+  2. JSON Schema registration (`schemas/credential-ref.schema.json`, `schemas/auth-evidence.schema.json`, schema registry).
+  3. `internal/credentials` implementation (`EnvReader`, `CLISessionAuthAdapter` registry, `KeychainChecker`, `process_guard.go`, `manager.go`).
+  4. Integration and leak tests (sentinel secret tests, version-only isolation tests, hostile output isolation tests, process spec secret injection prevention).
+  5. Go/Schema parity tests.
+  6. Cross-platform build verification (`GOOS=windows GOARCH=amd64`).
+- **Known blockers / open questions:** None.
+
 ## Next concrete action
 
-WP-M3B-3 is accepted and this milestone branch is synchronized with the
-merged PR #12 roadmap baseline. Start **WP-M3B-4 — Credential-reference
-abstraction** next.
-
-Before implementation, follow the normal protocol: fetch the branch, adopt
-the actual post-merge remote HEAD as the new concurrency baseline, reread
-ADR-0014 §6 / `docs/SECURITY.md` / the WP4 scope card, inspect existing
-credential/auth abstractions (especially `internal/cognition/service.go`
-and `internal/process`), then expand WP-M3B-4 into its committed EWP and
-perform the required security/threat-model review before implementation.
-Keep credential references distinct from cognition endpoints, access channels,
-sessions, accounts, and economic regimes; WP4 does not choose a portfolio.
-
-Do **not** start WP-M3B-5 from its old static-profile assumptions. PR #11
-rebaselined WP5 to deterministic readiness + ResourceInventory; when WP5
-starts, first assess the pre-existing doctor/profile code against that new
-scope.
+Implement protocol types in `internal/protocol/credentials.go` and corresponding schema in `schemas/credential-ref.schema.json`.
 
 ## Resume checklist for the next agent
 
