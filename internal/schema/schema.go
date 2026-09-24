@@ -63,6 +63,8 @@ const (
 	NameSetupPlan            Name = "setup-plan"
 	NameSetupExecutionReport Name = "setup-execution-report"
 	NameSetupLedgerEvent     Name = "setup-ledger-event"
+	NameCredentialRef        Name = "credential-ref"
+	NameAuthEvidence         Name = "auth-evidence"
 )
 
 // Names of the review-convergence schemas published ahead of their M6 Go
@@ -96,6 +98,8 @@ var RecordKindToSchema = map[string]Name{
 	"SetupPlan":                 NameSetupPlan,
 	"SetupExecutionReport":      NameSetupExecutionReport,
 	"SetupLedgerEvent":          NameSetupLedgerEvent,
+	"CredentialRef":             NameCredentialRef,
+	"AuthEvidence":              NameAuthEvidence,
 }
 
 // Set is a compiled collection of schemas.

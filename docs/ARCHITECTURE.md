@@ -322,6 +322,17 @@ The workflow topology itself is routable. More model calls are not automatically
 
 See [COGNITION_PORTFOLIO.md](COGNITION_PORTFOLIO.md) and [ADR-0018](adr/0018-adaptive-cognition-portfolio-and-workflow-synthesis.md).
 
+### 6.7D Credential references and secret isolation
+
+`internal/credentials` provides provider-neutral, opaque authorization locators (`CredentialRefKind`: `env_var`, `cli_session`, `keychain_ref`). DevCadence holds no custody of raw secrets.
+
+Key architectural boundaries:
+- `CredentialRef != CognitionEndpoint != AccessChannel != Session != Account != EconomicRegime != CognitionPortfolio`;
+- environment variable resolution is presence-only via `os.LookupEnv` without value retention or length inspection;
+- CLI session discovery: `--version` proves installation only, never authentication;
+- subprocess boundary: `process.Spec.Args` and `process.Spec.Env` are strictly guarded against secret injection;
+- authentication operations emit zero raw output artifacts, and hostile probe output is discarded rather than logged.
+
 ### 6.8 Repository/worktree manager
 Provides controlled repository reads, isolated mutations, commits, diffs and integration staging.
 

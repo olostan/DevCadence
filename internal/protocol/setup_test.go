@@ -362,10 +362,9 @@ func TestLoopbackOnlyPortCondition(t *testing.T) {
 func TestCredentialRefValidation(t *testing.T) {
 	// Valid env_var
 	credEnv := protocol.CredentialRef{
-		RefID:    "cred-001",
-		Kind:     protocol.CredRefEnvVar,
-		Provider: "anthropic",
-		Locator:  "ANTHROPIC_API_KEY",
+		RefID:   "cred-001",
+		Kind:    protocol.CredRefEnvVar,
+		Locator: "ANTHROPIC_API_KEY",
 	}
 	if err := credEnv.Validate(); err != nil {
 		t.Fatalf("valid env_var cred failed: %v", err)
@@ -380,10 +379,9 @@ func TestCredentialRefValidation(t *testing.T) {
 
 	// Valid cli_session
 	credCLI := protocol.CredentialRef{
-		RefID:    "cred-002",
-		Kind:     protocol.CredRefCLISession,
-		Provider: "anthropic",
-		Locator:  "claude-code:session-1",
+		RefID:   "cred-002",
+		Kind:    protocol.CredRefCLISession,
+		Locator: "claude-code:session-1",
 	}
 	if err := credCLI.Validate(); err != nil {
 		t.Fatalf("valid cli_session cred failed: %v", err)

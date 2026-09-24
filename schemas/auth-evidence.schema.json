@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/olostan/DevCadence/schemas/auth-evidence.schema.json",
+  "title": "DevCadence AuthEvidence",
+  "description": "Structured, bounded durable record of authentication readiness without raw secrets.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "ref_id",
+    "kind",
+    "status",
+    "probe_kind",
+    "observed_at"
+  ],
+  "properties": {
+    "ref_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[a-zA-Z0-9_\\-:]+$"
+    },
+    "kind": {
+      "enum": [
+        "env_var",
+        "cli_session",
+        "keychain_ref"
+      ]
+    },
+    "status": {
+      "enum": [
+        "authenticated",
+        "unauthenticated",
+        "unavailable",
+        "indeterminate"
+      ]
+    },
+    "probe_kind": {
+      "enum": [
+        "env_presence",
+        "cli_auth_call",
+        "cli_version_only",
+        "keychain_presence"
+      ]
+    },
+    "observed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "probe_target": {
+      "type": "string",
+      "maxLength": 256
+    },
+    "adapter_id": {
+      "type": "string",
+      "maxLength": 128
+    },
+    "detail": {
+      "type": "string",
+      "maxLength": 512
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "probe_kind": { "const": "cli_version_only" } }
+      },
+      "then": {
+        "properties": {
+          "status": {
+            "enum": [
+              "unauthenticated",
+              "unavailable",
+              "indeterminate"
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

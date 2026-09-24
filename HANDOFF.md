@@ -1,6 +1,6 @@
 # Handoff — M3B guided bootstrap (feat/m3b-guided-bootstrap)
 
-Last updated: 2026-09-24T09:12:00Z by Antigravity (WP-M3B-4 EWP expansion)
+Last updated: 2026-09-24T09:22:00Z by Antigravity (WP-M3B-4 implementation complete)
 
 Session takeover HEAD: `9b8c809615bc2f5c961f2cacf14e0de4110b0ad4`.
 Expected remote HEAD before next push: `9b8c809615bc2f5c961f2cacf14e0de4110b0ad4`
@@ -143,7 +143,7 @@ implementing on top of it or rewriting it.
 | WP-M3B-1 | accepted (amended §13) | see head of `internal/protocol/setup.go` history | `go build ./...`, `go vet ./...`, `go test -count=1 ./...` all PASS | independent review complete — [comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5805285148), findings addressed in EWP §12; §13 amendment (runtime-agnostic types) not yet independently re-reviewed on its own, but covered by the WP-M3B-3 review below since the two ship together |
 | WP-M3B-2 | accepted | `bb01bc9` | all PASS (see EWP §13) | independent review complete — [comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5805603916), 7 findings, all addressed in EWP §14 |
 | WP-M3B-3 | **accepted** (§21) | `cc799cd` | `go build ./...`, `go vet ./...`, `go test -count=1 ./...`, `go test -race ./internal/setup/... ./internal/cognition/mlx/... ./internal/environment/...`, `GOOS=windows GOARCH=amd64 go build ./...` all PASS | 7 independent review rounds, 25 findings total, all resolved — see EWP §15–§21. Final acceptance: [comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5809019161) |
-| WP-M3B-4 | in progress | EWP committed | — | EWP expanded and committed (`docs/work-packages/wp-m3b-4-ewp.md`) |
+| WP-M3B-4 | complete (ready for review) | pending commit | `go test ./...`, `go test -race ./...`, windows build all PASS | EWP, threat model, schemas, implementation, and 16 test suites complete; awaiting independent review |
 | WP-M3B-5 | unknown — likely partially pre-existing, unverified; scope rebaselined by PR #11 | — | — | assess `internal/setup/doctor.go`, `profiles.go` against deterministic ResourceInventory/readiness scope first |
 | WP-M3B-6 | unknown — likely partially pre-existing, unverified | — | — | assess `internal/setup/planner.go`, `cache.go` first |
 | WP-M3B-7 | not started | — | — | blocked on WP-3/4/5/6 |
@@ -223,24 +223,26 @@ until the whole milestone closes.)
   can no longer approve pulling model A while declaring success against
   model B.
 
-## Currently in progress: WP-M3B-4 — Credential-reference abstraction
+## Currently in progress: WP-M3B-4 — Credential-reference abstraction (complete, ready for review)
 
-- **EWP status:** expanded and committed at `docs/work-packages/wp-m3b-4-ewp.md`
+- **EWP status:** expanded and committed at `docs/work-packages/wp-m3b-4-ewp.md` (updated §12 with verification summary).
 - **Base commit this WP started from:** `9b8c809615bc2f5c961f2cacf14e0de4110b0ad4`
-- **What's implemented so far:** EWP authored and committed with full threat model and interface specifications.
-- **What's verified:** Baseline verified clean (`go build ./...`, `go test -count=1 ./...`).
-- **What's left for this WP:**
-  1. Protocol types update (`internal/protocol/credentials.go`, `protocol.LooksLikeSecret`, `CredentialRef` without provider coupling, `AuthEvidence`).
-  2. JSON Schema registration (`schemas/credential-ref.schema.json`, `schemas/auth-evidence.schema.json`, schema registry).
-  3. `internal/credentials` implementation (`EnvReader`, `CLISessionAuthAdapter` registry, `KeychainChecker`, `process_guard.go`, `manager.go`).
-  4. Integration and leak tests (sentinel secret tests, version-only isolation tests, hostile output isolation tests, process spec secret injection prevention).
-  5. Go/Schema parity tests.
-  6. Cross-platform build verification (`GOOS=windows GOARCH=amd64`).
+- **What's implemented:**
+  1. Protocol types in `internal/protocol/credentials.go` (`CredentialRefKind`, `CredentialRef`, `AuthEvidenceStatus`, `AuthProbeKind`, `AuthEvidence`, `LooksLikeSecret`). Provider decoupled from `CredentialRef` locator model per architectural invariant `CredentialRef != CognitionEndpoint != AccessChannel != Account`.
+  2. JSON Schemas: `schemas/credential-ref.schema.json` and `schemas/auth-evidence.schema.json` (Draft 2020-12, registered in `internal/schema/schema.go`).
+  3. `internal/credentials` service package: `EnvReader`/`OsEnvReader` (presence-only, zero value retention), `CLISessionAuthAdapter` registry, `VersionOnlyAdapter` (version output alone proves installation only, never authentication), `BoundedCLIAuthAdapter` (safe bounded auth status probes; raw stdout/stderr discarded immediately, zero raw artifacts), `KeychainChecker`/`UnsupportedKeychainChecker` (pure Go, cross-platform), `ValidateProcessSpecNoSecrets` (guards process args and env against secret injection), and `Manager`.
+  4. Deduplicated secret detection across `internal/cognition/service.go` and `internal/cognition/remoteapi/remoteapi.go` by delegating to `protocol.LooksLikeSecret`.
+  5. Canonical documentation updated in `docs/PROTOCOLS.md` (§20) and `docs/ARCHITECTURE.md` (§6.7D).
+- **What's verified:**
+  - `go build ./...`, `go vet ./...`, `go test -count=1 ./...` (all 29 packages PASS).
+  - `go test -race ./internal/credentials/... ./internal/protocol/... ./internal/setup/...` (PASS, no races).
+  - `GOOS=windows GOARCH=amd64 go build ./...` and `GOOS=linux GOARCH=amd64 go build ./...` (clean cross-compilation).
+  - All 16 required test scenarios covered in `internal/protocol/credentials_test.go` and `internal/credentials/credentials_test.go`.
 - **Known blockers / open questions:** None.
 
 ## Next concrete action
 
-Implement protocol types in `internal/protocol/credentials.go` and corresponding schema in `schemas/credential-ref.schema.json`.
+Perform independent review of WP-M3B-4 checkpoint per `AGENT_HANDOFF_PROTOCOL.md` and `docs/REVIEW_AND_CONVERGENCE.md`. Once accepted, proceed to WP-M3B-5.
 
 ## Resume checklist for the next agent
 

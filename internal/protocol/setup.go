@@ -978,63 +978,6 @@ func (p *SetupPlan) ComputePlanDigest() (string, error) {
 	return ComputePlanDigest(p)
 }
 
-// CredentialRefKind specifies the storage/resolution mechanism for an opaque credential reference.
-type CredentialRefKind string
-
-const (
-	CredRefEnvVar      CredentialRefKind = "env_var"
-	CredRefCLISession  CredentialRefKind = "cli_session"
-	CredRefKeychainRef CredentialRefKind = "keychain_ref"
-)
-
-func (k CredentialRefKind) Valid() bool {
-	switch k {
-	case CredRefEnvVar, CredRefCLISession, CredRefKeychainRef:
-		return true
-	}
-	return false
-}
-
-type CredentialRef struct {
-	RefID    string            `json:"ref_id"`
-	Kind     CredentialRefKind `json:"kind"`
-	Provider string            `json:"provider"`
-	Locator  string            `json:"locator"`
-}
-
-var envVarIdentifierRegex = regexp.MustCompile(`^[A-Z_][A-Z0-9_]*$`)
-var cliSessionHandleRegex = regexp.MustCompile(`^[a-zA-Z0-9_\-:]+$`)
-
-func (c CredentialRef) Validate() error {
-	const kind = "CredentialRef"
-	if c.RefID == "" {
-		return errs.New(errs.CategoryInvalidArgument, "%s: ref_id is required", kind)
-	}
-	if !c.Kind.Valid() {
-		return errs.New(errs.CategoryInvalidArgument, "%s: invalid kind %q", kind, string(c.Kind))
-	}
-	if c.Provider == "" {
-		return errs.New(errs.CategoryInvalidArgument, "%s: provider is required", kind)
-	}
-	if c.Locator == "" {
-		return errs.New(errs.CategoryInvalidArgument, "%s: locator is required", kind)
-	}
-	switch c.Kind {
-	case CredRefEnvVar:
-		if !envVarIdentifierRegex.MatchString(c.Locator) {
-			return errs.New(errs.CategoryInvalidArgument, "%s: env_var locator must be valid uppercase env identifier, got %q", kind, c.Locator)
-		}
-	case CredRefCLISession:
-		if !cliSessionHandleRegex.MatchString(c.Locator) {
-			return errs.New(errs.CategoryInvalidArgument, "%s: cli_session locator must be alphanumeric handle, got %q", kind, c.Locator)
-		}
-	case CredRefKeychainRef:
-		if len(c.Locator) > 256 {
-			return errs.New(errs.CategoryInvalidArgument, "%s: keychain_ref locator too long", kind)
-		}
-	}
-	return nil
-}
 
 // ActionStatus tracks individual action lifecycle.
 type ActionStatus string

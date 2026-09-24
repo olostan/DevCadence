@@ -276,16 +276,7 @@ func orUnknownCost(cost protocol.CostClass) protocol.CostClass {
 }
 
 func looksLikeSecret(value string) bool {
-	if len(value) > 128 {
-		return true
-	}
-	lowered := strings.ToLower(value)
-	for _, prefix := range []string{"sk-", "sk_", "pat_", "ghp_", "bearer ", "aws_"} {
-		if strings.HasPrefix(lowered, prefix) {
-			return true
-		}
-	}
-	return false
+	return protocol.LooksLikeSecret(value)
 }
 
 // StaticClient is a deterministic Client for tests and for proving the boundary.

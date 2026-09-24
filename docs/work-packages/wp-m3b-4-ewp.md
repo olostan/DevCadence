@@ -5,7 +5,7 @@
 - **Base commit:** `9b8c809615bc2f5c961f2cacf14e0de4110b0ad4` (`feat/m3b-guided-bootstrap`, post-merge of PR #12 roadmap rebaseline; includes accepted WP-M3B-1, WP-M3B-2, and WP-M3B-3 checkpoints)
 - **Branch:** `feat/m3b-guided-bootstrap`
 - **Depends on:** WP-M3B-1 (accepted at `6833219`, amended §13), WP-M3B-2 (accepted at `bb01bc9`), WP-M3B-3 (accepted at `cc799cd`).
-- **Status:** Expanded EWP draft committed as authority baseline before implementation.
+-**Status:** Implementation complete; all 16 test suites and deterministic verification PASS; ready for review.
 
 ---
 
@@ -383,3 +383,49 @@ Stop and escalate if:
 1. A downstream requirement demands passing raw credentials through DevCadence process arguments or environment variables.
 2. A provider CLI cannot be probed without triggering paid model inference or mutating local user state.
 3. An existing protocol schema requires breaking changes that invalidate accepted M1/M2/M3A fixtures without an approved ADR.
+
+---
+
+## 12. Implementation and deterministic verification summary
+
+### Implemented deliverables
+
+1. **Protocol Types (`internal/protocol/credentials.go`):**
+   - `CredentialRefKind`: `env_var`, `cli_session`, `keychain_ref`.
+   - `CredentialRef`: Provider-neutral struct `{RefID, Kind, Locator}`. `Provider` was decoupled from the core type in accordance with the invariant `CredentialRef != CognitionEndpoint != AccessChannel != Account`.
+   - `AuthEvidenceStatus`: `authenticated`, `unauthenticated`, `unavailable`, `indeterminate`.
+   - `AuthProbeKind`: `env_presence`, `cli_auth_call`, `cli_version_only`, `keychain_presence`.
+   - `AuthEvidence`: Structured, bounded durable record of authentication readiness `{RefID, Kind, Status, ProbeKind, ObservedAt, ProbeTarget, AdapterID, Detail}`.
+   - `LooksLikeSecret`: Canonical, hardened secret detector preventing token leakage into locators, IDs, details, and environment/args.
+   - Rule enforcement: `AuthProbeCLIVersionOnly` with `AuthStatusAuthenticated` is structurally rejected by `Validate()`.
+
+2. **JSON Schemas (`schemas/credential-ref.schema.json`, `schemas/auth-evidence.schema.json`):**
+   - Published Draft 2020-12 schemas for both types.
+   - Registered in `internal/schema/schema.go` as `NameCredentialRef` and `NameAuthEvidence` with `RecordKindToSchema` mappings.
+   - Verified schema compilation and Go/schema bidirectional parity in `internal/protocol/credentials_test.go`.
+
+3. **Domain Implementation (`internal/credentials/`):**
+   - `env.go`: `EnvReader` interface, `OsEnvReader` (presence-only, zero value retention), and `MapEnvReader` for testing.
+   - `cli.go`: `CLISessionAuthAdapter` interface, `VersionOnlyAdapter` (version proves installation only, never authentication), `BoundedCLIAuthAdapter` (bounded non-inference auth calls, zero raw stdout/stderr retained in durable records), and `StaticCLIAuthAdapter`.
+   - `keychain.go`: `KeychainChecker` interface, `MapKeychainChecker`, and cross-platform safe fallback `UnsupportedKeychainChecker` (no CGO, zero platform-specific syscalls).
+   - `process_guard.go`: `ValidateProcessSpecNoSecrets(process.Spec)` preventing secrets from being passed to subprocess `Args` or `Env`.
+   - `manager.go`: `Manager` coordinating safe presence/auth checks into schema-valid `AuthEvidence`.
+
+4. **Integration with Existing Codebase:**
+   - Replaced duplicate unexported `looksLikeSecret` in `internal/cognition/service.go` and `internal/cognition/remoteapi/remoteapi.go` with delegation to `protocol.LooksLikeSecret`.
+   - Updated `docs/PROTOCOLS.md` (§20) and `docs/ARCHITECTURE.md` (§6.7D) with component boundaries and invariants.
+
+### Deterministic verification results
+
+All commands executed with zero errors and zero diagnostics:
+
+| Command | Result |
+|---|---|
+| `go build ./...` | PASS |
+| `go vet ./...` | PASS |
+| `go test -count=1 ./...` | PASS (all 29 tested packages) |
+| `go test -race ./internal/credentials/... ./internal/protocol/... ./internal/setup/...` | PASS (no data races) |
+| `GOOS=windows GOARCH=amd64 go build ./...` | PASS (clean cross-compilation) |
+| `GOOS=linux GOARCH=amd64 go build ./...` | PASS (clean cross-compilation) |
+| `git diff --check` | PASS |
+

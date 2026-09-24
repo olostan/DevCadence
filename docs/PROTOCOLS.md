@@ -654,3 +654,37 @@ flowchart LR
 ~~~
 
 See [REVIEW_AND_CONVERGENCE.md](REVIEW_AND_CONVERGENCE.md) and schemas/review-campaign.schema.json, finding-disposition.schema.json, closure-decision.schema.json.
+
+## 20. Credential references and authentication evidence
+
+DevCadence isolates authorization handles from secret material and keeps credentials orthogonal to cognition routing, access channels, accounts, and economic regimes (ADR-0014 §6, ADR-0018 §1, DCI-081):
+
+```text
+CredentialRef
+!= CognitionEndpoint
+!= AccessChannel
+!= Session
+!= Account
+!= EconomicRegime
+!= CognitionPortfolio
+```
+
+### CredentialRef
+An opaque reference to an authorization mechanism. It is provider-neutral and holds no secret custody:
+- `ref_id`: stable identifier for the reference;
+- `kind`: `env_var | cli_session | keychain_ref`;
+- `locator`: non-secret locator (e.g. uppercase environment variable identifier, CLI session handle, or keychain service locator). Raw secret values are rejected at boundary validation.
+
+### AuthEvidence
+A structured, bounded durable record of authentication readiness resulting from an evaluation:
+- `ref_id`: reference identifier matching the CredentialRef;
+- `kind`: credential reference kind;
+- `status`: `authenticated | unauthenticated | unavailable | indeterminate`;
+- `probe_kind`: `env_presence | cli_auth_call | cli_version_only | keychain_presence`;
+- `observed_at`: timestamp of the probe;
+- `probe_target`: optional locator or CLI tool name;
+- `adapter_id`: optional adapter identifier;
+- `detail`: bounded, non-secret diagnostic description.
+
+Crucial invariant: `cli_version_only` probes (e.g. `claude --version`) prove software installation only, NEVER authentication. A record claiming `authenticated` from a `cli_version_only` probe is structurally refused.
+See schemas/credential-ref.schema.json and schemas/auth-evidence.schema.json.

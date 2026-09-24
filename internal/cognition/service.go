@@ -779,27 +779,9 @@ func findingStatusFor(err error) protocol.FindingStatus {
 	}
 }
 
-// looksLikeSecret is a conservative guard against a credential reaching a
-// durable record.
-//
-// It is not a secret scanner and does not pretend to be. It rejects the shapes
-// an operator most plausibly pastes by mistake — a long opaque token, an
-// explicit key prefix — so the mistake fails loudly at configuration time
-// instead of becoming a stored credential.
+// looksLikeSecret delegates to protocol.LooksLikeSecret for canonical secret-shape detection.
 func looksLikeSecret(value string) bool {
-	if value == "" {
-		return false
-	}
-	if len(value) > 128 {
-		return true
-	}
-	lowered := strings.ToLower(value)
-	for _, prefix := range []string{"sk-", "sk_", "pat_", "ghp_", "github_pat_", "bearer ", "aws_"} {
-		if strings.HasPrefix(lowered, prefix) {
-			return true
-		}
-	}
-	return strings.Contains(lowered, "secret=") || strings.Contains(lowered, "token=")
+	return protocol.LooksLikeSecret(value)
 }
 
 func truncate(value string, max int) string {
