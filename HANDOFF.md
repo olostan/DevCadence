@@ -3,7 +3,7 @@
 Last updated: 2026-09-24T10:05:00Z by Claude Code / Sonnet 5 (cloud session, olostan@gmail.com)
 
 Session takeover HEAD: `962e67d1a20bb5f5b01f89677fa642d71ceeb614`.
-Expected remote HEAD before next push: update this to the real SHA `git log`/`git fetch` reports after the next push (the previous value here, `635fb19c0175...`, did not resolve to an actual commit — a bookkeeping error caught by review; fixed as part of this same repair revision rather than a dedicated SHA-only commit, per this file's own established practice).
+Expected remote HEAD before next push: `82a0ba4` (pushed to `feat/m3b-guided-bootstrap` — the WP-M3B-4 fix-round commit for the 6 independent-review findings; confirmed via `git push` output, not assumed).
 
 ## Roadmap synchronization after PR #12
 
