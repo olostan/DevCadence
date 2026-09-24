@@ -1,26 +1,54 @@
 # Handoff — M3B guided bootstrap (feat/m3b-guided-bootstrap)
 
-Last updated: 2026-09-24T06:35:00Z by Claude Code / Sonnet 5 (cloud session, olostan@gmail.com)
+Last updated: 2026-09-24T06:40:00Z by Claude Code / Sonnet 5 (cloud session, olostan@gmail.com)
 
 Session takeover HEAD: `a38b293` (origin/main HEAD when this session started — branch did not exist yet)
-Expected remote HEAD before next push: update this to the real SHA `git log`/`git fetch` reports after the next push (this field's own self-reference lag is a known, accepted pattern in this repo per the reviewer's explicit instruction not to chase it with dedicated commits — see `docs/work-packages/wp-m3b-3-ewp.md` §18's "smaller follow-ups").
+Expected remote HEAD before next push: `cc799cd` (the actual current pushed HEAD — advance after every successful push; see "Git safety rules" in AGENT_HANDOFF_PROTOCOL.md).
 
-## Where WP-M3B-3 actually stands
+## WP-M3B-3 is accepted
 
-WP-M3B-3 is **implemented, not yet accepted**. Six independent review rounds so far, newest first:
+Seven independent review rounds, ending in acceptance
+([PR #10 comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5809019161),
+owner, 2026-09-24): "WP-M3B-3 is accepted. GREEN to proceed to WP-M3B-4 (or
+another allowed next WP per the documented dependency chain)." Full
+disposition and the accepted checkpoint's accumulated properties are in
+`docs/work-packages/wp-m3b-3-ewp.md` §21. The review history (§15–§21,
+25 total findings across all rounds, all resolved):
 
-6. **Sixth review** ([PR #10 comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5808795614), owner): confirmed both §19 integration fixes correct and explicitly closed every prior executor/MLX finding as not reopened. Found `ExecutableVerifiedOperand.VersionArgs []string` (the §19 fix for `hf version`) reopened an arbitrary-argv execution surface inside a supposedly closed condition — a real security/protocol regression — plus a canonical-doc sync gap (ADR-0014/`docs/WORK_PACKAGES.md` still described the pre-amendment Ollama-specific protocol). **Both fixed this session**: `VersionArgs` replaced with a closed `VersionProbeKind` enum whose argv mapping is executor-owned, never plan-supplied; ADR-0014 and WP-M3B-1's scope card updated to the accepted runtime-agnostic contract. See `docs/work-packages/wp-m3b-3-ewp.md` §20. The reviewer stated these are the final blockers before marking WP-M3B-3 accepted.
-5. Fifth review ([comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5808511199)): 2 integration blockers — `DefaultInventory()` never discovered the `hf` CLI; M3B setup / M3A's MLX cognition adapter could resolve two different Hugging Face cache locations — fixed (§19).
-4. Fourth review ([comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5808007255)): 3 material findings (MLX cache-dir binding, MLX crash-recovery size verification, `LicenseReference` contract truthfulness) + 4 smaller items — fixed (§18).
-3. Third, follow-up independent review ([comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5807748158)): reviewed the runtime-agnostic redesign itself, confirmed the direction correct, found 8 implementation-quality gaps — fixed (§17).
-2. Second review found this WP's design was Ollama-specific, conflicting with `docs/MODEL_RUNTIME.md`/`INVARIANTS.md` DCI-055. The project owner explicitly authorized reopening WP-M3B-1's protocol types on this branch and required MLX-LM to be a fully equal peer to Ollama. A runtime-agnostic `LocalModelRuntimeAdapter` redesign was implemented (`ensure_local_model`/`model_present` protocol types, `ModelRuntimeRegistry`, `OllamaAdapter`/`MLXAdapter`) — see `docs/work-packages/wp-m3b-1-ewp.md` §13 and `wp-m3b-3-ewp.md` §16.
-1. A first independent review found 10 blocking issues in the executor — fixed (§15).
+1. First round: 10 executor findings (lock/ledger ownership, crash
+   recovery, exported bypasses, executable-identity binding, supply-chain
+   enforcement, diagnostic truthfulness, ledger terminality,
+   home-confinement, ANSI stripping) — §15.
+2. Architecture correction: this WP's design was Ollama-specific,
+   conflicting with `docs/MODEL_RUNTIME.md`/`INVARIANTS.md` DCI-055. The
+   project owner explicitly authorized reopening WP-M3B-1's protocol types
+   on this branch and required MLX-LM to be a fully equal peer to Ollama.
+   A runtime-agnostic `LocalModelRuntimeAdapter` redesign was implemented
+   (`ensure_local_model`/`model_present` protocol types,
+   `ModelRuntimeRegistry`, `OllamaAdapter`/`MLXAdapter`) — see
+   `docs/work-packages/wp-m3b-1-ewp.md` §13 and `wp-m3b-3-ewp.md` §16.
+3. Redesign-quality review: 8 implementation-quality findings — §17.
+4. 3 material findings (MLX cache-dir binding, crash-recovery size
+   verification, `LicenseReference` contract truthfulness) + 4 smaller — §18.
+5. 2 integration blockers (`hf` never in default discovery; setup/cognition
+   Hugging Face cache-location disagreement) — §19.
+6. 1 security/protocol regression (an arbitrary-argv surface the round-5
+   fix introduced, closed to a `VersionProbeKind` enum) + canonical-doc
+   sync (ADR-0014/`docs/WORK_PACKAGES.md`) — §20.
+7. **Final review: accepted, no remaining blocker** — §21.
 
-**Current state is accurate as of this line** — do not trust any "Currently in progress" or STOP-banner wording from an older revision of this file; git history has several now-superseded versions of this section.
+**Verified at acceptance:** `go build ./...`, `go vet ./...`, `gofmt -l
+internal/setup/*.go internal/protocol/setup*.go internal/environment/*.go
+internal/cognition/mlx/*.go`, `go test -count=1 ./...` (all packages,
+including the `tests` schema-fixture round-trip and the invalid-fixture
+regression), `go test -race ./internal/setup/... ./internal/cognition/mlx/...
+./internal/environment/...`, `GOOS=windows GOARCH=amd64 go build ./...` —
+all clean. No GitHub-attached CI exists on this repository (confirmed
+across every review round) — this evidence is session-reported, as it has
+been for the whole milestone.
 
-**Verified after all fixes:** `go build ./...`, `go vet ./...`, `gofmt -l internal/setup/*.go internal/protocol/setup*.go internal/environment/*.go internal/cognition/mlx/*.go`, `go test -count=1 ./...` (all packages, including the `tests` schema-fixture round-trip and the new invalid-fixture case), `go test -race ./internal/setup/... ./internal/cognition/mlx/... ./internal/environment/...`, `GOOS=windows GOARCH=amd64 go build ./...` — all clean.
-
-**Not yet done:** a fifth independent review round confirming the §18 fixes. Post a PR comment summarizing them (this session's next job) and keep watching PR #10. Do not flip WP-M3B-3 to `accepted` unilaterally — that is the reviewer's call, per the established pattern for every WP in this milestone. The fourth reviewer noted they do not expect a further architectural redesign and expect the next round to be smaller.
+PR #10 itself stays **draft/open** — it tracks the whole M3B milestone, and
+WP-M3B-4 through WP-M3B-9 are not started.
 
 ## Milestone
 
@@ -63,8 +91,8 @@ implementing on top of it or rewriting it.
 |----|--------|------------|------------|--------|
 | WP-M3B-1 | accepted (amended §13) | see head of `internal/protocol/setup.go` history | `go build ./...`, `go vet ./...`, `go test -count=1 ./...` all PASS | independent review complete — [comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5805285148), findings addressed in EWP §12; §13 amendment (runtime-agnostic types) not yet independently re-reviewed on its own, but covered by the WP-M3B-3 review below since the two ship together |
 | WP-M3B-2 | accepted | `bb01bc9` | all PASS (see EWP §13) | independent review complete — [comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5805603916), 7 findings, all addressed in EWP §14 |
-| WP-M3B-3 | implemented, NOT accepted — awaiting review of the §20 fix round (reviewer says this should be the last one) | current branch HEAD (see "Expected remote HEAD" above — update after pushing) | `go build ./...`, `go vet ./...`, `go test -count=1 ./...`, `go test -race ./internal/setup/... ./internal/cognition/mlx/... ./internal/environment/...`, `GOOS=windows GOARCH=amd64 go build ./...` all PASS | first 10-finding round: addressed (EWP §15). Architecture correction: resolved by owner instruction, redesign implemented (EWP §16). Redesign-quality review: 8 findings, addressed (EWP §17). Fourth review: 3 material findings + 4 smaller, addressed (EWP §18). Fifth review: 2 integration blockers, addressed (EWP §19). **Sixth review** ([comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5808795614)): arbitrary-argv security regression in the §19 fix (closed to a `VersionProbeKind` enum) + ADR-0014/WORK_PACKAGES.md canonical-doc sync — all fixed this session (EWP §20), not yet re-reviewed |
-| WP-M3B-4 | not started | — | — | blocked on WP-M3B-3 acceptance |
+| WP-M3B-3 | **accepted** (§21) | `cc799cd` | `go build ./...`, `go vet ./...`, `go test -count=1 ./...`, `go test -race ./internal/setup/... ./internal/cognition/mlx/... ./internal/environment/...`, `GOOS=windows GOARCH=amd64 go build ./...` all PASS | 7 independent review rounds, 25 findings total, all resolved — see EWP §15–§21. Final acceptance: [comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5809019161) |
+| WP-M3B-4 | not started | — | — | unblocked — WP-M3B-3 accepted |
 | WP-M3B-5 | unknown — likely partially pre-existing, unverified | — | — | assess `internal/setup/doctor.go`, `profiles.go` first |
 | WP-M3B-6 | unknown — likely partially pre-existing, unverified | — | — | assess `internal/setup/planner.go`, `cache.go` first |
 | WP-M3B-7 | not started | — | — | blocked on WP-3/4/5/6 |
@@ -146,14 +174,17 @@ until the whole milestone closes.)
 
 ## Next concrete action
 
-Post a PR comment on #10 summarizing the 8-finding fix round (this
-session's next job) and continue watching for the owner's response. Once a
-fresh review round lands and any further findings are addressed, flip
-WP-M3B-3 to `accepted` and proceed to WP-M3B-4/5/6 per the dependency chain
-in `docs/WORK_PACKAGES.md` (any order, not concurrently — see
-`AGENT_HANDOFF_PROTOCOL.md`'s "Concurrency model"), starting each with the
-same pre-check pattern against `internal/setup/{doctor,planner,profiles,
-cache}.go`.
+WP-M3B-3 is accepted. Start WP-M3B-4, or WP-M3B-5/6 (any order, not
+concurrently — see `AGENT_HANDOFF_PROTOCOL.md`'s "Concurrency model"), per
+the dependency chain in `docs/WORK_PACKAGES.md`. **Before starting
+WP-M3B-5 or WP-M3B-6, first check whether
+`internal/setup/{doctor,planner,profiles,cache}.go` already substantially
+satisfies that WP's scope card** — this has not been assessed yet by any
+session (see "IMPORTANT" section above). If it does, write the EWP
+describing what's there, verify it fresh, and accept it, rather than
+assuming a blank slate. WP-M3B-4 (credential-reference abstraction) has no
+such pre-existing-code question — read its scope card in
+`docs/WORK_PACKAGES.md` and start its EWP per AGENTS.md §6.
 
 ## Resume checklist for the next agent
 
