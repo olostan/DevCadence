@@ -90,7 +90,7 @@ Setup operations and conditions are closed, typed protocols, not open-ended key-
   - `PARTIALLY_READY`: Deterministic control plane is operational, but at least one mandatory capability for the target is absent or no target profile can be selected.
   - `ACTION_REQUIRED`: A mandatory base dependency (Git, write permissions on state root, disk space) prevents operation.
 - **M3B boundary:** Doctor computes deterministic readiness and a ResourceInventory from verified facts. Human-readable deployment labels may summarize the environment, but M3B does not solve optimal role/provider/budget allocation with a static pure-function selector.
-- **Adaptive portfolio synthesis:** AI-assisted CognitionPortfolio recommendation, economic/budget modeling and task workflow-topology synthesis are governed by ADR-0018/M3C. Any recommendation remains advisory until deterministic policy validation succeeds.
+- **Adaptive cognition split:** M3C owns the deterministic cognition session/economic substrate and portfolio validation/activation boundary. M3D owns AI-assisted CognitionPortfolio recommendation and task workflow-topology synthesis. Any recommendation remains advisory until deterministic policy validation succeeds.
 
 ### 6. Opaque Credential References and Secret Isolation
 
