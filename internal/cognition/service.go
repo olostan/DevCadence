@@ -779,9 +779,19 @@ func findingStatusFor(err error) protocol.FindingStatus {
 	}
 }
 
-// looksLikeSecret delegates to protocol.LooksLikeSecret for canonical secret-shape detection.
+// looksLikeSecret delegates to protocol.LooksLikeSecret for canonical
+// prefix/keyword secret-shape detection, plus this package's own
+// field-specific length bound: CredentialRef/AccountRef are opaque handles
+// (the same ~128-byte contract protocol.CredentialRef.RefID/Locator use),
+// never raw secret material, so an overlong value is refused here rather
+// than by a length threshold baked into the shared LooksLikeSecret helper
+// itself — protocol.LooksLikeSecret intentionally carries no length
+// heuristic, because other callers (AuthEvidence.ProbeTarget/Detail) have
+// their own, longer declared contracts (independent-review follow-up on
+// WP-M3B-4, finding 2).
 func looksLikeSecret(value string) bool {
-	return protocol.LooksLikeSecret(value)
+	const maxHandleLength = 128
+	return protocol.LooksLikeSecret(value) || len(value) > maxHandleLength
 }
 
 func truncate(value string, max int) string {

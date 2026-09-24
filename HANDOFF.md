@@ -3,7 +3,7 @@
 Last updated: 2026-09-24T10:05:00Z by Claude Code / Sonnet 5 (cloud session, olostan@gmail.com)
 
 Session takeover HEAD: `962e67d1a20bb5f5b01f89677fa642d71ceeb614`.
-Expected remote HEAD before next push: `82a0ba4` (pushed to `feat/m3b-guided-bootstrap` — the WP-M3B-4 fix-round commit for the 6 independent-review findings; confirmed via `git push` output, not assumed).
+Expected remote HEAD before next push: whatever `git fetch origin feat/m3b-guided-bootstrap` reports as the branch tip — per the follow-up review's bookkeeping note, this field is no longer chased with a dedicated SHA-only commit after every push; the next agent should simply verify the fetched HEAD itself rather than trust a stale value here. As of this revision (the WP-M3B-4 follow-up fix round, §14), the pushed commit contains the 3 additional independent-review findings fixed on top of `82a0ba4`.
 
 ## Roadmap synchronization after PR #12
 
@@ -141,7 +141,7 @@ implementing on top of it or rewriting it.
 | WP-M3B-1 | accepted (amended §13) | see head of `internal/protocol/setup.go` history | `go build ./...`, `go vet ./...`, `go test -count=1 ./...` all PASS | independent review complete — [comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5805285148), findings addressed in EWP §12; §13 amendment (runtime-agnostic types) not yet independently re-reviewed on its own, but covered by the WP-M3B-3 review below since the two ship together |
 | WP-M3B-2 | accepted | `bb01bc9` | all PASS (see EWP §13) | independent review complete — [comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5805603916), 7 findings, all addressed in EWP §14 |
 | WP-M3B-3 | **accepted** (§21) | `cc799cd` | `go build ./...`, `go vet ./...`, `go test -count=1 ./...`, `go test -race ./internal/setup/... ./internal/cognition/mlx/... ./internal/environment/...`, `GOOS=windows GOARCH=amd64 go build ./...` all PASS | 7 independent review rounds, 25 findings total, all resolved — see EWP §15–§21. Final acceptance: [comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5809019161) |
-| WP-M3B-4 | implemented, NOT accepted — 6 findings fixed, awaiting re-review | current branch HEAD (see "Expected remote HEAD" above) | `go build ./...`, `go vet ./...`, `go test -count=1 ./...`, `go test -race ./internal/credentials/... ./internal/protocol/...`, `GOOS=windows GOARCH=amd64 go build ./...` all PASS | first independent review — [comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5811641514), 6 substantive findings (presence-vs-authenticated, unenforced secret guard, AuthEvidence validation gaps, Go/schema parity, incoherent Record integration, over-confident CLI failure semantics) + bookkeeping — all fixed, see EWP §13, not yet re-reviewed |
+| WP-M3B-4 | implemented, NOT accepted — 6+3 findings fixed across two review rounds, awaiting re-review | current branch HEAD (see "Expected remote HEAD" above) | `go build ./...`, `go vet ./...`, `go test -count=1 ./...`, `go test -race ./internal/credentials/... ./internal/protocol/... ./internal/cognition/...`, `GOOS=windows GOARCH=amd64 go build ./...` all PASS | first review — [comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5811641514), 6 findings (presence-vs-authenticated, unenforced secret guard, AuthEvidence validation gaps, Go/schema parity, incoherent Record integration, over-confident CLI failure semantics) — all fixed, EWP §13, confirmed resolved by follow-up review, not reopened. Follow-up review — [comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5817088046), 3 more findings (real process.Runner execution/Handle-vs-ExecutablePath separation, a Go/schema length-boundary mismatch plus two other packages' latent dependence on the same bug, BoundedCLIAuthAdapter version-command smuggling) — all fixed, EWP §14, not yet re-reviewed |
 | WP-M3B-5 | unknown — likely partially pre-existing, unverified; scope rebaselined by PR #11 | — | — | assess `internal/setup/doctor.go`, `profiles.go` against deterministic ResourceInventory/readiness scope first |
 | WP-M3B-6 | unknown — likely partially pre-existing, unverified | — | — | assess `internal/setup/planner.go`, `cache.go` first |
 | WP-M3B-7 | not started | — | — | blocked on WP-3/4/5/6 |
@@ -221,7 +221,7 @@ until the whole milestone closes.)
   can no longer approve pulling model A while declaring success against
   model B.
 
-## Currently in progress: WP-M3B-4 — Credential-reference abstraction (6 findings fixed, awaiting re-review)
+## Currently in progress: WP-M3B-4 — Credential-reference abstraction (6+3 findings fixed across two review rounds, awaiting re-review)
 
 - **EWP status:** expanded and committed at `docs/work-packages/wp-m3b-4-ewp.md` (updated §12 with verification summary).
 - **Base commit this WP started from:** `9b8c809615bc2f5c961f2cacf14e0de4110b0ad4`
@@ -244,11 +244,16 @@ until the whole milestone closes.)
   5. `CredentialRef`/`AuthEvidence` claimed to be durable Records but didn't actually satisfy the `Record` interface or have `NewRecord`/fixture wiring — completed as real Records (also caught: `schema.AllNames()` was missing both schema names entirely);
   6. `BoundedCLIAuthAdapter` treated every unrecognized nonzero exit as `unauthenticated` — now `indeterminate` unless a provider-specific message matched.
   Full detail and every new test in `docs/work-packages/wp-m3b-4-ewp.md` §13.
-- **Known blockers / open questions:** none — awaiting a follow-up review round to confirm the §13 fixes.
+- **Follow-up independent review** ([comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5817088046), owner, 2026-09-24) confirmed all 6 findings above were substantively resolved and did not reopen them, but found 3 more blockers, all fixed this session:
+  1. real `process.Runner` execution was never demonstrated and the adapter spec (no `Env`) couldn't resolve a bare CLI name against the real runner — `VersionOnlyAdapter`/`BoundedCLIAuthAdapter`'s single `Executable` field is now split into `Handle` (opaque logical identity, matched against `CredentialRef.locator`) and `ExecutablePath` (what actually runs), plus an `Env` field defaulting to `process.BaseEnv()`; new integration test `TestAdaptersExecuteViaRealProcessRunner` uses a real `process.NewRunner()` and a temp-dir fake executable;
+  2. `protocol.LooksLikeSecret`'s unconditional ">128 bytes" rule disagreed with `ProbeTarget`'s 256/`Detail`'s 512 declared limits, and was unsafe when reused for process argv/env (a long `PATH` would be treated as a credential) — the length rule is removed from `LooksLikeSecret` entirely (now prefix/keyword-only, matching the schemas exactly); this also uncovered `internal/cognition` and `internal/cognition/remoteapi` silently depending on that same bug for their own `CredentialRef`/`AccountRef` fields, both now given their own explicit 128-byte bound alongside `protocol.LooksLikeSecret`;
+  3. `BoundedCLIAuthAdapter` could be configured with version/help-shaped `ProbeArgs` (e.g. `--version`) and still report `authenticated` on exit 0 — `ProbeAuth` now reclassifies such a shape to `probe_kind: cli_version_only` and caps success at `indeterminate`, enforced at evaluation time regardless of construction.
+  Full detail and every new test in `docs/work-packages/wp-m3b-4-ewp.md` §14.
+- **Known blockers / open questions:** none — awaiting a further review round to confirm the §14 fixes.
 
 ## Next concrete action
 
-Post a PR comment on #10 summarizing the §13 fix round and continue watching for the owner's response. Do not flip WP-M3B-4 to `accepted` unilaterally. Once accepted, proceed to WP-M3B-5 — but first assess `internal/setup/doctor.go`/`profiles.go` against the deterministic `ResourceInventory`/readiness scope PR #11 rebaselined, per the pre-check pattern every WP in this milestone has used.
+Post a PR comment on #10 summarizing the §14 fix round and continue watching for the owner's response. Do not flip WP-M3B-4 to `accepted` unilaterally. Once accepted, proceed to WP-M3B-5 — but first assess `internal/setup/doctor.go`/`profiles.go` against the deterministic `ResourceInventory`/readiness scope PR #11 rebaselined, per the pre-check pattern every WP in this milestone has used.
 
 ## Resume checklist for the next agent
 

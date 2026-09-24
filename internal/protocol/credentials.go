@@ -293,9 +293,20 @@ func (e AuthEvidence) SchemaVer() SchemaVersion { return e.SchemaVersion }
 // LooksLikeSecret is a conservative guard against raw credential material reaching
 // durable records, configuration, or process boundaries (DCI-081, ADR-0014 §6).
 //
-// It rejects common secret token prefixes, high-entropy/length heuristics,
-// and key-value secret assignments. It does not replace OS secrets storage,
-// but prevents accidental pasting of raw secrets into opaque handle locators.
+// It rejects common secret token prefixes and key-value secret assignments.
+// It does not replace OS secrets storage, but prevents accidental pasting of
+// raw secrets into opaque handle locators.
+//
+// It deliberately does NOT use string length as a secret signal. An earlier
+// revision rejected any value over 128 bytes, which silently disagreed with
+// fields whose declared contract is longer (AuthEvidence.ProbeTarget's 256,
+// Detail's 512) and was unsafe when reused by
+// credentials.ValidateProcessSpecNoSecrets for process argv/env values,
+// where an ordinary long PATH is not a credential (independent-review
+// follow-up on WP-M3B-4, finding 2). Field-specific length bounds belong to
+// each field's own declared contract (validateOpaqueID's maxLen parameter,
+// AuthEvidence.Validate's explicit checks, and each JSON Schema property's
+// maxLength) — never to this function.
 //
 // This exact set of prefixes/keywords is mirrored as JSON Schema "not"
 // clauses in schemas/credential-ref.schema.json and
@@ -305,9 +316,6 @@ func (e AuthEvidence) SchemaVer() SchemaVersion { return e.SchemaVersion }
 func LooksLikeSecret(value string) bool {
 	if value == "" {
 		return false
-	}
-	if len(value) > 128 {
-		return true
 	}
 	lowered := strings.ToLower(value)
 	for _, prefix := range []string{

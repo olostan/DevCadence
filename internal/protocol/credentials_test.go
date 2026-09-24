@@ -435,6 +435,10 @@ func TestSchemaSecretPatternParity(t *testing.T) {
 		{"secret-shaped ref_id", protocol.CredentialRef{SchemaVersion: protocol.SchemaVersion1, RefID: "sk-ant-api03-abcdefghijklmnop", Kind: protocol.CredRefCLISession, Locator: "claude"}},
 		{"secret-shaped locator", protocol.CredentialRef{SchemaVersion: protocol.SchemaVersion1, RefID: "cred-001", Kind: protocol.CredRefCLISession, Locator: "sk-ant-api03-abcdefghijklmnop"}},
 		{"token= keyword in locator", protocol.CredentialRef{SchemaVersion: protocol.SchemaVersion1, RefID: "cred-001", Kind: protocol.CredRefCLISession, Locator: "token=abcdef123456"}},
+		{"ref_id at 128-byte limit is accepted", protocol.CredentialRef{SchemaVersion: protocol.SchemaVersion1, RefID: strings.Repeat("a", 128), Kind: protocol.CredRefCLISession, Locator: "claude"}},
+		{"ref_id over 128-byte limit is rejected", protocol.CredentialRef{SchemaVersion: protocol.SchemaVersion1, RefID: strings.Repeat("a", 129), Kind: protocol.CredRefCLISession, Locator: "claude"}},
+		{"cli_session locator at 128-byte limit is accepted", protocol.CredentialRef{SchemaVersion: protocol.SchemaVersion1, RefID: "cred-001", Kind: protocol.CredRefCLISession, Locator: strings.Repeat("a", 128)}},
+		{"cli_session locator over 128-byte limit is rejected", protocol.CredentialRef{SchemaVersion: protocol.SchemaVersion1, RefID: "cred-001", Kind: protocol.CredRefCLISession, Locator: strings.Repeat("a", 129)}},
 	}
 	for _, tc := range credCases {
 		t.Run("CredentialRef/"+tc.name, func(t *testing.T) {
@@ -463,6 +467,22 @@ func TestSchemaSecretPatternParity(t *testing.T) {
 		{"secret-shaped detail", protocol.AuthEvidence{SchemaVersion: protocol.SchemaVersion1, RefID: "cred-001", Kind: protocol.CredRefCLISession, Status: protocol.AuthStatusIndeterminate, ProbeKind: protocol.AuthProbeCLIVersionOnly, ObservedAt: ts, Detail: "token=abcdef123456"}},
 		{"mismatched kind/probe_kind", protocol.AuthEvidence{SchemaVersion: protocol.SchemaVersion1, RefID: "cred-001", Kind: protocol.CredRefEnvVar, Status: protocol.AuthStatusIndeterminate, ProbeKind: protocol.AuthProbeCLIAuthCall, ObservedAt: ts}},
 		{"presence probe claims authenticated", protocol.AuthEvidence{SchemaVersion: protocol.SchemaVersion1, RefID: "cred-001", Kind: protocol.CredRefEnvVar, Status: protocol.AuthStatusAuthenticated, ProbeKind: protocol.AuthProbeEnvPresence, ObservedAt: ts}},
+		// Boundary parity: independent-review follow-up on WP-M3B-4 found
+		// that LooksLikeSecret's earlier unconditional ">128 bytes is a
+		// secret" rule disagreed with probe_target's declared 256 and
+		// detail's declared 512 — an ordinary 129-byte string was accepted
+		// by the schema (maxLength 256/512) but rejected by Go. These
+		// cases pin the boundary exactly at each field's own declared
+		// limit, with no length-based secret heuristic in the way.
+		{"probe_target 129 bytes ordinary text is accepted", protocol.AuthEvidence{SchemaVersion: protocol.SchemaVersion1, RefID: "cred-001", Kind: protocol.CredRefCLISession, Status: protocol.AuthStatusIndeterminate, ProbeKind: protocol.AuthProbeCLIVersionOnly, ObservedAt: ts, ProbeTarget: strings.Repeat("a", 129)}},
+		{"probe_target at 256-byte limit is accepted", protocol.AuthEvidence{SchemaVersion: protocol.SchemaVersion1, RefID: "cred-001", Kind: protocol.CredRefCLISession, Status: protocol.AuthStatusIndeterminate, ProbeKind: protocol.AuthProbeCLIVersionOnly, ObservedAt: ts, ProbeTarget: strings.Repeat("a", 256)}},
+		{"probe_target over 256-byte limit is rejected", protocol.AuthEvidence{SchemaVersion: protocol.SchemaVersion1, RefID: "cred-001", Kind: protocol.CredRefCLISession, Status: protocol.AuthStatusIndeterminate, ProbeKind: protocol.AuthProbeCLIVersionOnly, ObservedAt: ts, ProbeTarget: strings.Repeat("a", 257)}},
+		{"detail 129 bytes ordinary text is accepted", protocol.AuthEvidence{SchemaVersion: protocol.SchemaVersion1, RefID: "cred-001", Kind: protocol.CredRefCLISession, Status: protocol.AuthStatusIndeterminate, ProbeKind: protocol.AuthProbeCLIVersionOnly, ObservedAt: ts, Detail: strings.Repeat("a", 129)}},
+		{"detail at 512-byte limit is accepted", protocol.AuthEvidence{SchemaVersion: protocol.SchemaVersion1, RefID: "cred-001", Kind: protocol.CredRefCLISession, Status: protocol.AuthStatusIndeterminate, ProbeKind: protocol.AuthProbeCLIVersionOnly, ObservedAt: ts, Detail: strings.Repeat("a", 512)}},
+		{"detail over 512-byte limit is rejected", protocol.AuthEvidence{SchemaVersion: protocol.SchemaVersion1, RefID: "cred-001", Kind: protocol.CredRefCLISession, Status: protocol.AuthStatusIndeterminate, ProbeKind: protocol.AuthProbeCLIVersionOnly, ObservedAt: ts, Detail: strings.Repeat("a", 513)}},
+		{"detail secret-shaped and within length is still rejected", protocol.AuthEvidence{SchemaVersion: protocol.SchemaVersion1, RefID: "cred-001", Kind: protocol.CredRefCLISession, Status: protocol.AuthStatusIndeterminate, ProbeKind: protocol.AuthProbeCLIVersionOnly, ObservedAt: ts, Detail: "sk-ant-" + strings.Repeat("a", 200)}},
+		{"adapter_id at 128-byte limit is accepted", protocol.AuthEvidence{SchemaVersion: protocol.SchemaVersion1, RefID: "cred-001", Kind: protocol.CredRefCLISession, Status: protocol.AuthStatusIndeterminate, ProbeKind: protocol.AuthProbeCLIVersionOnly, ObservedAt: ts, AdapterID: strings.Repeat("a", 128)}},
+		{"adapter_id over 128-byte limit is rejected", protocol.AuthEvidence{SchemaVersion: protocol.SchemaVersion1, RefID: "cred-001", Kind: protocol.CredRefCLISession, Status: protocol.AuthStatusIndeterminate, ProbeKind: protocol.AuthProbeCLIVersionOnly, ObservedAt: ts, AdapterID: strings.Repeat("a", 129)}},
 	}
 	for _, tc := range evCases {
 		t.Run("AuthEvidence/"+tc.name, func(t *testing.T) {

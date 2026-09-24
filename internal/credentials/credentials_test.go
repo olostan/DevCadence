@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -138,8 +140,8 @@ func TestCLIVersionOutputAloneCannotEstablishAuthenticatedState(t *testing.T) {
 	}
 
 	versionAdapter := &credentials.VersionOnlyAdapter{
-		ID:         "claude-version-probe",
-		Executable: "claude",
+		ID:     "claude-version-probe",
+		Handle: "claude",
 	}
 
 	mgr, err := credentials.NewManager(credentials.Options{
@@ -200,25 +202,25 @@ func TestCLIAuthProbeSuccessAndFailure(t *testing.T) {
 	adapters := []credentials.CLISessionAuthAdapter{
 		&credentials.BoundedCLIAuthAdapter{
 			ID:                  "claude-auth",
-			Executable:          "claude",
+			Handle:              "claude",
 			ProbeArgs:           []string{"auth", "status"},
 			UnauthenticatedMsgs: []string{"not logged in", "login required"},
 		},
 		&credentials.BoundedCLIAuthAdapter{
 			ID:                  "codex-auth",
-			Executable:          "codex",
+			Handle:              "codex",
 			ProbeArgs:           []string{"auth", "status"},
 			UnauthenticatedMsgs: []string{"not logged in"},
 		},
 		&credentials.BoundedCLIAuthAdapter{
-			ID:         "gemini-auth",
-			Executable: "gemini",
-			ProbeArgs:  []string{"auth", "status"},
+			ID:        "gemini-auth",
+			Handle:    "gemini",
+			ProbeArgs: []string{"auth", "status"},
 		},
 		&credentials.BoundedCLIAuthAdapter{
-			ID:         "missing-auth",
-			Executable: "missing",
-			ProbeArgs:  []string{"auth", "status"},
+			ID:        "missing-auth",
+			Handle:    "missing",
+			ProbeArgs: []string{"auth", "status"},
 		},
 	}
 
@@ -304,9 +306,9 @@ func TestHostileAuthProbeOutputNeverLeaks(t *testing.T) {
 	}
 
 	adapter := &credentials.BoundedCLIAuthAdapter{
-		ID:         "claude-auth",
-		Executable: "claude",
-		ProbeArgs:  []string{"auth", "status"},
+		ID:        "claude-auth",
+		Handle:    "claude",
+		ProbeArgs: []string{"auth", "status"},
 	}
 
 	mgr, err := credentials.NewManager(credentials.Options{
@@ -370,6 +372,34 @@ func TestValidateProcessSpecNoSecrets(t *testing.T) {
 	tokenEnvSpec.Env = []string{"BEARER=bearer xyz123"}
 	if err := credentials.ValidateProcessSpecNoSecrets(tokenEnvSpec); err == nil {
 		t.Fatal("expected bearer token in Env to be rejected, but passed")
+	}
+
+	// 5. A long but ordinary PATH is not a secret merely for being long
+	// (independent-review follow-up on WP-M3B-4, finding 2): an earlier
+	// revision of LooksLikeSecret rejected any value over 128 bytes
+	// unconditionally, which would have made a perfectly normal
+	// multi-directory PATH untestable via the real process.Runner.
+	longPathSpec := cleanSpec
+	longDirs := make([]string, 0, 20)
+	for i := 0; i < 20; i++ {
+		longDirs = append(longDirs, fmt.Sprintf("/opt/tools/bin-%02d", i))
+	}
+	longPath := "PATH=" + strings.Join(longDirs, ":")
+	if len(longPath) <= 128 {
+		t.Fatalf("test setup error: longPath is only %d bytes, want > 128", len(longPath))
+	}
+	longPathSpec.Env = []string{longPath, "HOME=/home/user"}
+	if err := credentials.ValidateProcessSpecNoSecrets(longPathSpec); err != nil {
+		t.Fatalf("expected a long but ordinary PATH to pass validation, got: %v", err)
+	}
+
+	// 6. A genuinely secret-shaped long value is still rejected: removing
+	// the length-based heuristic must not weaken the prefix/keyword
+	// detection that actually identifies secret shapes.
+	longSecretSpec := cleanSpec
+	longSecretSpec.Env = []string{"PATH=/usr/bin", "TOKEN=" + SentinelSecret + strings.Repeat("x", 100)}
+	if err := credentials.ValidateProcessSpecNoSecrets(longSecretSpec); err == nil {
+		t.Fatal("expected a long secret-shaped env value to still be rejected, but passed")
 	}
 }
 
@@ -572,7 +602,7 @@ func TestBoundedCLIAuthAdapterUnrecognizedFailureIsIndeterminate(t *testing.T) {
 	}
 	adapter := &credentials.BoundedCLIAuthAdapter{
 		ID:                  "flaky-auth",
-		Executable:          "flaky-cli",
+		Handle:              "flaky-cli",
 		ProbeArgs:           []string{"auth", "status"},
 		UnauthenticatedMsgs: []string{"not logged in", "login required"},
 	}
@@ -599,6 +629,109 @@ func TestBoundedCLIAuthAdapterUnrecognizedFailureIsIndeterminate(t *testing.T) {
 	}
 }
 
+// TestBoundedCLIAuthAdapterCannotSmuggleVersionCommandAsAuthCall proves that
+// a BoundedCLIAuthAdapter configured with a version/help-shaped ProbeArgs
+// (e.g. "--version") can never report AuthStatusAuthenticated even on a
+// successful exit, and is reclassified to the same cli_version_only probe
+// kind VersionOnlyAdapter uses — closing the gap where the exported,
+// free-form ProbeArgs field let a caller's promise ("this is an
+// authoritative auth check") substitute for a structural guarantee
+// (independent-review follow-up on WP-M3B-4, finding 3).
+func TestBoundedCLIAuthAdapterCannotSmuggleVersionCommandAsAuthCall(t *testing.T) {
+	clk := clock.NewFake(time.Date(2026, 9, 24, 10, 0, 0, 0, time.UTC), 0)
+	for _, probeArgs := range [][]string{
+		{"--version"}, {"-v"}, {"version"}, {"--help"}, {"-h"},
+	} {
+		t.Run(strings.Join(probeArgs, " "), func(t *testing.T) {
+			runner := &fakeRunner{
+				results: map[string]process.Result{
+					"sneaky-cli " + strings.Join(probeArgs, " "): {
+						Status:   process.StatusCompleted,
+						ExitCode: 0,
+						Stdout:   []byte("sneaky-cli version 9.9.9\n"),
+					},
+				},
+			}
+			adapter := &credentials.BoundedCLIAuthAdapter{
+				ID:        "sneaky-auth",
+				Handle:    "sneaky-cli",
+				ProbeArgs: probeArgs,
+			}
+			mgr, err := credentials.NewManager(credentials.Options{
+				Clock:       clk,
+				Runner:      runner,
+				CLIAdapters: []credentials.CLISessionAuthAdapter{adapter},
+			})
+			if err != nil {
+				t.Fatalf("failed to create manager: %v", err)
+			}
+
+			ev, err := mgr.CheckCredential(context.Background(), protocol.CredentialRef{
+				SchemaVersion: protocol.SchemaVersion1,
+				RefID:         "cred-sneaky",
+				Kind:          protocol.CredRefCLISession,
+				Locator:       "sneaky-cli",
+			})
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if ev.Status == protocol.AuthStatusAuthenticated {
+				t.Fatalf("SECURITY VIOLATION: a version/help-shaped probe (%v) established authenticated state", probeArgs)
+			}
+			if ev.ProbeKind != protocol.AuthProbeCLIVersionOnly {
+				t.Fatalf("probe_kind = %q, want cli_version_only for a version/help-shaped probe %v", ev.ProbeKind, probeArgs)
+			}
+		})
+	}
+}
+
+// TestBoundedCLIAuthAdapterAuthoritativeProbeStillAuthenticates is the
+// control for the adjacent smuggling test: a genuine auth-status command
+// (not a version/help invocation) must still be able to report
+// authenticated, so the finding-3 fix does not overcorrect into rejecting
+// legitimate probes.
+func TestBoundedCLIAuthAdapterAuthoritativeProbeStillAuthenticates(t *testing.T) {
+	clk := clock.NewFake(time.Date(2026, 9, 24, 10, 0, 0, 0, time.UTC), 0)
+	runner := &fakeRunner{
+		results: map[string]process.Result{
+			"real-cli auth status": {
+				Status:   process.StatusCompleted,
+				ExitCode: 0,
+				Stdout:   []byte("Logged in as user@example.com\n"),
+			},
+		},
+	}
+	adapter := &credentials.BoundedCLIAuthAdapter{
+		ID:        "real-auth",
+		Handle:    "real-cli",
+		ProbeArgs: []string{"auth", "status"},
+	}
+	mgr, err := credentials.NewManager(credentials.Options{
+		Clock:       clk,
+		Runner:      runner,
+		CLIAdapters: []credentials.CLISessionAuthAdapter{adapter},
+	})
+	if err != nil {
+		t.Fatalf("failed to create manager: %v", err)
+	}
+
+	ev, err := mgr.CheckCredential(context.Background(), protocol.CredentialRef{
+		SchemaVersion: protocol.SchemaVersion1,
+		RefID:         "cred-real",
+		Kind:          protocol.CredRefCLISession,
+		Locator:       "real-cli",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if ev.Status != protocol.AuthStatusAuthenticated {
+		t.Fatalf("status = %q, want authenticated for a genuine auth-status probe", ev.Status)
+	}
+	if ev.ProbeKind != protocol.AuthProbeCLIAuthCall {
+		t.Fatalf("probe_kind = %q, want cli_auth_call", ev.ProbeKind)
+	}
+}
+
 // TestCLIAdaptersEnforceProcessSpecSecretGuard proves the secret guard is
 // on the actual execution path both adapters use, not merely available as
 // an opt-in helper (finding 2): an adapter configured (however that came
@@ -609,14 +742,14 @@ func TestCLIAdaptersEnforceProcessSpecSecretGuard(t *testing.T) {
 	runner := &fakeRunner{results: map[string]process.Result{}}
 
 	versionAdapter := &credentials.VersionOnlyAdapter{
-		ID:         "leaky-version",
-		Executable: "leaky-cli",
-		Arg:        SentinelSecret,
+		ID:     "leaky-version",
+		Handle: "leaky-cli",
+		Arg:    SentinelSecret,
 	}
 	authAdapter := &credentials.BoundedCLIAuthAdapter{
-		ID:         "leaky-auth",
-		Executable: "leaky-cli",
-		ProbeArgs:  []string{SentinelSecret},
+		ID:        "leaky-auth",
+		Handle:    "leaky-cli",
+		ProbeArgs: []string{SentinelSecret},
 	}
 
 	for _, tc := range []struct {
@@ -655,4 +788,171 @@ func TestCLIAdaptersEnforceProcessSpecSecretGuard(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestAdaptersExecuteViaRealProcessRunner proves a WP4 CLI auth/version
+// probe actually starts and produces bounded evidence when run through the
+// real process.Runner instead of only the in-package fakeRunner test
+// double (independent-review follow-up on WP-M3B-4, finding 1). fakeRunner
+// never exercised process.Runner's controlled-resolution rule: a bare
+// Executable is resolved only via Spec.Env's PATH, and fails closed with no
+// PATH at all — so a canonical adapter built with no Env could pass every
+// fakeRunner-based test while failing before the real process even starts.
+//
+// It also proves Handle (the opaque identifier matched against
+// CredentialRef.Locator, which the cli_session locator contract forbids
+// from containing "/") is independent of ExecutablePath (what actually
+// gets started, which may be a bare name resolved via PATH or a
+// discovered/verified absolute path) — the two cannot be collapsed into
+// one field the way the pre-fix Executable field did.
+func TestAdaptersExecuteViaRealProcessRunner(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake executable is a POSIX shell script; not applicable on windows")
+	}
+
+	dir := t.TempDir()
+	scriptPath := filepath.Join(dir, "fake-cli")
+	script := "#!/bin/sh\n" +
+		"if [ \"$1\" = \"auth\" ] && [ \"$2\" = \"status\" ]; then\n" +
+		"  echo 'Logged in as test@example.com'\n" +
+		"  exit 0\n" +
+		"fi\n" +
+		"echo 'fake-cli version 1.0.0'\n" +
+		"exit 0\n"
+	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
+		t.Fatalf("failed to write fake executable: %v", err)
+	}
+
+	clk := clock.NewFake(time.Date(2026, 9, 24, 10, 0, 0, 0, time.UTC), 0)
+	runner := process.NewRunner()
+
+	t.Run("VersionOnlyAdapter bare name resolved via Env PATH", func(t *testing.T) {
+		adapter := &credentials.VersionOnlyAdapter{
+			ID:             "fake-version",
+			Handle:         "fake-cli", // logical handle: no "/" allowed by the cli_session locator contract
+			ExecutablePath: "fake-cli", // bare name, resolved via Env's PATH below
+			Env:            []string{"PATH=" + dir},
+		}
+		mgr, err := credentials.NewManager(credentials.Options{
+			Clock:       clk,
+			Runner:      runner,
+			CLIAdapters: []credentials.CLISessionAuthAdapter{adapter},
+		})
+		if err != nil {
+			t.Fatalf("failed to create manager: %v", err)
+		}
+		ev, err := mgr.CheckCredential(context.Background(), protocol.CredentialRef{
+			SchemaVersion: protocol.SchemaVersion1,
+			RefID:         "cred-fake",
+			Kind:          protocol.CredRefCLISession,
+			Locator:       "fake-cli",
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if ev.Status != protocol.AuthStatusIndeterminate {
+			t.Fatalf("status = %q, want indeterminate (version probe succeeded but cannot authenticate)", ev.Status)
+		}
+	})
+
+	t.Run("BoundedCLIAuthAdapter absolute ExecutablePath distinct from Handle", func(t *testing.T) {
+		adapter := &credentials.BoundedCLIAuthAdapter{
+			ID:             "fake-auth",
+			Handle:         "fake-cli", // opaque handle used for CredentialRef matching only
+			ExecutablePath: scriptPath, // discovered/verified absolute path, distinct from Handle
+			ProbeArgs:      []string{"auth", "status"},
+			Env:            process.BaseEnv(),
+		}
+		mgr, err := credentials.NewManager(credentials.Options{
+			Clock:       clk,
+			Runner:      runner,
+			CLIAdapters: []credentials.CLISessionAuthAdapter{adapter},
+		})
+		if err != nil {
+			t.Fatalf("failed to create manager: %v", err)
+		}
+		ev, err := mgr.CheckCredential(context.Background(), protocol.CredentialRef{
+			SchemaVersion: protocol.SchemaVersion1,
+			RefID:         "cred-fake-auth",
+			Kind:          protocol.CredRefCLISession,
+			Locator:       "fake-cli",
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if ev.Status != protocol.AuthStatusAuthenticated {
+			t.Fatalf("status = %q, want authenticated", ev.Status)
+		}
+	})
+
+	t.Run("bare ExecutablePath with no PATH fails closed", func(t *testing.T) {
+		// A test double could never catch this: fakeRunner never resolves
+		// Executable against Env at all. This is exactly the failure mode
+		// the follow-up review flagged as hidden by fakeRunner-only
+		// coverage.
+		adapter := &credentials.VersionOnlyAdapter{
+			ID:             "fake-version-no-path",
+			Handle:         "fake-cli",
+			ExecutablePath: "fake-cli",
+			Env:            []string{}, // explicit empty Env (not nil), so the BaseEnv default does not apply
+		}
+		mgr, err := credentials.NewManager(credentials.Options{
+			Clock:       clk,
+			Runner:      runner,
+			CLIAdapters: []credentials.CLISessionAuthAdapter{adapter},
+		})
+		if err != nil {
+			t.Fatalf("failed to create manager: %v", err)
+		}
+		ev, err := mgr.CheckCredential(context.Background(), protocol.CredentialRef{
+			SchemaVersion: protocol.SchemaVersion1,
+			RefID:         "cred-fake-nopath",
+			Kind:          protocol.CredRefCLISession,
+			Locator:       "fake-cli",
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if ev.Status != protocol.AuthStatusUnavailable {
+			t.Fatalf("status = %q, want unavailable (no PATH in Env means resolveExecutable fails closed)", ev.Status)
+		}
+	})
+
+	t.Run("default Env falls back to process.BaseEnv and resolves a real PATH entry", func(t *testing.T) {
+		// Not the fake-cli fixture (BaseEnv uses the real host PATH, which
+		// does not contain our temp dir): a widely-available real
+		// executable proves the nil-Env default itself works end to end
+		// through the real runner.
+		realExecutable := "true"
+		if _, err := os.Stat("/usr/bin/true"); err != nil {
+			t.Skip("no /usr/bin/true available on this host to probe")
+		}
+		adapter := &credentials.VersionOnlyAdapter{
+			ID:             "real-true",
+			Handle:         "posix-true",
+			ExecutablePath: realExecutable,
+			Arg:            "", // VersionOnlyAdapter defaults to --version; `true` ignores unknown args and exits 0 regardless
+			Env:            nil,
+		}
+		mgr, err := credentials.NewManager(credentials.Options{
+			Clock:       clk,
+			Runner:      runner,
+			CLIAdapters: []credentials.CLISessionAuthAdapter{adapter},
+		})
+		if err != nil {
+			t.Fatalf("failed to create manager: %v", err)
+		}
+		ev, err := mgr.CheckCredential(context.Background(), protocol.CredentialRef{
+			SchemaVersion: protocol.SchemaVersion1,
+			RefID:         "cred-real-true",
+			Kind:          protocol.CredRefCLISession,
+			Locator:       "posix-true",
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if ev.Status != protocol.AuthStatusIndeterminate {
+			t.Fatalf("status = %q, want indeterminate", ev.Status)
+		}
+	})
 }
