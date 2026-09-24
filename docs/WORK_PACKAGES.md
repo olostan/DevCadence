@@ -43,7 +43,7 @@ Branch: `feat/m3b-guided-bootstrap` (create when WP-M3B-1 starts).
 Normative grounding for this milestone: ADR-0014 (guided bootstrap, setup
 plans, operational event ledger, readiness contracts — already `Accepted`,
 so the architecture decisions below are mostly settled, not open for
-relitigation), ADR-0011, ADR-0013, `docs/ENVIRONMENT_INTELLIGENCE_AND_ONBOARDING.md`,
+relitigation), ADR-0011, ADR-0013, ADR-0018, `docs/ENVIRONMENT_INTELLIGENCE_AND_ONBOARDING.md`,
 `docs/MODEL_RUNTIME.md`, `docs/SETUP.md`, `docs/SECURITY.md`. Read these —
 in that order — before expanding WP-M3B-1.
 
@@ -203,36 +203,20 @@ never authentication — this is narrower than "never a readiness signal at
 all," since installation genuinely is one legitimate `command_available`
 signal).
 
-### WP-M3B-5 — Doctor readiness and recommendation engine (service layer, no public CLI)
+### WP-M3B-5 — Doctor readiness and resource inventory (service layer, no public CLI)
 
-**Objective:** the `devcadence doctor` diagnostic evaluation and pure-
-function deployment-profile recommendation engine, as a service `internal/
-doctor` (or equivalent) exposes. Like WP-M3B-3, this WP owns behavior, not
-command/flag parsing — WP-M3B-7 registers the actual `devcadence doctor`
-command against this service.
+**Objective:** provide deterministic `devcadence doctor` readiness evaluation and the factual ResourceInventory consumed by M3C. M3B does **not** solve the multidimensional portfolio optimization problem with a static profile chooser.
 
 **Deliverables:**
-- `DoctorReport` with explicit `ReadinessEvaluationScope` (target profile,
-  required roles, evidence freshness) per ADR-0014 §5.
-- The four normative readiness states (`READY`,
-  `READY_WITH_REDUCED_CAPABILITY`, `PARTIALLY_READY`, `ACTION_REQUIRED`)
-  computed correctly against live, verified endpoint evidence — memory/
-  hardware presence alone never establishes capability.
-- Recommendation engine as a pure function over `RecommendationInput`
-  (facts, profile, policy, preferences) → `SelectedProfile` (one of
-  local-heavy / hybrid-thin / cloud-cognition / offline / custom) or
-  `nil` with reported missing prerequisites.
-- The service-level behavior `doctor --fix` will expose: generating a
-  `SetupPlan` file from the current `DoctorReport`, never executing or
-  approving anything (ADR-0014 §7) — as a callable operation; the `--fix`
-  flag itself is WP-M3B-7's.
+- DoctorReport with explicit readiness scope;
+- normative readiness states from verified evidence;
+- deterministic ResourceInventory over hardware, runtimes/models, cognition endpoints, session evidence, hosts, credential references and available economic/policy metadata;
+- profile labels MAY be emitted for UX, but are not a closed SelectedProfile routing decision;
+- `doctor --fix` generates SetupPlan from concrete missing/remediable facts and never AI-selects a cognition portfolio.
 
-**Acceptance criteria:** same synthetic-fixture-machine verification
-pattern M3A already established (`internal/environment/fixtures.go`) — no
-GPU/runtime/network required; a fixture with no viable profile returns
-`nil` selection plus missing-prerequisite reasons, never a forced choice;
-cached machine-profile evidence past its freshness window is treated as
-stale, not silently reused.
+**MUST:** no provider/model role doctrine or static weighted "optimal" portfolio logic. AI-assisted synthesis belongs to M3C/ADR-0018.
+
+**Acceptance criteria:** fixtures produce stable readiness + ResourceInventory without GPU/runtime/network; optional resource absence degrades gracefully; stale evidence is reported; provider/model renaming does not create built-in role preference; no cognition endpoint remains a valid deterministic state.
 
 ### WP-M3B-6 — Bounded recipes
 
@@ -343,6 +327,31 @@ exit criterion in `docs/IMPLEMENTATION_PLAN.md` is met and the entry says
 so with cited evidence, not just "done."
 
 ---
+
+## M3C — Adaptive cognition portfolio and workflow synthesis
+
+M3C starts after M3B deterministic bootstrap contracts stabilize. The user-facing setup experience may make M3B+M3C look continuous.
+
+### WP-M3C-1 — Portfolio protocol and economics
+Define AccessChannel/session capabilities, EconomicRegime, BudgetPool, optional BudgetState, CognitionPortfolio, PortfolioRecommendation and schemas without overloading model identity with billing semantics.
+
+### WP-M3C-2 — Session-driver abstraction
+Normalize model selection, structured/streaming events, resume, cancellation, worktree/tool/MCP access and usage/quota evidence across authenticated CLIs/SDKs/APIs/local runtimes. Include at least two materially different remote drivers and a fake third-adapter contract test.
+
+### WP-M3C-3 — Deterministic portfolio validator
+Validate endpoints, capability provenance, source exposure, spending/overage, budget bindings, driver features, resource constraints and diversity claims. AI output never activates without this layer.
+
+### WP-M3C-4 — AI-assisted Portfolio Planner
+Use any sufficiently capable eligible endpoint to synthesize typed recommendations from ResourceInventory + role needs + project characteristics + policy + available historical evidence. Include rationale/tradeoffs and no authority expansion.
+
+### WP-M3C-5 — Workflow topology planner
+Compile task/risk + portfolio + current resource state into bounded WorkflowPlan, explicitly supporting topology collapse, local-heavy iteration, subscription-diverse review and metered-budget-constrained execution.
+
+### WP-M3C-6 — Adaptation and UX
+Support portfolio explain/recommend/apply service/CLI surfaces, configuration diffs for new resources, rollback/versioning and setup integration. Later dashboard consumes the same protocols.
+
+### WP-M3C-7 — Cross-portfolio verification
+Cover Apple/MLX, NVIDIA/local, one subscription, multiple subscriptions, paid API allowed/forbidden, mixed portfolios, endpoint loss, quota pressure and future-driver extensibility.
 
 ## Future milestones
 

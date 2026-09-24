@@ -185,6 +185,27 @@ Interactive setup should use a restrained text UI suitable for local terminals a
 
 The intended Go UI stack is Huh v2, using Bubble Tea v2/Lip Gloss v2 underneath when richer dynamic behavior is needed.
 
+## 7B. Adaptive cognition portfolio (M3C)
+
+M3B gets the machine safely to a factual, usable state. M3C decides how to organize the cognition resources that actually exist.
+
+The intended user experience remains a single simple setup flow:
+
+```text
+devcadence setup
+  -> discover hardware/runtimes/agent CLIs/hosts
+  -> verify auth and local acceleration where possible
+  -> collect privacy/spending/preferences
+  -> establish at least one viable cognition endpoint when desired
+  -> synthesize portfolio recommendations with a capable endpoint
+  -> deterministically validate the recommendation
+  -> present an explainable configuration/diff for activation
+```
+
+Adding a subscription, API authorization, GPU or local model later should support incremental portfolio recommendation rather than reinstalling DevCadence.
+
+No user is required to own local AI hardware or any particular commercial subscription.
+
 ## 8. Local data directories
 
 Do not store runtime state inside target project source trees by default.

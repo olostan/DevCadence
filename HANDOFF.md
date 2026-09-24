@@ -1,9 +1,33 @@
 # Handoff — M3B guided bootstrap (feat/m3b-guided-bootstrap)
 
-Last updated: 2026-09-24T06:40:00Z by Claude Code / Sonnet 5 (cloud session, olostan@gmail.com)
+Last updated: 2026-09-24T08:02:00Z by ChatGPT / GPT-5.6 Sol (PR #11 architecture synchronization)
 
-Session takeover HEAD: `a38b293` (origin/main HEAD when this session started — branch did not exist yet)
-Expected remote HEAD before next push: `cc799cd` (the actual current pushed HEAD — advance after every successful push; see "Git safety rules" in AGENT_HANDOFF_PROTOCOL.md).
+Session takeover HEAD: `80b3edd` (remote milestone-branch HEAD at the PR #11 synchronization boundary)
+Expected remote HEAD before next push: `80b3edd` (baseline before this synchronization merge; the next session must fetch and adopt the actual post-merge HEAD before pushing).
+
+## Architecture synchronization after PR #11
+
+PR #11 (adaptive cognition portfolio architecture) was merged to `main` at
+`e9645fe` after WP-M3B-3 reached its accepted checkpoint. Per
+`AGENT_HANDOFF_PROTOCOL.md`, this branch is synchronized at the WP boundary
+by **merging `main` into `feat/m3b-guided-bootstrap`**, never rebasing or
+force-pushing.
+
+The overlap was resolved intentionally:
+
+- PR #10's accepted runtime-neutral setup protocol remains canonical:
+  `ensure_local_model` / `model_present`, `LocalModelRuntimeAdapter`,
+  closed `VersionProbeKind`, MLX/Ollama peer adapters, and the hardened
+  ADR-0014 supply-chain/recovery semantics.
+- PR #11's architecture is canonical for unstarted work: M3B remains
+  deterministic bootstrap and produces `ResourceInventory`; static
+  `SelectedProfile` optimization is not the final routing model; adaptive
+  CognitionPortfolio/workflow synthesis belongs to M3C/ADR-0018.
+- WP-M3B-5 is therefore doctor readiness + deterministic ResourceInventory,
+  not the old static deployment-profile recommendation engine.
+
+WP-M3B-4 remains compatible with both architectures and is the next
+recommended implementation package.
 
 ## WP-M3B-3 is accepted
 
@@ -65,7 +89,7 @@ amended rather than treated as frozen.
 
 ## IMPORTANT — read this before touching internal/setup or internal/protocol/setup.go
 
-`main` (as of `a38b293`, this branch's base) contains a substantial, tested
+The original M3B base at `a38b293` contains a substantial, tested
 implementation of `internal/protocol/setup.go`/`internal/setup/{doctor,
 planner,profiles,cache}.go` that predates this protocol and the M3B
 work-package breakdown — see `docs/work-packages/wp-m3b-1-ewp.md`'s
@@ -93,7 +117,7 @@ implementing on top of it or rewriting it.
 | WP-M3B-2 | accepted | `bb01bc9` | all PASS (see EWP §13) | independent review complete — [comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5805603916), 7 findings, all addressed in EWP §14 |
 | WP-M3B-3 | **accepted** (§21) | `cc799cd` | `go build ./...`, `go vet ./...`, `go test -count=1 ./...`, `go test -race ./internal/setup/... ./internal/cognition/mlx/... ./internal/environment/...`, `GOOS=windows GOARCH=amd64 go build ./...` all PASS | 7 independent review rounds, 25 findings total, all resolved — see EWP §15–§21. Final acceptance: [comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5809019161) |
 | WP-M3B-4 | not started | — | — | unblocked — WP-M3B-3 accepted |
-| WP-M3B-5 | unknown — likely partially pre-existing, unverified | — | — | assess `internal/setup/doctor.go`, `profiles.go` first |
+| WP-M3B-5 | unknown — likely partially pre-existing, unverified; scope rebaselined by PR #11 | — | — | assess `internal/setup/doctor.go`, `profiles.go` against deterministic ResourceInventory/readiness scope first |
 | WP-M3B-6 | unknown — likely partially pre-existing, unverified | — | — | assess `internal/setup/planner.go`, `cache.go` first |
 | WP-M3B-7 | not started | — | — | blocked on WP-3/4/5/6 |
 | WP-M3B-8 | not started | — | — | blocked on WP-7 |
@@ -128,7 +152,8 @@ until the whole milestone closes.)
   exists). `EnsureModel`/`ModelPresent` verify exact digest + size against
   the live `/api/tags` response, same as before.
 - `mlx_adapter.go` — `MLXAdapter{CacheDir string}`: `EnsureModel` resolves
-  the cache directory once (`CacheDir`/`HF_HOME`/`~/.cache/huggingface/hub`)
+  the cache directory through the shared Hugging Face resolver (`CacheDir`/
+  `HF_HUB_CACHE`/`HF_HOME`/`XDG_CACHE_HOME`/default)
   and runs `hf download <ref> --revision <rev> --cache-dir <that exact
   dir>` via the verified executable path (never `huggingface-cli`, which
   is deprecated) — the explicit `--cache-dir` binds the download to the
@@ -174,17 +199,21 @@ until the whole milestone closes.)
 
 ## Next concrete action
 
-WP-M3B-3 is accepted. Start WP-M3B-4, or WP-M3B-5/6 (any order, not
-concurrently — see `AGENT_HANDOFF_PROTOCOL.md`'s "Concurrency model"), per
-the dependency chain in `docs/WORK_PACKAGES.md`. **Before starting
-WP-M3B-5 or WP-M3B-6, first check whether
-`internal/setup/{doctor,planner,profiles,cache}.go` already substantially
-satisfies that WP's scope card** — this has not been assessed yet by any
-session (see "IMPORTANT" section above). If it does, write the EWP
-describing what's there, verify it fresh, and accept it, rather than
-assuming a blank slate. WP-M3B-4 (credential-reference abstraction) has no
-such pre-existing-code question — read its scope card in
-`docs/WORK_PACKAGES.md` and start its EWP per AGENTS.md §6.
+WP-M3B-3 is accepted and this milestone branch is synchronized with the
+merged PR #11 architecture baseline. Start **WP-M3B-4 — Credential-reference
+abstraction** next.
+
+Before implementation, follow the normal protocol: fetch the branch, adopt
+the actual post-merge remote HEAD as the new concurrency baseline, reread
+ADR-0014 §6 / `docs/SECURITY.md` / the WP4 scope card, inspect existing
+credential/auth abstractions (especially `internal/cognition/service.go`
+and `internal/process`), then expand WP-M3B-4 into its committed EWP and
+perform the required security/threat-model review before implementation.
+
+Do **not** start WP-M3B-5 from its old static-profile assumptions. PR #11
+rebaselined WP5 to deterministic readiness + ResourceInventory; when WP5
+starts, first assess the pre-existing doctor/profile code against that new
+scope.
 
 ## Resume checklist for the next agent
 

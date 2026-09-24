@@ -13,7 +13,8 @@ flowchart LR
     M0["M0<br/>Normative baseline"]
     M1["M1<br/>Domain + state core"]
     M2["M2<br/>Repository execution"]
-    M3["M3<br/>Environment intelligence<br/>+ cognition runtime<br/>+ guided bootstrap"]
+    M3["M3A/B<br/>Environment intelligence<br/>+ safe bootstrap"]
+    M3C["M3C<br/>Adaptive cognition<br/>portfolio + workflow"]
     M4A["M4A<br/>Semantic MCP<br/>+ principal hosts"]
     M4B["M4B<br/>Project adoption<br/>+ retrospective reconstruction"]
     M5["M5<br/>Vertical slice proof"]
@@ -22,12 +23,13 @@ flowchart LR
     M8["M8<br/>Learning/evaluation"]
     M9["M9<br/>Autonomous campaigns"]
 
-    M0 --> M1 --> M2 --> M3 --> M4A --> M4B --> M5 --> M6 --> M7 --> M8 --> M9
+    M0 --> M1 --> M2 --> M3 --> M3C --> M4A --> M4B --> M5 --> M6 --> M7 --> M8 --> M9
 ```
 
-M3 is internally split into M3A (environment/cognition capability) and M3B
-(guided bootstrap). M4 is split into M4A (principal-host connectivity) and M4B
-(brownfield project adoption). These are milestone sub-phases, not new
+M3 is internally split into M3A (environment/cognition capability), M3B
+(guided deterministic bootstrap), and M3C (adaptive cognition portfolio and
+workflow synthesis). M4 is split into M4A (principal-host connectivity) and
+M4B (brownfield project adoption). These are milestone sub-phases, not new
 top-level numbering that shifts M5-M9.
 
 An additional sub-phase, M2.5, sits between M2 and M3: it extends M2's
@@ -431,63 +433,45 @@ runtime, no Python, no credentials and no network. The read-only proof surface i
 `devcadence environment inspect`, `cognition list`, `cognition probe` and
 `cognition route`.
 
-### M3B — Guided bootstrap and onboarding
+### M3B — Guided deterministic bootstrap and onboarding
 
-**Status: not implemented.** M3A deliberately stops at facts, assessment and
-routing: it mutates nothing, installs nothing, downloads nothing and
-authenticates nothing. `setup` and `doctor` do not exist.
+**Status: in progress.** M3B owns safe discovery/cache/readiness, setup mutation, credential references, bounded runtime/model/tool recipes and terminal UX. It MUST NOT hard-code a final cognition-organization strategy.
 
-See [WORK_PACKAGES.md#m3b](WORK_PACKAGES.md#m3b--guided-bootstrap-and-onboarding)
-for this milestone's Work Package breakdown, and
-[AGENT_HANDOFF_PROTOCOL.md](../AGENT_HANDOFF_PROTOCOL.md) for the branch/
-commit/handoff discipline development follows across sessions.
-
-M3B inherits from M3A the pieces it needs: `MachineFingerprint` for cache
-invalidation, `ProbeDepth` for progressive cost, `cognition.Declaration` for
-operator-supplied capability and policy, `AcceleratorCandidate.RequiredSoftware`
-for what to remediate, and the versioned compatibility tables to extend.
+M3B's canonical output for later recommendation is deterministic **ResourceInventory** plus readiness evidence. Deployment labels may be shown as descriptors but are not routing configuration.
 
 #### Deliverables
-- `devcadence doctor`;
-- `devcadence setup`;
-- modular setup surfaces for hardware/inference/cognition/principal/auth;
-- dry-run setup/remediation plans;
-- structured SetupAction authority levels;
-- versioned install/remediation recipes;
-- safe optional package/runtime/model installation;
-- credential-reference abstraction;
-- discovery/reuse of existing authenticated provider/CLI sessions;
-- deployment-profile recommendation:
-  - local-heavy;
-  - hybrid-thin;
-  - cloud-cognition;
-  - offline;
-  - custom;
-- compact terminal UX using Huh v2 with Bubble Tea v2/Lip Gloss v2 where
-  richer dynamic rendering is needed;
-- SSH/local-terminal support plus accessible/plain/`--no-tui`/`--json`
-  operation;
-- setup verification/smoke tests.
-
-#### Verification
-- setup from a machine with no optional AI software installed;
-- dry-run shows every planned mutation;
-- privileged/high-impact changes require explicit approval;
-- interrupted setup can be re-run safely;
-- existing usable tools are preferred over unnecessary installation;
-- non-interactive mode emits no TUI control sequences;
-- SSH/TTY/basic terminal behavior;
-- readiness summary correctly reports reduced capability rather than generic
-  failure.
+- `devcadence doctor` and `devcadence setup`;
+- safe SetupPlan / approval / ledger semantics;
+- modular discovery/remediation for hardware, local inference, cognition interfaces, principal hosts and auth;
+- runtime-agnostic local-model setup boundary with MLX-LM and Ollama as peer implementations;
+- credential references and reuse of existing authenticated sessions;
+- deterministic ResourceInventory + readiness projection;
+- compact terminal UX with plain/`--json`/`--no-tui` parity.
 
 #### Exit criterion
-A user new to local LLM tooling can start from an ordinary supported Mac/Linux
-machine and reach an explicit usable DevCadence deployment profile without
-having to understand accelerator stacks, model runtimes, or provider auth in
-advance.
+A user can safely discover/configure at least one viable cognition path when possible and obtain an auditable ResourceInventory/readiness state without needing to understand accelerator/runtime/provider details.
 
-See [ENVIRONMENT_INTELLIGENCE_AND_ONBOARDING.md](ENVIRONMENT_INTELLIGENCE_AND_ONBOARDING.md),
-[MODEL_RUNTIME.md](MODEL_RUNTIME.md), ADR-0011.
+### M3C — Adaptive cognition portfolio and workflow synthesis
+
+#### Goal
+Turn discovered resources into an explainable, policy-compliant engineering cognition organization without embedding vendor/model doctrine.
+
+#### Deliverables
+- provider-neutral AccessChannel/session-driver capabilities;
+- EconomicRegime, BudgetPool and optional BudgetState;
+- versioned CognitionPortfolio and PortfolioRecommendation;
+- spending/source-exposure/reserve/preference/diversity policy;
+- AI-assisted Portfolio Planner usable through any sufficiently capable eligible endpoint;
+- deterministic recommendation validation;
+- incremental re-recommendation when resources or evidence change;
+- task-specific Workflow Planner/topology that may collapse or expand role passes;
+- no silent subscription→metered API fallback.
+
+#### Verification
+Exercise strong Apple Silicon + MLX, NVIDIA/local runtime, one subscription CLI/no local model, multiple subscriptions/no API spending, explicit metered API budget, mixed portfolios, no cognition endpoint, resource removal/quota constraint, and adding a new subscription. A fake third provider/session driver must participate without core role/workflow changes.
+
+#### Exit criterion
+Given supported ResourceInventory and policy, DevCadence can produce and validate a useful CognitionPortfolio or explain why cognition is unavailable. No provider/model family is structurally privileged and workflow topology adapts to resources.
 
 ## M4 — Semantic principal integration and project adoption
 
@@ -618,62 +602,27 @@ and refuse normal managed work until that baseline passes Adoption Readiness.
 
 See [PROJECT_ADOPTION.md](PROJECT_ADOPTION.md) and ADR-0012.
 
-## M5 — Central hypothesis vertical slice
+## M5 — Adaptive cognition vertical slice
 
 ### Goal
-Test whether deep frontier design + compact evidence + lower-cost execution
-cognition preserves quality while reducing frontier repository context across
-different hardware/inference profiles and both greenfield and brownfield
-projects.
+Test whether adaptive allocation of heterogeneous cognition resources—combined with compressed engineering artifacts and deterministic controls—can preserve or improve accepted quality while reducing scarce-resource consumption versus a conventional linear coding-agent workflow.
 
 ### Experiment
-
-Use several real medium-complexity tasks and compare:
-
-**Baseline:** frontier coding agent directly handles the repository.
-
-**DevCadence:** deterministic/scout evidence -> principal design -> detailed
-Work Package -> isolated implementation worker -> deterministic validation ->
-independent review -> principal compact decision.
-
-The DevCadence path MUST be exercised under materially different profiles:
-
-1. **strong-local** — e.g. capable Apple Silicon/local coder;
-2. **hybrid-thin** — e.g. 32 GB-class Linux node with deterministic/local-small
-   work and economical remote implementation;
-3. **cloud-cognition/no-local-model** — local control plane and repository
-   authority with remote model cognition.
-
-The experiment must also cover:
-- a greenfield/DevCadence-native project path;
-- a brownfield repository that enters through M4B reconstruction and reaches a
-  committed Adoption Baseline before normal managed work.
+Compare direct coding-agent baselines with DevCadence-generated WorkflowPlans under strong-local, one-subscription/no-local, multiple-subscriptions/no-paid-API, metered-remote and mixed local/subscription/API portfolios. The role graph need not be identical across scenarios.
 
 ### Measurements
-- accepted correctness;
-- human corrections;
-- frontier input/context usage;
-- remote paid/quota cognition usage;
-- local inference usage;
-- source/context exposure to remote endpoints;
-- wall time;
-- retry count;
-- blueprint deviations;
-- reviewer defects found;
-- principal raw-source escalation frequency;
-- onboarding/setup interventions;
-- brownfield reconstruction decisions/unknowns;
-- whether protocol behavior changes across deployment profiles.
+- accepted correctness/regressions/human corrections;
+- subscription/quota consumption;
+- metered API spend and token volume where observable;
+- local inference/compute use;
+- cognition invocation/session count;
+- repair/review rounds and Principal re-entry;
+- source exposure and wall time;
+- whether a simpler topology would have produced the same result;
+- total resource-to-accepted-result.
 
 ### Exit criterion
-DevCadence shows meaningful frontier context savings without unacceptable
-quality loss; at least one task demonstrates useful independent
-review/escalation; the same core engineering protocols operate under
-strong-local, hybrid-thin and no-local-model profiles; and an imperfect
-existing repository can be adopted into the mandatory canonical baseline
-before managed work begins.
-
-If not, stop and revise architecture.
+DevCadence demonstrates useful outcomes across materially different portfolios without dependence on local inference, one provider, one subscription model or one fixed role topology. If adaptive orchestration routinely consumes more scarce resources than a simpler baseline without quality benefit, revise routing/topology policy before broadening autonomy.
 
 ## M6 — Multi-review and consultant cognition
 
@@ -755,9 +704,11 @@ Improve the engineering system from evidence.
 - trajectory manifests;
 - LessonCandidate lifecycle;
 - frozen evaluation corpus;
-- prompt/model routing experiments;
+- prompt/portfolio/workflow routing experiments;
 - promotion/rollback;
-- model-role outcome metrics.
+- endpoint-access-role-task outcome metrics;
+- resource-to-accepted-result metrics across subscription, API and local regimes;
+- evaluated recommendations for portfolio changes without silent policy mutation.
 
 ### Verification
 Demonstrate one evaluated improvement:

@@ -1,6 +1,6 @@
 # DevCadence
 
-**DevCadence is a local-first intelligent software-development control plane.** It combines scarce frontier-model reasoning with capability-routed execution cognition through explicit engineering protocols, evidence-backed project state, deterministic verification, independent review, and risk-based escalation.
+**DevCadence is a local-first adaptive software-development control plane.** It discovers the cognition resources a developer actually has—local runtimes, authenticated agent CLIs, subscriptions, remote APIs, hosts, and deterministic tools—and organizes them into a disciplined software-engineering system under explicit policy.
 
 Local-first means that repository authority, canonical state, deterministic execution, evidence and acceptance remain under the local control plane. Model inference itself may be local or remote according to capability, privacy, cost and policy.
 
@@ -12,13 +12,17 @@ DevCadence is not intended to be another chat-based coding assistant. It is desi
 
 ## Core thesis
 
-Modern frontier models are valuable because they can reason deeply, compare alternatives, research current external knowledge, consult other models, design interfaces and algorithms, and produce detailed implementation guidance. Their weakness in long coding sessions is economic and contextual: repeatedly ingesting large repositories, compiler output, logs, test failures, and nearly identical source revisions wastes limited context and paid or quota-bound inference.
+DevCadence is opinionated about engineering discipline, evidence, bounded authority, reproducibility, security, and cost control. It is deliberately **not opinionated about which provider or model family should fill an engineering role**.
 
-Strong local models are one excellent execution option, but not a prerequisite. A capable Apple Silicon workstation may run strong local coding/review models; a modest Linux box may use deterministic tools plus a small local model and economical remote implementation; a machine with no local LLM may still keep repository execution and evidence local while routing model cognition remotely.
+The control plane separates role, capability, access channel, economics/scarcity, and workflow topology.
 
-The invariant is not “cloud versus local.” It is **high-leverage cognition versus high-volume cognition versus deterministic machinery**, with source exposure and cost controlled explicitly.
+A model is not intrinsically "cheap," "expensive," "frontier," "principal," or "implementer." The same model reached through a subscription-backed CLI and through a metered API is two different cognition endpoints with different economics and possibly different tool/session semantics.
 
-DevCadence creates a strict information boundary between those roles.
+DevCadence discovers the available resource portfolio, applies user policy, and may use a capable cognition endpoint to synthesize a recommended **Cognition Portfolio**. Deterministic policy validation remains authoritative: AI may propose a configuration but may not invent capabilities, relax privacy/spending policy, or silently enable metered billing.
+
+The invariant is not "cloud versus local." It is **high-leverage cognition versus high-volume cognition versus deterministic machinery, dynamically allocated from the resources actually available to the user**.
+
+See [docs/COGNITION_PORTFOLIO.md](docs/COGNITION_PORTFOLIO.md) and [ADR-0018](docs/adr/0018-adaptive-cognition-portfolio-and-workflow-synthesis.md).
 
 ## The intelligence hierarchy
 
@@ -71,7 +75,7 @@ flowchart TB
     C --> P
 ```
 
-No individual model provider, local runtime, consultant subscription, or principal host is mandatory. The control plane discovers what is available and routes within explicit policy.
+No individual model provider, local runtime, subscription, API, consultant, agent CLI, or principal host is mandatory. The control plane discovers what is available, constructs a validated cognition portfolio, and adapts the workflow topology within explicit policy.
 
 ## Non-goals
 

@@ -90,6 +90,14 @@ Interactive setup/doctor flows use a modest terminal UI where appropriate. The i
 
 The UI is not business logic. Non-interactive/plain/JSON operation remains supported.
 
+### 9. Later refinement: adaptive cognition portfolio
+
+ADR-0018 refines the routing/economic layer without reversing this decision.
+
+M3A endpoint discovery remains the factual substrate. M3B safely bootstraps/configures resources. M3C adds explicit access-channel economics/budget pools, AI-assisted portfolio synthesis and adaptive workflow topology.
+
+Deployment labels such as strong-local/hybrid/no-local remain useful scenario descriptors, not the closed routing configuration.
+
 ## Consequences
 
 ### Positive
