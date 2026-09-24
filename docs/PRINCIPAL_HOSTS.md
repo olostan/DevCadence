@@ -20,6 +20,8 @@ A cognition endpoint is the model/runtime/CLI/API that provides reasoning.
 
 These concepts may overlap but must not be conflated.
 
+A product may also expose a machine-invocable agent CLI or SDK. That interface is modeled separately as a cognition **session driver/access channel**. Integrating an editor as a host must not make DevCadence's scheduler depend on that editor to reach unrelated Codex/Claude/Gemini/local endpoints, and a headless agent CLI remains usable even when its corresponding GUI host is not selected.
+
 Examples:
 
 ```text

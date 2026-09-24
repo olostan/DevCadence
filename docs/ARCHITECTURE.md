@@ -197,7 +197,7 @@ Normal operation should keep the principal at semantic depth levels 0–2:
 
 Escalating evidence depth is permitted. Starting at maximum context is not preferred.
 
-## 5. Frontier-to-local execution path
+## 5. Adaptive cognition execution path
 
 ```mermaid
 sequenceDiagram
@@ -241,7 +241,7 @@ sequenceDiagram
     end
 ```
 
-The sequence intentionally places a second frontier reasoning pass after scouting and before implementation.
+The sequence is illustrative, not a fixed topology. The Workflow Planner may collapse, expand or diversify cognition roles according to task risk, the validated Cognition Portfolio, user policy and current resource state. Deterministic validation and acceptance gates remain stable even when cognition topology changes.
 
 ## 6. Core domain components
 
@@ -284,34 +284,43 @@ Stores versioned frontier-authored implementation blueprints.
 ### 6.6 Evidence service
 Stores structured claims and references to raw artifacts without forcing raw artifacts into every model context.
 
-### 6.7 Cognition runtime and capability router
-Executes role-specific workers through replaceable cognition endpoints and harness adapters. Endpoints may be local runtimes, authenticated CLIs or remote APIs. Role requirements, privacy policy, cost and measured capability drive routing; a strong local LLM is not required for control-plane validity.
+### 6.7 Cognition resource plane
 
-As implemented in M3A, this component decomposes into three boundaries with a
-one-directional dependency, so that no layer can quietly assume what the one below
-it merely made plausible:
+The cognition resource plane exposes replaceable cognition endpoints and invocation/session drivers. Endpoints may be local runtimes, authenticated coding/agent CLIs or SDKs, remote APIs, or future policy-compatible workers. Roles are not endpoint kinds and provider/model identity does not imply role.
+
+M3A remains the factual substrate:
 
 ```text
-internal/environment    observed facts  +  pure backend assessment
-        │               (SysProbe / CommandProbe; no os/exec, no runtime.GOOS)
+internal/environment    observed machine/software facts
+        │
         ▼
-internal/cognition      Adapter contract, acceleration evidence, capability
-        │               routing, profile assembly, ProjectState projection
+internal/cognition      endpoint discovery, probes, capability evidence
+        │
         ▼
-  ollama/ mlx/          the only packages that know a runtime, CLI or provider;
-  codingcli/ remoteapi/ selected at the edge in cmd/devcadence
+runtime / codingcli / remoteapi adapters selected at the edge
 ```
 
-`internal/principalhosts` sits beside rather than inside this: a principal host is
-a frontend a human drives, not a source of cognition (DCI-107).
+`internal/principalhosts` remains orthogonal: a principal host is a human-facing frontend, not automatically a cognition endpoint.
 
-Assessment is a pure function of facts and may never claim more than
-`runtime_available`; only an inference probe can verify a backend. Machine
-profiles are computed on demand rather than persisted, with large raw probe
-evidence in the M2 artifact store and a compact projection in ProjectState. See
-[adr/0013-environment-intelligence-and-cognition-contracts.md](adr/0013-environment-intelligence-and-cognition-contracts.md).
+### 6.7A Resource inventory and economics
 
-Environment discovery, acceleration verification and guided onboarding are defined in [ENVIRONMENT_INTELLIGENCE_AND_ONBOARDING.md](ENVIRONMENT_INTELLIGENCE_AND_ONBOARDING.md).
+A deterministic ResourceInventory combines hardware/accelerator facts, cognition endpoints and capability evidence, session features, credential/auth readiness, configured EconomicRegime/BudgetPool bindings, dynamic BudgetState where safely observable, and user/project privacy/spending policy.
+
+Economics attach to access paths, not model families. The same model through a subscription CLI and a metered API is represented as distinct endpoints/budget bindings.
+
+### 6.7B Cognition Portfolio Planner
+
+Once a sufficiently capable policy-allowed endpoint exists, an AI-assisted Portfolio Planner may synthesize PortfolioRecommendations from ResourceInventory + project needs + user policy + historical outcome evidence.
+
+The planner has no authority to activate arbitrary configuration. Typed output passes deterministic validation before becoming an active CognitionPortfolio.
+
+### 6.7C Workflow Planner
+
+The Workflow Planner compiles task/risk requirements plus the active CognitionPortfolio and current resource state into a WorkflowPlan. It may choose one bounded cognition session, distinct Principal/Implementer/Reviewer endpoints, abundant local repair loops with scarce subscription escalation, provider-diverse review for high-risk work, or deterministic-only behavior.
+
+The workflow topology itself is routable. More model calls are not automatically better.
+
+See [COGNITION_PORTFOLIO.md](COGNITION_PORTFOLIO.md) and [ADR-0018](adr/0018-adaptive-cognition-portfolio-and-workflow-synthesis.md).
 
 ### 6.8 Repository/worktree manager
 Provides controlled repository reads, isolated mutations, commits, diffs and integration staging.

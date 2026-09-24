@@ -6,11 +6,11 @@ Identifiers are stable. If an invariant is superseded, preserve the identifier a
 
 ## A. Intelligence-boundary invariants
 
-### DCI-001 — Frontier intelligence is used for high-leverage cognition
-Frontier models own product reasoning, architectural decisions, alternative analysis, implementation strategy for substantial work, algorithms, pseudocode, interface design, and high-risk adjudication. They are not reduced to task routers.
+### DCI-001 — High-leverage cognition is allocated deliberately
+High-leverage reasoning receives the strongest eligible cognition the active portfolio and policy can justify. No provider/model family is definitionally "the frontier principal."
 
-### DCI-002 — Lower-cost execution cognition absorbs high-volume repository work
-Repository search, repeated source inspection, compiler/test loops, log interpretation, routine implementation, broad review, and repeated verification should use deterministic tooling and the least expensive/privacy-preserving cognition that satisfies the task. Local inference is preferred when capable and policy-appropriate, but remote cognition is a valid execution backend; repository authority and deterministic evidence remain locally governed.
+### DCI-002 — High-volume cognition is resource-aware
+High-volume repository work uses the least scarce quality-sufficient eligible resources according to the active portfolio. Local tokens may be effectively unmetered; subscription quota, hosted "cheap" tokens and review cycles are not assumed free.
 
 ### DCI-003 — Optimize context volume, not thinking time
 The system must not sacrifice design quality merely to reduce wall-clock reasoning time. Compact, high-quality frontier reasoning is preferred over fast implementation begun with weak grounding.
@@ -254,3 +254,37 @@ The accepted canonical documentation baseline and its adoption decision are tied
 ### DCI-113 — Pre-adoption autonomy is bounded
 Before project adoption reaches READY, DevCadence may perform bounded investigation and isolated adoption work, but it must not treat the repository as ready for normal autonomous implementation, acceptance or integration.
 
+## L. Adaptive cognition portfolio invariants
+
+### DCI-120 — Roles are independent of providers and access channels
+Engineering roles are capability requirements, not aliases for vendors, model families, runtimes, CLIs or APIs.
+
+### DCI-121 — Economics belong to access paths
+Economic regime, budget/quota pool and scarcity attach to the endpoint/access path, not intrinsically to a model family.
+
+### DCI-122 — No silent metered fallback
+DevCadence never converts subscription/local/prepaid usage into metered API or overage spending without explicit policy/approval.
+
+### DCI-123 — AI recommends; deterministic policy authorizes
+AI may synthesize portfolio/workflow recommendations. Deterministic machinery validates existence, capability, privacy, spending, permissions, feature compatibility and resource constraints before activation.
+
+### DCI-124 — Recommendation cannot expand authority
+A planner cannot weaken source-exposure policy, spending limits, credential rules, setup authority or destructive-operation policy.
+
+### DCI-125 — Workflow topology is adaptive
+The number and arrangement of cognition roles is chosen from task risk, portfolio and resource state. More agents, reviews or provider diversity are not intrinsically better.
+
+### DCI-126 — Scarce quota remains scarce when marginal dollars are zero
+Subscription-included or enterprise cognition is not treated as unlimited merely because an invocation has no separate API charge.
+
+### DCI-127 — Resource loss degrades, it does not invalidate unrelated capability
+When an endpoint, subscription, GPU, runtime or API becomes unavailable, DevCadence preserves deterministic/local-authority capability and derives the best policy-compliant reduced workflow.
+
+### DCI-128 — Portfolio adaptation is explicit and reversible
+New resources or learned evidence may produce a recommended configuration delta; they do not silently rewrite normative user policy.
+
+### DCI-129 — Endpoint effectiveness is contextual and empirical
+Capability/effectiveness claims are tied to role/task/access context and provenance. Provider reputation, parameter count and marketing tier are not sufficient routing evidence.
+
+### DCI-130 — Hosts and cognition drivers are orthogonal
+A human-facing host and a machine-invocable cognition/session interface are separate architectural roles even when one product exposes both.

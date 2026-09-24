@@ -328,9 +328,15 @@ validation without it, machine profiles are computed rather than persisted, and
 routing is a filter plus an explicit ordering with no score.
 
 The next milestone is **M3B — guided bootstrap**: `setup`/`doctor`, remediation
-planning, installation recipes, credential references, deployment-profile
-recommendations and a restrained terminal UI suitable for local terminals, SSH and
-non-interactive use.
+planning, installation recipes, credential references, deterministic `ResourceInventory`,
+readiness projection, and a restrained terminal UI suitable for local terminals, SSH and
+non-interactive use. M3B computes factual readiness and resource inventory without
+embedding a static deployment-profile chooser.
+
+Following M3B, **M3C — adaptive cognition portfolio and workflow synthesis**:
+implements the provider-neutral session-driver abstraction, `EconomicRegime` / `BudgetPool` / `BudgetState`,
+versioned `CognitionPortfolio`, AI-assisted Portfolio Planner, deterministic recommendation
+validator, and adaptive task `WorkflowPlan` synthesis.
 
 Do not reintroduce the old assumption that M3 means "install one local model."
 A strong local model—and even a local LLM at all—is optional capability.
@@ -342,11 +348,12 @@ After M3:
 - **M4B** implements Project Adoption and Retrospective Reconstruction for
   existing repositories. Brownfield projects are not READY until the required
   canonical documentation baseline is committed and Adoption Readiness passes.
-- **M5** proves the central hypothesis across strong-local, hybrid-thin and
-  no-local-model/cloud-cognition profiles, and across greenfield plus
-  brownfield project entry paths.
+- **M5** validates adaptive allocation of heterogeneous cognition resources,
+  compressed engineering artifacts, and adaptive workflow topologies across
+  strong-local, subscription-only, metered-API, and mixed portfolios, and
+  across greenfield plus brownfield project entry paths.
 
-ADRs 0011, 0012 and 0013 are accepted and normative for this direction.
+ADRs 0011, 0012, 0013, 0014, and 0018 are accepted and normative for this direction.
 
 The overall implementation objective is still to prove the central hypothesis
 without prematurely adding dashboard complexity, generalized distributed

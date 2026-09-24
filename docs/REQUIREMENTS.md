@@ -48,8 +48,8 @@ Autonomous implementation MUST execute in an isolated branch/worktree once workt
 ### FR-010 — Attempt lineage
 Every implementation run MUST create a distinct Attempt with model/profile, base revision, worktree, status and resulting commit/artifacts.
 
-### FR-011 — Cognition runtimes and endpoints
-The system MUST keep model/cognition adapters independent from core roles and MUST support capability-based routing across replaceable cognition endpoints. The bootstrap SHOULD support local inference, but a strong or even installed local LLM MUST NOT be required for otherwise valid control-plane operation.
+### FR-011 — Cognition resources and endpoints
+The system MUST keep engineering roles independent from model/provider/runtime/access identities and MUST support replaceable cognition endpoints reached through local runtimes, authenticated agent/CLI or SDK sessions, remote APIs, and future compatible workers. No specific provider, subscription, API, strong local model or principal host is required for otherwise valid control-plane operation.
 
 ### FR-012 — Deterministic validation
 The system MUST execute configured validation commands and capture immutable/traceable results.
@@ -97,10 +97,10 @@ The system MUST capture sufficient structured trajectory data to evaluate agent/
 The system MUST support LessonCandidate creation and governed promotion rather than direct self-modification.
 
 ### FR-027 — Cognition capability profiles
-The system MUST represent cognition endpoint/model/runtime capability profiles independently from role definitions, including locality, health, structured-output/tool capability, privacy/exposure properties and cost class where applicable.
+The system MUST represent cognition endpoint capability profiles independently from role definitions, including model identity when known, access channel, locality, health, structured-output/tool/session capabilities, privacy/exposure properties, and capability grades with provenance.
 
-### FR-028 — Resource and endpoint management
-Local runtimes SHOULD expose loaded-model and memory/resource state sufficient for safe scheduling. Remote/authenticated cognition endpoints SHOULD expose enough health, availability and usage/cost metadata for policy-aware routing where the integration permits it.
+### FR-028 — Resource, economics and endpoint state
+The system MUST represent resource economics independently from model identity. Where observable/configured, endpoints MUST be linkable to an EconomicRegime and BudgetPool and MAY expose dynamic BudgetState. Unknown economics MUST remain unknown rather than inferred from provider/model presence.
 
 ### FR-029 — Auditability
 The system MUST answer why a candidate was accepted/rejected and which evidence supported the decision.
@@ -197,6 +197,36 @@ The system MUST represent an explicit readiness decision proving that required c
 
 ### FR-060 — Canonical documentation entry point
 Each managed project MUST expose a stable configured canonical documentation root. For brownfield adoption the default SHOULD be `docs/devcadence/`, while another committed location MAY be configured explicitly.
+
+### FR-061 — Resource inventory
+The system MUST materialize a deterministic ResourceInventory from discovered hardware, local runtimes/models, cognition interfaces, API configurations, hosts, capability evidence and configured economic/budget metadata.
+
+### FR-062 — Cognition portfolio
+The system MUST represent a versioned CognitionPortfolio describing role eligibility/preferences, endpoint priorities, fallbacks, escalation rules, budget constraints and workflow constraints without hard-coding provider/model choices into role semantics.
+
+### FR-063 — AI-assisted portfolio recommendation
+Once at least one policy-allowed endpoint satisfies minimum planning capability, DevCadence SHOULD support an AI-assisted Cognition Portfolio Planner that produces PortfolioRecommendations with rationale and tradeoffs.
+
+### FR-064 — Deterministic recommendation validation
+Every AI-produced PortfolioRecommendation MUST be deterministically validated before activation for endpoint readiness, capability, session features, privacy, spending, independence and authority constraints.
+
+### FR-065 — No silent paid fallback
+DevCadence MUST NOT silently substitute a metered or overage-billed access path for a subscription-included, local, prepaid or otherwise authorized path.
+
+### FR-066 — Adaptive workflow topology
+The system MUST be able to choose a task-specific WorkflowPlan/topology from task role/risk requirements, active CognitionPortfolio, resource/budget state and policy. More agents or reviewers are not intrinsically preferred.
+
+### FR-067 — Resource-change adaptation
+Changes in hardware, runtimes/models, subscriptions, API authorization, budget policy or materially new outcome evidence SHOULD be able to trigger a proposed portfolio delta without full setup repetition.
+
+### FR-068 — User preference without vendor doctrine
+The system MUST support role preferences, provider diversity constraints, endpoint exclusions and fallbacks. Built-in defaults MUST NOT assert a vendor/model family is inherently the correct Principal, Implementer or Reviewer.
+
+### FR-069 — Cognition session drivers
+The system SHOULD normalize supported invocation surfaces behind capability-negotiated session drivers covering model selection, structured/streaming events, resume, cancellation, tools/MCP, worktree binding and usage/quota reporting.
+
+### FR-070 — Graceful portfolio degradation
+When portfolio resources disappear or become constrained, DevCadence MUST preserve unrelated deterministic/local-authority capabilities and SHOULD derive the best feasible reduced workflow.
 
 ## 2A. Discovery and specification requirements
 

@@ -131,6 +131,18 @@ Authentication flows SHOULD use provider-supported login/device/browser mechanis
 
 A consultant or cognition request should reference an authenticated adapter, not carry an API key.
 
+## 7A. Portfolio-planner authority boundary
+
+The Cognition Portfolio Planner is an untrusted recommender with respect to authority.
+
+It may reason over a sanitized ResourceInventory, non-secret credential references, capability evidence, policy and historical outcome summaries. It MUST NOT receive raw credentials merely to decide routing.
+
+Its output cannot create credentials, enable a paid/overage path, weaken source-exposure policy, increase setup/destructive authority, declare nonexistent endpoint/session capabilities, bypass auth/health checks, or silently change reserve/spending constraints.
+
+A typed PortfolioRecommendation becomes active only after deterministic validation and any policy-required human approval. Recommendation and validation rationale are auditable.
+
+Session/CLI/SDK drivers remain subject to least authority. Driver-specific worktree/tool access is declared and policy-checked rather than inferred from product reputation.
+
 ## 8. Network policy
 
 Local workers should not automatically receive unrestricted network access.

@@ -154,6 +154,32 @@ It is computed on demand rather than persisted; ProjectState carries a compact
 projection of it. See
 [adr/0013-environment-intelligence-and-cognition-contracts.md](adr/0013-environment-intelligence-and-cognition-contracts.md).
 
+## 3C. Adaptive cognition portfolio protocols (M3C)
+
+These protocol families are introduced normatively by ADR-0018; concrete Go/schema implementation lands in M3C.
+
+### ResourceInventory
+A deterministic snapshot/projection referencing MachineCapabilityProfile, cognition endpoints/capability provenance, session-driver features, host availability, credential references/auth status, configured economic/budget bindings and current resource observations where safely available. It contains no raw secrets.
+
+### EconomicRegime / BudgetPool / BudgetState
+`EconomicRegime` describes how use is constrained/charged: local compute, subscription quota, metered API, prepaid credits, enterprise allocation, unknown/custom.
+
+`BudgetPool` is stable policy/configuration shared by one or more endpoints. It may define spending/reserve/overage policy even when exact remaining quota is not observable.
+
+`BudgetState` is ephemeral evidence such as remaining quota/credits, reset time, rate/concurrency limits or local resource pressure. Unknown values remain unknown.
+
+### PortfolioRecommendation
+Typed advisory output from the Cognition Portfolio Planner. It references existing endpoints/budget pools and includes role choices/fallbacks, independence/diversity constraints, escalation/reserve behavior, workflow constraints, rationale/tradeoffs and evidence refs. It cannot grant authority.
+
+### CognitionPortfolio
+A versioned, deterministically validated configuration accepted from a recommendation or explicit operator configuration. It is the durable routing input, not a deployment-label string.
+
+### WorkflowPlan
+A bounded per-task topology compiled from task/risk requirements + CognitionPortfolio + current resource state. It names roles, endpoint/session requirements, retry/review/escalation bounds and deterministic gates. It may contain one cognition role or many.
+
+### PortfolioChangeProposal
+An explicit diff triggered by changed resources/policy/evidence. Applying it is auditable and reversible; learned evidence never silently mutates the active portfolio.
+
 ## 4. InvestigationRequest
 
 An InvestigationRequest asks local repository cognition to establish facts.

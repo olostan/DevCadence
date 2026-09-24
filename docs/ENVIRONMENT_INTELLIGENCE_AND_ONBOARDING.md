@@ -252,47 +252,31 @@ Examples:
 
 The system should report **READY**, **READY WITH REDUCED CAPABILITY**, **PARTIALLY READY**, or a similarly explicit assessment instead of collapsing every missing optional integration into setup failure.
 
-## 9. Deployment profiles
+## 9. Portfolio descriptors, not deployment modes
 
-Profiles are recommendation templates, not architectural modes.
+Labels such as `local-heavy`, `hybrid-thin`, `cloud-cognition` and `offline` remain useful human-readable summaries and fixture scenarios. They are **not the configuration object and not a closed set of architectural modes**.
 
-### local-heavy
+The canonical result is a CognitionPortfolio over discovered resources, not a selected deployment label.
 
-Strong local implementation/review capability plus optional frontier escalation.
+## 10. Deterministic discovery and AI-assisted portfolio synthesis
 
-### hybrid-thin
+Setup proceeds in two stages.
 
-Deterministic local repository work, small/local cognition where useful, economical remote implementation/review, frontier escalation when needed.
+### Stage A — deterministic bootstrap
 
-This is the expected profile for machines such as a modest 32 GB Linux box with an integrated GPU.
+DevCadence discovers and verifies hardware/storage/accelerators, local runtimes/models, agent/coding CLIs or SDK surfaces and auth readiness, configured APIs without reading raw secrets, principal hosts, capability/session evidence, configured EconomicRegime/BudgetPool bindings, and project/user privacy/spending/preferences.
 
-### cloud-cognition
+This produces ResourceInventory and readiness without requiring model cognition.
 
-Local control plane, repository, worktrees, tools and evidence; model cognition is remote according to policy.
+### Stage B — portfolio synthesis
 
-### offline
+As soon as one policy-allowed endpoint meets minimum portfolio-planning capability, DevCadence may ask it to reason over ResourceInventory, DevCadence role requirements, project shape, user policy and historical evidence.
 
-Control plane + deterministic engineering execution only. LLM-dependent roles are unavailable until configured.
+PortfolioRecommendation output is advisory. Deterministic validation rejects nonexistent/unready endpoints, unsupported capabilities/session features, privacy or spending violations, impossible independence claims and any authority expansion.
 
-### custom
+If no planning endpoint exists, setup remains useful and can guide the user to one minimal cognition path. Resource changes can later trigger an incremental recommendation instead of full reinstall.
 
-Operator-defined routing/privacy/cost policy.
-
-## 10. Recommendation inputs
-
-The recommendation engine should consider:
-
-- observed hardware/software capabilities;
-- verified acceleration;
-- measured model/runtime behavior;
-- required role quality;
-- project privacy policy;
-- whether source may leave the machine;
-- available authenticated subscriptions/tools;
-- monetary budget/cost class;
-- observed historical model performance.
-
-Do not prefer local inference merely for ideological consistency. Prefer the cheapest/most private option that satisfies the required quality and policy.
+See [COGNITION_PORTFOLIO.md](COGNITION_PORTFOLIO.md) and ADR-0018.
 
 ## 11. Setup actions and authority
 
@@ -468,15 +452,27 @@ Implementation notes that qualify the prose above:
 - Everything is **read-only**. Contracts are settled in
   [adr/0013-environment-intelligence-and-cognition-contracts.md](adr/0013-environment-intelligence-and-cognition-contracts.md).
 
-### M3B — Guided bootstrap — **not implemented**
+### M3B — Guided deterministic bootstrap — **not implemented**
 
 - `setup` / `doctor`;
 - dry-run remediation plans;
 - installation/configuration recipes;
 - credential references/auth discovery;
-- deployment-profile recommendation;
+- deterministic ResourceInventory/readiness projection;
 - terminal UX;
 - blank-machine flow.
+
+### M3C — Adaptive cognition portfolio — **planned**
+
+- EconomicRegime, BudgetPool and dynamic BudgetState contracts;
+- invocation/session driver capability model;
+- AI-assisted PortfolioRecommendation over deterministic inventory + policy;
+- deterministic recommendation validation and activation;
+- CognitionPortfolio persistence/versioning;
+- workflow-topology planning and explanation;
+- incremental re-recommendation when resources/policy materially change.
+
+M3B and M3C may be presented by one user-facing `devcadence setup` experience.
 
 ### M4 — Principal host integration
 

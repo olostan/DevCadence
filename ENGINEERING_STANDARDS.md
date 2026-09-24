@@ -622,3 +622,17 @@ Standards:
 A zero-finding closure review is valid. Reviewers MUST NOT manufacture findings to demonstrate activity.
 
 See docs/REVIEW_AND_CONVERGENCE.md.
+
+## 20A. Adaptive cognition integration
+
+Cognition integrations must preserve the separation between role, provider/model identity, access channel and economics.
+
+- Do not branch core workflow behavior on provider/model names.
+- Authenticated CLIs/SDKs, remote APIs and local runtimes implement capability-negotiated adapters/session drivers selected at the edge.
+- One product's host UI and agent/session interface are separate integrations.
+- EconomicRegime/BudgetPool configuration is explicit; do not infer billing mode from executable/provider presence.
+- AI-generated PortfolioRecommendation objects are schema-validated and policy-validated before activation.
+- Contract tests for session drivers use fakes/transports and prove unsupported features fail closed.
+- Core workflow tests include a fake future provider/driver to detect vendor-shaped abstractions.
+- Usage/quota observations are evidence with freshness/provenance, not permanent truths.
+- No silent fallback may increase monetary or source-exposure authority.
