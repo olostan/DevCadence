@@ -338,7 +338,7 @@ If that hypothesis fails, the architecture must be revised before adding autonom
 M1, M2 and M3A are implemented, so the control plane can be built, can safely
 operate on real repositories, and can describe the machine and its cognition
 endpoints from observed evidence — all without requiring any model runtime.
-M3B will add guided setup, remediation planning and the terminal UX.
+M3B will add guided setup, remediation planning, credential-safe ResourceInventory/readiness and a safe plain/JSON/basic-terminal surface; richer adaptive onboarding is deliberately deferred to M3D.
 
 ```bash
 go build -o bin/devcadence ./cmd/devcadence
