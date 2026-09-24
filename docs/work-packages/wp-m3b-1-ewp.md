@@ -4,7 +4,7 @@
 - **Scope card:** [docs/WORK_PACKAGES.md#wp-m3b-1--setup-domain-types-and-plan-digest](../WORK_PACKAGES.md#wp-m3b-1--setup-domain-types-and-plan-digest)
 - **Base commit:** `a38b293` (origin/main, merge of PR #9 — `AGENT_HANDOFF_PROTOCOL.md` and M3B work-package breakdown)
 - **Branch:** `feat/m3b-guided-bootstrap`
-- **Status:** Implementation already present on `main` prior to this EWP's authorship — see "Provenance" below. This EWP documents, verifies, and formally accepts that existing implementation as WP-M3B-1's deliverable under `AGENT_HANDOFF_PROTOCOL.md`'s Principal/Implementer sequence, rather than re-deriving the same design from a blank slate.
+- **Status:** Accepted. Implementation already present on `main` prior to this EWP's authorship — see "Provenance" below. This EWP documents, verifies, and formally accepts that existing implementation as WP-M3B-1's deliverable under `AGENT_HANDOFF_PROTOCOL.md`'s Principal/Implementer sequence, rather than re-deriving the same design from a blank slate. Independent review: [PR #10 review comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5805285148) (owner, 2026-09-24) found three checkpoint issues, all addressed in this revision — see §12.
 
 ## Provenance (read before anything else)
 
@@ -143,9 +143,9 @@ Scope card's stated criteria, each checked against a fresh test run (not trusted
 |---|---|
 | Schema round-trip tests | `tests/schema_fixtures_test.go::TestValidFixturesValidate`, `TestInvalidFixturesAreRejected`, `TestFixturesRoundTripWithoutSemanticLoss` — PASS (see §8) |
 | Weaker-than-`IntrinsicPolicy` authority rejected | `internal/protocol/setup_test.go::TestSetupActionIntrinsicPolicyEnforcement` — PASS |
-| `PlanDigest` stable/reproducible for identical input, changes for any other field change | `TestSetupPlanValidationAndDigest`, `TestComputeDigestForFixtures` — PASS |
-| Fixtures cover manual and executable action shapes | `validManualAction()`/`validExecutableAction()` helpers in `setup_test.go`, exercised by `TestSetupActionMutualExclusion`, `TestSetupPlanValidationAndDigest` — PASS. (JSON fixture corpus under `fixtures/protocol/` currently only carries an executable-shaped `setup-plan.valid.json`; the manual-action shape and the cross-shape mutual-exclusion rejection are covered by the Go-level table above rather than a second JSON fixture file. This is judged sufficient — the scope card does not mandate JSON-fixture-only coverage, and the Go tests exercise the identical validation path a JSON-decoded plan would hit — but is flagged here explicitly rather than silently treated as fully equivalent to a fixture-file check.) |
-| Mixing manual + executable on one action rejected | `TestSetupActionMutualExclusion` (both directions) — PASS |
+| `PlanDigest` stable/reproducible for identical input, changes for any other field change | `TestSetupPlanValidationAndDigest`, `TestComputeDigestForFixtures`, plus the structural contract added in review (`internal/protocol/setup_digest_contract_test.go::TestPlanDigestViewFieldParity`, `TestPlanDigestChangesForEveryField`, `TestPlanDigestUnaffectedByPlanDigestField` — see §12) — PASS |
+| Fixtures cover manual and executable action shapes | `fixtures/protocol/setup-plan.valid.json` (executable) and `setup-plan.valid-manual-action.json` (manual, added in review — see §12), both validated by `TestValidFixturesValidate`/`TestFixturesRoundTripWithoutSemanticLoss`; plus the pre-existing Go-level `validManualAction()`/`validExecutableAction()` coverage in `setup_test.go` — PASS |
+| Mixing manual + executable on one action rejected | `TestSetupActionMutualExclusion` (Go-level, both directions) and `fixtures/protocol/setup-plan.invalid-mixed-manual-and-executable-action.json` (JSON-schema level, added in review — see §12) via `TestInvalidFixturesAreRejected` — PASS |
 
 ## 8. Deterministic evidence (this session, base commit `a38b293`, Go toolchain `go1.25.0`, linux/amd64)
 
@@ -165,7 +165,9 @@ ok  	github.com/olostan/DevCadence/tests	0.821s
 ```
 
 Full per-relevant-test breakdown (`go test ./internal/protocol/... ./internal/schema/... -run "Setup|Plan|Digest|Operation|Condition" -v`):
-`TestDigestIsAlgorithmPrefixedAndContentAddressed`, `TestSetupActionMutualExclusion`, `TestSetupActionIntrinsicPolicyEnforcement`, `TestSetupPlanValidationAndDigest`, `TestLoopbackOnlyPortCondition`, `TestSetupLedgerEventValidationAndChain`, `TestComputeDigestForFixtures` — all PASS.
+`TestDigestIsAlgorithmPrefixedAndContentAddressed`, `TestSetupActionMutualExclusion`, `TestSetupActionIntrinsicPolicyEnforcement`, `TestSetupPlanValidationAndDigest`, `TestLoopbackOnlyPortCondition`, `TestSetupLedgerEventValidationAndChain`, `TestComputeDigestForFixtures`, `TestPlanDigestViewFieldParity`, `TestPlanDigestChangesForEveryField` (11 sub-cases), `TestPlanDigestUnaffectedByPlanDigestField` — all PASS (the last three added in review; see §12).
+
+Re-run after the review-driven additions in §12: `go build ./...` clean; `go vet ./...` clean; `go test -count=1 ./...` — all 26 packages pass, 0 failures, including `TestValidFixturesValidate/setup-plan.valid-manual-action.json` and `TestInvalidFixturesAreRejected/setup-plan.invalid-mixed-manual-and-executable-action.json`.
 
 ## 9. Non-goals / forbidden changes for this WP
 
@@ -182,4 +184,14 @@ None triggered. If a future session finds a WP-M3B-1-level type actually contrad
 
 ## 11. Disposition
 
-**WP-M3B-1 is accepted at this checkpoint.** No implementation code changes were required; the existing `internal/protocol/setup.go` (plus `schemas/setup-plan.schema.json` and `fixtures/protocol/setup-plan.*.json`) already satisfies every deliverable and acceptance criterion in the scope card, verified fresh in §8 above. This EWP itself, plus the verification run, is the checkpoint artifact.
+**WP-M3B-1 is accepted at this checkpoint**, as of the revision incorporating §12 below. The core typed-operation/condition/plan design required no implementation code changes — the existing `internal/protocol/setup.go` already satisfied it, verified fresh in §8. Three checkpoint gaps identified by independent review (§12) — status wording that claimed acceptance before review had happened, an under-specified digest-coverage test, and a literal fixture-coverage shortfall — were closed with new tests and fixtures, not a design change.
+
+## 12. Independent review disposition
+
+[PR #10 review comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5805285148) (project owner, 2026-09-24) is this WP's required independent per-WP checkpoint review (`AGENT_HANDOFF_PROTOCOL.md`'s "Per-WP checkpoints and review"). It found no defect in the underlying type/policy design, and three blocking checkpoint issues, all addressed in this revision:
+
+1. **Premature "accepted" wording.** The original revision of this EWP, `HANDOFF.md`, and the PR body all said "accepted" while stating in the same breath that independent review hadn't happened — directly contradicting `AGENT_HANDOFF_PROTOCOL.md`'s "later WPs... start from that accepted checkpoint, not from an unreviewed one." Fixed: this review comment *is* the independent review; the checkpoint is only marked `accepted` in this revision, which incorporates its findings. `HANDOFF.md` and the PR description are updated to match.
+2. **Digest field-coverage was asserted, not proven.** `TestSetupPlanValidationAndDigest` tampered only `Target`; nothing made "the digest covers every field" a structural guarantee against a future field added to `SetupPlan` but not to the internal `setupPlanDigestView` mirror. Fixed: `internal/protocol/setup_digest_contract_test.go` adds `TestPlanDigestViewFieldParity` (reflection-based: the two structs' JSON field sets must match exactly except for `plan_digest`), `TestPlanDigestChangesForEveryField` (table-driven mutation of every top-level `SetupPlan` field plus two nested `SetupAction` fields, each asserted to change the digest from a common baseline), and `TestPlanDigestUnaffectedByPlanDigestField` (explicitly proves the current value of `plan_digest` never feeds back into `ComputePlanDigest`).
+3. **Fixture corpus didn't literally cover the manual-action shape or the mixed-shape rejection.** Only `setup-plan.valid.json` (executable-only) and `setup-plan.invalid-target.json` existed; the original EWP substituted Go-level test coverage and declared it equivalent, which the review correctly identified as quietly weakening an explicit scope-card criterion rather than satisfying it. Fixed: added `fixtures/protocol/setup-plan.valid-manual-action.json` (a schema-valid plan whose only action is `high_impact_manual`/`manual_instructions`, digest computed via `protocol.ComputePlanDigest` and wired into `tests/schema_fixtures_test.go`'s round-trip table) and `fixtures/protocol/setup-plan.invalid-mixed-manual-and-executable-action.json` (a plan whose one action sets both `operation` and `manual_instructions`, rejected by `schemas/setup-plan.schema.json`'s existing `oneOf` — confirmed via `TestInvalidFixturesAreRejected`).
+
+The review's "other observations" (no PR-attached CI, so `go build`/`go vet`/`go test` evidence in §8 is session-reported rather than CI-recorded) is accurate and not a defect to fix — this repository has no PR-triggered CI configured; the EWP already described the evidence as this session's own run, not as CI-confirmed.

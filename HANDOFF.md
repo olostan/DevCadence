@@ -1,9 +1,9 @@
 # Handoff — M3B guided bootstrap (feat/m3b-guided-bootstrap)
 
-Last updated: 2026-09-24T00:00:00Z by Claude Code / Sonnet 5 (cloud session, olostan@gmail.com)
+Last updated: 2026-09-24T00:40:00Z by Claude Code / Sonnet 5 (cloud session, olostan@gmail.com)
 
 Session takeover HEAD: `a38b293` (origin/main HEAD when this session started — branch did not exist yet)
-Expected remote HEAD before next push: `4b006d3` (this session's EWP-commit push — advance this after every successful push)
+Expected remote HEAD before next push: `1e5b8bf` (advance this after every successful push — see "Git safety rules" in AGENT_HANDOFF_PROTOCOL.md)
 
 ## Milestone
 
@@ -55,7 +55,7 @@ file-backed ledger that writes it).
 
 | WP | Status | Checkpoint | Validation | Review |
 |----|--------|------------|------------|--------|
-| WP-M3B-1 | accepted | `4b006d3` | `go build ./...`, `go vet ./...`, `go test -count=1 ./...` all PASS (see EWP §8) | not yet independently reviewed — EWP + fresh verification only |
+| WP-M3B-1 | accepted | `95c5ec2` (this commit) | `go build ./...`, `go vet ./...`, `go test -count=1 ./...` all PASS (see EWP §8) | independent review complete — [PR #10 comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5805285148) (owner), 3 findings, all addressed in EWP §12 |
 | WP-M3B-2 | not started | — | — | — |
 | WP-M3B-3 | unknown — likely partially pre-existing, unverified | — | — | blocked on WP-M3B-2; assess `internal/setup/planner.go` first |
 | WP-M3B-4 | not started | — | — | blocked on WP-M3B-3 |
@@ -70,22 +70,26 @@ until the whole milestone closes.)
 
 ## Currently in progress: none — WP-M3B-1 is closed out for this session
 
-- **EWP status:** committed at `4b006d3` (`docs/work-packages/wp-m3b-1-ewp.md`).
+- **EWP status:** committed at `4b006d3`, revised in place (same file,
+  new commit — not force-pushed/amended over the already-pushed `4b006d3`)
+  to incorporate independent review findings; see EWP §12 and
+  [PR #10 comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5805285148).
 - **Base commit this WP started from:** `a38b293` (origin/main).
-- **What's implemented so far:** nothing new — WP-M3B-1's scope was already
-  satisfied by pre-existing `main` code (see EWP §1 "Provenance"). The EWP
-  itself is the deliverable of this session's work on WP-M3B-1.
+- **What's implemented so far:** the EWP itself (checkpoint artifact), plus
+  three review-driven additions layered on top of the pre-existing
+  `main` code (see EWP §12): `internal/protocol/setup_digest_contract_test.go`
+  (structural digest-coverage proof), `fixtures/protocol/setup-plan.valid-manual-action.json`,
+  and `fixtures/protocol/setup-plan.invalid-mixed-manual-and-executable-action.json`
+  (wired into `tests/schema_fixtures_test.go`'s round-trip table).
 - **What's verified:** `go build ./...` clean; `go vet ./...` clean;
   `go test -count=1 ./...` — all 26 packages pass, 0 failures, including
-  every WP-M3B-1 acceptance-criteria test named in the EWP §7 table. Not
-  yet run: `go test -race ./...` (WP-M3B-9's deliverable per its scope
-  card, but worth a spot-check by whoever opens WP-M3B-2 against a mutable
-  ledger/lock, since races are exactly what that WP needs to get right).
-- **What's left for this WP:** nothing — WP-M3B-1 is done. A dedicated
-  independent correctness/security review of the EWP (this branch's own
-  per-WP checkpoint review, per `AGENT_HANDOFF_PROTOCOL.md`'s "Per-WP
-  checkpoints and review") has not happened yet; it can happen any time
-  before milestone closure, in parallel with later WPs starting.
+  every WP-M3B-1 acceptance-criteria test named in the EWP §7 table and
+  the three new digest-contract tests. Not yet run: `go test -race ./...`
+  (WP-M3B-9's deliverable per its scope card, but worth a spot-check by
+  whoever opens WP-M3B-2 against a mutable ledger/lock, since races are
+  exactly what that WP needs to get right).
+- **What's left for this WP:** nothing — WP-M3B-1 is accepted. Independent
+  per-WP checkpoint review happened and its findings are closed (EWP §12).
 - **Known blockers / open questions:** none for WP-M3B-1 itself. The open
   question for the *milestone* is the one flagged above: how much of
   WP-M3B-3/5/6 is already done in `internal/setup/*.go` and just needs the
