@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/olostan/DevCadence/internal/clock"
+	"github.com/olostan/DevCadence/internal/errs"
 	"github.com/olostan/DevCadence/internal/process"
 	"github.com/olostan/DevCadence/internal/protocol"
 )
@@ -82,6 +83,61 @@ func versionOrHelpOnlyArgs(args []string) bool {
 	}
 	return false
 }
+
+// AuthProbeDefinition is a closed declaration that a specific argv is a
+// provider's authoritative auth-status command — the only thing that can
+// grant a BoundedCLIAuthAdapter's result probe_kind: cli_auth_call /
+// status: authenticated authority.
+//
+// It can only be produced by NewAuthProbeDefinition (or MustAuthProbeDefinition):
+// its one field is unexported, so a caller cannot manufacture that authority
+// merely by assigning a []string to a public struct field — the WP4 threat
+// model requires auth probe commands to be "hardcoded, typed command
+// definitions or registered adapters", not an arbitrary argv whose
+// authority is inferred after the fact (independent-review follow-up on
+// WP-M3B-4, finding 1, third round: negative version/help filtering alone
+// left every *other* successful command implicitly authoritative). This
+// does not, and cannot, prove that a given command is actually a
+// provider's real auth-status check — no runtime mechanism can — but it
+// does make "I am declaring this argv as authoritative" a deliberate,
+// validated act of trusted adapter-construction code, not an incidental
+// field assignment reachable from anywhere.
+type AuthProbeDefinition struct {
+	args []string
+}
+
+// NewAuthProbeDefinition declares args as an authoritative auth-status
+// command. It refuses an empty argv and a version/help-shaped argv, since
+// neither can ever be authoritative (ADR-0014 §6).
+func NewAuthProbeDefinition(args []string) (AuthProbeDefinition, error) {
+	if len(args) == 0 {
+		return AuthProbeDefinition{}, errs.New(errs.CategoryInvalidArgument,
+			"credentials: an auth probe definition requires at least one argument")
+	}
+	if versionOrHelpOnlyArgs(args) {
+		return AuthProbeDefinition{}, errs.New(errs.CategoryInvalidArgument,
+			"credentials: auth probe definition %v looks like a version/help invocation, which can never be authoritative (use VersionOnlyAdapter instead)", args)
+	}
+	return AuthProbeDefinition{args: append([]string(nil), args...)}, nil
+}
+
+// MustAuthProbeDefinition is NewAuthProbeDefinition for package-level
+// variable initialization, where a caller can't propagate an error —
+// mirroring the standard library's regexp.MustCompile convention. It
+// panics on the same conditions NewAuthProbeDefinition refuses.
+func MustAuthProbeDefinition(args []string) AuthProbeDefinition {
+	def, err := NewAuthProbeDefinition(args)
+	if err != nil {
+		panic(err)
+	}
+	return def
+}
+
+// Args returns a defensive copy of the declared argv.
+func (d AuthProbeDefinition) Args() []string { return append([]string(nil), d.args...) }
+
+// IsZero reports whether d was never constructed via NewAuthProbeDefinition.
+func (d AuthProbeDefinition) IsZero() bool { return d.args == nil }
 
 // VersionOnlyAdapter handles CLIs where only installation/version checking is known.
 // Per ADR-0014 §6, running --version can NEVER produce status "authenticated".
@@ -168,8 +224,13 @@ type BoundedCLIAuthAdapter struct {
 	Handle string
 	// ExecutablePath is what is actually started. See
 	// VersionOnlyAdapter.ExecutablePath.
-	ExecutablePath      string
-	ProbeArgs           []string
+	ExecutablePath string
+	// Probe is the authoritative auth-status argv, declared via
+	// NewAuthProbeDefinition/MustAuthProbeDefinition — never a bare
+	// []string field, so granting cli_auth_call/authenticated authority is
+	// always a deliberate, validated construction step (finding 1, third
+	// round; see AuthProbeDefinition's doc comment).
+	Probe               AuthProbeDefinition
 	UnauthenticatedMsgs []string
 	// Env is the process environment used for execution. See
 	// VersionOnlyAdapter.Env.
@@ -185,24 +246,24 @@ func (a *BoundedCLIAuthAdapter) Handles(locator string) bool {
 func (a *BoundedCLIAuthAdapter) ProbeAuth(ctx context.Context, runner CommandRunner, clk clock.Clock, ref protocol.CredentialRef) protocol.AuthEvidence {
 	now := protocol.NewTimestamp(clk.Now())
 
-	// A ProbeArgs shape that is itself a version/help invocation can never
-	// be an authoritative auth check, no matter what exit code it returns.
-	// This is enforced here, at the moment evidence would be produced,
-	// rather than trusted of whoever configured ProbeArgs (finding 3).
-	versionOnly := versionOrHelpOnlyArgs(a.ProbeArgs)
-	probeKind := protocol.AuthProbeCLIAuthCall
-	if versionOnly {
-		probeKind = protocol.AuthProbeCLIVersionOnly
-	}
-
 	evidence := protocol.AuthEvidence{
 		SchemaVersion: protocol.SchemaVersion1,
 		RefID:         ref.RefID,
 		Kind:          ref.Kind,
-		ProbeKind:     probeKind,
+		ProbeKind:     protocol.AuthProbeCLIAuthCall,
 		ObservedAt:    now,
 		ProbeTarget:   a.Handle,
 		AdapterID:     a.ID,
+	}
+
+	// An adapter with no validly-declared Probe (the zero value, e.g. a
+	// bare struct literal that never called NewAuthProbeDefinition) has no
+	// authoritative command to run at all — refuse to probe rather than
+	// treat a missing/invalid declaration as an accidentally-empty argv.
+	if a.Probe.IsZero() {
+		evidence.Status = protocol.AuthStatusUnavailable
+		evidence.Detail = "adapter has no declared authoritative auth probe"
+		return evidence
 	}
 
 	if runner == nil {
@@ -211,10 +272,11 @@ func (a *BoundedCLIAuthAdapter) ProbeAuth(ctx context.Context, runner CommandRun
 		return evidence
 	}
 
+	probeArgs := a.Probe.Args()
 	executable, env := resolveExecSpec(a.Handle, a.ExecutablePath, a.Env)
 	spec := process.Spec{
 		Executable: executable,
-		Args:       a.ProbeArgs,
+		Args:       probeArgs,
 		Dir:        "/",
 		Env:        env,
 		Timeout:    10 * time.Second,
@@ -263,14 +325,10 @@ func (a *BoundedCLIAuthAdapter) ProbeAuth(ctx context.Context, runner CommandRun
 		}
 	}
 
-	if versionOnly {
-		// ProbeArgs resolved to a version/help invocation: exit 0 proves
-		// installation, never authentication (ADR-0014 §6), the same
-		// invariant VersionOnlyAdapter enforces structurally.
-		evidence.Status = protocol.AuthStatusIndeterminate
-		evidence.Detail = "probe_args resolve to a version/help invocation; software is installed, but version output cannot establish authentication"
-		return evidence
-	}
+	// versionOrHelpOnlyArgs can never be true here: NewAuthProbeDefinition
+	// refuses to construct a version/help-shaped Probe in the first place,
+	// so a.Probe.Args() is already guaranteed authoritative-shaped by the
+	// time evidence is produced.
 
 	evidence.Status = protocol.AuthStatusAuthenticated
 	evidence.Detail = "session verified via CLI auth probe"

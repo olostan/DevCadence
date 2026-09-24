@@ -329,7 +329,7 @@ See [COGNITION_PORTFOLIO.md](COGNITION_PORTFOLIO.md) and [ADR-0018](adr/0018-ada
 Key architectural boundaries:
 - `CredentialRef != CognitionEndpoint != AccessChannel != Session != Account != EconomicRegime != CognitionPortfolio`;
 - environment variable resolution is presence-only via `os.LookupEnv` without value retention or length inspection;
-- CLI session discovery: `--version` proves installation only, never authentication — enforced structurally at evaluation time, so a probe command that resolves to a version/help invocation can never be reported as `authenticated` regardless of how the probing adapter was configured;
+- CLI session discovery: `--version` proves installation only, never authentication — `BoundedCLIAuthAdapter`'s probe argv can only be granted `cli_auth_call` authority via the closed `AuthProbeDefinition` type (constructed only by a validated function that refuses empty and version/help-shaped argv), so no arbitrary caller-supplied command, and no bare struct literal, can acquire that authority implicitly;
 - CLI adapters separate the opaque logical CLI identity matched against `CredentialRef.locator` from the executable path/PATH-resolved name actually started, so `process.Runner`'s controlled environment (`docs/SECURITY.md` §5) applies to real CLI execution, not only to a test double;
 - subprocess boundary: `process.Spec.Args` and `process.Spec.Env` are strictly guarded against secret injection, by prefix/keyword shape rather than length, so ordinary long values (e.g. `PATH`) are not misclassified as credentials;
 - authentication operations emit zero raw output artifacts, and hostile probe output is discarded rather than logged.

@@ -483,6 +483,16 @@ func TestSchemaSecretPatternParity(t *testing.T) {
 		{"detail secret-shaped and within length is still rejected", protocol.AuthEvidence{SchemaVersion: protocol.SchemaVersion1, RefID: "cred-001", Kind: protocol.CredRefCLISession, Status: protocol.AuthStatusIndeterminate, ProbeKind: protocol.AuthProbeCLIVersionOnly, ObservedAt: ts, Detail: "sk-ant-" + strings.Repeat("a", 200)}},
 		{"adapter_id at 128-byte limit is accepted", protocol.AuthEvidence{SchemaVersion: protocol.SchemaVersion1, RefID: "cred-001", Kind: protocol.CredRefCLISession, Status: protocol.AuthStatusIndeterminate, ProbeKind: protocol.AuthProbeCLIVersionOnly, ObservedAt: ts, AdapterID: strings.Repeat("a", 128)}},
 		{"adapter_id over 128-byte limit is rejected", protocol.AuthEvidence{SchemaVersion: protocol.SchemaVersion1, RefID: "cred-001", Kind: protocol.CredRefCLISession, Status: protocol.AuthStatusIndeterminate, ProbeKind: protocol.AuthProbeCLIVersionOnly, ObservedAt: ts, AdapterID: strings.Repeat("a", 129)}},
+		// Unicode boundary parity (independent-review follow-up on
+		// WP-M3B-4, finding 2, third round): Go's len(string) counts UTF-8
+		// bytes, but JSON Schema's maxLength counts Unicode characters/code
+		// points. "é" is 2 UTF-8 bytes but 1 schema character, so these
+		// cases would previously disagree at the boundary if Go used
+		// len() instead of utf8.RuneCountInString.
+		{"probe_target 256 multi-byte runes at the limit is accepted", protocol.AuthEvidence{SchemaVersion: protocol.SchemaVersion1, RefID: "cred-001", Kind: protocol.CredRefCLISession, Status: protocol.AuthStatusIndeterminate, ProbeKind: protocol.AuthProbeCLIVersionOnly, ObservedAt: ts, ProbeTarget: strings.Repeat("é", 256)}},
+		{"probe_target 257 multi-byte runes over the limit is rejected", protocol.AuthEvidence{SchemaVersion: protocol.SchemaVersion1, RefID: "cred-001", Kind: protocol.CredRefCLISession, Status: protocol.AuthStatusIndeterminate, ProbeKind: protocol.AuthProbeCLIVersionOnly, ObservedAt: ts, ProbeTarget: strings.Repeat("é", 257)}},
+		{"detail 512 multi-byte runes at the limit is accepted", protocol.AuthEvidence{SchemaVersion: protocol.SchemaVersion1, RefID: "cred-001", Kind: protocol.CredRefCLISession, Status: protocol.AuthStatusIndeterminate, ProbeKind: protocol.AuthProbeCLIVersionOnly, ObservedAt: ts, Detail: strings.Repeat("é", 512)}},
+		{"detail 513 multi-byte runes over the limit is rejected", protocol.AuthEvidence{SchemaVersion: protocol.SchemaVersion1, RefID: "cred-001", Kind: protocol.CredRefCLISession, Status: protocol.AuthStatusIndeterminate, ProbeKind: protocol.AuthProbeCLIVersionOnly, ObservedAt: ts, Detail: strings.Repeat("é", 513)}},
 	}
 	for _, tc := range evCases {
 		t.Run("AuthEvidence/"+tc.name, func(t *testing.T) {

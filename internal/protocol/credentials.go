@@ -3,6 +3,7 @@ package protocol
 import (
 	"regexp"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/olostan/DevCadence/internal/errs"
 )
@@ -264,14 +265,21 @@ func (e AuthEvidence) Validate() error {
 		}
 	}
 
-	if len(e.ProbeTarget) > 256 {
+	// utf8.RuneCountInString, not len(): ProbeTarget/Detail are free text
+	// (unlike the ASCII-regex-constrained ref_id/locator/adapter_id
+	// fields), and JSON Schema's maxLength counts Unicode
+	// characters/code points, not UTF-8 bytes. Using len() here would
+	// reject Unicode text the schema accepts — e.g. 200 "é" characters is
+	// 400 UTF-8 bytes but 200 schema characters (independent-review
+	// follow-up on WP-M3B-4, finding 2, third round).
+	if utf8.RuneCountInString(e.ProbeTarget) > 256 {
 		return errs.New(errs.CategoryInvalidArgument, "%s: probe_target exceeds maximum length of 256", kind)
 	}
 	if LooksLikeSecret(e.ProbeTarget) {
 		return errs.New(errs.CategoryInvalidArgument, "%s: probe_target looks like a secret value", kind)
 	}
 
-	if len(e.Detail) > 512 {
+	if utf8.RuneCountInString(e.Detail) > 512 {
 		return errs.New(errs.CategoryInvalidArgument, "%s: detail exceeds maximum length of 512", kind)
 	}
 	if LooksLikeSecret(e.Detail) {

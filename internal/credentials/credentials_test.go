@@ -203,24 +203,24 @@ func TestCLIAuthProbeSuccessAndFailure(t *testing.T) {
 		&credentials.BoundedCLIAuthAdapter{
 			ID:                  "claude-auth",
 			Handle:              "claude",
-			ProbeArgs:           []string{"auth", "status"},
+			Probe:               credentials.MustAuthProbeDefinition([]string{"auth", "status"}),
 			UnauthenticatedMsgs: []string{"not logged in", "login required"},
 		},
 		&credentials.BoundedCLIAuthAdapter{
 			ID:                  "codex-auth",
 			Handle:              "codex",
-			ProbeArgs:           []string{"auth", "status"},
+			Probe:               credentials.MustAuthProbeDefinition([]string{"auth", "status"}),
 			UnauthenticatedMsgs: []string{"not logged in"},
 		},
 		&credentials.BoundedCLIAuthAdapter{
-			ID:        "gemini-auth",
-			Handle:    "gemini",
-			ProbeArgs: []string{"auth", "status"},
+			ID:     "gemini-auth",
+			Handle: "gemini",
+			Probe:  credentials.MustAuthProbeDefinition([]string{"auth", "status"}),
 		},
 		&credentials.BoundedCLIAuthAdapter{
-			ID:        "missing-auth",
-			Handle:    "missing",
-			ProbeArgs: []string{"auth", "status"},
+			ID:     "missing-auth",
+			Handle: "missing",
+			Probe:  credentials.MustAuthProbeDefinition([]string{"auth", "status"}),
 		},
 	}
 
@@ -306,9 +306,9 @@ func TestHostileAuthProbeOutputNeverLeaks(t *testing.T) {
 	}
 
 	adapter := &credentials.BoundedCLIAuthAdapter{
-		ID:        "claude-auth",
-		Handle:    "claude",
-		ProbeArgs: []string{"auth", "status"},
+		ID:     "claude-auth",
+		Handle: "claude",
+		Probe:  credentials.MustAuthProbeDefinition([]string{"auth", "status"}),
 	}
 
 	mgr, err := credentials.NewManager(credentials.Options{
@@ -603,7 +603,7 @@ func TestBoundedCLIAuthAdapterUnrecognizedFailureIsIndeterminate(t *testing.T) {
 	adapter := &credentials.BoundedCLIAuthAdapter{
 		ID:                  "flaky-auth",
 		Handle:              "flaky-cli",
-		ProbeArgs:           []string{"auth", "status"},
+		Probe:               credentials.MustAuthProbeDefinition([]string{"auth", "status"}),
 		UnauthenticatedMsgs: []string{"not logged in", "login required"},
 	}
 	mgr, err := credentials.NewManager(credentials.Options{
@@ -629,59 +629,86 @@ func TestBoundedCLIAuthAdapterUnrecognizedFailureIsIndeterminate(t *testing.T) {
 	}
 }
 
-// TestBoundedCLIAuthAdapterCannotSmuggleVersionCommandAsAuthCall proves that
-// a BoundedCLIAuthAdapter configured with a version/help-shaped ProbeArgs
-// (e.g. "--version") can never report AuthStatusAuthenticated even on a
-// successful exit, and is reclassified to the same cli_version_only probe
-// kind VersionOnlyAdapter uses — closing the gap where the exported,
-// free-form ProbeArgs field let a caller's promise ("this is an
-// authoritative auth check") substitute for a structural guarantee
-// (independent-review follow-up on WP-M3B-4, finding 3).
-func TestBoundedCLIAuthAdapterCannotSmuggleVersionCommandAsAuthCall(t *testing.T) {
-	clk := clock.NewFake(time.Date(2026, 9, 24, 10, 0, 0, 0, time.UTC), 0)
+// TestNewAuthProbeDefinitionRejectsVersionAndHelpShapes proves the
+// authoritative-probe declaration itself refuses a version/help-shaped
+// argv — the exact `--version` smuggling example a review found — at
+// construction time, before any BoundedCLIAuthAdapter could ever be built
+// from it (independent-review follow-up on WP-M3B-4, finding 1, third
+// round).
+func TestNewAuthProbeDefinitionRejectsVersionAndHelpShapes(t *testing.T) {
 	for _, probeArgs := range [][]string{
-		{"--version"}, {"-v"}, {"version"}, {"--help"}, {"-h"},
+		{"--version"}, {"-version"}, {"-v"}, {"version"},
+		{"--help"}, {"-help"}, {"-h"}, {"help"},
+		{"--VERSION"}, {" --version "}, // case/whitespace insensitive
 	} {
-		t.Run(strings.Join(probeArgs, " "), func(t *testing.T) {
-			runner := &fakeRunner{
-				results: map[string]process.Result{
-					"sneaky-cli " + strings.Join(probeArgs, " "): {
-						Status:   process.StatusCompleted,
-						ExitCode: 0,
-						Stdout:   []byte("sneaky-cli version 9.9.9\n"),
-					},
-				},
-			}
-			adapter := &credentials.BoundedCLIAuthAdapter{
-				ID:        "sneaky-auth",
-				Handle:    "sneaky-cli",
-				ProbeArgs: probeArgs,
-			}
-			mgr, err := credentials.NewManager(credentials.Options{
-				Clock:       clk,
-				Runner:      runner,
-				CLIAdapters: []credentials.CLISessionAuthAdapter{adapter},
-			})
-			if err != nil {
-				t.Fatalf("failed to create manager: %v", err)
-			}
-
-			ev, err := mgr.CheckCredential(context.Background(), protocol.CredentialRef{
-				SchemaVersion: protocol.SchemaVersion1,
-				RefID:         "cred-sneaky",
-				Kind:          protocol.CredRefCLISession,
-				Locator:       "sneaky-cli",
-			})
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
-			if ev.Status == protocol.AuthStatusAuthenticated {
-				t.Fatalf("SECURITY VIOLATION: a version/help-shaped probe (%v) established authenticated state", probeArgs)
-			}
-			if ev.ProbeKind != protocol.AuthProbeCLIVersionOnly {
-				t.Fatalf("probe_kind = %q, want cli_version_only for a version/help-shaped probe %v", ev.ProbeKind, probeArgs)
+		t.Run(strings.Join(probeArgs, "|"), func(t *testing.T) {
+			if _, err := credentials.NewAuthProbeDefinition(probeArgs); err == nil {
+				t.Fatalf("SECURITY VIOLATION: NewAuthProbeDefinition accepted a version/help-shaped argv %v", probeArgs)
 			}
 		})
+	}
+}
+
+// TestNewAuthProbeDefinitionRejectsEmpty proves an empty argv cannot be
+// declared authoritative either.
+func TestNewAuthProbeDefinitionRejectsEmpty(t *testing.T) {
+	if _, err := credentials.NewAuthProbeDefinition(nil); err == nil {
+		t.Fatal("expected NewAuthProbeDefinition(nil) to be rejected")
+	}
+	if _, err := credentials.NewAuthProbeDefinition([]string{}); err == nil {
+		t.Fatal("expected NewAuthProbeDefinition([]string{}) to be rejected")
+	}
+}
+
+// TestBoundedCLIAuthAdapterWithoutDeclaredProbeCannotAuthenticate proves the
+// structural half of the finding-1 (third round) fix: AuthProbeDefinition's
+// only field is unexported, so a BoundedCLIAuthAdapter built from a bare
+// struct literal — the exact "arbitrary command reaches cli_auth_call
+// authority" shape the review is concerned about — has no way to populate
+// Probe at all from outside this package, leaving it at its zero value.
+// That zero value must never run a command or authenticate; combined with
+// TestNewAuthProbeDefinitionRejectsVersionAndHelpShapes (the only
+// constructor refuses version/help), authority can only ever be granted by
+// a deliberate, validated NewAuthProbeDefinition call.
+func TestBoundedCLIAuthAdapterWithoutDeclaredProbeCannotAuthenticate(t *testing.T) {
+	clk := clock.NewFake(time.Date(2026, 9, 24, 10, 0, 0, 0, time.UTC), 0)
+	runner := &fakeRunner{results: map[string]process.Result{}}
+
+	// Deliberately constructed the way an attacker/careless caller would:
+	// a bare struct literal with every exported field set except Probe,
+	// which cannot be set this way.
+	adapter := &credentials.BoundedCLIAuthAdapter{
+		ID:                  "undeclared-auth",
+		Handle:              "undeclared-cli",
+		UnauthenticatedMsgs: []string{"not logged in"},
+	}
+
+	mgr, err := credentials.NewManager(credentials.Options{
+		Clock:       clk,
+		Runner:      runner,
+		CLIAdapters: []credentials.CLISessionAuthAdapter{adapter},
+	})
+	if err != nil {
+		t.Fatalf("failed to create manager: %v", err)
+	}
+
+	ev, err := mgr.CheckCredential(context.Background(), protocol.CredentialRef{
+		SchemaVersion: protocol.SchemaVersion1,
+		RefID:         "cred-undeclared",
+		Kind:          protocol.CredRefCLISession,
+		Locator:       "undeclared-cli",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if ev.Status == protocol.AuthStatusAuthenticated {
+		t.Fatal("SECURITY VIOLATION: an adapter with no declared AuthProbeDefinition reported authenticated")
+	}
+	if ev.Status != protocol.AuthStatusUnavailable {
+		t.Fatalf("status = %q, want unavailable (no authoritative probe was ever declared)", ev.Status)
+	}
+	if len(runner.calls()) != 0 {
+		t.Fatalf("runner should never have been invoked with no declared probe, got calls: %v", runner.calls())
 	}
 }
 
@@ -702,9 +729,9 @@ func TestBoundedCLIAuthAdapterAuthoritativeProbeStillAuthenticates(t *testing.T)
 		},
 	}
 	adapter := &credentials.BoundedCLIAuthAdapter{
-		ID:        "real-auth",
-		Handle:    "real-cli",
-		ProbeArgs: []string{"auth", "status"},
+		ID:     "real-auth",
+		Handle: "real-cli",
+		Probe:  credentials.MustAuthProbeDefinition([]string{"auth", "status"}),
 	}
 	mgr, err := credentials.NewManager(credentials.Options{
 		Clock:       clk,
@@ -747,9 +774,9 @@ func TestCLIAdaptersEnforceProcessSpecSecretGuard(t *testing.T) {
 		Arg:    SentinelSecret,
 	}
 	authAdapter := &credentials.BoundedCLIAuthAdapter{
-		ID:        "leaky-auth",
-		Handle:    "leaky-cli",
-		ProbeArgs: []string{SentinelSecret},
+		ID:     "leaky-auth",
+		Handle: "leaky-cli",
+		Probe:  credentials.MustAuthProbeDefinition([]string{SentinelSecret}),
 	}
 
 	for _, tc := range []struct {
@@ -860,7 +887,7 @@ func TestAdaptersExecuteViaRealProcessRunner(t *testing.T) {
 			ID:             "fake-auth",
 			Handle:         "fake-cli", // opaque handle used for CredentialRef matching only
 			ExecutablePath: scriptPath, // discovered/verified absolute path, distinct from Handle
-			ProbeArgs:      []string{"auth", "status"},
+			Probe:          credentials.MustAuthProbeDefinition([]string{"auth", "status"}),
 			Env:            process.BaseEnv(),
 		}
 		mgr, err := credentials.NewManager(credentials.Options{
