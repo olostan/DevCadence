@@ -48,7 +48,7 @@ relitigation), ADR-0011, ADR-0013, `docs/ENVIRONMENT_INTELLIGENCE_AND_ONBOARDING
 in that order — before expanding WP-M3B-1.
 
 Dependency chain: WP1 → WP2 → WP3 → {WP4, WP5, WP6 in any order} → WP7 →
-WP8 → WP9. WP4–WP6 have no dependency on each other and may be completed in
+WP8. WP4–WP6 have no dependency on each other and may be completed in
 any order; under this protocol's single-writer model they are still
 implemented one at a time, not concurrently — see
 `AGENT_HANDOFF_PROTOCOL.md`'s "Concurrency model."
@@ -232,122 +232,127 @@ resolvable digest fails plan generation rather than planning an
 under-specified action; license metadata is present for every
 install-class operation.
 
-### WP-M3B-7 — CLI surface (non-interactive/plain/JSON first)
+### WP-M3B-7 — CLI surface and minimal guided interaction
 
-**Objective:** own **all public command registration** for `devcadence
-doctor` / `devcadence setup`, wiring WP-M3B-3's and WP-M3B-5's service APIs
-(plus WP-M3B-1/2/4/6 underneath them) to actual commands — non-interactive
-and `--json` modes first. The TUI (WP-M3B-8) layers on top of this, not the
-other way around. This WP is the single owner of: command/flag parsing,
-the `--fix` flag, `setup plan`/`setup apply` command registration, plain/
-JSON output presentation, the exit-code contract, help text, and `--no-tui`
-(accepted as a no-op here since there's no TUI yet — WP-M3B-8 makes it a
-real flag).
+**Objective:** own all public command registration for `devcadence doctor` /
+`devcadence setup`, wiring WP-M3B-3's and WP-M3B-5's service APIs (plus
+WP-M3B-1/2/4/6 underneath them) to actual commands. M3B requires a safe,
+usable plain/JSON/basic-terminal surface, not the final rich adaptive setup UI.
 
 **Deliverables:**
-- `devcadence doctor` command (plain and `--json` output), including the
-  `--fix` flag calling WP-M3B-5's plan-generation behavior.
-- `devcadence setup plan` / `devcadence setup apply` commands, calling
-  WP-M3B-3's service API — this WP owns parsing/presentation only, not the
-  approval semantics WP-M3B-3 already implemented.
-- Help text documenting the two-step approval workflow; a defined exit-code
-  contract.
-- Non-interactive mode emits no control sequences of any kind, verified by
-  fixture.
+- `devcadence doctor` command (plain and `--json` output), including
+  `--fix` calling WP-M3B-5's plan-generation behavior;
+- `devcadence setup plan` / `devcadence setup apply` commands calling
+  WP-M3B-3's service API;
+- help text documenting the two-step approval workflow and a defined exit-code
+  contract;
+- minimal confirmations where interactive approval is required, with SSH/basic
+  terminal fallback;
+- non-interactive mode emits no control sequences and remains fully usable;
+- `--no-tui` may remain a compatibility/no-op flag until M3D adds the richer
+  adaptive terminal experience.
 
-**Acceptance criteria:** every command has a `--json` mode whose output
-validates against a published schema; help output documents the two-step
-approval workflow; exit codes distinguish "nothing to do," "plan
-generated," "drift detected, refresh needed," and "execution failed"; no
-approval/precondition/readiness logic is duplicated here that WP-M3B-3/5
-already implemented — this WP calls it, it does not reimplement it.
+**MUST:** the CLI is a rendering/argument layer only. Approval, readiness,
+credential and remediation semantics remain in their owning services. Do not
+introduce Huh/Bubble Tea/Lip Gloss as an M3B completion dependency.
 
-### WP-M3B-8 — Terminal UX
+**Acceptance criteria:** every machine-readable command has `--json` output
+validated by schema; help documents approval; exit codes distinguish no-op,
+plan generated, drift/refresh required and execution failure; plain/SSH
+operation works; no control sequences appear in non-interactive output; no
+service semantics are duplicated in command code.
 
-**Objective:** the compact terminal UX using Huh v2 with Bubble Tea v2/Lip
-Gloss v2, per `docs/IMPLEMENTATION_PLAN.md`'s M3B deliverables list — this
-is new external-dependency surface with no ADR precedent yet in this repo,
-so budget more iteration than the other WPs.
+### WP-M3B-8 — Verification suite and docs sync
 
-**Deliverables:**
-- Interactive `doctor`/`setup` flows using Huh v2 for prompts/approval,
-  Bubble Tea v2/Lip Gloss v2 where richer dynamic rendering
-  (progress, live ledger tail) is warranted.
-- SSH/plain-terminal fallback and `--no-tui` becomes a real flag (not the
-  WP-M3B-7 no-op).
-- Accessible-mode behavior (no reliance on color/motion alone for meaning).
-
-**Acceptance criteria:** the interactive flow and the non-interactive
-(`--json`/`--no-tui`) flow produce the same underlying `SetupPlan`/
-execution result for the same inputs — the TUI is a rendering layer, not a
-second code path with independent logic; SSH/basic-terminal smoke test
-passes; non-interactive mode still emits zero control sequences (repeat
-the WP-M3B-7 fixture against the TUI build to catch a regression).
-
-### WP-M3B-9 — Verification suite and docs sync
-
-**Objective:** close the milestone. Full verification suite across the
-fixture matrix `docs/IMPLEMENTATION_PLAN.md`'s M3B section already
-specifies, and required documentation synchronization (AGENTS.md §14 —
-"an implementation that changes behavior but leaves normative docs
-misleading is not done").
+**Objective:** close the deterministic-bootstrap milestone. Full verification
+across the fixture matrix and synchronization of normative docs.
 
 **Deliverables:**
-- Fixture coverage for: blank machine with no optional AI software; dry-run
-  shows every planned mutation; privileged/high-impact changes require
-  explicit approval; interrupted setup re-runs safely (exercises
-  WP-M3B-2's recovery path end-to-end through the real CLI); existing
-  usable tools preferred over unnecessary installation; non-interactive
-  mode emits no TUI control sequences; SSH/TTY/basic-terminal behavior;
-  readiness summary correctly reports reduced capability rather than
-  generic failure.
-- `docs/IMPLEMENTATION_PLAN.md`: flip M3B's status from "not implemented"
-  to "implemented," matching the M3A section's own precedent for how that
-  status update should read (cite the actual test names that satisfy the
-  exit criterion, as M3A's own entry does).
-- `docs/SETUP.md`: update the "remain intended M3B behaviour" framing to
-  describe what's actually implemented.
-- `README.md`/`INVARIANTS.md`: spot-check for anything M3B changes that
-  needs reflecting there.
-- `HANDOFF.md` stays through review/repair per `AGENT_HANDOFF_PROTOCOL.md`
-  — this WP only gets the candidate to "ready for review." It is removed
-  later, as part of preparing the final closure candidate (*before* that
-  candidate is frozen, not as post-freeze cleanup), which is closure work,
-  not this WP's.
+- fixture coverage for blank machine; dry-run mutation visibility;
+  privileged/high-impact approval; interrupted setup recovery through the real
+  CLI; preference for existing usable tools; plain/non-interactive operation;
+  SSH/basic-terminal behavior; and readiness/resource-inventory degradation
+  rather than generic failure;
+- `docs/IMPLEMENTATION_PLAN.md`: mark M3B implemented with cited test evidence;
+- `docs/SETUP.md`: describe implemented M3B behavior and clearly defer rich
+  adaptive onboarding to M3D;
+- README/INVARIANTS spot-check;
+- HANDOFF.md retained through review/repair, then removed before the frozen
+  closure candidate per `AGENT_HANDOFF_PROTOCOL.md`.
 
-**Acceptance criteria:** every fixture above passes; `go test -count=1
-./... && go test -race ./... && go vet ./...` clean; the milestone's own
-exit criterion in `docs/IMPLEMENTATION_PLAN.md` is met and the entry says
-so with cited evidence, not just "done."
+**Acceptance criteria:** all fixtures pass; `go test -count=1 ./... && go
+test -race ./... && go vet ./...` clean; the M3B exit criterion is met and
+documented with evidence.
 
 ---
 
-## M3C — Adaptive cognition portfolio and workflow synthesis
+## M3C — Cognition resource and session substrate
 
-M3C starts after M3B deterministic bootstrap contracts stabilize. The user-facing setup experience may make M3B+M3C look continuous.
+M3C begins after M3B deterministic bootstrap contracts stabilize. It builds
+provider-neutral deterministic cognition/economic/session infrastructure; it
+does not yet let AI choose the portfolio.
 
-### WP-M3C-1 — Portfolio protocol and economics
-Define AccessChannel/session capabilities, EconomicRegime, BudgetPool, optional BudgetState, CognitionPortfolio, PortfolioRecommendation and schemas without overloading model identity with billing semantics.
+Branch: `feat/m3c-cognition-substrate`.
+
+### WP-M3C-1 — Portfolio protocol, economics and policy
+Define AccessChannel/session capabilities, EconomicRegime, BudgetPool,
+BudgetState/ResourceState, policy constraints, CognitionPortfolio,
+PortfolioRecommendation and WorkflowPlan protocol/schema shapes without
+overloading model identity with billing semantics.
 
 ### WP-M3C-2 — Session-driver abstraction
-Normalize model selection, structured/streaming events, resume, cancellation, worktree/tool/MCP access and usage/quota evidence across authenticated CLIs/SDKs/APIs/local runtimes. Include at least two materially different remote drivers and a fake third-adapter contract test.
+Normalize model selection, structured/streaming events, resume, cancellation,
+worktree/tool/MCP access and usage/quota evidence across authenticated
+CLIs/SDKs/APIs/local runtimes. Include at least two materially different
+drivers and a fake third-adapter contract test.
 
-### WP-M3C-3 — Deterministic portfolio validator
-Validate endpoints, capability provenance, source exposure, spending/overage, budget bindings, driver features, resource constraints and diversity claims. AI output never activates without this layer.
+### WP-M3C-3 — Deterministic portfolio validator and activation
+Validate endpoints, capability provenance, source exposure, spending/overage,
+budget bindings, driver features and resource constraints. Add versioned
+portfolio activation/persistence/rollback primitives. No AI output can bypass
+this layer later.
 
-### WP-M3C-4 — AI-assisted Portfolio Planner
-Use any sufficiently capable eligible endpoint to synthesize typed recommendations from ResourceInventory + role needs + project characteristics + policy + available historical evidence. Include rationale/tradeoffs and no authority expansion.
+### WP-M3C-4 — Substrate integration verification
+Exercise local, subscription, metered and mixed candidate portfolios; missing
+quota/resource evidence; endpoint removal; denied source exposure/spend; and
+driver capability differences. Prove a future driver can participate without
+core provider-specific changes.
 
-### WP-M3C-5 — Workflow topology planner
-Compile task/risk + portfolio + current resource state into bounded WorkflowPlan, explicitly supporting topology collapse, local-heavy iteration, subscription-diverse review and metered-budget-constrained execution.
+## M3D — Adaptive portfolio and workflow synthesis
 
-### WP-M3C-6 — Adaptation and UX
-Support portfolio explain/recommend/apply service/CLI surfaces, configuration diffs for new resources, rollback/versioning and setup integration. Later dashboard consumes the same protocols.
+M3D consumes M3C's deterministic substrate and adds AI-assisted recommendation,
+adaptive workflow topology and the richer setup/explanation UX.
 
-### WP-M3C-7 — Cross-portfolio verification
-Cover Apple/MLX, NVIDIA/local, one subscription, multiple subscriptions, paid API allowed/forbidden, mixed portfolios, endpoint loss, quota pressure and future-driver extensibility.
+Branch: `feat/m3d-adaptive-planning`.
 
-## Future milestones
+### WP-M3D-1 — AI-assisted Portfolio Planner
+Use any sufficiently capable eligible endpoint to synthesize typed alternatives
+from ResourceInventory + role needs + project characteristics + policy +
+available historical evidence. Include rationale/tradeoffs/confidence and no
+authority expansion.
+
+### WP-M3D-2 — Workflow topology planner
+Compile task/risk + active portfolio + current resource state into a bounded
+WorkflowPlan. Explicitly support topology collapse, local-heavy iteration,
+subscription-diverse review and metered-budget-constrained execution.
+
+### WP-M3D-3 — Adaptation, versioning and rollback
+Support explicit portfolio-change proposals when resources/policy/evidence
+change, with auditable diffs, deterministic revalidation, activation,
+versioning and rollback. No silent learned/policy mutation.
+
+### WP-M3D-4 — Adaptive setup and explanation UX
+Integrate recommend/explain/apply into the setup experience. Plain/JSON remains
+canonical; optional rich terminal rendering (Huh/Bubble Tea/Lip Gloss if still
+justified) presents the same underlying typed recommendation/validation path,
+never a second decision engine.
+
+### WP-M3D-5 — Cross-portfolio verification
+Cover Apple/MLX, NVIDIA/local, one subscription, multiple subscriptions,
+paid-API allowed/forbidden, mixed portfolios, endpoint loss, quota pressure,
+new-resource addition, topology collapse and future-driver extensibility.
+
+## Future milestones## Future milestones
 
 Add a new `## <Milestone>` section here, following the same shape (branch
 name, normative grounding, dependency chain, WP entries with objective/

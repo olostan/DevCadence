@@ -154,9 +154,9 @@ It is computed on demand rather than persisted; ProjectState carries a compact
 projection of it. See
 [adr/0013-environment-intelligence-and-cognition-contracts.md](adr/0013-environment-intelligence-and-cognition-contracts.md).
 
-## 3C. Adaptive cognition portfolio protocols (M3C)
+## 3C. Cognition resource/session and adaptive planning protocols (M3C/M3D)
 
-These protocol families are introduced normatively by ADR-0018; concrete Go/schema implementation lands in M3C.
+These protocol families are introduced normatively by ADR-0018. M3C owns the deterministic protocol/session/economic substrate and validation/activation boundary; M3D owns AI-assisted PortfolioRecommendation and WorkflowPlan synthesis over those types.
 
 ### ResourceInventory
 A deterministic snapshot/projection referencing MachineCapabilityProfile, cognition endpoints/capability provenance, session-driver features, host availability, credential references/auth status, configured economic/budget bindings and current resource observations where safely available. It contains no raw secrets.

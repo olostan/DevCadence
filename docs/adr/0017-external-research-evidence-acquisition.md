@@ -6,7 +6,7 @@
 - **Supersedes:** —
 - **Superseded by:** —
 - **Related invariants:** DCI-052, DCI-053 (reproducible/authoritative state), security invariants around worker network and untrusted content in docs/SECURITY.md
-- **Related tasks:** M6 — Multi-review and consultant cognition
+- **Related tasks:** M7 — Multi-review and consultant cognition
 
 ## Context
 
@@ -125,7 +125,7 @@ and evidence/provenance model changed across these revisions.
 
 ### Option A — Principal-only web research
 
-The Principal (which already has broader trust and, per M4A's design, will
+The Principal (which already has broader trust and, per M5's design, will
 eventually have `request_evidence`) is the only role allowed to trigger
 external research; execution agents never get direct access.
 
@@ -323,10 +323,10 @@ the prior revision. This revision adds one further piece, `SourceProvenance`
 (§6) — a shared embedded structure, not an eighth top-level record —
 carried by both `PolicyAssessment` and `DerivedDigest` so durable evidence
 stays auditable even on the derive-only path where no `SourceSnapshot`
-exists. A real M6
+exists. A real M7
 Consultant may *consume* an `ExternalEvidencePacket` as input evidence; it
 does not *emit* one, and the External Research service never emits a
-`ConsultationResult`. `docs/IMPLEMENTATION_PLAN.md`'s M6 section must not
+`ConsultationResult`. `docs/IMPLEMENTATION_PLAN.md`'s M7 section must not
 attach this ADR to the "at least one external consultant adapter" bullet as
 if it satisfied that deliverable — it is a sibling capability, tracked as
 its own bullet (already corrected in this PR's `IMPLEMENTATION_PLAN.md`
@@ -725,7 +725,7 @@ unwinding changes to `internal/tools`, `internal/compaction`, or
 - [ ] Work Package: `SearchRelevance`/`SnippetDigest` cognition-routing
       roles.
 - [ ] Legal review of the license-policy/SPDX-provenance approach.
-- [ ] `docs/IMPLEMENTATION_PLAN.md` M6 section: keep this as its own bullet,
+- [ ] `docs/IMPLEMENTATION_PLAN.md` M7 section: keep this as its own bullet,
       distinct from the "at least one external consultant adapter"
       deliverable (already corrected in this PR).
 - [ ] `docs/SECURITY.md`: cross-reference the Safe Source Fetcher threat

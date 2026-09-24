@@ -13,30 +13,45 @@ flowchart LR
     M0["M0<br/>Normative baseline"]
     M1["M1<br/>Domain + state core"]
     M2["M2<br/>Repository execution"]
-    M3["M3A/B<br/>Environment intelligence<br/>+ safe bootstrap"]
-    M3C["M3C<br/>Adaptive cognition<br/>portfolio + workflow"]
-    M4A["M4A<br/>Semantic MCP<br/>+ principal hosts"]
-    M4B["M4B<br/>Project adoption<br/>+ retrospective reconstruction"]
-    M5["M5<br/>Vertical slice proof"]
-    M6["M6<br/>Reviews + consultants"]
-    M7["M7<br/>Health/refactoring"]
-    M8["M8<br/>Learning/evaluation"]
-    M9["M9<br/>Autonomous campaigns"]
+    M3["M3A/B<br/>Environment intelligence<br/>+ deterministic bootstrap"]
+    M3C["M3C<br/>Cognition resource<br/>+ session substrate"]
+    M3D["M3D<br/>Adaptive portfolio<br/>+ workflow synthesis"]
+    M4["M4<br/>Adaptive vertical slice<br/>+ evidence gate"]
+    M5["M5<br/>Semantic principal<br/>+ host portability"]
+    M6["M6<br/>Project adoption<br/>+ reconstruction"]
+    M7["M7<br/>Reviews + consultants"]
+    M8["M8<br/>Health/refactoring"]
+    M9["M9<br/>Learning/evaluation"]
+    M10["M10<br/>Autonomous campaigns"]
 
-    M0 --> M1 --> M2 --> M3 --> M3C --> M4A --> M4B --> M5 --> M6 --> M7 --> M8 --> M9
+    M0 --> M1 --> M2 --> M3 --> M3C --> M3D --> M4 --> M5 --> M6 --> M7 --> M8 --> M9 --> M10
 ```
 
-M3 is internally split into M3A (environment/cognition capability), M3B
-(guided deterministic bootstrap), and M3C (adaptive cognition portfolio and
-workflow synthesis). M4 is split into M4A (principal-host connectivity) and
-M4B (brownfield project adoption). These are milestone sub-phases, not new
-top-level numbering that shifts M5-M9.
+M3 is deliberately split into four bounded phases: M3A (read-only
+environment/cognition discovery), M3B (safe deterministic bootstrap), M3C
+(provider-neutral cognition resource/session substrate), and M3D
+(AI-assisted portfolio/workflow synthesis plus the richer adaptive setup
+experience).
+
+**M4 is an evidence gate, not merely the next feature milestone.** It tests
+the central adaptive-cognition hypothesis before DevCadence invests in broad
+principal-host productization, brownfield reconstruction, and later autonomy.
+If the experiment shows that simpler workflows consume fewer scarce resources
+for equivalent accepted quality, M3D policy/topology should be revised before
+M5+ scope proceeds unchanged.
+
+M5 productizes semantic principal integration and host portability. M6 gives
+brownfield Project Adoption its own milestone rather than hiding that
+product-sized subsystem inside a host-integration phase. M7-M10 then build
+review convergence, engineering health, evaluated learning, and long-running
+campaigns in that order.
 
 An additional sub-phase, M2.5, sits between M2 and M3: it extends M2's
 repository/worktree/process/validation foundation with the module, tool,
 service-supervision and context-compaction infrastructure that M3's cognition
-runtime and M4A's execution-agent roles need. See "M2.5 — Declarative modules,
+runtime and M5's execution-agent roles need. See "M2.5 — Declarative modules,
 bounded execution tools, supervised services, and context compaction" below.
+
 
 ## M0 — Normative architecture baseline
 
@@ -435,87 +450,180 @@ runtime, no Python, no credentials and no network. The read-only proof surface i
 
 ### M3B — Guided deterministic bootstrap and onboarding
 
-**Status: in progress.** M3B owns safe discovery/cache/readiness, setup mutation, credential references, bounded runtime/model/tool recipes and terminal UX. It MUST NOT hard-code a final cognition-organization strategy.
+**Status: in progress.** M3B owns safe discovery/cache/readiness, setup
+mutation, credential references, bounded runtime/model/tool recipes and the
+minimal CLI interaction needed to use those capabilities safely. It MUST NOT
+hard-code a final cognition-organization strategy.
 
-M3B's canonical output for later recommendation is deterministic **ResourceInventory** plus readiness evidence. Deployment labels may be shown as descriptors but are not routing configuration.
+M3B's canonical output for later recommendation is deterministic
+**ResourceInventory** plus readiness evidence. Deployment labels may be shown
+as descriptors but are not routing configuration. A polished/rich interactive
+setup UI is intentionally deferred until M3D, when the portfolio semantics it
+must explain are known.
 
 #### Deliverables
 - `devcadence doctor` and `devcadence setup`;
 - safe SetupPlan / approval / ledger semantics;
-- modular discovery/remediation for hardware, local inference, cognition interfaces, principal hosts and auth;
-- runtime-agnostic local-model setup boundary with MLX-LM and Ollama as peer implementations;
+- modular discovery/remediation for hardware, local inference, cognition
+  interfaces, principal hosts and auth;
+- runtime-agnostic local-model setup boundary with MLX-LM and Ollama as peer
+  implementations;
 - credential references and reuse of existing authenticated sessions;
 - deterministic ResourceInventory + readiness projection;
-- compact terminal UX with plain/`--json`/`--no-tui` parity.
+- plain / `--json` / basic-terminal operation with minimal confirmations and
+  SSH-safe fallbacks; no rich TUI is required for M3B completion.
 
 #### Exit criterion
-A user can safely discover/configure at least one viable cognition path when possible and obtain an auditable ResourceInventory/readiness state without needing to understand accelerator/runtime/provider details.
+A user can safely discover/configure at least one viable cognition path when
+possible and obtain an auditable ResourceInventory/readiness state without
+needing to understand accelerator/runtime/provider details. The workflow is
+usable from plain terminals and automation; rich adaptive onboarding is not an
+M3B gate.
 
-### M3C — Adaptive cognition portfolio and workflow synthesis
+### M3C — Cognition resource and session substrate
 
 #### Goal
-Turn discovered resources into an explainable, policy-compliant engineering cognition organization without embedding vendor/model doctrine.
+Create the provider-neutral deterministic substrate that represents how
+cognition can be accessed, constrained, budgeted and invoked, without yet
+asking AI to choose the portfolio.
 
 #### Deliverables
-- provider-neutral AccessChannel/session-driver capabilities;
-- EconomicRegime, BudgetPool and optional BudgetState;
-- versioned CognitionPortfolio and PortfolioRecommendation;
-- spending/source-exposure/reserve/preference/diversity policy;
-- AI-assisted Portfolio Planner usable through any sufficiently capable eligible endpoint;
-- deterministic recommendation validation;
-- incremental re-recommendation when resources or evidence change;
-- task-specific Workflow Planner/topology that may collapse or expand role passes;
-- no silent subscription→metered API fallback.
+- provider-neutral AccessChannel and session-driver capability contracts;
+- EconomicRegime, BudgetPool and optional dynamic BudgetState / ResourceState;
+- explicit privacy/spending/source-exposure/reserve/preference/diversity policy;
+- versioned CognitionPortfolio / PortfolioRecommendation / WorkflowPlan
+  protocol shapes and activation/versioning primitives;
+- session-driver abstraction for authenticated CLIs/SDKs/APIs/local runtimes,
+  including model selection, structured/streaming events, resume,
+  cancellation, tool/MCP/worktree capabilities and usage/quota evidence where
+  observable;
+- deterministic portfolio validator covering endpoint identity/capability
+  provenance, source exposure, spending/overage, budget bindings, driver
+  features and resource constraints;
+- no silent subscription/local → metered API fallback.
+
+M3C is deliberately deterministic infrastructure. It may validate an explicit
+operator-authored or fixture portfolio, but AI portfolio synthesis belongs to
+M3D.
 
 #### Verification
-Exercise strong Apple Silicon + MLX, NVIDIA/local runtime, one subscription CLI/no local model, multiple subscriptions/no API spending, explicit metered API budget, mixed portfolios, no cognition endpoint, resource removal/quota constraint, and adding a new subscription. A fake third provider/session driver must participate without core role/workflow changes.
+Exercise at least two materially different real driver shapes plus a fake third
+provider/driver contract; local and remote access; subscription and metered
+economic regimes; missing/unknown quota; endpoint loss; source-exposure and
+spending denial; resume/cancellation capability differences; and a machine
+with no cognition endpoint.
 
 #### Exit criterion
-Given supported ResourceInventory and policy, DevCadence can produce and validate a useful CognitionPortfolio or explain why cognition is unavailable. No provider/model family is structurally privileged and workflow topology adapts to resources.
+Given ResourceInventory + policy + an explicit candidate portfolio, DevCadence
+can represent sessions/economics faithfully, deterministically validate or
+reject that portfolio, and explain why. No provider/model family or billing
+channel is structurally privileged.
 
-## M4 — Semantic principal integration and project adoption
-
-M4 is deliberately split so principal connectivity can be proven before the
-larger brownfield reconstruction workflow.
-
-### M4A — Semantic MCP + principal-host integration
+### M3D — Adaptive portfolio and workflow synthesis
 
 #### Goal
-Allow a frontier principal to operate through compact semantic operations
-without requiring direct repository browsing.
+Use eligible cognition to recommend how the discovered resources should be
+organized, while keeping activation authority deterministic and adapting the
+workflow topology rather than assuming more agents are always better.
+
+#### Deliverables
+- AI-assisted Portfolio Planner usable through any sufficiently capable
+  eligible endpoint;
+- typed portfolio alternatives with rationale, tradeoffs, confidence and
+  provenance;
+- deterministic validation before any recommendation can activate;
+- task-specific Workflow Planner that may collapse to one capable session or
+  expand into multiple independent roles based on task/risk/resources;
+- incremental re-recommendation when resources, policy, budget pressure or
+  evidence change;
+- explicit diff/apply/rollback/versioning for portfolio changes;
+- adaptive setup/explain UX, including optional rich terminal rendering only
+  after the portfolio semantics are stable;
+- cross-portfolio verification across local, subscription, metered and mixed
+  configurations.
+
+#### Verification
+Exercise strong Apple Silicon + MLX, NVIDIA/local runtime, one subscription
+CLI/no local model, multiple subscriptions/no API spending, explicit metered
+API budget, mixed portfolios, no cognition endpoint, resource removal/quota
+constraint, and adding a new subscription. Verify both topology expansion and
+topology collapse. A fake new provider/session driver must participate without
+core role/workflow changes.
+
+#### Exit criterion
+Given supported ResourceInventory and policy, DevCadence can recommend,
+validate and activate a useful CognitionPortfolio or explain why cognition is
+unavailable; derive a bounded task WorkflowPlan; and present the choice without
+silently expanding spending, privacy exposure or execution authority.
+
+## M4 — Adaptive cognition vertical slice and evidence gate
+
+### Goal
+Test the central product hypothesis **before** broad host/product/adoption
+investment: can adaptive allocation of heterogeneous cognition resources,
+combined with compressed engineering artifacts and deterministic controls,
+preserve or improve accepted engineering quality while reducing scarce-resource
+consumption versus simpler coding-agent workflows?
+
+M4 is intentionally allowed to use a controlled/reference orchestration
+harness. Full semantic-host portability is M5, and full brownfield adoption is
+M6; neither should block learning whether the adaptive cognition thesis is
+worth productizing.
+
+### Experiment
+Compare direct strong coding-agent and other simple baselines with
+DevCadence-generated WorkflowPlans under strong-local,
+one-subscription/no-local, multiple-subscriptions/no-paid-API, metered-remote
+and mixed local/subscription/API portfolios. The role graph need not be
+identical across scenarios, and "one capable session + deterministic checks"
+is a valid DevCadence outcome.
+
+### Measurements
+- accepted correctness, regressions and human corrections;
+- subscription/quota consumption;
+- metered API spend and token volume where observable;
+- local inference/compute use;
+- cognition invocation/session count;
+- repair/review rounds and Principal re-entry;
+- source exposure and wall time;
+- whether a simpler topology would have produced the same accepted result;
+- total resource-to-accepted-result.
+
+### Exit criterion
+DevCadence demonstrates useful outcomes across materially different portfolios
+without dependence on local inference, one provider, one subscription model or
+one fixed role topology. If adaptive orchestration routinely consumes more
+scarce resources than a simpler baseline without quality benefit, revise M3D
+routing/topology policy before broadening product scope. M4 is a real
+go/revise gate, not a ceremonial demo.
+
+## M5 — Semantic principal integration and host portability
+
+### Goal
+Productize the semantic principal boundary after the adaptive cognition
+hypothesis has passed or been revised through M4. Allow a capable principal to
+operate through compact semantic operations without requiring direct
+repository browsing.
 
 Antigravity is the reference integration. Cursor and Visual Studio Code are
 the other initial first-class principal hosts. No one host is a core-domain
 dependency.
 
-#### Deliverables
+### Deliverables
 - stdio MCP adapter with no-argument `devcadence-mcp` launch contract;
 - host-neutral semantic principal contract;
 - PrincipalHost adapter boundary;
-- first-class integration support for:
-  - Antigravity;
-  - Cursor;
-  - Visual Studio Code;
+- first-class integration support for Antigravity plus at least one of Cursor
+  or Visual Studio Code, with all three remaining intended first-class hosts;
 - host discovery/compatibility/configuration consumed from M3;
 - principal instructions/skills/rules;
-- project_state;
-- investigate;
-- create_work_package;
-- delegate;
-- task_status;
-- validate;
-- review;
-- request_evidence;
-- accept/reject;
+- semantic operations for project_state, investigate, create_work_package,
+  delegate, task_status, validate, review, request_evidence and accept/reject;
 - Discovery Principal semantic operations;
 - Day-0 persistence operations for product decisions, requirements and
   readiness.
 
-Implementation may land host adapters sequentially, but M4A is not complete
-until the semantic contract is demonstrated on the reference host and at least
-one additional first-class host, proving host portability.
-
-#### Verification
+### Verification
 - principal initializes from compact ProjectState;
 - repository is not required in strict principal workspace mode;
 - targeted source evidence retrieval works;
@@ -525,7 +633,7 @@ one additional first-class host, proving host portability.
 - Cursor or VS Code portability proof through the same semantic contract;
 - blank-host setup can guide/configure a selected supported host.
 
-#### Exit criterion
+### Exit criterion
 A principal can plan and drive one task through the semantic interface without
 directly browsing the repository, and the core contract is demonstrably not
 Antigravity-specific.
@@ -534,15 +642,17 @@ See [PRINCIPAL_HOSTS.md](PRINCIPAL_HOSTS.md),
 [ANTIGRAVITY_INTEGRATION.md](ANTIGRAVITY_INTEGRATION.md), and
 [MCP_API.md](MCP_API.md).
 
-### M4B — Project Adoption and Retrospective Reconstruction
+## M6 — Project Adoption and Retrospective Reconstruction
 
-#### Goal
+### Goal
 Allow an existing repository with absent, stale, incomplete or arbitrary
 documentation to become a trustworthy DevCadence-managed project.
 
-Repository registration alone is not readiness.
+Repository registration alone is not readiness. Project Adoption is large
+enough to own a full milestone rather than being a sub-phase of host
+integration.
 
-#### Deliverables
+### Deliverables
 - project-adoption state/workflow;
 - adoption source-commit pinning;
 - deterministic repository/document inventory;
@@ -550,26 +660,13 @@ Repository registration alone is not readiness.
 - source/test/schema/configuration contract discovery;
 - targeted Git-history archaeology;
 - ambiguity/contradiction ledger for brownfield evidence;
-- reconstruction provenance distinguishing:
-  - observed;
-  - documented;
-  - inferred;
-  - human-confirmed;
-  - reconstructed-confirmed;
-  - unknown;
-  - contradicted;
-  - accepted-risk;
-- mandatory canonical documentation baseline under
-  `docs/devcadence/` by default (or an explicitly configured committed
-  canonical root), including:
-  - VISION.md;
-  - REQUIREMENTS.md;
-  - ARCHITECTURE.md;
-  - INVARIANTS.md;
-  - SECURITY.md;
-  - TEST_STRATEGY.md;
-  - OPERATIONS.md;
-  - adr/README.md and applicable ADRs;
+- reconstruction provenance distinguishing observed, documented, inferred,
+  human-confirmed, reconstructed-confirmed, unknown, contradicted and
+  accepted-risk;
+- mandatory canonical documentation baseline under `docs/devcadence/` by
+  default (or an explicitly configured committed canonical root), including
+  VISION, REQUIREMENTS, ARCHITECTURE, INVARIANTS, SECURITY, TEST_STRATEGY,
+  OPERATIONS and applicable ADRs;
 - isolated adoption-baseline worktree/branch;
 - AdoptionDecision and Adoption Readiness Gate;
 - guard preventing normal managed implementation/acceptance/integration before
@@ -578,103 +675,59 @@ Repository registration alone is not readiness.
 Existing good native documentation should be preserved/referenced rather than
 rewritten merely for formatting consistency.
 
-#### Verification
-Synthetic brownfield repositories including:
-- no docs;
-- README only;
-- high-quality native docs;
-- stale docs contradicting code/tests;
-- tests revealing undocumented invariants;
-- recoverable historical rationale;
-- unrecoverable rationale;
-- human-authority product ambiguity;
-- required canonical artifact missing;
-- explicit NOT_APPLICABLE required artifact;
-- canonical docs generated but not committed;
-- source commit changes during reconstruction;
-- attempt to delegate normal implementation before READY;
-- successful READY transition after blockers close.
+### Verification
+Synthetic brownfield repositories including no docs, README only, high-quality
+native docs, stale docs contradicting code/tests, tests revealing undocumented
+invariants, recoverable and unrecoverable historical rationale, human-authority
+product ambiguity, required canonical artifacts missing/not-applicable,
+uncommitted generated canonical docs, source commit drift during
+reconstruction, blocked delegation before READY, and successful READY
+transition after blockers close.
 
-#### Exit criterion
+### Exit criterion
 DevCadence can take an imperfect existing repository, reconstruct an
 evidence-backed engineering contract, commit the mandatory canonical baseline,
 and refuse normal managed work until that baseline passes Adoption Readiness.
 
 See [PROJECT_ADOPTION.md](PROJECT_ADOPTION.md) and ADR-0012.
 
-## M5 — Adaptive cognition vertical slice
+## M7 — Multi-review and consultant cognition
 
 ### Goal
-Test whether adaptive allocation of heterogeneous cognition resources—combined with compressed engineering artifacts and deterministic controls—can preserve or improve accepted quality while reducing scarce-resource consumption versus a conventional linear coding-agent workflow.
-
-### Experiment
-Compare direct coding-agent baselines with DevCadence-generated WorkflowPlans under strong-local, one-subscription/no-local, multiple-subscriptions/no-paid-API, metered-remote and mixed local/subscription/API portfolios. The role graph need not be identical across scenarios.
-
-### Measurements
-- accepted correctness/regressions/human corrections;
-- subscription/quota consumption;
-- metered API spend and token volume where observable;
-- local inference/compute use;
-- cognition invocation/session count;
-- repair/review rounds and Principal re-entry;
-- source exposure and wall time;
-- whether a simpler topology would have produced the same result;
-- total resource-to-accepted-result.
-
-### Exit criterion
-DevCadence demonstrates useful outcomes across materially different portfolios without dependence on local inference, one provider, one subscription model or one fixed role topology. If adaptive orchestration routinely consumes more scarce resources than a simpler baseline without quality benefit, revise routing/topology policy before broadening autonomy.
-
-## M6 — Multi-review and consultant cognition
-
-### Goal
-Add cognitive diversity where it has leverage.
+Add cognitive diversity where it has leverage, with bounded convergence rather
+than an AI committee that can reopen work forever.
 
 ### Deliverables
 - multiple review dimensions;
 - bounded ReviewCampaign orchestration;
 - FindingDisposition adjudication;
 - rising reopen thresholds and repair-round limits, including enforcement of
-  the per-task retry bound M1 records but does not yet apply
-  (`TaskDelegated.max_attempts`; see ADR-0004 §3a);
+  `TaskDelegated.max_attempts`;
 - focused revalidation and ClosureDecision freeze semantics;
 - reviewer finding budgets and compact review-state handoff;
-- disagreement reports;
-- risk-based review policy;
+- disagreement reports and risk-based review policy;
 - consultant abstraction;
-- at least one external consultant adapter — a real independent-reasoning
-  adapter under `ConsultationRequest`/`ConsultationResult`
-  (docs/CONSULTANTS.md), not evidence acquisition;
-- optional external research / evidence-acquisition service — see
-  [adr/0017-external-research-evidence-acquisition.md](adr/0017-external-research-evidence-acquisition.md)
-  (status: Proposed) for a candidate design: a bounded, license-aware,
-  fail-closed-by-default service (distinct from the Consultant abstraction
-  above) letting execution-cognition roles look up external code/API/
-  documentation facts through `ExternalResearchRequest`/
-  `ExternalEvidencePacket`, with a safe remote-acquisition boundary, local-
-  first cognition routing for reranking/digesting, and per-project egress/
-  license/cache policy. Optional; not required for M6's other deliverables,
-  and not a substitute for the external consultant adapter above;
+- at least one real external consultant adapter under
+  `ConsultationRequest`/`ConsultationResult`, distinct from evidence
+  acquisition;
+- optional external research/evidence-acquisition service per ADR-0017,
+  distinct from the consultant abstraction and not required for M7's other
+  deliverables;
 - anti-anchoring independent-consultation mode;
 - Design Readiness Gate;
-- independent specification-review dimensions and consultant-assisted ambiguity discovery;
+- independent specification-review dimensions and consultant-assisted
+  ambiguity discovery;
 - Specification Readiness evaluation using local/consultant review evidence.
 
 ### Verification
-- seeded defect suite;
-- parallel reviewers inspect the same immutable candidate;
-- duplicate findings are deduplicated before repair;
-- one consolidated Repair Work Package is produced per round;
-- focused revalidation does not restart broad review;
-- closure review reports only threshold-crossing issues;
-- frozen campaign rejects opinion-only reopening;
-- materially new evidence can reopen a frozen campaign;
-- repair-round limit escalates rather than loops forever;
-- disagreement routing;
-- blind consultant request;
-- consultant unavailable behavior;
-- security/redaction policy.
+Seeded defect suite; parallel reviewers on the same immutable candidate;
+deduplication before repair; one consolidated repair package per round;
+focused revalidation without broad-review restart; thresholded closure;
+frozen-campaign reopening only for materially new evidence; repair-round
+escalation; disagreement routing; blind consultant request; consultant
+unavailable behavior; and security/redaction policy.
 
-## M7 — Engineering health and refactoring
+## M8 — Engineering health and refactoring
 
 ### Goal
 Prevent feature throughput from degrading architecture.
@@ -688,17 +741,14 @@ Prevent feature throughput from degrading architecture.
 - refactoring Work Package templates.
 
 ### Verification
-Seed a fixture project with intentional smells and verify:
-- detection;
-- epoch planning;
-- behavior-preserving refactor;
-- full regression;
-- before/after health comparison.
+Seed a fixture project with intentional smells and verify detection, epoch
+planning, behavior-preserving refactor, full regression and before/after health
+comparison.
 
-## M8 — Learning and evaluation
+## M9 — Learning and evaluation
 
 ### Goal
-Improve the engineering system from evidence.
+Improve the engineering system from evidence without hidden policy mutation.
 
 ### Deliverables
 - trajectory manifests;
@@ -707,21 +757,21 @@ Improve the engineering system from evidence.
 - prompt/portfolio/workflow routing experiments;
 - promotion/rollback;
 - endpoint-access-role-task outcome metrics;
-- resource-to-accepted-result metrics across subscription, API and local regimes;
-- evaluated recommendations for portfolio changes without silent policy mutation.
+- resource-to-accepted-result metrics across subscription, API and local
+  regimes;
+- evaluated recommendations for portfolio changes without silent policy
+  mutation.
 
 ### Verification
-Demonstrate one evaluated improvement:
-- candidate derived from real failure;
-- replay/evaluation;
-- versioned promotion;
-- future task uses promoted knowledge;
-- rollback works.
+Demonstrate one evaluated improvement: candidate derived from real failure,
+replay/evaluation, versioned promotion, future task uses promoted knowledge,
+and rollback works.
 
-## M9 — Long-running autonomous campaigns
+## M10 — Long-running autonomous campaigns
 
 ### Goal
-Allow milestone-scale local execution with frontier principal intervention only when valuable.
+Allow milestone-scale execution with principal/human intervention only when
+valuable.
 
 ### Deliverables
 - dependency-aware scheduler;
@@ -733,16 +783,11 @@ Allow milestone-scale local execution with frontier principal intervention only 
 - resumable daemon.
 
 ### Verification
-Run a multi-task milestone:
-- parallel independent tasks;
-- dependency blocks;
-- local retry;
-- principal escalation;
-- integration conflict;
-- refactoring trigger;
-- daily summary.
+Run a multi-task milestone with parallel independent tasks, dependency blocks,
+local retry, principal escalation, integration conflict, refactoring trigger
+and daily summary.
 
-## Suggested bootstrap repository structure
+## Suggested bootstrap repository structure## Suggested bootstrap repository structure
 
 ```text
 cmd/

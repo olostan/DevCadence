@@ -89,7 +89,7 @@ A separate principal workspace:
 - reduces the chance that repository prompt injection gains principal-level authority;
 - makes the architecture testable: we can measure whether the principal succeeds without ambient source access.
 
-This is the recommended mode for the M5 central-hypothesis experiment.
+This is a recommended controlled condition for the M4 central-hypothesis experiment when available; M5 later productizes this semantic principal/host boundary across supported hosts.
 
 ## 4. Workspace layout
 

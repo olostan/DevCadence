@@ -136,7 +136,7 @@ marked deprecated and never written by current builds. Deleting them would make
 every historical ProjectState document unreadable under strict decoding, which
 ADR-0003 forbids (DCI-092, DCI-093). Keeping them costs two optional fields and
 preserves the ability to inspect old trajectories. Consultant selection becomes
-an M6 policy over discovered endpoints rather than a separate capability list.
+an M7 policy over discovered endpoints rather than a separate capability list.
 
 Because the change is additive-optional within `schema_version` 1.0, no version
 bump is required and old fixtures still validate.
@@ -282,11 +282,11 @@ shell engine by another name.
 ### Scope
 
 This ADR settles the contracts M3A needed. It does not decide setup action
-authority levels, remediation recipes, credential creation, deployment-profile
-recommendation or terminal UX — those are M3B. It does not decide consultant
-selection or reviewer independence policy, which are M6, though it preserves the
-provider, model-family and opaque account metadata M6 will need to avoid treating
-two frontends over one model as independent.
+authority, remediation recipes or credential references — those are M3B. It
+does not decide session/economic portfolio substrate contracts (M3C), AI-assisted
+portfolio/workflow synthesis or rich adaptive setup UX (M3D), or consultant/
+reviewer independence policy (M7), though it preserves the provider,
+model-family and opaque account metadata those later layers need.
 
 It adds no new endpoint kind for LAN or remote inference workers:
 docs/MODEL_RUNTIME.md §21 requires a separate threat model first, and publishing
