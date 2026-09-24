@@ -3,7 +3,7 @@
 Last updated: 2026-09-24T01:30:00Z by Claude Code / Sonnet 5 (cloud session, olostan@gmail.com)
 
 Session takeover HEAD: `a38b293` (origin/main HEAD when this session started — branch did not exist yet)
-Expected remote HEAD before next push: `7f90472` (advance this after every successful push — see "Git safety rules" in AGENT_HANDOFF_PROTOCOL.md)
+Expected remote HEAD before next push: `bb01bc9` (advance this after every successful push — see "Git safety rules" in AGENT_HANDOFF_PROTOCOL.md)
 
 ## Milestone
 
@@ -55,7 +55,7 @@ WP's row above and `docs/work-packages/wp-m3b-2-ewp.md`.
 | WP | Status | Checkpoint | Validation | Review |
 |----|--------|------------|------------|--------|
 | WP-M3B-1 | accepted | `6833219` | `go build ./...`, `go vet ./...`, `go test -count=1 ./...` all PASS (see EWP §8) | independent review complete — [PR #10 comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5805285148) (owner), 3 findings, all addressed in EWP §12; verified in [follow-up comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5805447822) |
-| WP-M3B-2 | accepted | `7f90472` | `go build ./...`, `go vet ./...`, `go test -count=1 ./...`, `go test -race ./internal/setup/...`, `GOOS=windows GOARCH=amd64 go build ./...` all PASS (see EWP §13) | independent review complete — [PR #10 comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5805603916) (owner), 7 findings, all addressed in EWP §14 |
+| WP-M3B-2 | accepted | `bb01bc9` | `go build ./...`, `go vet ./...`, `go test -count=1 ./...`, `go test -race ./internal/setup/...`, `GOOS=windows GOARCH=amd64 go build ./...` all PASS (see EWP §13) | independent review complete — [PR #10 comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5805603916) (owner), 7 findings, all addressed in EWP §14 |
 | WP-M3B-3 | unknown — likely partially pre-existing, unverified | — | — | blocked on WP-M3B-2 review; assess `internal/setup/planner.go` first |
 | WP-M3B-4 | not started | — | — | blocked on WP-M3B-3 |
 | WP-M3B-5 | unknown — likely partially pre-existing, unverified | — | — | assess `internal/setup/doctor.go`, `profiles.go` first |
