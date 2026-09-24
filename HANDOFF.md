@@ -3,7 +3,7 @@
 Last updated: 2026-09-24T05:10:00Z by Claude Code / Sonnet 5 (cloud session, olostan@gmail.com)
 
 Session takeover HEAD: `a38b293` (origin/main HEAD when this session started — branch did not exist yet)
-Expected remote HEAD before next push: **update this after the next push** — the actual current pushed HEAD; advance it after every successful push (see "Git safety rules" in AGENT_HANDOFF_PROTOCOL.md). As of this file's last edit, the real pushed tip was `5c22d36`; this session has since committed further fixes that are NOT yet pushed as of this line being written — do not trust any older SHA quoted elsewhere in this file over `git log`/`git fetch` reality.
+Expected remote HEAD before next push: `b83507c` (the actual current pushed HEAD — this field always tracks the real remote tip; advance it after every successful push — see "Git safety rules" in AGENT_HANDOFF_PROTOCOL.md).
 
 ## Where WP-M3B-3 actually stands
 
