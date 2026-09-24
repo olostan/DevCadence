@@ -88,7 +88,8 @@ Setup operations and conditions are closed, typed protocols, not open-ended key-
   - `READY_WITH_REDUCED_CAPABILITY`: Every mandatory capability is satisfied, but optional capabilities (e.g. local coding acceleration or consultants) are unconfigured.
   - `PARTIALLY_READY`: Deterministic control plane is operational, but at least one mandatory capability for the target is absent or no target profile can be selected.
   - `ACTION_REQUIRED`: A mandatory base dependency (Git, write permissions on state root, disk space) prevents operation.
-- **Recommendation Engine:** A pure function over `RecommendationInput` (facts, profile, policy, preferences). Memory and hardware alone never establish implementation capability. If no profile satisfies capability and policy, `SelectedProfile` is `nil` with missing prerequisites reported.
+- **M3B boundary:** Doctor computes deterministic readiness and a ResourceInventory from verified facts. Human-readable deployment labels may summarize the environment, but M3B does not solve optimal role/provider/budget allocation with a static pure-function selector.
+- **Adaptive portfolio synthesis:** AI-assisted CognitionPortfolio recommendation, economic/budget modeling and task workflow-topology synthesis are governed by ADR-0018/M3C. Any recommendation remains advisory until deterministic policy validation succeeds.
 
 ### 6. Opaque Credential References and Secret Isolation
 
@@ -113,7 +114,7 @@ Setup operations and conditions are closed, typed protocols, not open-ended key-
 - The approval workflow prevents accidental or automated privilege escalation.
 - Setup execution is crash-safe and resumes deterministically after unexpected termination.
 - Operational machine state remains cleanly separated from Git project history.
-- Readiness and recommendations are grounded in verified capability, not hardware heuristics.
+- Readiness and ResourceInventory are grounded in verified capability, not hardware heuristics; later AI portfolio recommendations consume that verified substrate.
 - Public CLI JSON interfaces are governed by draft 2020-12 schemas with full fixture validation.
 
 ### Costs

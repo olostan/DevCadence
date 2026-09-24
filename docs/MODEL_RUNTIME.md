@@ -1,4 +1,4 @@
-# Cognition Runtime, Capability Routing, and Scheduling
+# Cognition Endpoints, Capability Routing, and Scheduling
 
 ## Scope
 
@@ -13,6 +13,8 @@ workers (§21) are unimplemented by design. The durable contracts are settled in
 [adr/0013-environment-intelligence-and-cognition-contracts.md](adr/0013-environment-intelligence-and-cognition-contracts.md).
 
 The original bootstrap target of a 48 GB Apple Silicon machine remains a valuable **strong-local reference profile**, but it is not an architectural prerequisite.
+
+ADR-0018 further separates model/provider identity, engineering role, access channel, economics and current resource state. A static "local/economy/frontier" ladder is explanatory shorthand, not the durable routing ontology.
 
 DevCadence must also run usefully on machines where:
 
@@ -152,58 +154,20 @@ Useful dimensions include:
 
 Values should come from measured local probes/evaluation where feasible.
 
-## 5. Role routing
+## 5. Role and workflow routing
 
-```mermaid
-flowchart LR
-    Role["Role"]
-    Risk["Risk / required quality"]
-    Privacy["Privacy / source exposure policy"]
-    Budget["Cost policy"]
-    Available["Available verified endpoints"]
-    Eval["Historical outcomes"]
-    Choice["Selected endpoint"]
+Routing has two levels:
 
-    Role --> Choice
-    Risk --> Choice
-    Privacy --> Choice
-    Budget --> Choice
-    Available --> Choice
-    Eval --> Choice
-```
+1. **Portfolio routing** decides which endpoints are eligible/preferred for roles under policy, economic regime, budget state, privacy, session features and evaluated capability.
+2. **Workflow routing** decides which roles/model passes are useful for this task at all.
 
-The implemented router (M3A) applies hard constraints first, recording a reason
-for every rejection, then orders the survivors explicitly:
+Hard constraints apply before preference: readiness/authentication, capability/provenance, privacy/source exposure, spending/overage authority, required session/tool features, resource/concurrency constraints and explicit exclusions.
 
-```text
-operator preference  ->  cheapest cost class  ->  most private exposure
-                     ->  best capability grade  ->  identifier
-```
+User preference then orders eligible choices. DevCadence ships templates and examples, not a built-in vendor ranking.
 
-Cost precedes capability grade because every survivor already *satisfies* the
-requirement, so the choice among them is the least expensive and most private one.
-The identifier tiebreak makes ties deterministic rather than dependent on
-discovery order. There is no score, no weight and no confidence value, and a
-decision distinguishes "ineligible" from "eligible but not chosen".
+A task with only one capable endpoint may intentionally use one bounded session plus deterministic validation rather than simulate diversity. A task with abundant local cognition and scarce subscription quota may spend many local iterations before escalation.
 
-Two safety properties: an unset policy fails closed to `local_only` /
-`local_compute`, so a caller who configured nothing cannot authorise remote
-cognition by omission; and operator preference orders eligible endpoints without
-ever making an ineligible one eligible, so preference cannot route around a
-privacy constraint.
-
-A conceptual preference sequence may look like:
-
-```text
-deterministic
-  -> small local cognition
-  -> strong local cognition
-  -> economical remote cognition
-  -> strong remote cognition
-  -> frontier escalation
-```
-
-But routing is not required to traverse every tier. It selects the least expensive/most private endpoint that satisfies required capability and policy.
+See [COGNITION_PORTFOLIO.md](COGNITION_PORTFOLIO.md).
 
 ## 6. Thin-node operation
 
@@ -428,21 +392,17 @@ Possible policies may permit:
 
 Remote inference must never be a silent fallback when policy disallows it.
 
-## 19. Cost-aware routing
+## 19. Economic regime, budgets and scarcity
 
-Remote cognition has monetary/quota cost.
+Remote/local is not an economic taxonomy.
 
-Profiles may represent coarse classes such as:
+An endpoint may consume `local_compute`, `subscription_quota`, `metered_api`, `prepaid_credits`, `enterprise_allocation`, or an unknown/custom regime.
 
-- local_compute;
-- subscription_included;
-- remote_economy;
-- remote_strong;
-- frontier_expensive.
+Endpoints may reference a BudgetPool shared with other endpoints or products. When safely observable, BudgetState may include remaining quota/credits, reset windows, rate/concurrency limits, local resource pressure or a coarse scarcity class.
 
-Routing should prefer quality-sufficient lower-cost cognition for high-volume implementation/review and reserve frontier cognition for high-leverage reasoning.
+Unknown economics stay unknown. DevCadence never infers billing mode merely from provider/model/executable identity.
 
-Cost policy does not override correctness/security requirements.
+Routing should reason about expected resources to reach an accepted result, including retry/review/escalation cost, rather than nominal price per token alone. Subscription quota can be scarce even at zero marginal dollars. Metered API use never becomes an implicit fallback.
 
 ## 20. Installation and onboarding
 
@@ -476,20 +436,18 @@ A true remote worker design requires:
 
 ## 22. Core principle
 
-The architectural distinction is not:
+The architectural distinction is not cloud versus local, and not frontier versus cheap.
 
 ```text
-cloud versus local
+engineering role requirements
++ eligible cognition capabilities
++ access/session semantics
++ economics and current scarcity
++ user/project policy
++ task risk
+→ validated portfolio
+→ adaptive workflow topology
 ```
 
-It is:
+Repository authority, deterministic evidence and acceptance remain local and stable while cognition allocation adapts.
 
-```text
-high-value cognition
-versus
-high-volume cognition
-versus
-deterministic machinery
-```
-
-Inference placement is chosen according to capability and policy while local control-plane authority remains stable.

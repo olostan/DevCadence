@@ -83,13 +83,17 @@ flowchart TB
 5. [REQUIREMENTS.md](REQUIREMENTS.md)
 6. [adr/0012-mandatory-brownfield-adoption-baseline.md](adr/0012-mandatory-brownfield-adoption-baseline.md)
 
-### Working on environment/setup/cognition routing
+### Working on environment/setup/cognition portfolio
+
 1. [ENVIRONMENT_INTELLIGENCE_AND_ONBOARDING.md](ENVIRONMENT_INTELLIGENCE_AND_ONBOARDING.md)
-2. [MODEL_RUNTIME.md](MODEL_RUNTIME.md)
-3. [SETUP.md](SETUP.md)
-4. [SECURITY.md](SECURITY.md)
-5. [adr/0011-adaptive-environment-and-host-independent-cognition.md](adr/0011-adaptive-environment-and-host-independent-cognition.md)
-6. [adr/0013-environment-intelligence-and-cognition-contracts.md](adr/0013-environment-intelligence-and-cognition-contracts.md)
+2. [COGNITION_PORTFOLIO.md](COGNITION_PORTFOLIO.md)
+3. [MODEL_RUNTIME.md](MODEL_RUNTIME.md)
+4. [SETUP.md](SETUP.md)
+5. [SECURITY.md](SECURITY.md)
+6. [adr/0011-adaptive-environment-and-host-independent-cognition.md](adr/0011-adaptive-environment-and-host-independent-cognition.md)
+7. [adr/0013-environment-intelligence-and-cognition-contracts.md](adr/0013-environment-intelligence-and-cognition-contracts.md)
+8. [adr/0014-guided-bootstrap-and-remediation.md](adr/0014-guided-bootstrap-and-remediation.md)
+9. [adr/0018-adaptive-cognition-portfolio-and-workflow-synthesis.md](adr/0018-adaptive-cognition-portfolio-and-workflow-synthesis.md)
 
 ### Working on frontier/principal behavior
 1. [PRINCIPAL_ENGINEER.md](PRINCIPAL_ENGINEER.md)
@@ -151,6 +155,8 @@ hierarchy below.
 | [0011](adr/0011-adaptive-environment-and-host-independent-cognition.md) | Adaptive environment intelligence, capability-routed cognition, blank-machine onboarding and host independence |
 | [0012](adr/0012-mandatory-brownfield-adoption-baseline.md) | Mandatory version-controlled canonical baseline before brownfield managed work |
 | [0013](adr/0013-environment-intelligence-and-cognition-contracts.md) | Environment facts vs assessment, evidenced acceleration, capability provenance, cognition persistence boundaries and explainable routing |
+| [0014](adr/0014-guided-bootstrap-and-remediation.md) | Safe guided bootstrap, explicit setup authority, crash-safe ledger and bounded remediation |
+| [0018](adr/0018-adaptive-cognition-portfolio-and-workflow-synthesis.md) | Adaptive cognition portfolios, economics/budget pools, AI-assisted recommendation and adaptive workflow topology |
 
 ## Normative hierarchy
 

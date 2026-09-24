@@ -1,10 +1,12 @@
-# Frontier Consultants
+# Consultants and Independent Cognition
 
 ## Scope
 
 Consultants provide independent high-capability reasoning beyond the primary principal. They are used to increase perspective diversity, challenge assumptions, verify important design choices, and help resolve high-risk uncertainty.
 
 They are not automatic authorities.
+
+After ADR-0018, "consultant" is primarily a **role/independence requirement over CognitionEndpoints**, not a hard-coded provider tier. A strong local model, authenticated subscription CLI, direct API, or other eligible endpoint may fill the role if policy/capability/independence constraints are satisfied.
 
 Consultants are also **optional capabilities**. DevCadence must not require the operator to subscribe to OpenAI, Anthropic, Google, xAI, or any other specific provider. Environment discovery should expose whichever compatible consultant/cognition endpoints are already installed, authenticated and policy-allowed; no available consultant means reduced cognitive diversity, not control-plane failure.
 
@@ -210,17 +212,13 @@ flowchart TD
 
 Do not resolve disagreement by majority vote alone.
 
-## 11. Subscription and provider adapters
+## 11. Endpoint, subscription and provider independence
 
-Provider adapters may invoke:
-- authenticated coding CLIs;
-- API clients;
-- ACP-compatible systems;
-- remote MCP services.
+Consultation uses the same CognitionPortfolio/session-driver substrate as other cognition roles.
 
-The domain layer should see only ConsultantRequest/Result.
+A provider may be reachable through several economically distinct endpoints, such as subscription-backed CLI and metered API; these remain separate choices. Consultant routing may require independence from the Principal/Implementer by provider, model family, session lineage or another policy-defined dimension.
 
-Authentication must remain outside prompt payloads.
+No specific provider or subscription is required. Unavailable independent cognition reduces review diversity; it does not invalidate deterministic control-plane operation.
 
 ## 12. Failure behavior
 

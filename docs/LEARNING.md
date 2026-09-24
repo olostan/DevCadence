@@ -173,46 +173,50 @@ Track:
 - tool-call reliability;
 - false escalation rate.
 
-## 9. Routing evaluation
+## 9. Portfolio and workflow routing evaluation
 
-For each model/profile/role, track empirical outcomes.
+Track outcomes against the actual decision context, not merely model name:
 
-```mermaid
-flowchart TB
-    Data["Historical evaluated tasks"]
-    Features["Task class / language / risk"]
-    Models["Candidate model profiles"]
-    Score["Outcome metrics"]
-    Policy["Routing policy candidate"]
-    Shadow["Shadow / replay evaluation"]
-    Promote["Promote"]
-
-    Data --> Features
-    Features --> Score
-    Models --> Score
-    Score --> Policy
-    Policy --> Shadow
-    Shadow --> Promote
+```text
+task class / language / risk
++ engineering role
++ endpoint + access channel
++ economic regime / budget pool
++ workflow topology
++ prompt/skill revision
+→ evaluated outcome
 ```
 
-Avoid opaque learned routing initially. Start with explicit interpretable policies.
+Useful questions include:
+- which endpoint/access path reaches accepted implementation with the fewest scarce-resource repair cycles;
+- when local iteration is preferable to subscription/API escalation;
+- whether independent provider diversity catches materially different defects;
+- when multiple reviewers add no value;
+- whether a subscription quota should be reserved for Principal/closure work;
+- whether a nominally cheap hosted endpoint causes enough retries to be more expensive overall.
+
+Avoid opaque autonomous routing initially. Historical evidence produces interpretable PortfolioRecommendation/WorkflowPolicy candidates that follow the normal LessonCandidate evaluation/promotion process.
 
 ## 10. Useful outcome metrics
 
-- task accepted;
-- human correction later;
-- regressions found after acceptance;
-- retry count;
-- principal escalation;
+- task accepted and later regressions;
+- human corrections;
+- retry/repair count;
+- cognition session/invocation count;
+- Principal escalation/re-entry;
 - reviewer defect precision;
 - Work Package deviation;
 - validation failures;
 - wall time;
-- local compute;
-- frontier quota/API use;
+- local compute/resource use;
+- subscription/quota use;
+- metered API token/spend where observable;
+- source exposure;
+- workflow topology;
+- resource-to-accepted-result;
 - code-health impact.
 
-Quality dominates raw speed.
+Quality dominates raw speed, but "cheap" cognition is not assumed free. Recommendations compare outcome quality and scarce-resource consumption together.
 
 ## 11. Architecture postmortems
 
