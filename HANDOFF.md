@@ -147,7 +147,7 @@ implementing on top of it or rewriting it.
 | WP-M3B-3 | **accepted** (§21) | `cc799cd` | `go build ./...`, `go vet ./...`, `go test -count=1 ./...`, `go test -race ./internal/setup/... ./internal/cognition/mlx/... ./internal/environment/...`, `GOOS=windows GOARCH=amd64 go build ./...` all PASS | 7 independent review rounds, 25 findings total, all resolved — see EWP §15–§21. Final acceptance: [comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5809019161) |
 | WP-M3B-4 | **accepted** (§16) | `75e65a7` | `go build ./...`, `go vet ./...`, `go test -count=1 ./...`, `go test -race ./internal/credentials/... ./internal/protocol/... ./internal/cognition/...`, `GOOS=windows GOARCH=amd64 go build ./...` all PASS | 3 independent review rounds, 6+3+2 findings total, all resolved — see EWP §13–§16. Final acceptance: [comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5819033678) |
 | WP-M3B-6 | **ACCEPTED** at `62f5254` — round 1 (4 FIX_NOW findings, EWP §10) and round 2 (4 required repairs, EWP §11) fixed; round 3 confirmed GREEN | `62f5254` | `go build ./...`, `go vet ./...`, `go test -count=1 ./...`, `go test -race ./internal/setup/... ./internal/protocol/... ./internal/credentials/... ./internal/schema/... ./internal/environment/... ./tests/...`, `GOOS=windows/linux GOARCH=amd64 go build ./...` all PASS; `gofmt -l` clean on every file the round-2 repair touched (the broad `internal/setup/ internal/protocol/` check reports pre-existing, unrelated `ledger.go`) | round 1 — [comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5834040833), fixed EWP §10. round 2 — [comment id `5836314553`](https://github.com/olostan/DevCadence/pull/10#issuecomment-5836314553), fixed EWP §11. round 3 (acceptance) — [comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5836690733), "GREEN for WP-M3B-6... accepted at this checkpoint" |
-| WP-M3B-7 | not started | — | — | unblocked — WP-M3B-6 accepted |
+| WP-M3B-7 | implemented, NOT accepted — round 1 (4 FIX_NOW findings, EWP §8) fixed, awaiting round-2 review | current branch HEAD (see "Expected remote HEAD" above) | `go build ./...`, `go vet ./...`, `gofmt -l` clean, `go test -count=1 ./...`, `go test -race ./cmd/devcadence/... ./internal/setup/... ./internal/protocol/... ./internal/credentials/... ./internal/schema/... ./internal/environment/... ./tests/...`, `GOOS=windows/linux GOARCH=amd64`/`GOOS=darwin GOARCH=arm64 go build ./...` all PASS | round 1 — [comment id `5837092761`](https://github.com/olostan/DevCadence/pull/10#issuecomment-5837092761), exit code 5 unreachable for invalid plans; `setup recover --json` ungoverned ad hoc map; `--scope`/`--target`/positional-target input silently ignored or ambiguous; acceptance evidence overclaimed exact matrix coverage — all fixed, EWP §8, not yet re-reviewed |
 | WP-M3B-8 | not started — verification suite and docs sync (formerly WP9) | — | — | blocked on all prior |
 
 (Never write "merged" for a WP checkpoint — nothing is merged to `main`
@@ -392,7 +392,7 @@ Full detail in `docs/work-packages/wp-m3b-6-ewp.md` §11.
 
 **Known blockers / open questions:** none.
 
-## WP-M3B-7 — CLI surface and minimal guided interaction (implementation complete, ready for review)
+## WP-M3B-7 — CLI surface and minimal guided interaction (round 1 fixed, awaiting round-2 review)
 
 - **EWP status:** authored, frozen, and committed at `docs/work-packages/wp-m3b-7-ewp.md`.
 - **Base commit this WP started from:** `bae6d2a86f0a78ba36f36296be04106be0c7fbcc`
@@ -424,7 +424,7 @@ Full detail in `docs/work-packages/wp-m3b-6-ewp.md` §11.
   5. `cmd/devcadence/cli_doctor_test.go` and `cmd/devcadence/cli_setup_test.go`:
      - Comprehensive unit and end-to-end tests covering all doctor and setup workflows, schema validation, exit code mappings (0, 1, 2, 3, 4, 5, 6), interactive approval/rejection, non-interactive fail-closed checks, drift detection, and ANSI-free output.
 
-- **Verification evidence:**
+- **Verification evidence (initial implementation):**
   - `go build ./...`: PASS, no diagnostics.
   - `go vet ./...`: PASS, no diagnostics.
   - `gofmt -l cmd/devcadence/`: PASS, all files clean.
@@ -433,11 +433,20 @@ Full detail in `docs/work-packages/wp-m3b-6-ewp.md` §11.
   - `GOOS=windows GOARCH=amd64 go build ./...` and `GOOS=linux GOARCH=amd64 go build ./...`: PASS, clean cross-compilation.
   - `git diff --check`: PASS.
 
+**Independent review round 1** ([comment id `5837092761`](https://github.com/olostan/DevCadence/pull/10#issuecomment-5837092761), owner, 2026-09-25, head `c272f35`) found the implementation not yet green, with 4 closure-threshold FIX_NOW findings, fixed this session:
+1. Exit code 5 was unreachable for invalid plan artifacts — `setup apply`/`setup recover` classified decode/validate/schema failures as exit 2 (or, for recover, skipped schema validation entirely). Fixed with a single shared `loadSetupPlanArtifact` boundary in `cmd_setup.go`: missing file stays exit 3, everything else wrong about an existing plan file (malformed JSON, failed semantic `Validate()`, unsupported `schema_version`, failed schema validation) is now uniformly exit 5.
+2. `setup recover --json` emitted an unvalidated ad hoc `map[string]any`, outside the governed JSON contract, and lost each status's `action_id`. Fixed with a new versioned protocol record `protocol.SetupRecoveryReport` (+ `schemas/setup-recovery-report.schema.json`), and `Executor.Recover`'s return type changed from `[]protocol.ActionStatus` to `[]protocol.RecoveryActionResult` so the CLI has the identity it needs to build a real record.
+3. `doctor --scope` was parsed and silently discarded; `doctor --target` was validated only when `--fix` was passed; `setup plan` permitted a positional target to silently conflict with `--target` and dropped extra positionals. Fixed: `--scope` now rejects any value other than `"default"` deterministically; `--target` is validated unconditionally; `setup plan` rejects more than one positional argument and a positional/`--target` conflict.
+4. Acceptance evidence overclaimed exact deterministic coverage for several verification-matrix rows (readiness 0/1, `--fix` no-op 0, `--yes` success 0, missing/invalid plan 3/5, ANSI absence). Fixed by extracting `doctorReadinessExitError`/`planActionsExitError` as pure functions with direct unit tests, adding the missing CLI-level exit-code tests, and — in the process of writing exact assertions — catching and fixing a real latent bug in the pre-existing recovery-ledger CLI tests: `Ledger.Append` errors were being discarded, every append was silently failing required-field validation, and `setup recover` was reconciling zero actions in every test that exercised it, undetected because the assertions only substring-matched a generic banner.
+Full detail in `docs/work-packages/wp-m3b-7-ewp.md` §8.
+
+**Verification (round-1 revision):** `go build ./...`, `go vet ./...`, `gofmt -l` clean on every file this repair touched, `go test -count=1 ./...` (all 30 packages), `go test -race ./cmd/devcadence/... ./internal/setup/... ./internal/protocol/... ./internal/credentials/... ./internal/schema/... ./internal/environment/... ./tests/...` (clean), `GOOS=windows GOARCH=amd64`/`GOOS=linux GOARCH=amd64`/`GOOS=darwin GOARCH=arm64 go build ./...` (clean), `git diff --check` (clean).
+
+**Known blockers / open questions:** none — awaiting round-2 review to confirm the §8 fixes.
+
 ## Next concrete action
 
-1. Commit and push WP-M3B-7 implementation to `feat/m3b-guided-bootstrap`.
-2. Post review request comment on PR #10 with documentation references and checkpoint details.
-3. Launch background `/github-pr-comment-poller` to await independent review.
+Post a PR comment on #10 summarizing the round-1 fix and continue watching for the owner's response. Do not flip WP-M3B-7 to `accepted` unilaterally. Once accepted, proceed to WP-M3B-8 (Milestone Closure & Verification).
 
 ## Resume checklist for the next agent
 

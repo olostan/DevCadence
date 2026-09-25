@@ -438,6 +438,8 @@ func NewRecord(kind string) (Record, error) {
 		return &SetupPlan{}, nil
 	case "SetupExecutionReport":
 		return &SetupExecutionReport{}, nil
+	case "SetupRecoveryReport":
+		return &SetupRecoveryReport{}, nil
 	case "SetupLedgerEvent":
 		return &SetupLedgerEvent{}, nil
 	case "CredentialRef":

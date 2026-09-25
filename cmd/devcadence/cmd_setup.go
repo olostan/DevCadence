@@ -57,6 +57,7 @@ func usageSetup(w io.Writer) {
 	fmt.Fprintln(w, "  2  Invalid command-line arguments or digest mismatch")
 	fmt.Fprintln(w, "  3  Plan file not found")
 	fmt.Fprintln(w, "  4  Precondition drift or interrupted ledger run (re-plan required)")
+	fmt.Fprintln(w, "  5  Plan file is malformed, semantically invalid, or fails schema validation")
 	fmt.Fprintln(w, "  6  Plan generated with pending actions")
 }
 
@@ -76,8 +77,16 @@ func runSetupPlan(ctx context.Context, e *env, args []string) error {
 		return err
 	}
 
+	if fs.NArg() > 1 {
+		return errs.New(errs.CategoryInvalidArgument,
+			"setup plan: unexpected extra arguments after target: %v", fs.Args()[1:])
+	}
 	targetStr := *targetFlag
-	if fs.NArg() > 0 && targetStr == "" {
+	if fs.NArg() == 1 {
+		if targetStr != "" && targetStr != fs.Arg(0) {
+			return errs.New(errs.CategoryInvalidArgument,
+				"setup plan: conflicting target: positional argument %q conflicts with --target %q", fs.Arg(0), targetStr)
+		}
 		targetStr = fs.Arg(0)
 	}
 	if targetStr == "" {
@@ -169,10 +178,7 @@ func runSetupPlan(ctx context.Context, e *env, args []string) error {
 		renderDoctorFixSummary(e.stdout, plan, *outputFile)
 	}
 
-	if len(plan.Actions) == 0 {
-		return nil
-	}
-	return &planGeneratedError{plan: plan}
+	return planActionsExitError(plan)
 }
 
 func runSetupApply(ctx context.Context, e *env, args []string) error {
@@ -194,28 +200,9 @@ func runSetupApply(ctx context.Context, e *env, args []string) error {
 		return errs.New(errs.CategoryInvalidArgument, "setup apply: --plan <file> is required")
 	}
 
-	data, err := os.ReadFile(*planFile)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return errs.New(errs.CategoryNotFound, "plan file %q not found", *planFile)
-		}
-		return errs.Wrap(errs.CategoryInvalidArgument, err, "read plan file %s", *planFile)
-	}
-
-	var plan protocol.SetupPlan
-	if err := protocol.Unmarshal(data, &plan); err != nil {
-		return errs.Wrap(errs.CategoryInvalidArgument, err, "decode plan file %s", *planFile)
-	}
-	if err := plan.Validate(); err != nil {
-		return errs.Wrap(errs.CategoryInvalidArgument, err, "plan validation failed")
-	}
-
-	set, err := schema.Default()
+	plan, set, err := loadSetupPlanArtifact(*planFile)
 	if err != nil {
 		return err
-	}
-	if err := set.ValidateBytes(schema.NameSetupPlan, data); err != nil {
-		return errs.Wrap(errs.CategoryInvalidArgument, err, "plan schema validation failed")
 	}
 
 	approvedDigest := *approvePlan
@@ -229,7 +216,7 @@ func runSetupApply(ctx context.Context, e *env, args []string) error {
 			return errs.New(errs.CategoryInvalidArgument,
 				"setup apply: --approve-plan <digest> is required in non-interactive mode")
 		}
-		renderPlanSummaryForApproval(e.stdout, &plan)
+		renderPlanSummaryForApproval(e.stdout, plan)
 		fmt.Fprintf(e.stdout, "\nApprove plan %s? [y/N]: ", plan.PlanDigest)
 		var input string
 		if e.stdin != nil {
@@ -254,7 +241,7 @@ func runSetupApply(ctx context.Context, e *env, args []string) error {
 		return err
 	}
 
-	report, applyErr := executor.Apply(ctx, &plan, approvedDigest, *yesFlag)
+	report, applyErr := executor.Apply(ctx, plan, approvedDigest, *yesFlag)
 
 	if *asJSON {
 		if report != nil {
@@ -291,20 +278,9 @@ func runSetupRecover(ctx context.Context, e *env, args []string) error {
 		return errs.New(errs.CategoryInvalidArgument, "setup recover: --plan <file> is required")
 	}
 
-	data, err := os.ReadFile(*planFile)
+	plan, set, err := loadSetupPlanArtifact(*planFile)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return errs.New(errs.CategoryNotFound, "plan file %q not found", *planFile)
-		}
-		return errs.Wrap(errs.CategoryInvalidArgument, err, "read plan file %s", *planFile)
-	}
-
-	var plan protocol.SetupPlan
-	if err := protocol.Unmarshal(data, &plan); err != nil {
-		return errs.Wrap(errs.CategoryInvalidArgument, err, "decode plan file %s", *planFile)
-	}
-	if err := plan.Validate(); err != nil {
-		return errs.Wrap(errs.CategoryInvalidArgument, err, "plan validation failed")
+		return err
 	}
 
 	home := e.homeDir()
@@ -318,27 +294,82 @@ func runSetupRecover(ctx context.Context, e *env, args []string) error {
 		return err
 	}
 
-	statuses, err := executor.Recover(ctx, &plan)
+	results, err := executor.Recover(ctx, plan)
 	if err != nil {
 		return err
 	}
+	if results == nil {
+		results = []protocol.RecoveryActionResult{}
+	}
 
 	if *asJSON {
-		return writeJSON(e.stdout, map[string]any{
-			"plan_id":     plan.PlanID,
-			"plan_digest": plan.PlanDigest,
-			"statuses":    statuses,
-		})
+		report := &protocol.SetupRecoveryReport{
+			SchemaVersion: protocol.SchemaVersion1,
+			RecoveryID:    ids.NewULIDSource().New("recovery"),
+			PlanID:        plan.PlanID,
+			PlanDigest:    plan.PlanDigest,
+			RecoveredAt:   protocol.NewTimestamp(clock.System().Now()),
+			Results:       results,
+		}
+		if err := report.Validate(); err != nil {
+			return errs.Wrap(errs.CategoryInternal, err, "generated recovery report failed internal validation")
+		}
+		reportBytes, err := json.Marshal(report)
+		if err != nil {
+			return errs.Wrap(errs.CategoryInternal, err, "marshal recovery report")
+		}
+		if err := set.ValidateBytes(schema.NameSetupRecoveryReport, reportBytes); err != nil {
+			return errs.Wrap(errs.CategoryIntegrity, err, "recovery report failed schema validation")
+		}
+		return writeJSON(e.stdout, report)
 	}
 
 	fmt.Fprintf(e.stdout, "Setup Recovery Reconciled\n")
 	fmt.Fprintf(e.stdout, "Plan ID:        %s\n", plan.PlanID)
 	fmt.Fprintf(e.stdout, "Plan Digest:    %s\n", plan.PlanDigest)
-	fmt.Fprintf(e.stdout, "Actions:        %d\n", len(statuses))
-	for i, s := range statuses {
-		fmt.Fprintf(e.stdout, "  %d. Status: %s\n", i+1, s)
+	fmt.Fprintf(e.stdout, "Actions:        %d\n", len(results))
+	for i, res := range results {
+		fmt.Fprintf(e.stdout, "  %d. %s: %s\n", i+1, res.ActionID, res.Status)
 	}
 	return nil
+}
+
+// loadSetupPlanArtifact reads, decodes, semantically validates, and schema-
+// validates a SetupPlan file from disk. It is the single boundary both
+// `setup apply` and `setup recover` load a plan artifact through, so the
+// two commands cannot drift on how a bad artifact is classified.
+//
+// A missing file is CategoryNotFound (exit 3): the operator simply pointed
+// at the wrong path. Everything else that is wrong about a file that does
+// exist — malformed JSON, a schema_version this build cannot interpret, a
+// document that fails SetupPlan's semantic Validate(), or one that fails
+// setup-plan.schema.json — is CategoryIntegrity (exit 5): the artifact
+// itself is not a plan this build can trust, which is a different failure
+// than a bad CLI argument (exit 2) and must not be reported as one
+// (independent-review follow-up on WP-M3B-7, FIX_NOW-1).
+func loadSetupPlanArtifact(path string) (*protocol.SetupPlan, *schema.Set, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil, errs.New(errs.CategoryNotFound, "plan file %q not found", path)
+		}
+		return nil, nil, errs.Wrap(errs.CategoryInvalidArgument, err, "read plan file %s", path)
+	}
+
+	var plan protocol.SetupPlan
+	if err := protocol.Unmarshal(data, &plan); err != nil {
+		return nil, nil, errs.Wrap(errs.CategoryIntegrity, err, "plan file %s is not a valid SetupPlan", path)
+	}
+
+	set, err := schema.Default()
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := set.ValidateBytes(schema.NameSetupPlan, data); err != nil {
+		return nil, nil, errs.Wrap(errs.CategoryIntegrity, err, "plan file %s failed schema validation", path)
+	}
+
+	return &plan, set, nil
 }
 
 func renderPlanSummaryForApproval(w interface{ Write([]byte) (int, error) }, plan *protocol.SetupPlan) {

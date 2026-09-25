@@ -53,7 +53,16 @@ func runDoctor(ctx context.Context, e *env, args []string) error {
 		return err
 	}
 
-	_ = scopeFlag
+	// No readiness-scope identifier other than "default" is implemented yet
+	// (ReadinessEvaluationScope carries no scope-identifier field at all —
+	// see internal/protocol/doctor.go). Rather than silently accepting and
+	// discarding an operator-supplied value that has no effect, an explicit
+	// non-default value is rejected deterministically (independent-review
+	// follow-up on WP-M3B-7, FIX_NOW-3).
+	if *scopeFlag != "default" {
+		return errs.New(errs.CategoryInvalidArgument,
+			"doctor: unsupported readiness scope %q (only \"default\" is currently supported)", *scopeFlag)
+	}
 
 	depth, err := parseDepth(*depthFlag)
 	if err != nil {
@@ -64,8 +73,12 @@ func runDoctor(ctx context.Context, e *env, args []string) error {
 			"doctor does not run inference; use `cognition probe` to verify an endpoint")
 	}
 
+	// target is validated unconditionally, not only when --fix is passed:
+	// an operator-supplied invalid value must never be silently accepted
+	// just because it currently has no effect without --fix (independent-
+	// review follow-up on WP-M3B-7, FIX_NOW-3).
 	target := protocol.SetupTarget(*targetFlag)
-	if *fix && !target.Valid() {
+	if !target.Valid() {
 		return errs.New(errs.CategoryInvalidArgument, "invalid setup target %q", *targetFlag)
 	}
 
@@ -122,11 +135,7 @@ func runDoctor(ctx context.Context, e *env, args []string) error {
 			renderDoctorReport(e.stdout, report)
 		}
 
-		if report.Readiness == protocol.ReadinessActionRequired || report.Readiness == protocol.ReadinessPartiallyReady {
-			return errs.New(errs.CategoryValidationFailed,
-				"doctor: readiness is %s; run 'devcadence doctor --fix' to plan remediation", report.Readiness)
-		}
-		return nil
+		return doctorReadinessExitError(report)
 	}
 
 	// --fix: generate a SetupPlan
@@ -180,6 +189,28 @@ func runDoctor(ctx context.Context, e *env, args []string) error {
 		renderDoctorFixSummary(e.stdout, plan, *outputFile)
 	}
 
+	return planActionsExitError(plan)
+}
+
+// doctorReadinessExitError maps a DoctorReport's Readiness to the doctor
+// exit-code contract (0 ready, 1 action required), as a pure function of
+// the report so it can be exercised deterministically without depending on
+// real hardware discovery (independent-review follow-up on WP-M3B-7,
+// FIX_NOW-4).
+func doctorReadinessExitError(report *protocol.DoctorReport) error {
+	if report.Readiness == protocol.ReadinessActionRequired || report.Readiness == protocol.ReadinessPartiallyReady {
+		return errs.New(errs.CategoryValidationFailed,
+			"doctor: readiness is %s; run 'devcadence doctor --fix' to plan remediation", report.Readiness)
+	}
+	return nil
+}
+
+// planActionsExitError maps a generated SetupPlan to the shared "plan
+// generated" exit-code contract (0 no-op, 6 pending actions) used by both
+// `doctor --fix` and `setup plan`, as a pure function of the plan so it can
+// be exercised deterministically without depending on real hardware
+// discovery (independent-review follow-up on WP-M3B-7, FIX_NOW-4).
+func planActionsExitError(plan *protocol.SetupPlan) error {
 	if len(plan.Actions) == 0 {
 		return nil
 	}

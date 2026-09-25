@@ -84,17 +84,20 @@ func TestCLISetupPlanGeneratesValidPlan(t *testing.T) {
 		t.Fatalf("plan.Validate failed: %v", valErr)
 	}
 
-	code := exitCode(err)
 	if len(plan.Actions) > 0 {
-		if code != ExitCodePlanGenerated {
+		if code := exitCode(err); code != ExitCodePlanGenerated {
 			t.Errorf("expected exit code %d (plan generated), got %d (err: %v)", ExitCodePlanGenerated, code, err)
 		}
 		if !strings.Contains(out, "To approve and apply this plan:") {
 			t.Errorf("expected apply instructions in output:\n%s", out)
 		}
 	} else {
-		if code != ExitCodeSuccess {
-			t.Errorf("expected exit code 0 (no-op), got %d (err: %v)", code, err)
+		// A nil error exits 0 without going through exitCode: exitCode(nil)
+		// classifies an absent error as CategoryInternal (exit 1), which is
+		// not a code path main() exercises (see
+		// TestDoctorReadinessExitErrorExactExitCodes for the same point).
+		if err != nil {
+			t.Errorf("expected nil error (no-op), got: %v", err)
 		}
 	}
 }
@@ -119,15 +122,12 @@ func TestCLISetupPlanJSONValidatesAgainstSchema(t *testing.T) {
 		t.Fatalf("failed to decode SetupPlan JSON: %v", decErr)
 	}
 
-	code := exitCode(err)
 	if len(plan.Actions) > 0 {
-		if code != ExitCodePlanGenerated {
+		if code := exitCode(err); code != ExitCodePlanGenerated {
 			t.Errorf("expected exit code %d, got %d", ExitCodePlanGenerated, code)
 		}
-	} else {
-		if code != ExitCodeSuccess {
-			t.Errorf("expected exit code %d, got %d", ExitCodeSuccess, code)
-		}
+	} else if err != nil {
+		t.Errorf("expected nil error (no-op), got: %v", err)
 	}
 }
 
@@ -317,6 +317,87 @@ func TestCLISetupApplyYesScopeRejectsPrivilegedPlan(t *testing.T) {
 	}
 }
 
+// simulateCLIInterruptedAction appends the durable event sequence a real
+// `setup apply` writes before crashing mid-action (execution_created,
+// plan_approved, action_starting with no matching action terminal event) to
+// the ledger at c's home directory, so `setup recover` finds exactly one
+// interrupted action for actionID when the test later runs it.
+//
+// Earlier versions of this helper's call sites built these events inline
+// and discarded Append's error (`_, _ = ledger.Append(...)`), which masked
+// a real defect: ExecutionCreatedPayload.InitiatedBy and
+// ActionStartingPayload.IdempotencyKey are both required, so every such
+// Append silently failed validation and the ledger stayed empty — meaning
+// setup recover always found zero interrupted actions and the assertions
+// that never checked the recovered count (only substring-matching the
+// generic "Setup Recovery Reconciled" banner) passed vacuously. Checking
+// each Append's error here is what caught it (independent-review follow-up
+// on WP-M3B-7, FIX_NOW-4).
+func simulateCLIInterruptedAction(t *testing.T, c *cli, plan *protocol.SetupPlan, action protocol.SetupAction) {
+	t.Helper()
+	ledgerPath := filepath.Join(c.db, "..", "state", "setup-ledger.jsonl")
+	if err := os.MkdirAll(filepath.Dir(ledgerPath), 0o700); err != nil {
+		t.Fatalf("create ledger dir: %v", err)
+	}
+	ledger, err := setup.OpenLedger(ledgerPath)
+	if err != nil {
+		t.Fatalf("OpenLedger: %v", err)
+	}
+
+	const execID = "exec_simulated"
+	now := time.Now()
+	if _, err := ledger.Append(&protocol.SetupLedgerEvent{
+		SchemaVersion: protocol.SchemaVersion1,
+		EventID:       "evt_sim_01",
+		ExecutionID:   execID,
+		PlanID:        plan.PlanID,
+		PlanDigest:    plan.PlanDigest,
+		Timestamp:     protocol.NewTimestamp(now),
+		Type:          protocol.EventExecutionCreated,
+		Payload: protocol.EventPayload{
+			ExecutionCreated: &protocol.ExecutionCreatedPayload{InitiatedBy: "test", Target: plan.Target},
+		},
+	}); err != nil {
+		t.Fatalf("append execution_created: %v", err)
+	}
+	if _, err := ledger.Append(&protocol.SetupLedgerEvent{
+		SchemaVersion: protocol.SchemaVersion1,
+		EventID:       "evt_sim_02",
+		ExecutionID:   execID,
+		PlanID:        plan.PlanID,
+		PlanDigest:    plan.PlanDigest,
+		Timestamp:     protocol.NewTimestamp(now),
+		Type:          protocol.EventPlanApproved,
+		Payload: protocol.EventPayload{
+			PlanApproved: &protocol.PlanApprovedPayload{ApprovedAuthority: plan.RequiredAuthority, ApprovedBy: "test"},
+		},
+	}); err != nil {
+		t.Fatalf("append plan_approved: %v", err)
+	}
+	opKind := action.Operation.Kind
+	if _, err := ledger.Append(&protocol.SetupLedgerEvent{
+		SchemaVersion: protocol.SchemaVersion1,
+		EventID:       "evt_sim_03",
+		ExecutionID:   execID,
+		PlanID:        plan.PlanID,
+		PlanDigest:    plan.PlanDigest,
+		ActionID:      action.ActionID,
+		Timestamp:     protocol.NewTimestamp(now),
+		Type:          protocol.EventActionStarting,
+		Payload: protocol.EventPayload{
+			ActionStarting: &protocol.ActionStartingPayload{
+				ActionID:       action.ActionID,
+				RecipeID:       action.RecipeID,
+				RecipeVersion:  action.RecipeVersion,
+				OperationKind:  &opKind,
+				IdempotencyKey: action.IdempotencyKey,
+			},
+		},
+	}); err != nil {
+		t.Fatalf("append action_starting: %v", err)
+	}
+}
+
 func TestCLISetupRecoverReconcilesInterruptedActions(t *testing.T) {
 	c := newCLI(t)
 	planFile := filepath.Join(t.TempDir(), "recover-plan.json")
@@ -327,46 +408,7 @@ func TestCLISetupRecoverReconcilesInterruptedActions(t *testing.T) {
 	planBytes, _ := json.MarshalIndent(fullPlan, "", "  ")
 	_ = os.WriteFile(planFile, planBytes, 0o600)
 
-	// Simulate an interrupted run in the ledger: append ActionStarting without ActionTerminated
-	ledgerPath := filepath.Join(c.db, "..", "state", "setup-ledger.jsonl")
-	_ = os.MkdirAll(filepath.Dir(ledgerPath), 0o700)
-	ledger, lErr := setup.OpenLedger(ledgerPath)
-	if lErr != nil {
-		t.Fatalf("OpenLedger: %v", lErr)
-	}
-
-	execID := "exec_simulated"
-	_, _ = ledger.Append(&protocol.SetupLedgerEvent{
-		SchemaVersion: protocol.SchemaVersion1,
-		EventID:       "evt_01",
-		ExecutionID:   execID,
-		PlanID:        fullPlan.PlanID,
-		PlanDigest:    fullPlan.PlanDigest,
-		Timestamp:     protocol.NewTimestamp(time.Now()),
-		Type:          protocol.EventExecutionCreated,
-		Payload: protocol.EventPayload{
-			ExecutionCreated: &protocol.ExecutionCreatedPayload{Target: protocol.TargetHardware},
-		},
-	})
-	opKind := action.Operation.Kind
-	_, _ = ledger.Append(&protocol.SetupLedgerEvent{
-		SchemaVersion: protocol.SchemaVersion1,
-		EventID:       "evt_02",
-		ExecutionID:   execID,
-		PlanID:        fullPlan.PlanID,
-		PlanDigest:    fullPlan.PlanDigest,
-		ActionID:      action.ActionID,
-		Timestamp:     protocol.NewTimestamp(time.Now()),
-		Type:          protocol.EventActionStarting,
-		Payload: protocol.EventPayload{
-			ActionStarting: &protocol.ActionStartingPayload{
-				ActionID:      action.ActionID,
-				RecipeID:      action.RecipeID,
-				RecipeVersion: action.RecipeVersion,
-				OperationKind: &opKind,
-			},
-		},
-	})
+	simulateCLIInterruptedAction(t, c, fullPlan, action)
 
 	out, stderr, err := c.run("setup", "recover", "--plan", planFile)
 	if err != nil {
@@ -374,6 +416,12 @@ func TestCLISetupRecoverReconcilesInterruptedActions(t *testing.T) {
 	}
 	if !strings.Contains(out, "Setup Recovery Reconciled") {
 		t.Errorf("expected recovery message in output:\n%s", out)
+	}
+	if !strings.Contains(out, "Actions:        1") {
+		t.Errorf("expected exactly one reconciled action in output:\n%s", out)
+	}
+	if !strings.Contains(out, action.ActionID) {
+		t.Errorf("expected the reconciled action's ID %q in output:\n%s", action.ActionID, out)
 	}
 }
 
@@ -397,10 +445,234 @@ func TestCLISetupHelpDocumentsWorkflowAndExitCodes(t *testing.T) {
 		"2  Invalid command-line arguments",
 		"3  Plan file not found",
 		"4  Precondition drift or interrupted ledger run",
+		"5  Plan file is malformed, semantically invalid, or fails schema validation",
 		"6  Plan generated with pending actions",
 	} {
 		if !strings.Contains(out, expected) {
 			t.Errorf("setup help missing %q:\n%s", expected, out)
 		}
 	}
+}
+
+// TestCLISetupApplyMissingPlanFileReturnsExitCode3 and
+// TestCLISetupRecoverMissingPlanFileReturnsExitCode3 are the independent-
+// review follow-up on WP-M3B-7, FIX_NOW-1/FIX_NOW-4: a plan file that
+// simply does not exist must be exit 3 (CategoryNotFound), distinct from a
+// plan file that exists but is invalid (exit 5).
+func TestCLISetupApplyMissingPlanFileReturnsExitCode3(t *testing.T) {
+	c := newCLI(t)
+	missing := filepath.Join(t.TempDir(), "does-not-exist.json")
+
+	_, _, err := c.run("setup", "apply", "--plan", missing, "--approve-plan", "sha256:0000000000000000000000000000000000000000000000000000000000000000")
+	if err == nil {
+		t.Fatal("expected setup apply against a missing plan file to fail")
+	}
+	if code := exitCode(err); code != ExitCodeNotFound {
+		t.Errorf("expected exit code %d (not found), got %d (err: %v)", ExitCodeNotFound, code, err)
+	}
+}
+
+func TestCLISetupRecoverMissingPlanFileReturnsExitCode3(t *testing.T) {
+	c := newCLI(t)
+	missing := filepath.Join(t.TempDir(), "does-not-exist.json")
+
+	_, _, err := c.run("setup", "recover", "--plan", missing)
+	if err == nil {
+		t.Fatal("expected setup recover against a missing plan file to fail")
+	}
+	if code := exitCode(err); code != ExitCodeNotFound {
+		t.Errorf("expected exit code %d (not found), got %d (err: %v)", ExitCodeNotFound, code, err)
+	}
+}
+
+// TestCLISetupApplyCorruptPlanFileReturnsExitCode5 and
+// TestCLISetupRecoverCorruptPlanFileReturnsExitCode5 prove a plan file that
+// exists but is not valid JSON is classified CategoryIntegrity (exit 5),
+// not CategoryInvalidArgument (exit 2) — the exact defect the round-3
+// reviewer reproduced end to end against `setup apply` and required to be
+// fixed for `setup recover` too (independent-review follow-up on
+// WP-M3B-7, FIX_NOW-1).
+func TestCLISetupApplyCorruptPlanFileReturnsExitCode5(t *testing.T) {
+	c := newCLI(t)
+	planFile := filepath.Join(t.TempDir(), "corrupt-plan.json")
+	if err := os.WriteFile(planFile, []byte("{not valid json"), 0o600); err != nil {
+		t.Fatalf("write corrupt plan fixture: %v", err)
+	}
+
+	_, _, err := c.run("setup", "apply", "--plan", planFile, "--approve-plan", "sha256:0000000000000000000000000000000000000000000000000000000000000000")
+	if err == nil {
+		t.Fatal("expected setup apply against a corrupt plan file to fail")
+	}
+	if code := exitCode(err); code != ExitCodeIntegrity {
+		t.Errorf("expected exit code %d (integrity), got %d (err: %v)", ExitCodeIntegrity, code, err)
+	}
+}
+
+func TestCLISetupRecoverCorruptPlanFileReturnsExitCode5(t *testing.T) {
+	c := newCLI(t)
+	planFile := filepath.Join(t.TempDir(), "corrupt-plan.json")
+	if err := os.WriteFile(planFile, []byte("{not valid json"), 0o600); err != nil {
+		t.Fatalf("write corrupt plan fixture: %v", err)
+	}
+
+	_, _, err := c.run("setup", "recover", "--plan", planFile)
+	if err == nil {
+		t.Fatal("expected setup recover against a corrupt plan file to fail")
+	}
+	if code := exitCode(err); code != ExitCodeIntegrity {
+		t.Errorf("expected exit code %d (integrity), got %d (err: %v)", ExitCodeIntegrity, code, err)
+	}
+}
+
+// TestCLISetupApplyInvalidPlanFileReturnsExitCode5 proves a plan file that
+// is well-formed JSON but fails SetupPlan's own semantic Validate() (here,
+// an unsupported schema_version) is also exit 5, not exit 2.
+func TestCLISetupApplyInvalidPlanFileReturnsExitCode5(t *testing.T) {
+	c := newCLI(t)
+	planFile := filepath.Join(t.TempDir(), "unsupported-version-plan.json")
+	action := setup.NewCreateDirectoryAction("act_01", protocol.LocationState, "1.0.0")
+	fullPlan := buildActionPlan(t, protocol.TargetHardware, action)
+	fullPlan.SchemaVersion = "99.0"
+
+	planBytes, err := json.Marshal(fullPlan)
+	if err != nil {
+		t.Fatalf("marshal fixture plan: %v", err)
+	}
+	if err := os.WriteFile(planFile, planBytes, 0o600); err != nil {
+		t.Fatalf("write fixture plan: %v", err)
+	}
+
+	_, _, err = c.run("setup", "apply", "--plan", planFile, "--approve-plan", fullPlan.PlanDigest)
+	if err == nil {
+		t.Fatal("expected setup apply against an unsupported schema_version to fail")
+	}
+	if code := exitCode(err); code != ExitCodeIntegrity {
+		t.Errorf("expected exit code %d (integrity), got %d (err: %v)", ExitCodeIntegrity, code, err)
+	}
+}
+
+// TestCLISetupApplyYesUserConfirmationSucceeds proves the --yes
+// non-interactive authorization path exits 0 on a plan whose required
+// authority is within scope (user_confirmation), not merely that it is
+// rejected when out of scope (TestCLISetupApplyYesScopeRejectsPrivilegedPlan
+// already covers the rejection case).
+func TestCLISetupApplyYesUserConfirmationSucceeds(t *testing.T) {
+	c := newCLI(t)
+	c.isTerminal = func() bool { return false }
+	planFile := filepath.Join(t.TempDir(), "plan.json")
+
+	// NewCreateDirectoryAction's operation kind intrinsically carries
+	// AuthorityUserConfirmation (protocol.IntrinsicPolicy), so this plan is
+	// exactly the --yes-eligible case without needing to override Authority.
+	action := setup.NewCreateDirectoryAction("act_01", protocol.LocationState, "1.0.0")
+	fullPlan := buildActionPlan(t, protocol.TargetHardware, action)
+	if fullPlan.RequiredAuthority != protocol.AuthorityUserConfirmation {
+		t.Fatalf("fixture precondition: required_authority = %s, want %s", fullPlan.RequiredAuthority, protocol.AuthorityUserConfirmation)
+	}
+
+	planBytes, _ := json.MarshalIndent(fullPlan, "", "  ")
+	_ = os.WriteFile(planFile, planBytes, 0o600)
+
+	out, stderr, err := c.run("setup", "apply", "--plan", planFile, "--approve-plan", fullPlan.PlanDigest, "--yes")
+	if err != nil {
+		t.Fatalf("expected --yes on a user_confirmation-authority plan to succeed, got: %v (stderr: %s)", err, stderr)
+	}
+	if strings.Contains(out, "\x1b") || strings.Contains(stderr, "\x1b") {
+		t.Errorf("setup apply --yes output contains ANSI control sequences")
+	}
+	if !strings.Contains(out, "Setup completed successfully.") {
+		t.Errorf("expected success message in output:\n%s", out)
+	}
+}
+
+// TestCLISetupRecoverOutputHasNoANSI closes the ANSI-absence gap FIX_NOW-4
+// noted for setup recover's plain-text output path (setup apply and setup
+// plan already carry this assertion elsewhere in this file).
+func TestCLISetupRecoverOutputHasNoANSI(t *testing.T) {
+	c := newCLI(t)
+	planFile := filepath.Join(t.TempDir(), "recover-plan.json")
+	action := setup.NewCreateDirectoryAction("act_01", protocol.LocationState, "1.0.0")
+	fullPlan := buildActionPlan(t, protocol.TargetHardware, action)
+	planBytes, _ := json.MarshalIndent(fullPlan, "", "  ")
+	_ = os.WriteFile(planFile, planBytes, 0o600)
+
+	simulateCLIInterruptedAction(t, c, fullPlan, action)
+
+	out, stderr, err := c.run("setup", "recover", "--plan", planFile)
+	if err != nil {
+		t.Fatalf("setup recover failed: %v (stderr: %s)", err, stderr)
+	}
+	if strings.Contains(out, "\x1b") || strings.Contains(stderr, "\x1b") {
+		t.Errorf("setup recover output contains ANSI control sequences")
+	}
+	if !strings.Contains(out, "Actions:        1") {
+		t.Errorf("expected exactly one reconciled action in output:\n%s", out)
+	}
+}
+
+// TestCLISetupRecoverJSONValidatesAgainstSchema proves `setup recover
+// --json` emits the versioned, schema-governed SetupRecoveryReport rather
+// than an unvalidated ad hoc map (independent-review follow-up on
+// WP-M3B-7, FIX_NOW-2).
+func TestCLISetupRecoverJSONValidatesAgainstSchema(t *testing.T) {
+	c := newCLI(t)
+	planFile := filepath.Join(t.TempDir(), "recover-plan.json")
+	action := setup.NewCreateDirectoryAction("act_01", protocol.LocationState, "1.0.0")
+	fullPlan := buildActionPlan(t, protocol.TargetHardware, action)
+	planBytes, _ := json.MarshalIndent(fullPlan, "", "  ")
+	_ = os.WriteFile(planFile, planBytes, 0o600)
+
+	simulateCLIInterruptedAction(t, c, fullPlan, action)
+
+	out, stderr, err := c.run("setup", "recover", "--plan", planFile, "--json")
+	if err != nil {
+		t.Fatalf("setup recover --json failed: %v (stderr: %s)", err, stderr)
+	}
+
+	set, sErr := schema.Default()
+	if sErr != nil {
+		t.Fatalf("schema.Default: %v", sErr)
+	}
+	if vErr := set.ValidateBytes(schema.NameSetupRecoveryReport, []byte(out)); vErr != nil {
+		t.Fatalf("emitted SetupRecoveryReport does not satisfy schema: %v\nJSON:\n%s", vErr, out)
+	}
+
+	var report protocol.SetupRecoveryReport
+	if decErr := protocol.Unmarshal([]byte(out), &report); decErr != nil {
+		t.Fatalf("failed to decode SetupRecoveryReport: %v", decErr)
+	}
+	if report.PlanID != fullPlan.PlanID {
+		t.Errorf("plan_id = %q, want %q", report.PlanID, fullPlan.PlanID)
+	}
+	if len(report.Results) != 1 || report.Results[0].ActionID != action.ActionID {
+		t.Errorf("results = %+v, want one result for %q", report.Results, action.ActionID)
+	}
+}
+
+// TestSetupPlanRejectsConflictingTargetAndExtraPositionals is the
+// independent-review follow-up on WP-M3B-7, FIX_NOW-3: `setup plan` must
+// not silently accept a positional target that conflicts with --target, or
+// extra positional arguments beyond the one target it documents.
+func TestCLISetupPlanRejectsConflictingTargetAndExtraPositionals(t *testing.T) {
+	c := newCLI(t)
+
+	t.Run("conflicting positional and --target", func(t *testing.T) {
+		_, _, err := c.run("setup", "plan", "hardware", "--target", "cognition")
+		if err == nil {
+			t.Fatal("expected conflicting positional target and --target to fail")
+		}
+		if code := exitCode(err); code != ExitCodeInvalidArgument {
+			t.Errorf("expected exit code %d (invalid argument), got %d (err: %v)", ExitCodeInvalidArgument, code, err)
+		}
+	})
+
+	t.Run("extra positional arguments", func(t *testing.T) {
+		_, _, err := c.run("setup", "plan", "hardware", "cognition")
+		if err == nil {
+			t.Fatal("expected extra positional arguments to fail")
+		}
+		if code := exitCode(err); code != ExitCodeInvalidArgument {
+			t.Errorf("expected exit code %d (invalid argument), got %d (err: %v)", ExitCodeInvalidArgument, code, err)
+		}
+	})
 }

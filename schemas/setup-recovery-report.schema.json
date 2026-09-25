@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/olostan/DevCadence/schemas/setup-recovery-report.schema.json",
+  "title": "DevCadence SetupRecoveryReport",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "recovery_id",
+    "plan_id",
+    "plan_digest",
+    "recovered_at",
+    "results"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "recovery_id": { "type": "string" },
+    "plan_id": { "type": "string" },
+    "plan_digest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "recovered_at": { "type": "string", "format": "date-time" },
+    "results": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["action_id", "status"],
+        "properties": {
+          "action_id": { "type": "string" },
+          "status": {
+            "enum": [
+              "planned",
+              "awaiting_approval",
+              "running",
+              "succeeded",
+              "failed",
+              "skipped",
+              "manual_required",
+              "blocked",
+              "interrupted"
+            ]
+          }
+        }
+      }
+    }
+  }
+}

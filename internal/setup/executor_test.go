@@ -562,12 +562,12 @@ func TestExecutorRecoverReconcilesInterruptedAction(t *testing.T) {
 		t.Fatalf("NewExecutor: %v", err)
 	}
 
-	statuses, err := exec.Recover(context.Background(), plan)
+	results, err := exec.Recover(context.Background(), plan)
 	if err != nil {
 		t.Fatalf("Recover: %v", err)
 	}
-	if len(statuses) != 1 || statuses[0] != protocol.ActionStatusSucceeded {
-		t.Fatalf("Recover statuses = %+v, want one succeeded", statuses)
+	if len(results) != 1 || results[0].ActionID != action.ActionID || results[0].Status != protocol.ActionStatusSucceeded {
+		t.Fatalf("Recover results = %+v, want one succeeded result for %q", results, action.ActionID)
 	}
 
 	// The interrupted action must be durably resolved now — a fresh Apply
@@ -626,12 +626,12 @@ func TestExecutorRecoverDoesNotReconcileIncompleteMLXSnapshotAsSucceeded(t *test
 		t.Fatalf("NewExecutor: %v", err)
 	}
 
-	statuses, err := exec.Recover(context.Background(), plan)
+	results, err := exec.Recover(context.Background(), plan)
 	if err != nil {
 		t.Fatalf("Recover: %v", err)
 	}
-	if len(statuses) != 1 || statuses[0] == protocol.ActionStatusSucceeded {
-		t.Fatalf("Recover statuses = %+v, want the incomplete-snapshot action NOT reconciled as succeeded", statuses)
+	if len(results) != 1 || results[0].Status == protocol.ActionStatusSucceeded {
+		t.Fatalf("Recover results = %+v, want the incomplete-snapshot action NOT reconciled as succeeded", results)
 	}
 }
 

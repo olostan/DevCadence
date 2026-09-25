@@ -1192,3 +1192,71 @@ func (r *SetupExecutionReport) Validate() error {
 	}
 	return nil
 }
+
+// RecoveryActionResult records one action's outcome from a crash-recovery
+// pass: the resolution Ledger.ReconcileInterrupted determined by checking
+// the action's own Postconditions live against current system state, never
+// by re-executing it.
+type RecoveryActionResult struct {
+	ActionID string       `json:"action_id"`
+	Status   ActionStatus `json:"status"`
+}
+
+func (r RecoveryActionResult) Validate() error {
+	const kind = "RecoveryActionResult"
+	if r.ActionID == "" {
+		return errs.New(errs.CategoryInvalidArgument, "%s: action_id is required", kind)
+	}
+	if !r.Status.Valid() {
+		return errs.New(errs.CategoryInvalidArgument, "%s: invalid status %q", kind, string(r.Status))
+	}
+	return nil
+}
+
+// SetupRecoveryReport is the versioned, schema-governed public shape of
+// `devcadence setup recover`'s JSON output. It exists because the CLI's
+// public JSON boundary must always be a validated, versioned protocol
+// record (ADR-0014) — an ad hoc map, however well-intentioned, is neither
+// (independent-review follow-up on WP-M3B-7, FIX_NOW-2).
+type SetupRecoveryReport struct {
+	SchemaVersion SchemaVersion          `json:"schema_version"`
+	RecoveryID    string                 `json:"recovery_id"`
+	PlanID        string                 `json:"plan_id"`
+	PlanDigest    string                 `json:"plan_digest"`
+	RecoveredAt   Timestamp              `json:"recovered_at"`
+	Results       []RecoveryActionResult `json:"results"`
+}
+
+func (r *SetupRecoveryReport) RecordKind() string       { return "SetupRecoveryReport" }
+func (r *SetupRecoveryReport) RecordID() string         { return r.RecoveryID }
+func (r *SetupRecoveryReport) SchemaVer() SchemaVersion { return r.SchemaVersion }
+
+func (r *SetupRecoveryReport) Validate() error {
+	const kind = "SetupRecoveryReport"
+	if err := r.SchemaVersion.Validate(kind); err != nil {
+		return err
+	}
+	if err := requireNonEmpty(kind, "recovery_id", r.RecoveryID); err != nil {
+		return err
+	}
+	if err := requireNonEmpty(kind, "plan_id", r.PlanID); err != nil {
+		return err
+	}
+	if !hexSha256Regex.MatchString(r.PlanDigest) {
+		return errs.New(errs.CategoryInvalidArgument, "%s: plan_digest must be sha256 hex, got %q", kind, r.PlanDigest)
+	}
+	if r.RecoveredAt.Time().IsZero() {
+		return errs.New(errs.CategoryInvalidArgument, "%s: recovered_at is required", kind)
+	}
+	seen := make(map[string]bool, len(r.Results))
+	for _, res := range r.Results {
+		if err := res.Validate(); err != nil {
+			return err
+		}
+		if seen[res.ActionID] {
+			return errs.New(errs.CategoryInvalidArgument, "%s: duplicate action_id %q in results", kind, res.ActionID)
+		}
+		seen[res.ActionID] = true
+	}
+	return nil
+}

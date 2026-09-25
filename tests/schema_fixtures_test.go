@@ -166,6 +166,7 @@ func TestFixturesRoundTripWithoutSemanticLoss(t *testing.T) {
 		{"setup-plan.valid.json", decodeInto[protocol.SetupPlan]},
 		{"setup-plan.valid-manual-action.json", decodeInto[protocol.SetupPlan]},
 		{"setup-execution-report.valid.json", decodeInto[protocol.SetupExecutionReport]},
+		{"setup-recovery-report.valid.json", decodeInto[protocol.SetupRecoveryReport]},
 		{"setup-ledger-event.valid.json", decodeInto[protocol.SetupLedgerEvent]},
 		{"credential-ref.valid.json", decodeInto[protocol.CredentialRef]},
 		{"auth-evidence.valid.json", decodeInto[protocol.AuthEvidence]},

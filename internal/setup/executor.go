@@ -306,7 +306,7 @@ func (e *Executor) Apply(ctx context.Context, plan *protocol.SetupPlan, approved
 // primitives for; Apply refuses to start a new execution while any
 // interrupted action remains unreconciled, so a caller resuming after a
 // crash must call Recover before its next Apply.
-func (e *Executor) Recover(ctx context.Context, plan *protocol.SetupPlan) ([]protocol.ActionStatus, error) {
+func (e *Executor) Recover(ctx context.Context, plan *protocol.SetupPlan) ([]protocol.RecoveryActionResult, error) {
 	if plan == nil {
 		return nil, errs.New(errs.CategoryInvalidArgument, "Executor.Recover: plan is required")
 	}
@@ -325,24 +325,24 @@ func (e *Executor) Recover(ctx context.Context, plan *protocol.SetupPlan) ([]pro
 		return nil, err
 	}
 
-	var statuses []protocol.ActionStatus
+	var results []protocol.RecoveryActionResult
 	for _, interrupted := range FindInterrupted(events) {
 		if interrupted.PlanID != plan.PlanID || interrupted.PlanDigest != plan.PlanDigest {
 			continue
 		}
 		action := findActionByID(plan, interrupted.ActionID)
 		if action == nil {
-			return statuses, errs.New(errs.CategoryNotFound,
+			return results, errs.New(errs.CategoryNotFound,
 				"Executor.Recover: plan %q has no action %q, but the ledger records it as interrupted", plan.PlanID, interrupted.ActionID)
 		}
 		now := protocol.NewTimestamp(e.clock.Now())
 		status, err := ledger.ReconcileInterrupted(ctx, e, interrupted, action.Postconditions, e.ids.New("evt"), e.ids.New("evt"), now)
 		if err != nil {
-			return statuses, err
+			return results, err
 		}
-		statuses = append(statuses, status)
+		results = append(results, protocol.RecoveryActionResult{ActionID: interrupted.ActionID, Status: status})
 	}
-	return statuses, nil
+	return results, nil
 }
 
 func findActionByID(plan *protocol.SetupPlan, actionID string) *protocol.SetupAction {
