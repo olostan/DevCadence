@@ -392,9 +392,27 @@ Full detail in `docs/work-packages/wp-m3b-6-ewp.md` §11.
 
 **Known blockers / open questions:** none.
 
+## WP-M3B-7 — CLI surface and minimal guided interaction (in progress)
+
+- **EWP status:** authored, frozen, and committed at `docs/work-packages/wp-m3b-7-ewp.md`.
+- **Base commit this WP started from:** `bae6d2a86f0a78ba36f36296be04106be0c7fbcc`
+- **Scope:**
+  - `devcadence doctor` command (plain text summary and `--json` output validated against `doctor-report.schema.json`), including `--fix` generating `SetupPlan`.
+  - `devcadence setup plan [target]` command (plain text plan summary and `--json` output validated against `setup-plan.schema.json`).
+  - `devcadence setup apply` command (`--plan`, `--approve-plan`, `--yes`, `--json` output validated against `setup-execution-report.schema.json`, minimal interactive confirmation, non-interactive fail-closed validation, and drift detection).
+  - `devcadence setup recover` command (`--plan`, `--json`) reconciling interrupted actions.
+  - Defined exit code contract: `0` (no-op/clean), `1` (execution failure), `2` (invalid argument), `3` (not found), `4` (precondition drift / refresh required), `5` (integrity), `6` (plan generated).
+  - Pure adapter pattern: no domain logic or duplicate checks in CLI layer.
+  - Non-interactive mode emits zero ANSI escape sequences.
+  - `--no-tui` accepted as compatibility no-op flag across all setup/doctor subcommands.
+
 ## Next concrete action
 
-WP-M3B-6 is accepted. Proceed to WP-M3B-7 (`devcadence doctor` / `devcadence setup` CLI surface) per the handoff protocol: read the WP-M3B-7 scope card in `docs/WORK_PACKAGES.md`, author its EWP before any implementation code (AGENTS.md §6), and follow the same implement -> verify -> independent-review -> fix cycle established across WP-M3B-1 through WP-M3B-6.
+Implement WP-M3B-7 against the frozen EWP:
+1. Extend `cmd/devcadence/main.go` and `cmd/devcadence/run.go` with exit code mapping and command dispatch.
+2. Implement `cmd/devcadence/cmd_doctor.go` and `cmd/devcadence/cmd_setup.go`.
+3. Add full unit and end-to-end test suite in `cmd/devcadence/cli_doctor_test.go` and `cmd/devcadence/cli_setup_test.go`.
+4. Verify with full verification suite, then commit, push, and request independent review.
 
 ## Resume checklist for the next agent
 
@@ -403,5 +421,5 @@ WP-M3B-6 is accepted. Proceed to WP-M3B-7 (`devcadence doctor` / `devcadence set
    HEAD" baseline.
 2. Do not trust this file blindly: run `go build ./... && go test -count=1 ./...`
    and confirm it matches what's claimed above.
-3. Read `docs/work-packages/wp-m3b-6-ewp.md` and PR #10 comments for review disposition.
+3. Read `docs/work-packages/wp-m3b-7-ewp.md` and PR #10 comments for review disposition.
 4. Continue from "Next concrete action" above.
