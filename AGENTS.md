@@ -302,8 +302,8 @@ Repeated failure should escalate rather than produce infinite retries.
 ## 16. Current phase
 
 M0 (normative baseline), M1 (domain core and canonical state), M2
-(repository/worktree/process execution) and M3A (environment intelligence and
-cognition runtime) are complete.
+(repository/worktree/process execution), M3A (environment intelligence and
+cognition runtime) and M3B (guided deterministic bootstrap) are complete.
 
 The control plane now has typed protocol records, an append-only engineering
 event journal, deterministic ProjectState reduction, task/attempt state
@@ -327,14 +327,15 @@ facts are separate from assessment, a capability grade requires provenance,
 validation without it, machine profiles are computed rather than persisted, and
 routing is a filter plus an explicit ordering with no score.
 
-The next milestone is **M3B — guided deterministic bootstrap**:
-`setup`/`doctor`, remediation planning, installation recipes, credential
-references, deterministic `ResourceInventory`, readiness projection, and a
-plain/JSON/basic-terminal surface. M3B computes factual readiness and resource
-inventory without embedding a static deployment-profile chooser. A rich
-adaptive setup TUI is deliberately not an M3B exit criterion.
+**M3B — guided deterministic bootstrap** is complete: `setup`/`doctor`,
+remediation planning, installation recipes, credential references,
+deterministic `ResourceInventory`, readiness projection, and a
+plain/JSON/basic-terminal surface (WP-M3B-1 through WP-M3B-8, all accepted).
+M3B computes factual readiness and resource inventory without embedding a
+static deployment-profile chooser. A rich adaptive setup TUI was deliberately
+not an M3B exit criterion.
 
-Following M3B:
+The next milestone is:
 - **M3C — cognition resource and session substrate** implements provider-neutral
   session drivers, access-channel capability contracts, `EconomicRegime`,
   `BudgetPool` / dynamic resource state, portfolio protocol shapes, and the

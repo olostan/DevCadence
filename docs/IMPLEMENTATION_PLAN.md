@@ -484,7 +484,7 @@ must explain are known.
   7. SSH/basic-terminal `--no-tui` deterministic compatibility (ADR-0018);
   8. Honest degradation of readiness and ResourceInventory when optional endpoints/hardware are degraded.
 - Credential evidence integrity and schema-to-Go twin parity across all 8 M3B record schemas (`tests/twin_fields_test.go`);
-- Comprehensive 23-dimension matrix tests in `internal/setup/matrix_test.go` and full CLI tests in `cmd/devcadence/setup_test.go`.
+- Comprehensive 23-dimension matrix tests in `internal/setup/matrix_test.go` and full CLI tests in `cmd/devcadence/cli_doctor_test.go` and `cmd/devcadence/cli_setup_test.go`.
 
 #### Exit criterion
 A user can safely discover/configure at least one viable cognition path when
@@ -493,7 +493,7 @@ needing to understand accelerator/runtime/provider details. The workflow is
 usable from plain terminals and automation; rich adaptive onboarding is not an
 M3B gate.
 
-**Met.** Verified across unit, matrix, CLI end-to-end, and milestone closure suites without requiring GPU, cloud credentials, or interactive TUI. All 8 M3B schemas pass strict twin validation.
+**Met.** Verified across unit, matrix, CLI end-to-end, and milestone closure suites without requiring GPU, cloud credentials, or interactive TUI. All 8 M3B schemas pass `TestSchemaTopLevelFieldsMatchTheGoTwin` (top-level schema properties matched against their canonical Go structs — not a deep/nested field-by-field check).
 
 ### M3C — Cognition resource and session substrate
 

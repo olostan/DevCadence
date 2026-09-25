@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/olostan/DevCadence/internal/clock"
+	"github.com/olostan/DevCadence/internal/cognition"
 	"github.com/olostan/DevCadence/internal/credentials"
 	"github.com/olostan/DevCadence/internal/ids"
 	"github.com/olostan/DevCadence/internal/process"
@@ -369,50 +370,161 @@ func TestM3BMilestoneClosure_Scenario04_InterruptedSetupRecoveryCLI(t *testing.T
 	}
 }
 
+// fakeCognitionAdapter is a minimal, deterministic cognition.Adapter for
+// milestone-closure scenarios that must drive Doctor.Run through a real
+// cognition.Service rather than hand-constructing its output (independent-
+// review follow-up on WP-M3B-8, FIX_NOW-1): a hand-built DoctorReport can
+// silently drift from what discovery actually produces, and proves nothing
+// about discovery itself.
+type fakeCognitionAdapter struct {
+	adapterID string
+	endpoints []protocol.CognitionEndpoint
+}
+
+func (a *fakeCognitionAdapter) ID() string { return a.adapterID }
+func (a *fakeCognitionAdapter) Discover(ctx context.Context, in cognition.DiscoveryInput) ([]protocol.CognitionEndpoint, error) {
+	return a.endpoints, nil
+}
+func (a *fakeCognitionAdapter) Probe(ctx context.Context, endpoint protocol.CognitionEndpoint, req cognition.ProbeRequest) (cognition.ProbeResult, error) {
+	return cognition.ProbeResult{}, nil
+}
+
+// findScopeStatus looks up one ScopeReadiness entry by scope kind, failing
+// the test if the scope is absent rather than returning a zero value that
+// could be mistaken for a real "not ready" status.
+func findScopeStatus(t *testing.T, readiness []protocol.ScopeReadiness, scope protocol.ScopeKind) protocol.ScopeReadinessStatus {
+	t.Helper()
+	for _, r := range readiness {
+		if r.Scope == scope {
+			return r.Status
+		}
+	}
+	t.Fatalf("scope %q not found in ScopeReadiness", scope)
+	return ""
+}
+
 // 5. Preference for Existing Usable Tools
 // DCI-105, ADR-0014 §7: Satisfied capabilities (e.g. existing authenticated CLI)
 // require 0 setup actions, preferring existing tools over redundant installations.
+//
+// Independent-review follow-up on WP-M3B-8, FIX_NOW-1: the original version
+// of this scenario hand-constructed a DoctorReport (with an empty, schema-
+// invalid EvaluationScope.EvidenceStatus) claiming the CLI was already
+// authenticated, without ever exercising discovery. That proved nothing
+// about whether discovery actually recognizes and prefers an existing
+// authenticated CLI. This version drives a real cognition.Service with a
+// deterministic fake adapter through Doctor.Run, and only then plans from
+// the report Run actually produced.
 func TestM3BMilestoneClosure_Scenario05_PreferenceForExistingUsableTools(t *testing.T) {
+	homeDir := t.TempDir()
+	for _, sub := range []string{"state", filepath.Join("artifacts", "setup"), "tmp"} {
+		if err := os.MkdirAll(filepath.Join(homeDir, sub), 0o700); err != nil {
+			t.Fatalf("mkdir %s: %v", sub, err)
+		}
+	}
+
 	fixedTime := time.Date(2026, 9, 25, 12, 0, 0, 0, time.UTC)
 	clk := clock.NewFake(fixedTime, 0)
 	seq := ids.NewSequential()
 
-	planner, err := setup.NewPlanner(setup.PlannerOptions{
-		Clock: clk,
-		IDs:   seq,
+	adapter := &fakeCognitionAdapter{
+		adapterID: "fake-authenticated-cli",
+		endpoints: []protocol.CognitionEndpoint{
+			{
+				ID:                     "claude-code",
+				Kind:                   protocol.EndpointAuthenticatedCLI,
+				Locality:               protocol.LocalityRemote,
+				Health:                 protocol.EndpointHealthReady,
+				Auth:                   protocol.AuthAuthenticated,
+				CostClass:              protocol.CostSubscriptionIncluded,
+				RequiredSourceExposure: protocol.ExposureFocusedSnippets,
+				StructuredOutput:       protocol.FeatureDeclared,
+				ToolUse:                protocol.FeatureDeclared,
+				ObservedAt:             protocol.NewTimestamp(fixedTime),
+			},
+		},
+	}
+	cogService, err := cognition.NewService(cognition.Options{
+		Adapters: []cognition.Adapter{adapter},
+		Clock:    clk,
+		IDs:      seq,
 	})
+	if err != nil {
+		t.Fatalf("cognition.NewService: %v", err)
+	}
+
+	doc, err := setup.NewDoctor(setup.DoctorOptions{
+		Clock:            clk,
+		IDs:              seq,
+		HomeDir:          homeDir,
+		CognitionService: cogService,
+	})
+	if err != nil {
+		t.Fatalf("NewDoctor: %v", err)
+	}
+
+	facts := protocol.EnvironmentFacts{
+		Host:           protocol.HostFacts{Family: protocol.OSLinux, Arch: "amd64"},
+		Virtualization: protocol.VirtualizationFacts{Container: protocol.ContainerNone},
+		Software: []protocol.SoftwarePresence{
+			{ID: "git", Category: protocol.SoftwareEngineering, Installed: true, Version: "2.45.0"},
+		},
+	}
+	scope := protocol.ReadinessEvaluationScope{
+		RequiredRoles:  []string{},
+		EvidenceStatus: "live",
+	}
+
+	report, err := doc.Run(context.Background(), scope, facts)
+	if err != nil {
+		t.Fatalf("Doctor.Run: %v", err)
+	}
+	if err := report.Validate(); err != nil {
+		t.Fatalf("DoctorReport.Validate: %v", err)
+	}
+
+	// Discovery must have actually surfaced the authenticated CLI, not just
+	// have been told about it after the fact.
+	discovered := false
+	for _, ep := range report.DiscoveredEndpoints {
+		if ep.ID == "claude-code" && ep.Auth == protocol.AuthAuthenticated {
+			discovered = true
+		}
+	}
+	if !discovered {
+		t.Fatalf("doctor did not discover the authenticated CLI endpoint; DiscoveredEndpoints = %+v", report.DiscoveredEndpoints)
+	}
+	if status := findScopeStatus(t, report.ScopeReadiness, protocol.ScopeCanUseAuthenticatedCLI); status != protocol.ScopeStatusReady {
+		t.Errorf("ScopeCanUseAuthenticatedCLI = %s, want ready", status)
+	}
+	if report.Readiness != protocol.ReadinessReady && report.Readiness != protocol.ReadinessReadyWithReducedCap {
+		t.Fatalf("Readiness = %s, want READY or READY_WITH_REDUCED_CAPABILITY (authenticated CLI is a viable path)", report.Readiness)
+	}
+
+	planner, err := setup.NewPlanner(setup.PlannerOptions{Clock: clk, IDs: seq})
 	if err != nil {
 		t.Fatalf("NewPlanner: %v", err)
 	}
-
-	// Report indicates authenticated CLI is present and healthy, no remediable findings
-	profile := protocol.DeploymentProfile("")
-	report := &protocol.DoctorReport{
-		SchemaVersion:      protocol.SchemaVersion1,
-		ReportID:           "rep_usable_tools",
-		MachineFingerprint: "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-		ObservedAt:         protocol.NewTimestamp(fixedTime),
-		Readiness:          protocol.ReadinessReady,
-		ScopeReadiness: []protocol.ScopeReadiness{
-			{Scope: protocol.ScopeCanUseAuthenticatedCLI, Status: protocol.ScopeStatusReady, Reason: "Authenticated CLI available"},
-			{Scope: protocol.ScopeHasAnyViableCognitionPath, Status: protocol.ScopeStatusReady, Reason: "Viable path available"},
-		},
-		Findings: []protocol.DiagnosticFinding{},
-	}
-
-	plan, err := planner.PlanWithContext(context.Background(), report, protocol.TargetAll, profile)
+	plan, err := planner.PlanWithContext(context.Background(), report, protocol.TargetAll, "")
 	if err != nil {
 		t.Fatalf("PlanWithContext: %v", err)
 	}
-
 	if len(plan.Actions) != 0 {
-		t.Errorf("planner generated %d actions for already-satisfied environment, want 0 (no redundant work)", len(plan.Actions))
+		t.Errorf("planner generated %d actions for an already-satisfied environment (real discovered authenticated CLI), want 0 (no redundant work): %+v", len(plan.Actions), plan.Actions)
 	}
 }
 
 // 6. Plain / Non-Interactive Operation
 // ADR-0014 §2: Non-interactive execution emits zero ANSI control characters and fails
 // closed if approval is missing.
+//
+// Independent-review follow-up on WP-M3B-8, FIX_NOW-1: the original version
+// pointed setup apply at a nonexistent plan file, so the CLI stopped at
+// "plan not found" (exit 3) and never reached the missing-approval fail-
+// closed boundary this scenario claims to prove (documented result: exit
+// 2). This version gives setup apply a real, valid, on-disk plan and omits
+// --approve-plan, so the exit code and diagnostic it asserts are actually
+// produced by the approval boundary, not by a file-not-found short circuit.
 func TestM3BMilestoneClosure_Scenario06_PlainNonInteractiveOperation(t *testing.T) {
 	bin := buildCLIBinary(t)
 	homeDir := t.TempDir()
@@ -430,76 +542,186 @@ func TestM3BMilestoneClosure_Scenario06_PlainNonInteractiveOperation(t *testing.
 		t.Errorf("plain CLI output contained ANSI escape sequences: %q", combined)
 	}
 
-	// Non-interactive apply without approval fails closed with exit code 2
-	cmdApply := exec.Command(bin, "setup", "apply", "--plan", filepath.Join(homeDir, "nonexistent.json"))
+	// A real, valid, on-disk plan — so omitting --approve-plan exercises the
+	// missing-approval fail-closed boundary itself, not file-not-found.
+	planPath := filepath.Join(homeDir, "plan.json")
+	action := setup.NewCreateDirectoryAction("act_mkdir", protocol.LocationTmp, "1.0")
+	plan := &protocol.SetupPlan{
+		SchemaVersion:      protocol.SchemaVersion1,
+		PlanID:             "plan_scenario06",
+		RecipeSetVersion:   "1.0",
+		MachineFingerprint: "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+		CreatedAt:          protocol.NewTimestamp(time.Now()),
+		Target:             protocol.TargetHardware,
+		Actions:            []protocol.SetupAction{action},
+		RequiredAuthority:  action.Authority,
+		TotalEffects:       action.Effects,
+	}
+	digest, err := plan.ComputePlanDigest()
+	if err != nil {
+		t.Fatalf("ComputePlanDigest: %v", err)
+	}
+	plan.PlanDigest = digest
+	raw, err := json.MarshalIndent(plan, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal plan: %v", err)
+	}
+	if err := os.WriteFile(planPath, raw, 0o600); err != nil {
+		t.Fatalf("write plan: %v", err)
+	}
+
+	// Non-interactive apply of a real, existing, valid plan without
+	// --approve-plan must fail closed with exactly exit code 2.
+	//
+	// Stdin is explicitly a pipe (via strings.NewReader), not left to
+	// exec.Cmd's own default: an unset Cmd.Stdin makes the child read from
+	// os.DevNull, and /dev/null itself reports as a character device on
+	// Unix (confirmed: os.Open(os.DevNull) has os.ModeCharDevice set) —
+	// which would trip the CLI's isTerminal() heuristic (run.go, checking
+	// exactly that bit) into treating this as an interactive session, and
+	// the test would exercise the interactive-decline path (exit 1) rather
+	// than the non-interactive fail-closed boundary this scenario claims
+	// to prove (exit 2). A pipe has no such bit set, so it exercises the
+	// real non-interactive boundary this scenario names.
+	cmdApply := exec.Command(bin, "setup", "apply", "--plan", planPath)
 	cmdApply.Env = append(os.Environ(), "DEVCADENCE_HOME="+homeDir)
+	cmdApply.Stdin = strings.NewReader("")
+	var applyStdout, applyStderr bytes.Buffer
+	cmdApply.Stdout = &applyStdout
+	cmdApply.Stderr = &applyStderr
 	errApply := cmdApply.Run()
 	if errApply == nil {
-		t.Fatal("expected setup apply without approval flags to fail")
+		t.Fatal("expected setup apply on a valid plan without --approve-plan to fail")
 	}
 	exitErr, ok := errApply.(*exec.ExitError)
-	if !ok || (exitErr.ExitCode() != 2 && exitErr.ExitCode() != 3) {
-		t.Errorf("exit code = %v, want 2 (invalid args) or 3 (not found)", exitErr)
+	if !ok || exitErr.ExitCode() != 2 {
+		t.Fatalf("setup apply exit code = %v (err: %v), want exactly 2 (invalid argument); stdout: %s stderr: %s",
+			exitErr, errApply, applyStdout.String(), applyStderr.String())
+	}
+	combinedApply := applyStdout.String() + applyStderr.String()
+	if !strings.Contains(combinedApply, "--approve-plan") {
+		t.Errorf("expected the approval diagnostic to mention --approve-plan, got: %s", combinedApply)
+	}
+	if strings.Contains(combinedApply, "\x1b[") {
+		t.Errorf("setup apply output contained ANSI escape sequences: %q", combinedApply)
 	}
 }
 
 // 7. SSH / Basic-Terminal Behavior
-// ADR-0018: --no-tui runs deterministically without terminal escape codes or TUI dependencies.
+// ADR-0018: --no-tui runs deterministically without terminal escape codes.
+//
+// Independent-review follow-up on WP-M3B-8, FIX_NOW-1: the original version
+// discarded the command's error/exit status entirely, so an unknown-flag or
+// argument-parsing failure (which also emits no ANSI) would have passed
+// while the scenario claimed the flag "is accepted cleanly." This version
+// asserts the process actually reached a real doctor readiness outcome (exit
+// 0 or 1), never an argument/parser failure (exit 2). Basic-TTY interactive
+// approval itself (the other half of ADR-0018's SSH/basic-terminal concern)
+// is proven separately and exactly by the existing interactive CLI tests —
+// TestCLISetupApplyInteractiveApproval and TestCLISetupApplyInteractiveRejection
+// in cmd/devcadence/cli_setup_test.go — so this scenario's scope is narrowed
+// to what its name and code actually exercise: the --no-tui compatibility
+// flag contract.
 func TestM3BMilestoneClosure_Scenario07_SSHBasicTerminalBehavior(t *testing.T) {
 	bin := buildCLIBinary(t)
 	homeDir := t.TempDir()
 
-	// --no-tui must be accepted cleanly as a compatibility flag
+	// --no-tui must be accepted cleanly as a compatibility flag: the
+	// process must reach a real doctor readiness outcome, never an
+	// argument/parser failure.
 	cmd := exec.Command(bin, "doctor", "--no-tui")
 	cmd.Env = append(os.Environ(), "DEVCADENCE_HOME="+homeDir)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
-	_ = cmd.Run()
+	err := cmd.Run()
 
 	combined := stdout.String() + stderr.String()
 	if strings.Contains(combined, "\x1b[") {
 		t.Errorf("--no-tui output contained ANSI escape sequences: %q", combined)
+	}
+
+	if err != nil {
+		exitErr, ok := err.(*exec.ExitError)
+		if !ok {
+			t.Fatalf("doctor --no-tui failed to run at all: %v", err)
+		}
+		code := exitErr.ExitCode()
+		if code != 0 && code != 1 {
+			t.Fatalf("doctor --no-tui exit code = %d, want 0 or 1 (a real readiness outcome, not an argument/parser failure); stdout: %s stderr: %s",
+				code, stdout.String(), stderr.String())
+		}
 	}
 }
 
 // 8. Readiness and Resource-Inventory Degradation
 // DCI-104: Unavailable optional hardware or endpoints degrade readiness to
 // READY_WITH_REDUCED_CAPABILITY or PARTIALLY_READY rather than causing a fatal error.
+//
+// Independent-review follow-up on WP-M3B-8, FIX_NOW-1: the original version
+// constructed Doctor with no cognition service at all, so the expired
+// endpoint was never supplied to Doctor.Run — it only ever reached a
+// separate BuildResourceInventory call, meaning the report's non-ready
+// state was unrelated to the expired auth it claimed to test. This version
+// drives Doctor.Run itself through a real cognition.Service reporting the
+// expired-auth endpoint, then builds ResourceInventory from that same
+// report's own DiscoveredEndpoints (rather than a hand-built, separately
+// constructed list) and validates both records.
 func TestM3BMilestoneClosure_Scenario08_GracefulCapabilityDegradation(t *testing.T) {
+	schemas, err := schema.Default()
+	if err != nil {
+		t.Fatalf("schema.Default: %v", err)
+	}
+
 	homeDir := t.TempDir()
 	fixedTime := time.Date(2026, 9, 25, 12, 0, 0, 0, time.UTC)
 	clk := clock.NewFake(fixedTime, 0)
 	seq := ids.NewSequential()
 
+	adapter := &fakeCognitionAdapter{
+		adapterID: "fake-expired-cli",
+		endpoints: []protocol.CognitionEndpoint{
+			{
+				ID:                     "expired-cli",
+				Kind:                   protocol.EndpointAuthenticatedCLI,
+				Locality:               protocol.LocalityRemote,
+				Health:                 protocol.EndpointHealthReady,
+				Auth:                   protocol.AuthExpired,
+				CostClass:              protocol.CostSubscriptionIncluded,
+				RequiredSourceExposure: protocol.ExposureFocusedSnippets,
+				StructuredOutput:       protocol.FeatureDeclared,
+				ToolUse:                protocol.FeatureDeclared,
+				ObservedAt:             protocol.NewTimestamp(fixedTime),
+			},
+		},
+	}
+	cogService, err := cognition.NewService(cognition.Options{
+		Adapters: []cognition.Adapter{adapter},
+		Clock:    clk,
+		IDs:      seq,
+	})
+	if err != nil {
+		t.Fatalf("cognition.NewService: %v", err)
+	}
+
 	doc, err := setup.NewDoctor(setup.DoctorOptions{
-		Clock:   clk,
-		IDs:     seq,
-		HomeDir: homeDir,
+		Clock:            clk,
+		IDs:              seq,
+		HomeDir:          homeDir,
+		CognitionService: cogService,
 	})
 	if err != nil {
 		t.Fatalf("NewDoctor: %v", err)
 	}
 
-	// Simulate machine with degraded endpoint (e.g. auth expired)
+	// Simulate machine with degraded endpoint (auth expired)
 	facts := protocol.EnvironmentFacts{
-		Host: protocol.HostFacts{Family: protocol.OSLinux, Arch: "amd64"},
+		Host:           protocol.HostFacts{Family: protocol.OSLinux, Arch: "amd64"},
+		Virtualization: protocol.VirtualizationFacts{Container: protocol.ContainerNone},
 		Software: []protocol.SoftwarePresence{
 			{ID: "git", Category: protocol.SoftwareEngineering, Installed: true},
 		},
 	}
-	endpoints := []protocol.CognitionEndpointSummary{
-		{
-			ID:                     "expired-cli",
-			Kind:                   protocol.EndpointAuthenticatedCLI,
-			Locality:               protocol.LocalityRemote,
-			Health:                 protocol.EndpointHealthReady,
-			Auth:                   protocol.AuthExpired,
-			CostClass:              protocol.CostSubscriptionIncluded,
-			RequiredSourceExposure: protocol.ExposureFocusedSnippets,
-		},
-	}
-
 	scope := protocol.ReadinessEvaluationScope{
 		RequiredRoles:  []string{},
 		EvidenceStatus: "live",
@@ -509,25 +731,49 @@ func TestM3BMilestoneClosure_Scenario08_GracefulCapabilityDegradation(t *testing
 	if err != nil {
 		t.Fatalf("Doctor.Run with degraded endpoint: %v", err)
 	}
+	if err := schemas.ValidateRecord(report.RecordKind(), report); err != nil {
+		t.Fatalf("DoctorReport fails schema validation: %v", err)
+	}
 
+	// The expired endpoint must actually have reached Doctor.Run's own
+	// output, not merely a separately-constructed inventory input.
+	expiredInReport := false
+	for _, ep := range report.DiscoveredEndpoints {
+		if ep.ID == "expired-cli" && ep.Auth == protocol.AuthExpired {
+			expiredInReport = true
+		}
+	}
+	if !expiredInReport {
+		t.Fatalf("doctor report did not discover the expired-auth endpoint; DiscoveredEndpoints = %+v", report.DiscoveredEndpoints)
+	}
+	if report.Readiness == protocol.ReadinessReady {
+		t.Error("report readiness should not be READY when the only endpoint's auth is expired")
+	}
+
+	// ResourceInventory is built from the report's own DiscoveredEndpoints —
+	// the same evidence Doctor.Run itself produced, not a hand-built list.
+	// A profile reference is required whenever cognition endpoints are
+	// present (it preserves runtime/model/capability provenance); this is
+	// the same minimal-but-valid shape internal/setup's own matrix tests
+	// use for this purpose (ProfileID/MachineFingerprint/ObservedAt/
+	// ProbeDepth), not a placeholder invented for this test alone.
 	cognProfile := &protocol.MachineCapabilityProfile{
 		ProfileID:          "mcp-degraded",
 		MachineFingerprint: "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
 		ObservedAt:         protocol.NewTimestamp(clk.Now()),
 		ProbeDepth:         protocol.DepthHealth,
 	}
-
-	// Verify inventory builds with honest degradation
-	inv, err := doc.BuildResourceInventory(context.Background(), facts, "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", endpoints, nil, cognProfile, nil)
+	inv, err := doc.BuildResourceInventory(context.Background(), facts,
+		"sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+		report.DiscoveredEndpoints, nil, cognProfile, report.ScopeReadiness)
 	if err != nil {
 		t.Fatalf("BuildResourceInventory: %v", err)
 	}
-
+	if err := schemas.ValidateRecord(inv.RecordKind(), inv); err != nil {
+		t.Fatalf("ResourceInventory fails schema validation: %v", err)
+	}
 	if len(inv.CognitionEndpoints) != 1 || inv.CognitionEndpoints[0].Auth != protocol.AuthExpired {
 		t.Errorf("inventory did not preserve degraded auth state: %+v", inv.CognitionEndpoints)
-	}
-	if report.Readiness == protocol.ReadinessReady {
-		t.Error("report readiness should not be READY when primary endpoint auth is expired")
 	}
 }
 

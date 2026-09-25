@@ -458,7 +458,7 @@ M3B adds guided deterministic bootstrap, environment diagnosis, and safe remedia
 ```bash
 bin/devcadence doctor                      # factual diagnostic evaluation
 bin/devcadence setup plan                  # dry-run setup plan with visible mutations
-bin/devcadence setup apply --plan <file>   # executed with explicit authority approval
+bin/devcadence setup apply --plan <file> --approve-plan <digest>  # executed with explicit digest approval
 bin/devcadence setup recover --plan <file> # crash recovery via append-only ledger
 ```
 

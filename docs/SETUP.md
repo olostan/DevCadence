@@ -152,7 +152,7 @@ DevCadence provides factual diagnosis and safe, auditable remediation planning:
 ```bash
 devcadence doctor                                          # evaluates readiness and diagnostic findings
 devcadence doctor --json                                   # machine-readable DoctorReport
-devcadence doctor --target hardware                        # scoped evaluation (hardware, cognition, auth, state)
+devcadence doctor --fix --target hardware                  # scoped remediation plan (hardware, inference, cognition, auth)
 devcadence setup plan                                      # dry-run setup plan with expected mutations
 devcadence setup plan --target hardware --json             # output canonical SetupPlan JSON
 devcadence setup apply --plan <file> --approve-plan <dig>  # execute approved plan (requires explicit approval)
