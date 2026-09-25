@@ -1,8 +1,10 @@
 package setup
 
 import (
+	"context"
 	"fmt"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 
@@ -71,6 +73,8 @@ type PlannerOptions struct {
 	RecipeSetVersion string
 	Facts            *protocol.EnvironmentFacts
 	SelectedRuntimes []string
+	ModelResolver    ModelResolver
+	ModelRefs        map[string]string
 }
 
 // Planner generates an immutable SetupPlan from a DoctorReport and setup target.
@@ -80,6 +84,8 @@ type Planner struct {
 	recipeSetVersion string
 	facts            *protocol.EnvironmentFacts
 	selectedRuntimes []string
+	modelResolver    ModelResolver
+	modelRefs        map[string]string
 }
 
 // NewPlanner returns a Planner.
@@ -93,17 +99,27 @@ func NewPlanner(opts PlannerOptions) (*Planner, error) {
 	if opts.RecipeSetVersion == "" {
 		opts.RecipeSetVersion = DefaultRecipeSetVersion
 	}
+	if opts.ModelResolver == nil {
+		opts.ModelResolver = NewCatalogModelResolver()
+	}
 	return &Planner{
 		clock:            opts.Clock,
 		ids:              opts.IDs,
 		recipeSetVersion: opts.RecipeSetVersion,
 		facts:            opts.Facts,
 		selectedRuntimes: opts.SelectedRuntimes,
+		modelResolver:    opts.ModelResolver,
+		modelRefs:        opts.ModelRefs,
 	}, nil
 }
 
-// Plan constructs a SetupPlan to address findings in the DoctorReport.
+// Plan constructs a SetupPlan to address findings in the DoctorReport using background context.
 func (p *Planner) Plan(report *protocol.DoctorReport, target protocol.SetupTarget, profile protocol.DeploymentProfile) (*protocol.SetupPlan, error) {
+	return p.PlanWithContext(context.Background(), report, target, profile)
+}
+
+// PlanWithContext constructs a SetupPlan to address findings in the DoctorReport.
+func (p *Planner) PlanWithContext(ctx context.Context, report *protocol.DoctorReport, target protocol.SetupTarget, profile protocol.DeploymentProfile) (*protocol.SetupPlan, error) {
 	if report == nil {
 		return nil, errs.New(errs.CategoryInvalidArgument, "setup planner: doctor report is required")
 	}
@@ -140,42 +156,7 @@ func (p *Planner) Plan(report *protocol.DoctorReport, target protocol.SetupTarge
 			actID := fmt.Sprintf("act_%s_%04d", loc, actionIndex)
 			actionIndex++
 			dirActionIDs = append(dirActionIDs, actID)
-
-			op := protocol.TypedOperation{
-				Kind: protocol.OpKindCreateDirectory,
-				CreateDirectory: &protocol.CreateDirectoryParams{
-					Location:    loc,
-					FileModeOct: "0700",
-				},
-			}
-			effects, auth := protocol.IntrinsicPolicy(op)
-			actions = append(actions, protocol.SetupAction{
-				ActionID:      actID,
-				RecipeID:      fmt.Sprintf("recipe.mkdir.%s", loc),
-				RecipeVersion: p.recipeSetVersion,
-				Title:         fmt.Sprintf("Create managed directory: %s", loc),
-				Description:   fmt.Sprintf("Creates %s under $DEVCADENCE_HOME with 0700 permissions", loc),
-				Authority:     auth,
-				Effects:       effects,
-				Operation:     &op,
-				Postconditions: []protocol.Condition{
-					{
-						Kind: protocol.CondKindManagedDirExists,
-						ManagedDirExists: &protocol.ManagedDirOperand{
-							Location:    loc,
-							FileModeOct: "0700",
-						},
-					},
-				},
-				ExpectedMutations: []protocol.ExpectedMutation{
-					{
-						Kind:   "directory_created",
-						Target: string(loc),
-						Detail: "Created directory with permissions 0700",
-					},
-				},
-				IdempotencyKey: fmt.Sprintf("create_dir_%s", loc),
-			})
+			actions = append(actions, NewCreateDirectoryAction(actID, loc, p.recipeSetVersion))
 		}
 	}
 
@@ -190,39 +171,44 @@ func (p *Planner) Plan(report *protocol.DoctorReport, target protocol.SetupTarge
 	if needsGit && (target == protocol.TargetAll || target == protocol.TargetHardware) {
 		actID := fmt.Sprintf("act_git_%04d", actionIndex)
 		actionIndex++
-		actions = append(actions, protocol.SetupAction{
-			ActionID:      actID,
-			RecipeID:      "recipe.manual.install_git",
-			RecipeVersion: p.recipeSetVersion,
-			Title:         "Install Git",
-			Description:   "Git is required for repository isolation and worktree management",
-			Authority:     protocol.AuthorityHighImpactManual,
-			Effects:       []protocol.EffectCategory{protocol.EffectPackageDownload, protocol.EffectFilesystemWrite},
-			ManualInstructions: &protocol.ManualGuide{
-				Summary: "Install Git on the host system",
-				Steps: []string{
-					"Install Git using your system package manager (e.g., brew install git or apt-get install git)",
-					"Alternatively, on macOS run: xcode-select --install",
-				},
-				VerificationCheck: []protocol.Condition{
-					{
-						Kind: protocol.CondKindCommandAvailable,
-						CommandAvailable: &protocol.CommandAvailableOperand{
-							CommandName: "git",
-						},
-					},
-				},
-			},
-			Postconditions: []protocol.Condition{
-				{
-					Kind: protocol.CondKindCommandAvailable,
-					CommandAvailable: &protocol.CommandAvailableOperand{
-						CommandName: "git",
-					},
-				},
-			},
-			IdempotencyKey: "manual_install_git",
-		})
+		actions = append(actions, NewManualGitAction(actID, p.recipeSetVersion))
+	}
+
+	// Hardware and kernel/driver remediation
+	if target == protocol.TargetAll || target == protocol.TargetHardware {
+		if p.facts != nil {
+			candidates := environment.AssessBackends(*p.facts)
+			for _, c := range candidates {
+				if c.Backend == protocol.BackendCUDA {
+					if slices.Contains(c.RequiredSoftware, "nvidia-driver") {
+						actID := fmt.Sprintf("act_driver_nvidia_%04d", actionIndex)
+						actionIndex++
+						actions = append(actions, NewManualNvidiaDriverAction(actID, c.DeviceID, p.recipeSetVersion))
+					} else if slices.Contains(c.RequiredSoftware, "nvidia-driver-device-access") {
+						actID := fmt.Sprintf("act_perm_nvidia_%04d", actionIndex)
+						actionIndex++
+						actions = append(actions, NewManualNvidiaDevicePermissionsAction(actID, c.DeviceID, p.recipeSetVersion))
+					}
+				} else if c.Backend == protocol.BackendROCm {
+					if slices.Contains(c.RequiredSoftware, "amdgpu-driver") {
+						actID := fmt.Sprintf("act_driver_rocm_%04d", actionIndex)
+						actionIndex++
+						actions = append(actions, NewManualRocmDriverAction(actID, c.DeviceID, p.recipeSetVersion))
+					} else if slices.Contains(c.RequiredSoftware, "amdkfd-device-access") {
+						actID := fmt.Sprintf("act_perm_amdgpu_%04d", actionIndex)
+						actionIndex++
+						actions = append(actions, NewManualAmdgpuDevicePermissionsAction(actID, c.DeviceID, p.recipeSetVersion))
+					}
+				}
+			}
+		}
+
+		// Evict stale machine profile cache if stale inference is retained
+		if report.EvaluationScope.EvidenceStatus == "stale_inference_retained" {
+			actID := fmt.Sprintf("act_cache_profile_%04d", actionIndex)
+			actionIndex++
+			actions = append(actions, NewRemoveStaleCacheAction(actID, protocol.CacheTargetMachineProfile, dirActionIDs, p.recipeSetVersion))
+		}
 	}
 
 	// Check auth: one manual re-authenticate action per endpoint whose
@@ -259,51 +245,7 @@ func (p *Planner) Plan(report *protocol.DoctorReport, target protocol.SetupTarge
 			}
 			actID := fmt.Sprintf("act_auth_%04d", actionIndex)
 			actionIndex++
-			actions = append(actions, protocol.SetupAction{
-				ActionID:      actID,
-				RecipeID:      "recipe.manual.reauthenticate",
-				RecipeVersion: p.recipeSetVersion,
-				Title:         fmt.Sprintf("Re-authenticate: %s", ep.ID),
-				Description:   fmt.Sprintf("Authentication for endpoint %s has expired", ep.ID),
-				Authority:     protocol.AuthorityHighImpactManual,
-				Effects:       []protocol.EffectCategory{protocol.EffectAuthentication},
-				ManualInstructions: &protocol.ManualGuide{
-					Summary: fmt.Sprintf("Re-authenticate the CLI or update credentials for %s", ep.ID),
-					Steps: []string{
-						fmt.Sprintf("Run the login/authentication command for %s (e.g. its CLI's own login subcommand)", ep.ID),
-						"Re-run devcadence doctor to confirm the endpoint reports authenticated",
-					},
-					// endpoint_authenticated, not endpoint_healthy: health
-					// says nothing about credential validity (WP-M3B-4's
-					// "healthy != authenticated != usable" invariant) —
-					// using health here would let a re-auth action's
-					// postcondition pass while the endpoint is still
-					// unauthenticated (independent-review follow-up on
-					// WP-M3B-5, finding 6).
-					VerificationCheck: []protocol.Condition{
-						{
-							Kind: protocol.CondKindEndpointAuthenticated,
-							// CredentialRefID carries this endpoint's own
-							// explicit, non-secret credential binding
-							// (ep.CredentialRef), never a locator guessed
-							// from ep.ID. Empty means no configured binding
-							// is known for this endpoint, which the
-							// checker must treat as unverifiable evidence
-							// rather than license to guess (independent-
-							// review follow-up on WP-M3B-5, round-3
-							// finding 2).
-							EndpointAuthenticated: &protocol.EndpointOperand{EndpointID: ep.ID, CredentialRefID: ep.CredentialRef},
-						},
-					},
-				},
-				Postconditions: []protocol.Condition{
-					{
-						Kind:                  protocol.CondKindEndpointAuthenticated,
-						EndpointAuthenticated: &protocol.EndpointOperand{EndpointID: ep.ID, CredentialRefID: ep.CredentialRef},
-					},
-				},
-				IdempotencyKey: fmt.Sprintf("reauthenticate_%s", ep.ID),
-			})
+			actions = append(actions, NewManualReauthenticateAction(actID, ep.ID, ep.CredentialRef, p.recipeSetVersion))
 		}
 	}
 
@@ -338,6 +280,22 @@ func (p *Planner) Plan(report *protocol.DoctorReport, target protocol.SetupTarge
 		}
 		shouldPullOllama := ollamaDetected || ollamaSelected
 		if shouldPullOllama {
+			modelRef := DefaultOllamaModelTag
+			if p.modelRefs != nil && p.modelRefs["ollama"] != "" {
+				modelRef = p.modelRefs["ollama"]
+			}
+
+			// Pre-resolution: resolve digest before planning so the plan is immutable.
+			// A recipe with no resolvable digest fails plan generation rather than
+			// planning an under-specified action (WP-M3B-6 deliverable & acceptance criteria).
+			resolved, err := p.modelResolver.ResolveModel(ctx, "ollama", modelRef)
+			if err != nil {
+				return nil, errs.Wrap(errs.CategoryNotFound, err, "setup planner: failed to resolve model %q for runtime %q", modelRef, "ollama")
+			}
+			if err := resolved.Validate(); err != nil {
+				return nil, errs.Wrap(errs.CategoryInvalidArgument, err, "setup planner: resolved model %q for runtime %q failed validation", modelRef, "ollama")
+			}
+
 			var ollamaPath, ollamaVersion string
 			if p.facts != nil {
 				factsFp, fpErr := environment.Fingerprint(*p.facts)
@@ -351,12 +309,12 @@ func (p *Planner) Plan(report *protocol.DoctorReport, target protocol.SetupTarge
 				}
 			}
 			action := p.ensureLocalModelAction(&actionIndex, dirActionIDs, localModelRecipe{
-				runtime:           "ollama",
-				modelRef:          DefaultOllamaModelTag,
-				resolvedRevision:  DefaultOllamaDigest,
-				expectedSizeBytes: DefaultOllamaSizeBytes,
-				allowedSource:     DefaultOllamaRegistryHost,
-				licenseReference:  DefaultOllamaLicense,
+				runtime:           resolved.Runtime,
+				modelRef:          resolved.ModelRef,
+				resolvedRevision:  resolved.ResolvedRevision,
+				expectedSizeBytes: resolved.ExpectedSizeBytes,
+				allowedSource:     resolved.AllowedSource,
+				licenseReference:  resolved.LicenseReference,
 				commandName:       "ollama",
 				executablePath:    ollamaPath,
 				executableVersion: ollamaVersion,
@@ -364,7 +322,7 @@ func (p *Planner) Plan(report *protocol.DoctorReport, target protocol.SetupTarge
 				recipeIDManual:    "recipe.manual.pull_ollama_model",
 				manualSteps: []string{
 					"Ensure Ollama is running and accessible",
-					fmt.Sprintf("Run: ollama pull %s", DefaultOllamaModelTag),
+					fmt.Sprintf("Run: ollama pull %s", resolved.ModelRef),
 				},
 				extraPreconditions: []protocol.Condition{
 					{
@@ -408,6 +366,20 @@ func (p *Planner) Plan(report *protocol.DoctorReport, target protocol.SetupTarge
 		}
 
 		if isDarwinArm64 && (mlxDetected || mlxSelected) {
+			modelRef := DefaultMLXModelRef
+			if p.modelRefs != nil && p.modelRefs["mlx"] != "" {
+				modelRef = p.modelRefs["mlx"]
+			}
+
+			// Pre-resolution for MLX: resolves to immutable commit hash before planning.
+			resolved, err := p.modelResolver.ResolveModel(ctx, "mlx", modelRef)
+			if err != nil {
+				return nil, errs.Wrap(errs.CategoryNotFound, err, "setup planner: failed to resolve model %q for runtime %q", modelRef, "mlx")
+			}
+			if err := resolved.Validate(); err != nil {
+				return nil, errs.Wrap(errs.CategoryInvalidArgument, err, "setup planner: resolved model %q for runtime %q failed validation", modelRef, "mlx")
+			}
+
 			// "hf" is the current Hugging Face Hub CLI; the older
 			// "huggingface-cli" name was removed in huggingface_hub v1.0
 			// (see internal/setup/mlx_adapter.go's doc comment).
@@ -424,12 +396,12 @@ func (p *Planner) Plan(report *protocol.DoctorReport, target protocol.SetupTarge
 				}
 			}
 			action := p.ensureLocalModelAction(&actionIndex, dirActionIDs, localModelRecipe{
-				runtime:             "mlx",
-				modelRef:            DefaultMLXModelRef,
-				resolvedRevision:    DefaultMLXRevision,
-				expectedSizeBytes:   DefaultMLXSizeBytes,
-				allowedSource:       DefaultMLXSource,
-				licenseReference:    DefaultMLXLicense,
+				runtime:             resolved.Runtime,
+				modelRef:            resolved.ModelRef,
+				resolvedRevision:    resolved.ResolvedRevision,
+				expectedSizeBytes:   resolved.ExpectedSizeBytes,
+				allowedSource:       resolved.AllowedSource,
+				licenseReference:    resolved.LicenseReference,
 				commandName:         "hf",
 				executablePath:      hfPath,
 				executableVersion:   hfVersion,
@@ -439,7 +411,7 @@ func (p *Planner) Plan(report *protocol.DoctorReport, target protocol.SetupTarge
 				versionProbeKind:    protocol.VersionProbeVersionSubcommand,
 				manualSteps: []string{
 					"Install mlx-lm and huggingface_hub in a dedicated Python environment (e.g., pip install mlx-lm huggingface_hub)",
-					fmt.Sprintf("Run: hf download %s --revision %s", DefaultMLXModelRef, DefaultMLXRevision),
+					fmt.Sprintf("Run: hf download %s --revision %s", resolved.ModelRef, resolved.ResolvedRevision),
 				},
 			})
 			actions = append(actions, action)
@@ -450,42 +422,7 @@ func (p *Planner) Plan(report *protocol.DoctorReport, target protocol.SetupTarge
 	if profile.Valid() && (target == protocol.TargetAll || target == protocol.TargetCognition) {
 		actID := fmt.Sprintf("act_config_%04d", actionIndex)
 		actionIndex++
-		op := protocol.TypedOperation{
-			Kind: protocol.OpKindWriteManagedConfig,
-			WriteManagedConfig: &protocol.WriteManagedConfigParams{
-				Key:   protocol.ConfigKeyDefaultProfile,
-				Value: string(profile),
-			},
-		}
-		effects, auth := protocol.IntrinsicPolicy(op)
-		actions = append(actions, protocol.SetupAction{
-			ActionID:      actID,
-			RecipeID:      "recipe.config.default_profile",
-			RecipeVersion: p.recipeSetVersion,
-			Title:         fmt.Sprintf("Set default profile: %s", profile),
-			Description:   fmt.Sprintf("Records default profile %s in managed configuration", profile),
-			Authority:     auth,
-			Effects:       effects,
-			Operation:     &op,
-			DependsOn:     dirActionIDs,
-			Postconditions: []protocol.Condition{
-				{
-					Kind: protocol.CondKindManagedDirExists,
-					ManagedDirExists: &protocol.ManagedDirOperand{
-						Location:    protocol.LocationState,
-						FileModeOct: "0700",
-					},
-				},
-			},
-			ExpectedMutations: []protocol.ExpectedMutation{
-				{
-					Kind:   "config_key_set",
-					Target: string(protocol.ConfigKeyDefaultProfile),
-					Detail: fmt.Sprintf("Set default_profile to %s", profile),
-				},
-			},
-			IdempotencyKey: fmt.Sprintf("config_set_default_profile_%s", profile),
-		})
+		actions = append(actions, NewWriteManagedConfigAction(actID, protocol.ConfigKeyDefaultProfile, string(profile), dirActionIDs, p.recipeSetVersion))
 	}
 
 	// Determine required authority and total effects
@@ -545,7 +482,7 @@ type localModelRecipe struct {
 	allowedSource     string
 	licenseReference  string
 	// commandName is the CLI this runtime's automated path shells out to
-	// (e.g. "ollama", "huggingface-cli"), used for the command_available
+	// (e.g. "ollama", "hf"), used for the command_available
 	// precondition and reported in the manual guide's steps.
 	commandName string
 	// executablePath/executableVersion are the trustworthy-identity
@@ -583,8 +520,8 @@ type localModelRecipe struct {
 // establish a trustworthy identity for r.commandName AND (when
 // r.revisionIsImmutable is set) r.resolvedRevision is actually an
 // immutable pin, otherwise a manual action with the same real
-// postcondition (model_present) — never a weaker command_available proxy,
-// for any runtime.
+// postcondition (model_present) binding the pre-resolved immutable revision
+// and size — never an under-specified proxy.
 func (p *Planner) ensureLocalModelAction(actionIndex *int, dependsOn []string, r localModelRecipe) protocol.SetupAction {
 	actID := fmt.Sprintf("act_pull_model_%s_%04d", r.runtime, *actionIndex)
 	*actionIndex++
@@ -599,7 +536,7 @@ func (p *Planner) ensureLocalModelAction(actionIndex *int, dependsOn []string, r
 		},
 	}
 	mutation := protocol.ExpectedMutation{
-		Kind:   "model_pulled",
+		Kind:   protocol.MutationModelPulled,
 		Target: r.modelRef,
 		Detail: fmt.Sprintf("Model %s (%s) pulled to local storage via %s", r.modelRef, r.resolvedRevision, r.runtime),
 	}
@@ -663,6 +600,7 @@ func (p *Planner) ensureLocalModelAction(actionIndex *int, dependsOn []string, r
 		Authority:     protocol.AuthorityHighImpactManual,
 		Effects:       []protocol.EffectCategory{protocol.EffectPackageDownload, protocol.EffectFilesystemWrite},
 		DependsOn:     dependsOn,
+		Preconditions: []protocol.Condition{},
 		ManualInstructions: &protocol.ManualGuide{
 			Summary:           fmt.Sprintf("Pull %s using the %s CLI", r.modelRef, r.runtime),
 			Steps:             r.manualSteps,

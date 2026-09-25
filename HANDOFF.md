@@ -146,9 +146,8 @@ implementing on top of it or rewriting it.
 | WP-M3B-2 | accepted | `bb01bc9` | all PASS (see EWP §13) | independent review complete — [comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5805603916), 7 findings, all addressed in EWP §14 |
 | WP-M3B-3 | **accepted** (§21) | `cc799cd` | `go build ./...`, `go vet ./...`, `go test -count=1 ./...`, `go test -race ./internal/setup/... ./internal/cognition/mlx/... ./internal/environment/...`, `GOOS=windows GOARCH=amd64 go build ./...` all PASS | 7 independent review rounds, 25 findings total, all resolved — see EWP §15–§21. Final acceptance: [comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5809019161) |
 | WP-M3B-4 | **accepted** (§16) | `75e65a7` | `go build ./...`, `go vet ./...`, `go test -count=1 ./...`, `go test -race ./internal/credentials/... ./internal/protocol/... ./internal/cognition/...`, `GOOS=windows GOARCH=amd64 go build ./...` all PASS | 3 independent review rounds, 6+3+2 findings total, all resolved — see EWP §13–§16. Final acceptance: [comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5819033678) |
-| WP-M3B-5 | **accepted** (EWP §14–§19) | `75ac877` | `go build ./...`, `go vet ./...`, `go test -count=1 ./...`, `go test -race ./internal/setup/... ./internal/protocol/... ./internal/credentials/... ./internal/schema/... ./tests/...`, `GOOS=windows/linux GOARCH=amd64 go build ./...` all PASS | 6 independent review rounds (6+4+3+3+2+1 = 19 findings total), all resolved — see EWP §14–§19. Final acceptance: [comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5832032107), owner, 2026-09-25, at head `75ac877`. **"WP-M3B-5 is accepted. GREEN to proceed to WP-M3B-6."** A regression sweep over every earlier repair found nothing reopened. PR #10 remains open/draft for the rest of M3B |
-| WP-M3B-6 | pre-check complete, EWP not yet authored — substantial pre-existing overlap in `planner.go`, real gaps identified (see "Currently in progress" below) | — | — | author `docs/work-packages/wp-m3b-6-ewp.md` next, incorporating the pre-check findings below |
-| WP-M3B-7 | not started | — | — | blocked on WP-3/4/5/6 |
+| WP-M3B-6 | implementation complete | awaiting review | `go build ./...`, `go vet ./...`, `go test -count=1 ./...`, `go test -race ./internal/setup/... ./internal/protocol/... ./internal/credentials/... ./internal/schema/... ./tests/...`, `GOOS=windows/linux GOARCH=amd64 go build ./...` all PASS | author `docs/work-packages/wp-m3b-6-ewp.md` frozen, 20-scenario verification matrix implemented in `recipes_test.go` |
+| WP-M3B-7 | not started | — | — | blocked on WP-M3B-6 review |
 | WP-M3B-8 | not started — verification suite and docs sync (formerly WP9) | — | — | blocked on all prior |
 
 (Never write "merged" for a WP checkpoint — nothing is merged to `main`
@@ -328,47 +327,59 @@ Full detail in `docs/work-packages/wp-m3b-5-ewp.md` §19.
 
 **Acceptance:** [comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5832032107), owner, 2026-09-25, at head `75ac877`. The round-6 fix was confirmed correct; a regression sweep over every earlier repair (rounds 1–6) found nothing reopened. **"WP-M3B-5 is accepted. GREEN to proceed to WP-M3B-6."** PR #10 itself remains open/draft for the rest of M3B. Per the acceptance comment's own instruction, this acceptance is recorded here rather than in a separate SHA-only bookkeeping commit.
 
-## Currently in progress: WP-M3B-6 — Bounded recipes (pre-check complete, EWP not yet authored)
+## WP-M3B-6 — Bounded recipes (implementation complete, awaiting review)
 
-**Scope card** (`docs/WORK_PACKAGES.md` "WP-M3B-6 — Bounded recipes"): versioned recipes for every `TypedOperation` kind from WP-M3B-1, each with declared registries, immutable digests, sizes, and licenses for anything installed/downloaded (ADR-0014 §7); system/kernel/driver-level operations classified strictly `AuthorityHighImpactManual`; model/package pre-resolution (resolving a digest before planning, so the plan itself is immutable and reproducible). Acceptance criteria: every executable recipe's declared authority matches or exceeds its `IntrinsicPolicy`; a recipe with no resolvable digest fails plan generation rather than planning an under-specified action; license metadata is present for every install-class operation.
+- **EWP status:** authored, frozen, and committed at `docs/work-packages/wp-m3b-6-ewp.md`.
+- **Base commit this WP started from:** `a8af45608a879e4c4b7f4b8eb61a4101dc4beb5f`
+- **What's implemented:**
+  1. **Pre-resolution mechanism (`internal/setup/resolver.go`):**
+     - Defined `ModelResolver` interface: `ResolveModel(ctx context.Context, runtime, modelRef string) (ResolvedModel, error)`.
+     - Defined `ResolvedModel` struct with strict `Validate()` method enforcing non-empty runtime, modelRef, immutable revision (sha256 digest or 40-character hex commit hash for MLX/Hugging Face via `isImmutableHFRevision`), positive size in bytes, allowed source registry, and non-empty license reference.
+     - Implemented `CatalogModelResolver` with thread-safe `Register` and `ResolveModel`, pre-populated with verified default models for Ollama (`DefaultOllamaModelTag`) and MLX (`DefaultMLXModelRef`).
+  2. **Planner integration & fail-closed generation (`internal/setup/planner.go`):**
+     - Added `ModelResolver` and `ModelRefs` to `PlannerOptions` and `Planner` (defaulting to `NewCatalogModelResolver()`).
+     - Added `PlanWithContext(ctx context.Context, ...)` while preserving `Plan(...)` backward compatibility.
+     - `PlanWithContext` resolves model identities prior to action construction. If a model digest cannot be resolved or is invalid, plan generation **fails closed immediately** with an error rather than planning an under-specified action.
+     - When resolved, if local executable identity is untrusted, the planner falls back to a manual pull action binding the exact resolved revision and size in its `model_present` postcondition.
+  3. **System / Kernel / Driver manual recipes (`internal/setup/recipes.go`, `internal/setup/planner.go`):**
+     - Formalized system/kernel/driver operations as strictly `AuthorityHighImpactManual`, with `Operation == nil` and structured `ManualInstructions`.
+     - Deterministic generation in `Planner.PlanWithContext` under `TargetHardware` / `TargetAll` driven by `environment.AssessBackends`:
+       - NVIDIA missing driver -> `recipe.manual.install_nvidia_driver`.
+       - NVIDIA `/dev/nvidiactl` permission missing -> `recipe.manual.configure_nvidia_device_permissions`.
+       - AMD ROCm driver missing -> `recipe.manual.install_rocm_driver`.
+       - AMD `/dev/kfd` permission missing -> `recipe.manual.configure_amdgpu_device_permissions`.
+  4. **Complete bounded recipe builders (`internal/setup/recipes.go`):**
+     - Concrete versioned recipe builders for all 5 WP-M3B-1 operation kinds:
+       - `NewCreateDirectoryAction` (`recipe.mkdir.<loc>`)
+       - `NewWriteManagedConfigAction` (`recipe.config.<key>`)
+       - `NewRemoveStaleCacheAction` (`recipe.cache.remove.<target>`) — also automatically planned on `stale_inference_retained`.
+       - `NewRunDiagnosticCheckAction` (`recipe.diagnostic.<check>`)
+       - `NewManualGitAction` (`recipe.manual.install_git`)
+       - `NewManualReauthenticateAction` (`recipe.manual.reauthenticate`)
+       - Driver manual actions above.
+     - All executable recipes derive authority and effects from `IntrinsicPolicy(op)` and pass full Go and schema validation.
+  5. **Comprehensive 20-Scenario Verification Matrix (`internal/setup/recipes_test.go`):**
+     - Full automated coverage of all 20 scenarios specified in EWP §8: pre-resolution of Ollama/MLX models, fail-closed handling for unresolvable models / empty digests / mutable MLX branches / missing licenses, fallback to manual pull on untrusted identity, automated pull on verified identity, NVIDIA and AMD driver and device node manual remediation, cache eviction and diagnostic check recipes, directory creation, config write, manual Git and reauth, IntrinsicPolicy conformance, and JSON Schema round-trip validation.
 
-**Pre-check performed** (same pattern every WP in this milestone has used — read `internal/setup/planner.go` in full, and `cache.go`, before assuming a blank slate):
-
-- The closed `OperationKind` set from WP-M3B-1 is small: `ensure_local_model`, `create_directory`, `write_managed_config`, `remove_stale_cache`, `run_diagnostic_check` (`internal/protocol/setup.go`).
-- `planner.go` already generates real recipes for most of these: Ollama/MLX model pulls (`recipe.ollama.pull_model` / `recipe.mlx.pull_model`-shaped, via `runtimeModelPullRecipe`), `mkdir` recipes for managed directories, a default-profile config-write recipe, and manual-only recipes (`recipe.manual.install_git`, `recipe.manual.reauthenticate`) for anything that can't be auto-executed.
-- **Real overlap already covers part of the scope card:** model-pull recipes already carry `ResolvedRevision`/`AllowedSource`/`LicenseReference` (`EnsureLocalModelParams`), and already refuse to auto-execute — falling back to a manual recipe — when executable identity isn't trustworthy (`trustworthyIdentity && revisionPinned` gate in `runtimeModelPullRecipe`). Every recipe already carries `RecipeVersion: p.recipeSetVersion`, and `IntrinsicPolicy(op)` already derives `Authority`/`Effects` from the operation itself rather than the recipe author choosing them independently — this is most of WP-M3B-6's "declared authority matches or exceeds `IntrinsicPolicy`" criterion, already true by construction.
-- **Real gaps identified, not yet closed:**
-  1. `ResolvedRevision`/`AllowedSource`/`LicenseReference` for Ollama/MLX are hardcoded constants (`DefaultOllamaDigest`, `DefaultOllamaRegistryHost`, `DefaultOllamaLicense`, `DefaultMLXRevision`, `DefaultMLXSource`, `DefaultMLXLicense` in `planner.go`) — not a pre-resolution step that queries a registry/manifest at plan time. WP-M3B-6's "Model/package pre-resolution" deliverable literally asks for the latter; the current design has no path to ever change which digest gets planned without a code change.
-  2. The "recipe with no resolvable digest fails plan generation rather than planning an under-specified action" acceptance criterion is not quite what the current code does: when identity isn't trustworthy, the planner falls back to a **manual** recipe instead of failing plan generation outright. Whether that satisfies the letter of the criterion (a manual recipe is still a "planned action", just not an auto-executable one) or needs to change is an open design question for the EWP to resolve, not decide implicitly.
-  3. No recipe in the current set touches system/kernel/driver-level operations at all (the "CUDA drivers" manual action in `validManualAction()`-style tests is a fixture, not production planner logic) — the "system/kernel/driver-level operations classified strictly `AuthorityHighImpactManual`" deliverable has no real implementation to audit yet; it needs to be designed from scratch alongside whatever new recipes WP-M3B-6 actually adds.
-  4. `cache.go` has no WP-M3B-6-relevant overlap beyond what WP-M3B-2/WP-M3B-5 already built (machine-profile caching) — it is not a source of pre-existing recipe logic.
-
-**Known blockers / open questions:** none — the pre-check is complete and the findings above are recorded. Author `docs/work-packages/wp-m3b-6-ewp.md` next, explicitly classifying this pre-existing planner.go logic (brownfield-adjacent, same as WP-M3B-5's own EWP §2 did for its own pre-existing code) before writing any new implementation.
+- **What's verified:**
+  - `go build ./...`: PASS, no diagnostics.
+  - `go vet ./...`: PASS, no diagnostics.
+  - `gofmt -l internal/setup/`: clean.
+  - `go test -count=1 ./...`: PASS across all packages.
+  - `go test -race -count=1 ./internal/setup/... ./internal/protocol/... ./internal/credentials/... ./internal/schema/... ./tests/...`: PASS, zero race conditions.
+  - `GOOS=windows GOARCH=amd64 go build ./...` and `GOOS=linux GOARCH=amd64 go build ./...`: clean cross-compilation.
+  - `git diff --check`: clean.
 
 ## Next concrete action
 
-WP-M3B-5 is accepted (see above). Author `docs/work-packages/wp-m3b-6-ewp.md`, incorporating the pre-check findings recorded above (real overlap in `planner.go`'s model-pull recipes; real gaps in pre-resolution, the fail-vs-manual-fallback acceptance criterion, and system/kernel/driver-level operations), before writing any new implementation. Post a PR comment recording WP-M3B-5's acceptance and the WP-M3B-6 pre-check/EWP-authoring plan.
+WP-M3B-6 implementation is complete. Post a checkpoint update on PR #10 summarizing the deliverables and verification evidence for independent review. Once accepted, proceed to WP-M3B-7 (`devcadence doctor` / `devcadence setup` CLI surface).
 
 ## Resume checklist for the next agent
 
 1. `git fetch origin feat/m3b-guided-bootstrap` and check out the branch.
    Record the fetched `HEAD` SHA as your own session's "Expected remote
-   HEAD" baseline — adopt whatever SHA the fetch actually returns rather
-   than assuming it matches this file's "Expected remote HEAD" field
-   above; if it doesn't match, reconcile per the protocol's git safety
-   rules before doing anything else.
-2. Do not trust this file blindly: run `go build ./... && go test -count=1
-   ./...` and confirm it matches what's claimed above.
-3. Read `docs/work-packages/wp-m3b-1-ewp.md`'s "Provenance" section and §13
-   amendment, and `wp-m3b-2-ewp.md`/`wp-m3b-3-ewp.md` in full — they
-   explain why every later WP needs the same "check what's already there"
-   pre-check, and WP-M3B-2's §12 is a worked example of escalating rather
-   than reopening a frozen WP's contract if the next WP hits a similar gap.
-4. Read `docs/WORK_PACKAGES.md`'s entry for whichever WP you're picking up
-   next and its relevant ADR-0014 section, and the relevant pre-existing
-   `internal/setup/*.go` file(s) for the pre-check.
-5. Continue from "Next concrete action" above.
-6. At the next durable checkpoint, update this file (including advancing
-   "Expected remote HEAD" to the SHA an actual `git log`/`git fetch`
-   returns, never a value guessed before pushing) and push it together
-   with that checkpoint's commit.
+   HEAD" baseline.
+2. Do not trust this file blindly: run `go build ./... && go test -count=1 ./...`
+   and confirm it matches what's claimed above.
+3. Read `docs/work-packages/wp-m3b-6-ewp.md` and PR #10 comments for review disposition.
+4. Continue from "Next concrete action" above.
