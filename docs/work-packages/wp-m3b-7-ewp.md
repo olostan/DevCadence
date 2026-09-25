@@ -5,7 +5,7 @@
 - **Base commit:** `bae6d2a86f0a78ba36f36296be04106be0c7fbcc` (`feat/m3b-guided-bootstrap`, includes accepted WP-M3B-1 through WP-M3B-6 checkpoints)
 - **Branch:** `feat/m3b-guided-bootstrap`
 - **Depends on:** WP-M3B-1 (`SetupPlan`/`SetupAction`/`TypedOperation`, accepted), WP-M3B-2 (ledger/executor sandbox, accepted), WP-M3B-3 (runtime-neutral local model adapters, accepted), WP-M3B-4 (`CredentialRef`/`AuthEvidence`, accepted), WP-M3B-5 (Doctor readiness and ResourceInventory, accepted), WP-M3B-6 (bounded recipes, pre-resolution, and hardware verification, accepted).
-- **Status:** Authored and frozen prior to implementation code. Implemented; independent review round 1 found 4 FIX_NOW findings (exit code 5 was unreachable for invalid plan artifacts; `setup recover --json` emitted an ungoverned ad hoc map instead of a typed/versioned public shape; `doctor --scope`/`doctor --target` accepted input with no effect and `setup plan` permitted ambiguous target arguments; the acceptance evidence overclaimed exact deterministic coverage of several verification-matrix rows) — all fixed, see §8.
+- **Status:** ACCEPTED at `3b85607` (round-3 review, 2026-09-25). Authored and frozen prior to implementation code. Implemented; independent review round 1 found 4 FIX_NOW findings (exit code 5 was unreachable for invalid plan artifacts; `setup recover --json` emitted an ungoverned ad hoc map instead of a typed/versioned public shape; `doctor --scope`/`doctor --target` accepted input with no effect and `setup plan` permitted ambiguous target arguments; the acceptance evidence overclaimed exact deterministic coverage of several verification-matrix rows) — see §8. Round 2 found one residual in the `--target` fix (a valid explicit target was still silently ignored without `--fix`) — fixed, see §9. Round 3 confirmed GREEN and accepted WP-M3B-7, see §10.
 
 ---
 
@@ -200,3 +200,13 @@ An independent review ([comment id `5837723410`](https://github.com/olostan/DevC
 **Verification (round-2 repair):** `go build ./...`, `go vet ./...`, `gofmt -l` clean, `go test -count=1 ./...` (all 30 packages `ok`), `go test -race ./cmd/devcadence/... ./internal/setup/... ./internal/protocol/... ./internal/credentials/... ./internal/schema/... ./internal/environment/... ./tests/...` (clean), `GOOS=windows GOARCH=amd64`/`GOOS=linux GOARCH=amd64`/`GOOS=darwin GOARCH=arm64 go build ./...` (clean), `git diff --check` (clean).
 
 **Disposition:** all findings including round-2 residual closed; awaiting focused re-review per AGENTS.md §8A before WP-M3B-7 can be marked `accepted`.
+
+## 10. Independent review round 3 disposition: ACCEPTED
+
+A focused round-3 re-review ([comment id `5837819872`](https://github.com/olostan/DevCadence/pull/10#issuecomment-5837819872), owner, 2026-09-25, head `3b85607`) confirmed the sole round-2 residual closed: explicit-`--target`-without-`--fix` detection via `fs.Visit`, the implicit default preserved for operators who omit the flag, and exact regressions covering both a valid explicit target without `--fix` and an invalid target with `--fix`. Quoting the review's disposition: "All four original WP-M3B-7 findings and the round-2 residual are closed. No closure-threshold findings remain. ... **Disposition: GREEN. WP-M3B-7 is accepted at `3b85607`.**"
+
+The review noted `HANDOFF.md`'s WP-M3B-7 subsection heading still read "round 1 fixed, awaiting round-2 review" — stale from before the round-2 fix — and called it non-blocking but correctable now; corrected in that file alongside this acceptance record rather than left stale.
+
+**Independent review verification (round 3, on head `3b85607`):** `go build ./...`, `go vet ./...`, `go test -race -count=1 ./cmd/devcadence/...`, changed-file `gofmt -l`, and `git diff --check` — all passed (a focused check scoped to the residual, per the review's own stated scope, not a repeat of the full matrix).
+
+**Disposition: WP-M3B-7 is ACCEPTED as of `3b85607`.** Per the handoff protocol, work proceeds to WP-M3B-8 (Milestone Closure & Verification).
