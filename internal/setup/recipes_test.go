@@ -538,6 +538,15 @@ func TestRecipe_Scenario09_HardwareDriverRemediationNvidiaDriver(t *testing.T) {
 	if driverAct.ManualInstructions == nil {
 		t.Errorf("driver action must have manual instructions")
 	}
+	if len(driverAct.Postconditions) != 2 {
+		t.Fatalf("expected 2 postconditions (driver bound and device node accessible), got %d", len(driverAct.Postconditions))
+	}
+	if driverAct.Postconditions[0].Kind != protocol.CondKindKernelDriverBound || driverAct.Postconditions[0].KernelDriverBound.Driver != "nvidia" {
+		t.Errorf("expected postcondition 0 to be kernel_driver_bound for nvidia, got %+v", driverAct.Postconditions[0])
+	}
+	if driverAct.Postconditions[1].Kind != protocol.CondKindDeviceNodeAccessible || driverAct.Postconditions[1].DeviceNodeAccessible.Path != "/dev/nvidiactl" {
+		t.Errorf("expected postcondition 1 to be device_node_accessible for /dev/nvidiactl, got %+v", driverAct.Postconditions[1])
+	}
 }
 
 // 10. Hardware device node remediation: NVIDIA device access
@@ -584,6 +593,9 @@ func TestRecipe_Scenario10_HardwareDriverRemediationNvidiaDeviceAccess(t *testin
 	}
 	if permAct.Authority != protocol.AuthorityHighImpactManual {
 		t.Errorf("expected AuthorityHighImpactManual, got %s", permAct.Authority)
+	}
+	if len(permAct.Postconditions) != 1 || permAct.Postconditions[0].Kind != protocol.CondKindDeviceNodeAccessible || !permAct.Postconditions[0].DeviceNodeAccessible.RequireAccessible {
+		t.Errorf("expected postcondition to be device_node_accessible with RequireAccessible=true, got %+v", permAct.Postconditions)
 	}
 }
 
@@ -641,6 +653,15 @@ func TestRecipe_Scenario11_HardwareDriverRemediationRocmDriver(t *testing.T) {
 	}
 	if rocmAct.Authority != protocol.AuthorityHighImpactManual {
 		t.Errorf("expected AuthorityHighImpactManual, got %s", rocmAct.Authority)
+	}
+	if len(rocmAct.Postconditions) != 2 {
+		t.Fatalf("expected 2 postconditions (driver bound and device node accessible), got %d", len(rocmAct.Postconditions))
+	}
+	if rocmAct.Postconditions[0].Kind != protocol.CondKindKernelDriverBound || rocmAct.Postconditions[0].KernelDriverBound.Driver != "amdgpu" {
+		t.Errorf("expected postcondition 0 to be kernel_driver_bound for amdgpu, got %+v", rocmAct.Postconditions[0])
+	}
+	if rocmAct.Postconditions[1].Kind != protocol.CondKindDeviceNodeAccessible || rocmAct.Postconditions[1].DeviceNodeAccessible.Path != "/dev/kfd" {
+		t.Errorf("expected postcondition 1 to be device_node_accessible for /dev/kfd, got %+v", rocmAct.Postconditions[1])
 	}
 }
 

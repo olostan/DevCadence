@@ -45,6 +45,8 @@ type ExecutorOptions struct {
 	// this is the only knob the executor exposes for that: it has no
 	// runtime-specific fields of its own (see modelruntime.go).
 	ModelRuntimes *ModelRuntimeRegistry
+	// DeviceDriver is optional; nil uses SysfsDriverChecker.
+	DeviceDriver DeviceDriverChecker
 }
 
 // Executor implements ADR-0014 §2's two-step approval workflow and §1/§7's
@@ -60,6 +62,7 @@ type Executor struct {
 	endpointHealth EndpointHealthChecker
 	endpointAuth   EndpointAuthChecker
 	modelRuntimes  *ModelRuntimeRegistry
+	deviceDriver   DeviceDriverChecker
 }
 
 // NewExecutor returns an Executor rooted at an absolute Home. Cache and the
@@ -119,6 +122,7 @@ func NewExecutor(opts ExecutorOptions) (*Executor, error) {
 		endpointHealth: opts.EndpointHealth,
 		endpointAuth:   endpointAuth,
 		modelRuntimes:  opts.ModelRuntimes,
+		deviceDriver:   opts.DeviceDriver,
 	}, nil
 }
 
@@ -141,7 +145,14 @@ func (e *Executor) CheckPostconditions(ctx context.Context, conditions []protoco
 }
 
 func (e *Executor) evaluatorDeps() EvaluatorDeps {
-	return EvaluatorDeps{Runner: e.runner, Home: e.home, EndpointHealth: e.endpointHealth, EndpointAuth: e.endpointAuth, ModelRuntimes: e.modelRuntimes}
+	return EvaluatorDeps{
+		Runner:         e.runner,
+		Home:           e.home,
+		EndpointHealth: e.endpointHealth,
+		EndpointAuth:   e.endpointAuth,
+		ModelRuntimes:  e.modelRuntimes,
+		DeviceDriver:   e.deviceDriver,
+	}
 }
 
 func (e *Executor) applierDeps() applierDeps {

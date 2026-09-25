@@ -247,16 +247,23 @@ const rocmComputeNodePath = "/dev/kfd"
 
 // NewManualNvidiaDriverAction constructs a high-impact manual action for installing proprietary NVIDIA drivers.
 func NewManualNvidiaDriverAction(actionID, deviceID, recipeSetVersion string) protocol.SetupAction {
-	// Existence of the control node (regardless of this user's access to
-	// it) is what proves the proprietary kernel driver is actually bound
-	// — a vendor CLI binary being on PATH proves neither (independent-
-	// review follow-up on WP-M3B-6, FIX_NOW 4).
-	cond := protocol.Condition{
+	// Verifies both that the proprietary kernel driver is bound to the
+	// specific device in sysfs, and that the control node exists as a
+	// device special file.
+	condDriver := protocol.Condition{
+		Kind: protocol.CondKindKernelDriverBound,
+		KernelDriverBound: &protocol.KernelDriverBoundOperand{
+			DeviceID: deviceID,
+			Driver:   "nvidia",
+		},
+	}
+	condNode := protocol.Condition{
 		Kind: protocol.CondKindDeviceNodeAccessible,
 		DeviceNodeAccessible: &protocol.DeviceNodeOperand{
 			Path: nvidiaControlNodePath,
 		},
 	}
+	verificationConds := []protocol.Condition{condDriver, condNode}
 	return protocol.SetupAction{
 		ActionID:      actionID,
 		RecipeID:      "recipe.manual.install_nvidia_driver",
@@ -277,9 +284,9 @@ func NewManualNvidiaDriverAction(actionID, deviceID, recipeSetVersion string) pr
 				"Reboot system to load the proprietary nvidia kernel modules",
 				"Confirm driver operation by running nvidia-smi",
 			},
-			VerificationCheck: []protocol.Condition{cond},
+			VerificationCheck: verificationConds,
 		},
-		Postconditions:    []protocol.Condition{cond},
+		Postconditions:    verificationConds,
 		ExpectedMutations: []protocol.ExpectedMutation{},
 		IdempotencyKey:    fmt.Sprintf("manual_install_nvidia_driver_%s", deviceID),
 	}
@@ -328,15 +335,23 @@ func NewManualNvidiaDevicePermissionsAction(actionID, deviceID, recipeSetVersion
 
 // NewManualRocmDriverAction constructs a high-impact manual action for installing AMD ROCm drivers and compute stack.
 func NewManualRocmDriverAction(actionID, deviceID, recipeSetVersion string) protocol.SetupAction {
-	// Existence of /dev/kfd (regardless of this user's access to it) is
-	// what proves the amdgpu/amdkfd kernel driver is actually bound —
-	// independent-review follow-up on WP-M3B-6, FIX_NOW 4.
-	cond := protocol.Condition{
+	// Verifies both that the amdgpu kernel driver is bound to the
+	// specific device in sysfs, and that the /dev/kfd compute node
+	// exists as a device special file.
+	condDriver := protocol.Condition{
+		Kind: protocol.CondKindKernelDriverBound,
+		KernelDriverBound: &protocol.KernelDriverBoundOperand{
+			DeviceID: deviceID,
+			Driver:   "amdgpu",
+		},
+	}
+	condNode := protocol.Condition{
 		Kind: protocol.CondKindDeviceNodeAccessible,
 		DeviceNodeAccessible: &protocol.DeviceNodeOperand{
 			Path: rocmComputeNodePath,
 		},
 	}
+	verificationConds := []protocol.Condition{condDriver, condNode}
 	return protocol.SetupAction{
 		ActionID:      actionID,
 		RecipeID:      "recipe.manual.install_rocm_driver",
@@ -357,9 +372,9 @@ func NewManualRocmDriverAction(actionID, deviceID, recipeSetVersion string) prot
 				"Reboot system to load the updated amdgpu and amdkfd kernel modules",
 				"Confirm ROCm installation with rocminfo",
 			},
-			VerificationCheck: []protocol.Condition{cond},
+			VerificationCheck: verificationConds,
 		},
-		Postconditions:    []protocol.Condition{cond},
+		Postconditions:    verificationConds,
 		ExpectedMutations: []protocol.ExpectedMutation{},
 		IdempotencyKey:    fmt.Sprintf("manual_install_rocm_driver_%s", deviceID),
 	}

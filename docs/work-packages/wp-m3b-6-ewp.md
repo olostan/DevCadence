@@ -77,10 +77,10 @@ Every recipe in the catalogue is versioned (`recipe_version`), carries an immuta
 
 | Recipe ID | Domain | Minimum Authority | Effects | Manual Guide Summary | Verification Conditions |
 |---|---|---|---|---|---|
-| `recipe.manual.install_nvidia_driver` | GPU Driver | `high_impact_manual` | `privilege_elevation`, `device_permission_change`, `package_download` | Instructions to install vendor NVIDIA proprietary driver package | `command_available: nvidia-smi` |
-| `recipe.manual.configure_nvidia_device_permissions` | Kernel Device Access | `high_impact_manual` | `privilege_elevation`, `device_permission_change` | Instructions to add user to `video`/`render` group and configure udev | `command_available: nvidia-smi` |
-| `recipe.manual.install_rocm_driver` | GPU Driver | `high_impact_manual` | `privilege_elevation`, `device_permission_change`, `package_download` | Instructions to install AMD ROCm driver and compute stack | `command_available: rocminfo` |
-| `recipe.manual.configure_amdgpu_device_permissions` | Kernel Device Access | `high_impact_manual` | `privilege_elevation`, `device_permission_change` | Instructions to configure `/dev/kfd` permissions | `command_available: rocminfo` |
+| `recipe.manual.install_nvidia_driver` | GPU Driver | `high_impact_manual` | `privilege_elevation`, `device_permission_change`, `package_download` | Instructions to install vendor NVIDIA proprietary driver package | `kernel_driver_bound: nvidia`, `device_node_accessible: /dev/nvidiactl` |
+| `recipe.manual.configure_nvidia_device_permissions` | Kernel Device Access | `high_impact_manual` | `privilege_elevation`, `device_permission_change` | Instructions to add user to `video`/`render` group and configure udev | `device_node_accessible: /dev/nvidiactl` (`require_accessible: true`) |
+| `recipe.manual.install_rocm_driver` | GPU Driver | `high_impact_manual` | `privilege_elevation`, `device_permission_change`, `package_download` | Instructions to install AMD ROCm driver and compute stack | `kernel_driver_bound: amdgpu`, `device_node_accessible: /dev/kfd` |
+| `recipe.manual.configure_amdgpu_device_permissions` | Kernel Device Access | `high_impact_manual` | `privilege_elevation`, `device_permission_change` | Instructions to configure `/dev/kfd` permissions | `device_node_accessible: /dev/kfd` (`require_accessible: true`) |
 | `recipe.manual.install_git` | Core Dependency | `high_impact_manual` | `package_download`, `filesystem_write` | System package manager instructions to install Git | `command_available: git` |
 | `recipe.manual.reauthenticate` | Authentication | `high_impact_manual` | `authentication` | CLI login / API key configuration instructions | `endpoint_authenticated` |
 | `recipe.manual.pull_ollama_model` | Local Model | `high_impact_manual` | `package_download`, `filesystem_write` | Manual `ollama pull` instructions when local binary identity is unverified | `model_present` (exact digest & size) |
@@ -229,4 +229,24 @@ An independent review ([PR #10 comment](https://github.com/olostan/DevCadence/pu
 
 **Verification (this revision):** `go build ./...`, `go vet ./...`, `go test -count=1 ./...` (all 30 packages `ok`), `go test -race ./internal/setup/... ./internal/protocol/... ./internal/credentials/... ./internal/schema/... ./internal/environment/... ./tests/...` (clean), `GOOS=windows GOARCH=amd64`/`GOOS=linux GOARCH=amd64 go build ./...` (clean), `git diff --check` (clean).
 
-**Disposition:** all 4 FIX_NOW findings fixed, plus the contract-drift cleanup; awaiting a focused re-review of the repaired head per AGENTS.md §8A before WP-M3B-6 can be marked `accepted`.
+**Disposition:** all 4 FIX_NOW findings fixed, plus the contract-drift cleanup; pushed at `ab69189` for focused round-2 re-review.
+
+---
+
+## 11. Independent review round 2 disposition: Finding 4 closed via `kernel_driver_bound` and non-device rejection
+
+A focused re-review ([PR #10 comment #5836314553](https://github.com/olostan/DevCadence/pull/10#issuecomment-5836314553), owner, 2026-09-25, head `ab69189`) confirmed that Findings 1–3 were resolved, `managed_dir_exists` was restored, and all deterministic verification passed cleanly. However, it noted Finding 4 still permitted a false success: `evaluateDeviceNodeAccessible` accepted ordinary regular files, and driver installation did not bind to observed driver state for the intended device rather than path existence alone.
+
+All items resolved in this repair round:
+
+1. **Rejection of non-device files:** `evaluateDeviceNodeAccessible` in `internal/setup/conditions.go` now inspects `info.Mode()&os.ModeDevice != 0`. An ordinary regular file, directory, or socket at the target path is strictly rejected with `false` (both for existence-only checks and accessibility checks).
+2. **Typed driver binding condition:** Added closed condition `CondKindKernelDriverBound` (`protocol.KernelDriverBoundOperand{DeviceID, Driver}`) to `internal/protocol/setup.go` and `schemas/setup-plan.schema.json`. Evaluated via `DeviceDriverChecker` interface and production `SysfsDriverChecker` reading `/sys/bus/pci/devices/<slot>/uevent` to confirm the required driver (e.g. `nvidia`/`nvidia_drm` or `amdgpu`) is bound to the specific hardware device.
+3. **Distinct verification contracts:**
+   - Driver install actions (`recipe.manual.install_nvidia_driver`, `recipe.manual.install_rocm_driver`) verify both `kernel_driver_bound` for the intended device and `device_node_accessible` (`/dev/nvidiactl` or `/dev/kfd`).
+   - Device permission actions (`recipe.manual.configure_nvidia_device_permissions`, `recipe.manual.configure_amdgpu_device_permissions`) retain the distinct access check `device_node_accessible` with `RequireAccessible: true`.
+4. **Reconciled EWP §3.2 Table:** Reconciled the manual recipes table in §3.2 with the final typed verification conditions.
+5. **Comprehensive Tests:** Added negative tests in `conditions_test.go` proving regular files are rejected, missing/unbound/wrong-driver sysfs states fail closed, real device special files (`/dev/null`) succeed, and corrected remediation states transition from failing to passing. Added postcondition assertions to scenarios 9, 10, 11, and 11b in `recipes_test.go`.
+
+**Verification:** `go build ./...`, `go vet ./...`, `go test -count=1 ./...` (all 30 packages pass), `go test -race ./internal/setup/... ./internal/protocol/... ./internal/credentials/... ./internal/schema/... ./internal/environment/... ./tests/...` (clean), `GOOS=windows GOARCH=amd64`/`GOOS=linux GOARCH=amd64 go build ./...` (clean), `git diff --check` (clean).
+
+**Disposition:** Finding 4 fully resolved; awaiting focused round-3 re-review.

@@ -416,22 +416,19 @@ const (
 	// digest does.
 	CondKindModelPresent ConditionKind = "model_present"
 	// CondKindDeviceNodeAccessible checks a device special file's actual
-	// remediation state: that it exists (a kernel driver bound something
-	// there — command_available's "the vendor CLI binary is on PATH" says
-	// nothing about this) and, when required, that the current user can
-	// open it for read/write (a separate, narrower fact than mere
-	// existence — a device node can exist while still being root-only).
-	// This is the closed, read-only, typed probe hardware driver/
-	// device-permission manual recipes verify against, replacing a
-	// command_available check that could pass long before — or without
-	// ever requiring — the actual remediation (independent-review
-	// follow-up on WP-M3B-6, FIX_NOW 4).
+	// remediation state: that it exists as a device special file (mode & os.ModeDevice != 0),
+	// and, when required, that the current user can open it for read/write
+	// (a separate, narrower fact than mere existence — a device node can exist
+	// while still being root-only).
 	CondKindDeviceNodeAccessible ConditionKind = "device_node_accessible"
+	// CondKindKernelDriverBound verifies that a specific kernel driver is bound
+	// to the intended accelerator device (e.g. via sysfs uevent on Linux).
+	CondKindKernelDriverBound ConditionKind = "kernel_driver_bound"
 )
 
 func (k ConditionKind) Valid() bool {
 	switch k {
-	case CondKindCommandAvailable, CondKindExecutableVerified, CondKindManagedDirExists, CondKindPortListening, CondKindEndpointHealthy, CondKindEndpointAuthenticated, CondKindModelPresent, CondKindDeviceNodeAccessible:
+	case CondKindCommandAvailable, CondKindExecutableVerified, CondKindManagedDirExists, CondKindPortListening, CondKindEndpointHealthy, CondKindEndpointAuthenticated, CondKindModelPresent, CondKindDeviceNodeAccessible, CondKindKernelDriverBound:
 		return true
 	}
 	return false
@@ -447,6 +444,7 @@ type Condition struct {
 	EndpointAuthenticated *EndpointOperand           `json:"endpoint_authenticated,omitempty"`
 	ModelPresent          *ModelPresentOperand       `json:"model_present,omitempty"`
 	DeviceNodeAccessible  *DeviceNodeOperand         `json:"device_node_accessible,omitempty"`
+	KernelDriverBound     *KernelDriverBoundOperand  `json:"kernel_driver_bound,omitempty"`
 }
 
 type CommandAvailableOperand struct {
@@ -525,6 +523,14 @@ type DeviceNodeOperand struct {
 	RequireAccessible bool `json:"require_accessible,omitempty"`
 }
 
+// KernelDriverBoundOperand specifies a device identifier and expected kernel driver name.
+// This proves that the intended device actually has the required kernel driver bound
+// in the operating system (e.g. sysfs on Linux), rather than checking path existence alone.
+type KernelDriverBoundOperand struct {
+	DeviceID string `json:"device_id"`
+	Driver   string `json:"driver"`
+}
+
 type EndpointOperand struct {
 	EndpointID string `json:"endpoint_id"`
 	// CredentialRefID is the explicit, non-secret WP-M3B-4 CredentialRef.RefID
@@ -591,6 +597,9 @@ func (c Condition) Validate() error {
 		count++
 	}
 	if c.DeviceNodeAccessible != nil {
+		count++
+	}
+	if c.KernelDriverBound != nil {
 		count++
 	}
 	if count != 1 {
@@ -677,6 +686,10 @@ func (c Condition) Validate() error {
 	case CondKindDeviceNodeAccessible:
 		if c.DeviceNodeAccessible == nil || !strings.HasPrefix(c.DeviceNodeAccessible.Path, "/") {
 			return errs.New(errs.CategoryInvalidArgument, "%s: device_node_accessible.path must be absolute", kind)
+		}
+	case CondKindKernelDriverBound:
+		if c.KernelDriverBound == nil || c.KernelDriverBound.DeviceID == "" || c.KernelDriverBound.Driver == "" {
+			return errs.New(errs.CategoryInvalidArgument, "%s: kernel_driver_bound device_id and driver are required", kind)
 		}
 	}
 	return nil

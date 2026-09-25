@@ -9,6 +9,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -162,6 +163,54 @@ type EvaluatorDeps struct {
 	// OllamaAdapter.BaseURL) rather than this struct — see
 	// modelruntime.go/ollama_adapter.go.
 	ModelRuntimes *ModelRuntimeRegistry
+	// DeviceDriver is optional; nil uses SysfsDriverChecker (reading /sys/bus/pci/devices).
+	DeviceDriver DeviceDriverChecker
+}
+
+// DeviceDriverChecker inspects whether an intended device has a specific kernel driver bound.
+type DeviceDriverChecker interface {
+	CheckDriverBound(ctx context.Context, deviceID, wantDriver string) (bool, string, error)
+}
+
+// SysfsDriverChecker is the production implementation of DeviceDriverChecker.
+type SysfsDriverChecker struct {
+	// SysfsDevicesDir overrides the sysfs PCI devices path (default: "/sys/bus/pci/devices").
+	SysfsDevicesDir string
+}
+
+func (c *SysfsDriverChecker) CheckDriverBound(ctx context.Context, deviceID, wantDriver string) (bool, string, error) {
+	if deviceID == "" || wantDriver == "" {
+		return false, "", errs.New(errs.CategoryInvalidArgument, "CheckDriverBound: deviceID and wantDriver must be non-empty")
+	}
+	dir := c.SysfsDevicesDir
+	if dir == "" {
+		dir = "/sys/bus/pci/devices"
+	}
+	slot := strings.TrimPrefix(deviceID, "pci:")
+	ueventPath := filepath.Join(dir, slot, "uevent")
+	content, err := os.ReadFile(ueventPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false, fmt.Sprintf("device %s not found in sysfs (%s)", deviceID, ueventPath), nil
+		}
+		return false, fmt.Sprintf("could not read uevent for device %s: %v", deviceID, err), nil
+	}
+	var boundDriver string
+	for _, line := range strings.Split(string(content), "\n") {
+		if val, ok := strings.CutPrefix(strings.TrimSpace(line), "DRIVER="); ok {
+			boundDriver = strings.TrimSpace(val)
+			break
+		}
+	}
+	if boundDriver == "" {
+		return false, fmt.Sprintf("no kernel driver is bound to device %s", deviceID), nil
+	}
+	// For NVIDIA, both "nvidia" and "nvidia_drm" are valid proprietary driver names (matches compatibility.go)
+	matches := boundDriver == wantDriver || (wantDriver == "nvidia" && boundDriver == "nvidia_drm")
+	if !matches {
+		return false, fmt.Sprintf("device %s has driver %q bound, want %q", deviceID, boundDriver, wantDriver), nil
+	}
+	return true, fmt.Sprintf("device %s has driver %q bound", deviceID, boundDriver), nil
 }
 
 // EvaluateCondition checks whether cond currently holds against the live
@@ -186,9 +235,19 @@ func EvaluateCondition(ctx context.Context, deps EvaluatorDeps, cond protocol.Co
 		return evaluateEndpointAuthenticated(ctx, deps, cond.EndpointAuthenticated)
 	case protocol.CondKindDeviceNodeAccessible:
 		return evaluateDeviceNodeAccessible(cond.DeviceNodeAccessible)
+	case protocol.CondKindKernelDriverBound:
+		return evaluateKernelDriverBound(ctx, deps, cond.KernelDriverBound)
 	default:
 		return false, "", errs.New(errs.CategoryInvalidArgument, "EvaluateCondition: unhandled condition kind %q", cond.Kind)
 	}
+}
+
+func evaluateKernelDriverBound(ctx context.Context, deps EvaluatorDeps, op *protocol.KernelDriverBoundOperand) (bool, string, error) {
+	checker := deps.DeviceDriver
+	if checker == nil {
+		checker = &SysfsDriverChecker{}
+	}
+	return checker.CheckDriverBound(ctx, op.DeviceID, op.Driver)
 }
 
 func evaluateCommandAvailable(op *protocol.CommandAvailableOperand) (bool, string, error) {
@@ -200,11 +259,9 @@ func evaluateCommandAvailable(op *protocol.CommandAvailableOperand) (bool, strin
 }
 
 // evaluateDeviceNodeAccessible is the closed, read-only probe hardware
-// driver/device-permission manual recipes verify against: it checks the
-// actual remediation state of a device special file, not a proxy for it
-// (independent-review follow-up on WP-M3B-6, FIX_NOW 4 — a vendor CLI
-// binary being on PATH proves neither that a kernel driver is bound nor
-// that the current user can access the device it created).
+// device-permission manual recipes verify against: it checks the actual
+// remediation state of a device special file, rejecting non-device files,
+// and testing genuine read/write open accessibility when required.
 func evaluateDeviceNodeAccessible(op *protocol.DeviceNodeOperand) (bool, string, error) {
 	info, err := os.Stat(op.Path)
 	if err != nil {
@@ -213,8 +270,13 @@ func evaluateDeviceNodeAccessible(op *protocol.DeviceNodeOperand) (bool, string,
 		}
 		return false, fmt.Sprintf("device node %s could not be inspected: %v", op.Path, err), nil
 	}
+	// Must be a device special file (character or block device).
+	// An ordinary regular file or directory is rejected immediately.
+	if info.Mode()&os.ModeDevice == 0 {
+		return false, fmt.Sprintf("path %s exists but is not a device special file (mode %s)", op.Path, info.Mode()), nil
+	}
 	if !op.RequireAccessible {
-		return true, fmt.Sprintf("device node %s exists (mode %s)", op.Path, info.Mode()), nil
+		return true, fmt.Sprintf("device node %s exists as device special file (mode %s)", op.Path, info.Mode()), nil
 	}
 	// A read-only probe cannot merely inspect permission bits and trust
 	// them (ACLs, group membership not yet applied to this process, etc.

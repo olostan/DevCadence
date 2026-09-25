@@ -370,18 +370,27 @@ Full detail in `docs/work-packages/wp-m3b-5-ewp.md` §19.
   - `GOOS=windows GOARCH=amd64 go build ./...` and `GOOS=linux GOARCH=amd64 go build ./...`: clean cross-compilation.
   - `git diff --check`: clean.
 
-**Independent review round 1** ([comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5834040833), owner, 2026-09-25, base `a8af456`, head `88fee78`) confirmed the recipe/resolver architecture was viable, then found 4 closure-threshold FIX_NOW findings, fixed this session:
+**Independent review round 1** ([comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5834040833), owner, 2026-09-25, base `a8af456`, head `88fee78`) confirmed the recipe/resolver architecture was viable, then found 4 closure-threshold FIX_NOW findings, fixed at commit `ab69189`:
 1. Ollama pre-resolution accepted any non-empty revision (including a mutable tag like `"main"`) — `ResolvedModel.Validate()` now dispatches per runtime, with a new `isImmutableOllamaRevision` (`sha256:<64 lowercase hex>`) alongside the existing MLX check, and fails closed for any runtime with no known verification rule;
 2. the planner trusted `ModelResolver` output blindly — a resolver could return a valid record for a different runtime/model and the plan would silently target it — new `verifyResolvedIdentity` fails closed on any mismatch;
 3. `recipe.manual.install_rocm_driver` was unreachable from the real `AssessBackends -> Planner` path (AMD assessment never distinguished "driver not bound" from "`/dev/kfd` inaccessible," and scenario 11 tested the wrong branch while claiming to cover it) — `amdCandidates` now checks `DriverInUse == "amdgpu"` first, mirroring `nvidiaCandidate`'s existing pattern;
 4. the four hardware manual recipes verified only `command_available` (a vendor CLI on PATH proves neither driver binding nor device accessibility) — new closed `device_node_accessible` condition checks the actual device-node state via `os.Stat`/a real open-for-read-write probe.
 Full detail in `docs/work-packages/wp-m3b-6-ewp.md` §10.
 
-**Known blockers / open questions:** none — awaiting a round-2 review to confirm the §10 fixes.
+**Independent review round 2** ([comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5836314553), owner, 2026-09-25, head `ab69189`) confirmed Findings 1–3 were resolved, `managed_dir_exists` restored, and deterministic suite passed cleanly. It noted Finding 4 still permitted false success because `evaluateDeviceNodeAccessible` accepted ordinary regular files, and driver installation did not bind to observed driver state for the intended device. Fixed in round-2 repair:
+1. `evaluateDeviceNodeAccessible` now checks `info.Mode()&os.ModeDevice != 0` to reject non-device files (regular files, directories, etc.).
+2. Added closed typed condition `kernel_driver_bound` (`CondKindKernelDriverBound`, `protocol.KernelDriverBoundOperand{DeviceID, Driver}`) with `DeviceDriverChecker` interface and production `SysfsDriverChecker` reading `/sys/bus/pci/devices/<slot>/uevent` to confirm the required driver (`nvidia`/`nvidia_drm` or `amdgpu`) is bound to the specific hardware device.
+3. Driver install actions verify both `kernel_driver_bound` and `device_node_accessible`.
+4. Device permission actions retain distinct access check with `device_node_accessible` (`RequireAccessible: true`).
+5. Reconciled EWP §3.2 recipe table with the final typed verification contract.
+6. Added negative tests for regular files, missing devices in sysfs, unbound devices, wrong drivers, and corrected state transitions.
+Full detail in `docs/work-packages/wp-m3b-6-ewp.md` §11.
+
+**Known blockers / open questions:** none — awaiting round-3 review to confirm the §11 fixes.
 
 ## Next concrete action
 
-Post a PR comment on #10 summarizing the §10 fix round and continue watching for the owner's response. Do not flip WP-M3B-6 to `accepted` unilaterally. Once accepted, proceed to WP-M3B-7 (`devcadence doctor` / `devcadence setup` CLI surface).
+Post a PR comment on #10 summarizing the round-2 fix round and poll for the owner's response using `/github-pr-comment-poller`. Do not flip WP-M3B-6 to `accepted` unilaterally. Once accepted, proceed to WP-M3B-7 (`devcadence doctor` / `devcadence setup` CLI surface).
 
 ## Resume checklist for the next agent
 

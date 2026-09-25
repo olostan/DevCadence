@@ -197,6 +197,30 @@
           },
           "required": ["device_node_accessible"],
           "additionalProperties": false
+        },
+        {
+          "properties": {
+            "kind": { "const": "kernel_driver_bound" },
+            "kernel_driver_bound": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["device_id", "driver"],
+              "properties": {
+                "device_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "Device identifier (e.g. 'pci:0000:01:00.0' or '0000:01:00.0')."
+                },
+                "driver": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "Expected kernel driver name (e.g. 'nvidia', 'amdgpu')."
+                }
+              }
+            }
+          },
+          "required": ["kernel_driver_bound"],
+          "additionalProperties": false
         }
       ]
     },

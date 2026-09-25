@@ -532,10 +532,12 @@ func TestEvaluateConditionModelPresentRejectsUnregisteredRuntime(t *testing.T) {
 // required, current-user read/write accessibility) rather than a proxy
 // like command_available. These regressions prove the condition
 // distinguishes "does not exist" from "exists but inaccessible" from
-// "exists and accessible", and that the transition from a pre-remediation
-// state to the corrected state flips the evaluated result.
+// TestEvaluateDeviceNodeAccessible tests the closed, read-only probe for
+// device special files. It verifies that regular files are strictly rejected,
+// nonexistent paths fail, and genuine device special files are inspected
+// for existence and current-user read/write accessibility.
 func TestEvaluateDeviceNodeAccessible(t *testing.T) {
-	t.Run("missing node fails both existence and accessibility checks", func(t *testing.T) {
+	t.Run("missing node fails existence and accessibility checks", func(t *testing.T) {
 		missing := filepath.Join(t.TempDir(), "does-not-exist")
 		passed, _, err := EvaluateCondition(context.Background(), EvaluatorDeps{}, protocol.Condition{
 			Kind:                 protocol.CondKindDeviceNodeAccessible,
@@ -549,62 +551,251 @@ func TestEvaluateDeviceNodeAccessible(t *testing.T) {
 		}
 	})
 
-	t.Run("existing node satisfies existence-only check regardless of permissions", func(t *testing.T) {
+	t.Run("regular file is strictly rejected even if writable", func(t *testing.T) {
 		dir := t.TempDir()
-		node := filepath.Join(dir, "node")
-		if err := os.WriteFile(node, nil, 0000); err != nil {
-			t.Fatalf("create fixture node: %v", err)
+		regular := filepath.Join(dir, "not-a-device")
+		if err := os.WriteFile(regular, []byte("fake"), 0666); err != nil {
+			t.Fatalf("create regular file: %v", err)
 		}
-		defer os.Chmod(node, 0600) //nolint:errcheck // best-effort cleanup so t.TempDir can remove it
-		passed, _, err := EvaluateCondition(context.Background(), EvaluatorDeps{}, protocol.Condition{
-			Kind:                 protocol.CondKindDeviceNodeAccessible,
-			DeviceNodeAccessible: &protocol.DeviceNodeOperand{Path: node},
-		})
-		if err != nil {
-			t.Fatalf("EvaluateCondition: %v", err)
-		}
-		if !passed {
-			t.Error("passed = false for an existing device node with existence-only check, want true (existence alone is the fact being verified — e.g. a driver having bound and created the node)")
-		}
-	})
-
-	t.Run("existing but inaccessible node fails the accessibility check: pre-remediation state", func(t *testing.T) {
-		if os.Geteuid() == 0 {
-			t.Skip("running as root: permission bits cannot deny access to this process")
-		}
-		dir := t.TempDir()
-		node := filepath.Join(dir, "node")
-		if err := os.WriteFile(node, nil, 0000); err != nil {
-			t.Fatalf("create fixture node: %v", err)
-		}
+		// Existence-only check must reject regular file
 		passed, detail, err := EvaluateCondition(context.Background(), EvaluatorDeps{}, protocol.Condition{
 			Kind:                 protocol.CondKindDeviceNodeAccessible,
-			DeviceNodeAccessible: &protocol.DeviceNodeOperand{Path: node, RequireAccessible: true},
+			DeviceNodeAccessible: &protocol.DeviceNodeOperand{Path: regular, RequireAccessible: false},
 		})
 		if err != nil {
 			t.Fatalf("EvaluateCondition: %v", err)
 		}
 		if passed {
-			t.Fatalf("passed = true for a 0000-mode device node, want false (pre-remediation state); detail=%q", detail)
+			t.Errorf("passed = true for regular file with RequireAccessible=false; want false (must reject non-device files), detail=%s", detail)
 		}
 
-		// Corrected state: the same recipe's remediation (granting rw
-		// access) makes the identical condition pass, without recreating
-		// the node — proving this checks live accessibility, not merely
-		// whether the path existed at some point.
-		if err := os.Chmod(node, 0600); err != nil {
-			t.Fatalf("chmod fixture node: %v", err)
-		}
-		defer os.Chmod(node, 0600) //nolint:errcheck
+		// Accessibility check must also reject regular file
 		passed, detail, err = EvaluateCondition(context.Background(), EvaluatorDeps{}, protocol.Condition{
 			Kind:                 protocol.CondKindDeviceNodeAccessible,
-			DeviceNodeAccessible: &protocol.DeviceNodeOperand{Path: node, RequireAccessible: true},
+			DeviceNodeAccessible: &protocol.DeviceNodeOperand{Path: regular, RequireAccessible: true},
+		})
+		if err != nil {
+			t.Fatalf("EvaluateCondition: %v", err)
+		}
+		if passed {
+			t.Errorf("passed = true for regular file with RequireAccessible=true; want false (must reject non-device files), detail=%s", detail)
+		}
+	})
+
+	t.Run("real character device satisfies existence and accessibility checks", func(t *testing.T) {
+		const devNull = "/dev/null"
+		info, err := os.Stat(devNull)
+		if err != nil || info.Mode()&os.ModeDevice == 0 {
+			t.Skip("/dev/null not available as a device special file on this platform")
+		}
+
+		// Existence-only on real device special file
+		passed, detail, err := EvaluateCondition(context.Background(), EvaluatorDeps{}, protocol.Condition{
+			Kind:                 protocol.CondKindDeviceNodeAccessible,
+			DeviceNodeAccessible: &protocol.DeviceNodeOperand{Path: devNull, RequireAccessible: false},
 		})
 		if err != nil {
 			t.Fatalf("EvaluateCondition: %v", err)
 		}
 		if !passed {
-			t.Fatalf("passed = false after granting rw access, want true (corrected state); detail=%q", detail)
+			t.Errorf("passed = false for %s with RequireAccessible=false, detail=%s", devNull, detail)
+		}
+
+		// Read/write accessibility on /dev/null
+		passed, detail, err = EvaluateCondition(context.Background(), EvaluatorDeps{}, protocol.Condition{
+			Kind:                 protocol.CondKindDeviceNodeAccessible,
+			DeviceNodeAccessible: &protocol.DeviceNodeOperand{Path: devNull, RequireAccessible: true},
+		})
+		if err != nil {
+			t.Fatalf("EvaluateCondition: %v", err)
+		}
+		if !passed {
+			t.Errorf("passed = false for %s with RequireAccessible=true, detail=%s", devNull, detail)
+		}
+	})
+
+	t.Run("inaccessible device special file fails RequireAccessible when permission denied", func(t *testing.T) {
+		if os.Geteuid() == 0 {
+			t.Skip("running as root: root has ambient access to restricted device nodes")
+		}
+		// Look for an existing device node in /dev that non-root cannot open for read/write
+		candidates := []string{"/dev/mem", "/dev/kmem", "/dev/port", "/dev/nvram", "/dev/kmsg", "/dev/tty0"}
+		var restrictedNode string
+		for _, c := range candidates {
+			info, err := os.Stat(c)
+			if err == nil && info.Mode()&os.ModeDevice != 0 {
+				if f, openErr := os.OpenFile(c, os.O_RDWR, 0); openErr != nil {
+					restrictedNode = c
+					break
+				} else {
+					_ = f.Close()
+				}
+			}
+		}
+		if restrictedNode == "" {
+			t.Skip("no restricted device node found in test environment to test permission denial")
+		}
+
+		// Existence should pass because it IS a device special file
+		passed, detail, err := EvaluateCondition(context.Background(), EvaluatorDeps{}, protocol.Condition{
+			Kind:                 protocol.CondKindDeviceNodeAccessible,
+			DeviceNodeAccessible: &protocol.DeviceNodeOperand{Path: restrictedNode, RequireAccessible: false},
+		})
+		if err != nil {
+			t.Fatalf("EvaluateCondition: %v", err)
+		}
+		if !passed {
+			t.Errorf("passed = false for existing device node %s with RequireAccessible=false, detail=%s", restrictedNode, detail)
+		}
+
+		// But RequireAccessible must fail because the current user cannot open it
+		passed, detail, err = EvaluateCondition(context.Background(), EvaluatorDeps{}, protocol.Condition{
+			Kind:                 protocol.CondKindDeviceNodeAccessible,
+			DeviceNodeAccessible: &protocol.DeviceNodeOperand{Path: restrictedNode, RequireAccessible: true},
+		})
+		if err != nil {
+			t.Fatalf("EvaluateCondition: %v", err)
+		}
+		if passed {
+			t.Errorf("passed = true for restricted device node %s with RequireAccessible=true; want false, detail=%s", restrictedNode, detail)
+		}
+	})
+}
+
+// TestEvaluateKernelDriverBound verifies the typed kernel_driver_bound condition.
+// It verifies that driver binding is distinguished from device presence, and that
+// unbound/wrong-driver states fail while bound states pass.
+func TestEvaluateKernelDriverBound(t *testing.T) {
+	sysfsRoot := t.TempDir()
+	checker := &SysfsDriverChecker{SysfsDevicesDir: sysfsRoot}
+	deps := EvaluatorDeps{DeviceDriver: checker}
+
+	const deviceID = "pci:0000:01:00.0"
+	slotDir := filepath.Join(sysfsRoot, "0000:01:00.0")
+
+	t.Run("missing device in sysfs fails", func(t *testing.T) {
+		passed, detail, err := EvaluateCondition(context.Background(), deps, protocol.Condition{
+			Kind: protocol.CondKindKernelDriverBound,
+			KernelDriverBound: &protocol.KernelDriverBoundOperand{
+				DeviceID: deviceID,
+				Driver:   "nvidia",
+			},
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if passed {
+			t.Errorf("passed = true for nonexistent sysfs device, detail=%s", detail)
+		}
+	})
+
+	t.Run("device present but no driver bound fails: pre-remediation state", func(t *testing.T) {
+		if err := os.MkdirAll(slotDir, 0755); err != nil {
+			t.Fatalf("mkdir slot: %v", err)
+		}
+		uevent := filepath.Join(slotDir, "uevent")
+		if err := os.WriteFile(uevent, []byte("PCI_CLASS=30000\nPCI_ID=10DE:2204\n"), 0644); err != nil {
+			t.Fatalf("write uevent: %v", err)
+		}
+
+		passed, detail, err := EvaluateCondition(context.Background(), deps, protocol.Condition{
+			Kind: protocol.CondKindKernelDriverBound,
+			KernelDriverBound: &protocol.KernelDriverBoundOperand{
+				DeviceID: deviceID,
+				Driver:   "nvidia",
+			},
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if passed {
+			t.Errorf("passed = true for unbound device, want false; detail=%s", detail)
+		}
+	})
+
+	t.Run("device has different driver bound fails", func(t *testing.T) {
+		uevent := filepath.Join(slotDir, "uevent")
+		if err := os.WriteFile(uevent, []byte("DRIVER=nouveau\nPCI_CLASS=30000\n"), 0644); err != nil {
+			t.Fatalf("write uevent: %v", err)
+		}
+
+		passed, detail, err := EvaluateCondition(context.Background(), deps, protocol.Condition{
+			Kind: protocol.CondKindKernelDriverBound,
+			KernelDriverBound: &protocol.KernelDriverBoundOperand{
+				DeviceID: deviceID,
+				Driver:   "nvidia",
+			},
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if passed {
+			t.Errorf("passed = true when driver is nouveau, want false for nvidia; detail=%s", detail)
+		}
+	})
+
+	t.Run("device has expected driver bound succeeds: corrected remediation state", func(t *testing.T) {
+		uevent := filepath.Join(slotDir, "uevent")
+		if err := os.WriteFile(uevent, []byte("DRIVER=nvidia\nPCI_CLASS=30000\n"), 0644); err != nil {
+			t.Fatalf("write uevent: %v", err)
+		}
+
+		passed, detail, err := EvaluateCondition(context.Background(), deps, protocol.Condition{
+			Kind: protocol.CondKindKernelDriverBound,
+			KernelDriverBound: &protocol.KernelDriverBoundOperand{
+				DeviceID: deviceID,
+				Driver:   "nvidia",
+			},
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !passed {
+			t.Errorf("passed = false when driver is nvidia; detail=%s", detail)
+		}
+
+		// Also check nvidia_drm alias for nvidia
+		if err := os.WriteFile(uevent, []byte("DRIVER=nvidia_drm\nPCI_CLASS=30000\n"), 0644); err != nil {
+			t.Fatalf("write uevent: %v", err)
+		}
+		passed, detail, err = EvaluateCondition(context.Background(), deps, protocol.Condition{
+			Kind: protocol.CondKindKernelDriverBound,
+			KernelDriverBound: &protocol.KernelDriverBoundOperand{
+				DeviceID: deviceID,
+				Driver:   "nvidia",
+			},
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !passed {
+			t.Errorf("passed = false when driver is nvidia_drm; detail=%s", detail)
+		}
+	})
+
+	t.Run("AMD ROCm driver bound succeeds", func(t *testing.T) {
+		const amdDeviceID = "pci:0000:06:00.0"
+		amdSlotDir := filepath.Join(sysfsRoot, "0000:06:00.0")
+		if err := os.MkdirAll(amdSlotDir, 0755); err != nil {
+			t.Fatalf("mkdir amd slot: %v", err)
+		}
+		uevent := filepath.Join(amdSlotDir, "uevent")
+		if err := os.WriteFile(uevent, []byte("DRIVER=amdgpu\nPCI_CLASS=30000\n"), 0644); err != nil {
+			t.Fatalf("write uevent: %v", err)
+		}
+
+		passed, detail, err := EvaluateCondition(context.Background(), deps, protocol.Condition{
+			Kind: protocol.CondKindKernelDriverBound,
+			KernelDriverBound: &protocol.KernelDriverBoundOperand{
+				DeviceID: amdDeviceID,
+				Driver:   "amdgpu",
+			},
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !passed {
+			t.Errorf("passed = false when driver is amdgpu; detail=%s", detail)
 		}
 	})
 }
