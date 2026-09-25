@@ -157,21 +157,23 @@ func (h PrincipalHostSummary) Validate() error {
 }
 
 type DoctorReport struct {
-	SchemaVersion       SchemaVersion            `json:"schema_version"`
-	ReportID            string                   `json:"report_id"`
-	MachineFingerprint  string                   `json:"machine_fingerprint"`
-	ObservedAt          Timestamp                `json:"observed_at"`
-	EvaluationScope     ReadinessEvaluationScope `json:"evaluation_scope"`
-	Readiness           ReadinessStatus          `json:"readiness"`
-	Findings            []DiagnosticFinding      `json:"findings"`
-	RecommendedProfile  *ProfileRecommendation   `json:"recommended_profile,omitempty"`
+	SchemaVersion       SchemaVersion              `json:"schema_version"`
+	ReportID            string                     `json:"report_id"`
+	MachineFingerprint  string                     `json:"machine_fingerprint"`
+	ObservedAt          Timestamp                  `json:"observed_at"`
+	EvaluationScope     ReadinessEvaluationScope   `json:"evaluation_scope"`
+	Readiness           ReadinessStatus            `json:"readiness"`
+	Findings            []DiagnosticFinding        `json:"findings"`
+	ScopeReadiness      []ScopeReadiness           `json:"scope_readiness,omitempty"`
+	ResourceInventory   *ResourceInventory         `json:"resource_inventory,omitempty"`
+	RecommendedProfile  *ProfileRecommendation     `json:"recommended_profile,omitempty"`
 	DiscoveredEndpoints []CognitionEndpointSummary `json:"discovered_endpoints,omitempty"`
-	PrincipalHosts      []PrincipalHostSummary   `json:"principal_hosts,omitempty"`
+	PrincipalHosts      []PrincipalHostSummary     `json:"principal_hosts,omitempty"`
 }
 
-func (r *DoctorReport) RecordKind() string         { return "DoctorReport" }
-func (r *DoctorReport) RecordID() string           { return r.ReportID }
-func (r *DoctorReport) SchemaVer() SchemaVersion   { return r.SchemaVersion }
+func (r *DoctorReport) RecordKind() string       { return "DoctorReport" }
+func (r *DoctorReport) RecordID() string         { return r.ReportID }
+func (r *DoctorReport) SchemaVer() SchemaVersion { return r.SchemaVersion }
 
 func (r *DoctorReport) Validate() error {
 	const kind = "DoctorReport"
@@ -200,6 +202,21 @@ func (r *DoctorReport) Validate() error {
 
 	for _, f := range r.Findings {
 		if err := f.Validate(); err != nil {
+			return err
+		}
+	}
+	seenScopes := make(map[ScopeKind]bool, len(r.ScopeReadiness))
+	for _, sr := range r.ScopeReadiness {
+		if err := sr.Validate(); err != nil {
+			return err
+		}
+		if seenScopes[sr.Scope] {
+			return errs.New(errs.CategoryInvalidArgument, "%s: duplicate scope %q in scope_readiness", kind, sr.Scope)
+		}
+		seenScopes[sr.Scope] = true
+	}
+	if r.ResourceInventory != nil {
+		if err := r.ResourceInventory.Validate(); err != nil {
 			return err
 		}
 	}

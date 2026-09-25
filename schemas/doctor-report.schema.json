@@ -211,6 +211,36 @@
           "version": { "type": "string" }
         }
       }
+    },
+    "scope_readiness": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["scope", "status", "reason"],
+        "properties": {
+          "scope": {
+            "enum": [
+              "can_execute_setup_plan",
+              "has_any_viable_cognition_path",
+              "can_run_local_inference",
+              "local_model_available",
+              "can_use_existing_authenticated_cli",
+              "principal_host_available"
+            ]
+          },
+          "status": {
+            "enum": ["ready", "not_ready", "unavailable", "unknown"]
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "resource_inventory": {
+      "type": "object"
     }
   }
 }

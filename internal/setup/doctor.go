@@ -152,7 +152,7 @@ func (d *Doctor) Run(ctx context.Context, scope protocol.ReadinessEvaluationScop
 		scope.EvidenceStatus = evidenceStatus
 	}
 
-	// 6. Profile recommendation
+	// 6. Profile recommendation (informational UX labels only; de-authorized from canonical readiness and routing)
 	recommendation := d.recommender.Recommend(RecommendationInput{
 		Facts:            facts,
 		Endpoints:        endpoints,
@@ -160,13 +160,21 @@ func (d *Doctor) Run(ctx context.Context, scope protocol.ReadinessEvaluationScop
 		Policy:           d.policy,
 	})
 
-	// Ensure evaluated scope has a TargetProfile before checking READY (ADR-0014)
+	// Default target profile for compatibility if not explicitly scoped
 	if scope.TargetProfile == nil && recommendation.SelectedProfile != nil {
 		scope.TargetProfile = recommendation.SelectedProfile
 	}
 
 	// 7. Evaluate Readiness
 	readiness := d.evaluateReadiness(scope, findings, endpoints, cognProfile, scope.TargetProfile)
+
+	// 8. Build ResourceInventory
+	inv, err := d.BuildResourceInventory(ctx, facts, fingerprint, endpoints, hosts)
+	if err != nil {
+		return nil, err
+	}
+
+	scopeReadiness := protocol.EvaluateScopeReadiness(findings, endpoints, hosts)
 
 	report := &protocol.DoctorReport{
 		SchemaVersion:       protocol.SchemaVersion1,
@@ -176,6 +184,8 @@ func (d *Doctor) Run(ctx context.Context, scope protocol.ReadinessEvaluationScop
 		EvaluationScope:     scope,
 		Readiness:           readiness,
 		Findings:            findings,
+		ScopeReadiness:      scopeReadiness,
+		ResourceInventory:   inv,
 		RecommendedProfile:  &recommendation,
 		DiscoveredEndpoints: endpoints,
 		PrincipalHosts:      hosts,
@@ -237,6 +247,12 @@ func (d *Doctor) BuildResourceInventory(
 		CognitionEndpoints: endpoints,
 		PrincipalHosts:     hosts,
 	}
+
+	var findings []protocol.DiagnosticFinding
+	findings = append(findings, d.checkStateRoot()...)
+	findings = append(findings, d.checkGit(facts)...)
+	findings = append(findings, d.checkHardware(facts)...)
+	inv.Readiness = protocol.EvaluateScopeReadiness(findings, endpoints, hosts)
 
 	if d.credManager != nil {
 		for _, ref := range d.credRefs {
@@ -716,12 +732,7 @@ func (d *Doctor) evaluateReadiness(
 		}
 	}
 
-	// 2. If no target profile is specified or selected, we cannot be fully READY
-	if targetProfile == nil {
-		return protocol.ReadinessPartiallyReady
-	}
-
-	// 3. Classify candidate endpoints using full CognitionEndpoints
+	// 2. Classify candidate endpoints using full CognitionEndpoints
 	var fullEndpoints []protocol.CognitionEndpoint
 	if cognProfile != nil && len(cognProfile.Endpoints) > 0 {
 		fullEndpoints = cognProfile.Endpoints
@@ -748,35 +759,42 @@ func (d *Doctor) evaluateReadiness(
 		}
 	}
 
-	// 4. Verify target profile constraints
-	switch *targetProfile {
-	case protocol.ProfileCloudCognition:
-		if len(remoteEndpoints) == 0 {
-			return protocol.ReadinessPartiallyReady
+	// 3. Verify target profile constraints if a target profile is specified
+	if targetProfile != nil {
+		switch *targetProfile {
+		case protocol.ProfileCloudCognition:
+			if len(remoteEndpoints) == 0 {
+				return protocol.ReadinessPartiallyReady
+			}
+		case protocol.ProfileOffline:
+			if len(localEndpoints) == 0 {
+				return protocol.ReadinessPartiallyReady
+			}
+		case protocol.ProfileLocalHeavy:
+			if len(localEndpoints) == 0 {
+				return protocol.ReadinessPartiallyReady
+			}
+			if len(acceleratedLocal) == 0 {
+				// Local-heavy requires verified hardware acceleration (ADR-0014: PARTIALLY_READY)
+				return protocol.ReadinessPartiallyReady
+			}
+		case protocol.ProfileHybridThin:
+			if len(localEndpoints) == 0 || len(remoteEndpoints) == 0 {
+				return protocol.ReadinessPartiallyReady
+			}
+		case protocol.ProfileCustom:
+			if len(localEndpoints) == 0 && len(remoteEndpoints) == 0 {
+				return protocol.ReadinessPartiallyReady
+			}
 		}
-	case protocol.ProfileOffline:
-		if len(localEndpoints) == 0 {
-			return protocol.ReadinessPartiallyReady
-		}
-	case protocol.ProfileLocalHeavy:
-		if len(localEndpoints) == 0 {
-			return protocol.ReadinessPartiallyReady
-		}
-		if len(acceleratedLocal) == 0 {
-			// Local-heavy requires verified hardware acceleration (ADR-0014: PARTIALLY_READY)
-			return protocol.ReadinessPartiallyReady
-		}
-	case protocol.ProfileHybridThin:
-		if len(localEndpoints) == 0 || len(remoteEndpoints) == 0 {
-			return protocol.ReadinessPartiallyReady
-		}
-	case protocol.ProfileCustom:
+	} else {
+		// When no target profile is specified, canonical readiness requires at least one ready cognition path
 		if len(localEndpoints) == 0 && len(remoteEndpoints) == 0 {
 			return protocol.ReadinessPartiallyReady
 		}
 	}
 
-	// 5. Verify required roles under routing policy and capability evidence
+	// 4. Verify required roles under routing policy and capability evidence
 	defaultReqs := cognition.DefaultRequirements()
 	effPolicy := cognition.DefaultPolicy()
 	if d.policy != nil {
@@ -796,23 +814,27 @@ func (d *Doctor) evaluateReadiness(
 		}
 
 		var candidateEndpoints []protocol.CognitionEndpoint
-		switch *targetProfile {
-		case protocol.ProfileOffline:
-			candidateEndpoints = localEndpoints
-		case protocol.ProfileLocalHeavy:
-			candidateEndpoints = localEndpoints
-		case protocol.ProfileCloudCognition:
-			candidateEndpoints = remoteEndpoints
-		case protocol.ProfileHybridThin:
-			switch cRole {
-			case cognition.RoleScout, cognition.RoleClassifier:
+		if targetProfile != nil {
+			switch *targetProfile {
+			case protocol.ProfileOffline:
 				candidateEndpoints = localEndpoints
-			case cognition.RoleImplementer, cognition.RoleArchitectureReviewer:
+			case protocol.ProfileLocalHeavy:
+				candidateEndpoints = localEndpoints
+			case protocol.ProfileCloudCognition:
 				candidateEndpoints = remoteEndpoints
-			default:
+			case protocol.ProfileHybridThin:
+				switch cRole {
+				case cognition.RoleScout, cognition.RoleClassifier:
+					candidateEndpoints = localEndpoints
+				case cognition.RoleImplementer, cognition.RoleArchitectureReviewer:
+					candidateEndpoints = remoteEndpoints
+				default:
+					candidateEndpoints = append(append([]protocol.CognitionEndpoint(nil), localEndpoints...), remoteEndpoints...)
+				}
+			case protocol.ProfileCustom:
 				candidateEndpoints = append(append([]protocol.CognitionEndpoint(nil), localEndpoints...), remoteEndpoints...)
 			}
-		case protocol.ProfileCustom:
+		} else {
 			candidateEndpoints = append(append([]protocol.CognitionEndpoint(nil), localEndpoints...), remoteEndpoints...)
 		}
 

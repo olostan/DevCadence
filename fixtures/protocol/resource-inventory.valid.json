@@ -50,6 +50,38 @@
       }
     }
   ],
+  "readiness": [
+    {
+      "scope": "can_execute_setup_plan",
+      "status": "ready",
+      "reason": "Git and writable state root are available for setup execution"
+    },
+    {
+      "scope": "has_any_viable_cognition_path",
+      "status": "ready",
+      "reason": "At least one ready cognition endpoint is available"
+    },
+    {
+      "scope": "can_run_local_inference",
+      "status": "ready",
+      "reason": "Local runtime is running with a verified usable model"
+    },
+    {
+      "scope": "local_model_available",
+      "status": "ready",
+      "reason": "Verified usable local model present in runtime"
+    },
+    {
+      "scope": "can_use_existing_authenticated_cli",
+      "status": "unavailable",
+      "reason": "No supported coding CLI installed"
+    },
+    {
+      "scope": "principal_host_available",
+      "status": "ready",
+      "reason": "Supported principal host installed"
+    }
+  ],
   "policy": {
     "max_source_exposure": "focused_snippets",
     "max_cost_class": "remote_economy"

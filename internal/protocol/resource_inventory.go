@@ -4,6 +4,193 @@ import (
 	"github.com/olostan/DevCadence/internal/errs"
 )
 
+// ScopeKind identifies a concrete operational or cognition capability scope.
+type ScopeKind string
+
+const (
+	ScopeCanExecuteSetupPlan       ScopeKind = "can_execute_setup_plan"
+	ScopeHasAnyViableCognitionPath ScopeKind = "has_any_viable_cognition_path"
+	ScopeCanRunLocalInference      ScopeKind = "can_run_local_inference"
+	ScopeLocalModelAvailable       ScopeKind = "local_model_available"
+	ScopeCanUseAuthenticatedCLI    ScopeKind = "can_use_existing_authenticated_cli"
+	ScopePrincipalHostAvailable    ScopeKind = "principal_host_available"
+)
+
+// CanonicalScopes defines the stable deterministic ordering of scopes.
+var CanonicalScopes = []ScopeKind{
+	ScopeCanExecuteSetupPlan,
+	ScopeHasAnyViableCognitionPath,
+	ScopeCanRunLocalInference,
+	ScopeLocalModelAvailable,
+	ScopeCanUseAuthenticatedCLI,
+	ScopePrincipalHostAvailable,
+}
+
+func (s ScopeKind) Valid() bool {
+	switch s {
+	case ScopeCanExecuteSetupPlan,
+		ScopeHasAnyViableCognitionPath,
+		ScopeCanRunLocalInference,
+		ScopeLocalModelAvailable,
+		ScopeCanUseAuthenticatedCLI,
+		ScopePrincipalHostAvailable:
+		return true
+	}
+	return false
+}
+
+// ScopeReadinessStatus represents the factual readiness of a specific scope.
+type ScopeReadinessStatus string
+
+const (
+	ScopeStatusReady       ScopeReadinessStatus = "ready"
+	ScopeStatusNotReady    ScopeReadinessStatus = "not_ready"
+	ScopeStatusUnavailable ScopeReadinessStatus = "unavailable"
+	ScopeStatusUnknown     ScopeReadinessStatus = "unknown"
+)
+
+func (s ScopeReadinessStatus) Valid() bool {
+	switch s {
+	case ScopeStatusReady, ScopeStatusNotReady, ScopeStatusUnavailable, ScopeStatusUnknown:
+		return true
+	}
+	return false
+}
+
+// ScopeReadiness captures the evidence-backed readiness of a specific capability.
+type ScopeReadiness struct {
+	Scope  ScopeKind            `json:"scope"`
+	Status ScopeReadinessStatus `json:"status"`
+	Reason string               `json:"reason"`
+}
+
+// Validate checks the scope readiness entry is well-formed.
+func (s ScopeReadiness) Validate() error {
+	const kind = "ScopeReadiness"
+	if !s.Scope.Valid() {
+		return errs.New(errs.CategoryInvalidArgument, "%s: invalid scope %q", kind, string(s.Scope))
+	}
+	if !s.Status.Valid() {
+		return errs.New(errs.CategoryInvalidArgument, "%s: invalid status %q", kind, string(s.Status))
+	}
+	if s.Reason == "" {
+		return errs.New(errs.CategoryInvalidArgument, "%s: reason is required", kind)
+	}
+	return nil
+}
+
+// EvaluateScopeReadiness deterministically evaluates the canonical capability scopes
+// from verified findings, endpoints, and hosts.
+func EvaluateScopeReadiness(
+	findings []DiagnosticFinding,
+	endpoints []CognitionEndpointSummary,
+	hosts []PrincipalHostSummary,
+) []ScopeReadiness {
+	// 1. can_execute_setup_plan
+	setupStatus := ScopeStatusReady
+	setupReason := "Git and writable state root are available for setup execution"
+	for _, f := range findings {
+		if f.Severity == "error" || f.Code == "GIT_NOT_FOUND" || f.Code == "STATE_ROOT_UNWRITABLE" {
+			setupStatus = ScopeStatusNotReady
+			setupReason = "Base dependencies (Git or state root writability) require remediation"
+			break
+		}
+	}
+
+	// 2. has_any_viable_cognition_path
+	cogStatus := ScopeStatusUnavailable
+	cogReason := "No cognition endpoints detected on machine"
+	hasReadyEndpoint := false
+	for _, ep := range endpoints {
+		if ep.Health == EndpointHealthReady {
+			hasReadyEndpoint = true
+			break
+		}
+	}
+	if hasReadyEndpoint {
+		cogStatus = ScopeStatusReady
+		cogReason = "At least one ready cognition endpoint is available"
+	} else if len(endpoints) > 0 {
+		cogStatus = ScopeStatusNotReady
+		cogReason = "Cognition endpoints are present but none are ready or fully authenticated"
+	}
+
+	// 3. can_run_local_inference
+	localInfStatus := ScopeStatusUnavailable
+	localInfReason := "No local inference runtime installed"
+	hasLocalRuntime := false
+	hasReadyLocal := false
+	for _, ep := range endpoints {
+		if ep.Kind == EndpointLocalRuntime {
+			hasLocalRuntime = true
+			if ep.Health == EndpointHealthReady {
+				hasReadyLocal = true
+				break
+			}
+		}
+	}
+	if hasReadyLocal {
+		localInfStatus = ScopeStatusReady
+		localInfReason = "Local runtime is running with a verified usable model"
+	} else if hasLocalRuntime {
+		localInfStatus = ScopeStatusNotReady
+		localInfReason = "Local runtime is present but not configured or model is not pulled"
+	}
+
+	// 4. local_model_available
+	modelStatus := ScopeStatusUnavailable
+	modelReason := "No local inference runtime installed"
+	if hasReadyLocal {
+		modelStatus = ScopeStatusReady
+		modelReason = "Verified usable local model present in runtime"
+	} else if hasLocalRuntime {
+		modelStatus = ScopeStatusNotReady
+		modelReason = "No verified usable model installed in local runtime"
+	}
+
+	// 5. can_use_existing_authenticated_cli
+	cliStatus := ScopeStatusUnavailable
+	cliReason := "No supported coding CLI installed"
+	hasCLI := false
+	hasAuthCLI := false
+	for _, ep := range endpoints {
+		if ep.Kind == EndpointAuthenticatedCLI {
+			hasCLI = true
+			if ep.Health == EndpointHealthReady && ep.Auth == AuthAuthenticated {
+				hasAuthCLI = true
+				break
+			}
+		}
+	}
+	if hasAuthCLI {
+		cliStatus = ScopeStatusReady
+		cliReason = "Authenticated coding CLI available and operational"
+	} else if hasCLI {
+		cliStatus = ScopeStatusNotReady
+		cliReason = "Coding CLI detected but authentication is expired or unverified"
+	}
+
+	// 6. principal_host_available
+	hostStatus := ScopeStatusUnavailable
+	hostReason := "No supported principal host installed"
+	for _, h := range hosts {
+		if h.Installed {
+			hostStatus = ScopeStatusReady
+			hostReason = "Supported principal host installed"
+			break
+		}
+	}
+
+	return []ScopeReadiness{
+		{Scope: ScopeCanExecuteSetupPlan, Status: setupStatus, Reason: setupReason},
+		{Scope: ScopeHasAnyViableCognitionPath, Status: cogStatus, Reason: cogReason},
+		{Scope: ScopeCanRunLocalInference, Status: localInfStatus, Reason: localInfReason},
+		{Scope: ScopeLocalModelAvailable, Status: modelStatus, Reason: modelReason},
+		{Scope: ScopeCanUseAuthenticatedCLI, Status: cliStatus, Reason: cliReason},
+		{Scope: ScopePrincipalHostAvailable, Status: hostStatus, Reason: hostReason},
+	}
+}
+
 // HardwareSummary is a compact, non-duplicative projection of
 // EnvironmentFacts. It deliberately does not re-embed the full facts
 // struct — those are looked up by MachineFingerprint when needed, per
@@ -108,6 +295,7 @@ type ResourceInventory struct {
 	CognitionEndpoints []CognitionEndpointSummary `json:"cognition_endpoints,omitempty"`
 	PrincipalHosts     []PrincipalHostSummary     `json:"principal_hosts,omitempty"`
 	Credentials        []CredentialInventoryEntry `json:"credentials,omitempty"`
+	Readiness          []ScopeReadiness           `json:"readiness,omitempty"`
 	Policy             *PolicySummary             `json:"policy,omitempty"`
 }
 
@@ -155,6 +343,16 @@ func (r *ResourceInventory) Validate() error {
 		if err := c.Validate(); err != nil {
 			return err
 		}
+	}
+	seenScopes := make(map[ScopeKind]bool, len(r.Readiness))
+	for _, rd := range r.Readiness {
+		if err := rd.Validate(); err != nil {
+			return err
+		}
+		if seenScopes[rd.Scope] {
+			return errs.New(errs.CategoryInvalidArgument, "%s: duplicate scope %q in readiness", kind, rd.Scope)
+		}
+		seenScopes[rd.Scope] = true
 	}
 	if r.Policy != nil {
 		if err := r.Policy.Validate(); err != nil {

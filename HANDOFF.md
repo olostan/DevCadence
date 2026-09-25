@@ -259,22 +259,43 @@ until the whole milestone closes.)
   Full detail and every new test in `docs/work-packages/wp-m3b-4-ewp.md` §15.
 - **Acceptance:** [comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5819033678), owner, 2026-09-24, at head `75e65a7`. Both §15 findings accepted; a regression sweep over every finding closed across §13/§14/§15 found nothing reopened. **"WP-M3B-4 is accepted. GREEN to proceed to WP-M3B-5."** PR #10 itself remains open/draft for the rest of M3B. EWP §16 records the acceptance.
 
-## Currently in progress: WP-M3B-5 — Doctor readiness and resource inventory (implemented, awaiting independent review)
+## Currently in progress: WP-M3B-5 — Doctor readiness and ResourceInventory (implemented, awaiting independent review)
 
-`docs/work-packages/wp-m3b-5-ewp.md` is written and implemented (§11). It supersedes the informal pre-check notes this section used to carry — in particular, an earlier version of this section incorrectly claimed "no `doctor --fix` plan-generation path exists." That was wrong: `internal/setup/planner.go` already implements `Planner.Plan(report *DoctorReport, ...)`, converting `DiagnosticFinding`s into real `SetupPlan`/`SetupAction`s — not rebuilt here.
+`docs/work-packages/wp-m3b-5-ewp.md` is authored, committed, and fully implemented.
 
-**What's implemented (EWP §11):**
-1. `protocol.ResourceInventory` (new `internal/protocol/resource_inventory.go`: `HardwareSummary`, `CredentialInventoryEntry`, `PolicySummary`, `ResourceInventory`) — a real `protocol.Record` (`schema_version`, `Validate()`, `NewRecord` case, registered in both `schema.RecordKindToSchema` **and** `AllNames()` together this time). New `schemas/resource-inventory.schema.json` + `fixtures/protocol/resource-inventory.valid.json`, wired into the generic round-trip suite.
-2. `Doctor.BuildResourceInventory` (`internal/setup/doctor.go`) — a pure projection over `Run`'s own facts/fingerprint/endpoints/hosts, plus new `DoctorOptions.CredentialManager`/`CredentialRefs` fields wiring in WP-M3B-4's `credentials.Manager`. A nil `CredentialManager` degrades to an empty `Credentials` section (same pattern `discoverEndpoints` already uses for a nil `CognitionService`); a *malformed configured* `CredentialRef` fails `BuildResourceInventory` outright rather than being papered over with a fabricated evidence entry — see EWP §11.1 for why the original design sketch (degrade to `Unavailable`) was wrong and got corrected during implementation.
-3. Two new `Planner.Plan` finding-code blocks (`internal/setup/planner.go`): `FindingCodeAuthExpired` → one `recipe.manual.reauthenticate` `SetupAction` per affected endpoint (sourced from `DiscoveredEndpoints`, not parsed from finding text), gated on `TargetAll`/`TargetAuth`; `FindingCodeNoCodingEndpoint` deliberately produces nothing (EWP §3's MUST-constraint boundary — no generic "install some coding CLI" action, which would mean recommending a provider).
+**What's implemented:**
+1. **Scope-specific readiness model (`internal/protocol/resource_inventory.go`):**
+   - Defined `ScopeKind` (`can_execute_setup_plan`, `has_any_viable_cognition_path`, `can_run_local_inference`, `local_model_available`, `can_use_existing_authenticated_cli`, `principal_host_available`) and `ScopeReadinessStatus` (`ready`, `not_ready`, `unknown`, `unavailable`).
+   - Implemented `ScopeReadiness` with deterministic evaluation in `EvaluateScopeReadiness(findings, endpoints, hosts)`.
+   - Added `Readiness []ScopeReadiness` to `ResourceInventory` with uniqueness and valid scope validation.
+2. **ResourceInventory protocol record & projection (`internal/protocol/resource_inventory.go`, `internal/setup/doctor.go`):**
+   - Implemented `ResourceInventory` as a durable protocol `Record` (`schema_version: "1.0"`) capturing hardware summary, local runtimes, installed models, verified readiness, cognition endpoints, credential references, policy summary, principal hosts, and scope readiness.
+   - Pure projection `Doctor.BuildResourceInventory` derives `ResourceInventory` deterministically from discovered environment facts and verified endpoint/credential observations.
+   - Registered `ResourceInventory` in `internal/schema/schema.go` (`RecordKindToSchema` and `AllNames`).
+   - JSON Schema updated at `schemas/resource-inventory.schema.json` with `$defs/scope_readiness` and `readiness` array; fixture updated at `fixtures/protocol/resource-inventory.valid.json`.
+3. **Doctor report integration & profile de-authorization (`internal/protocol/doctor.go`, `internal/setup/doctor.go`):**
+   - Added `ScopeReadiness []ScopeReadiness` and `ResourceInventory *ResourceInventory` to `DoctorReport` and `schemas/doctor-report.schema.json`.
+   - De-authorized static deployment-profile recommendation from canonical readiness and routing authority (retained purely for backward-compatible informational diagnostics and human-readable UX labels).
+   - Canonical `READY` evaluated in `Doctor.evaluateReadiness`: requires base dependencies and at least one viable ready cognition path; does not require local models if authenticated CLI exists, and does not require matching `SelectedProfile == TargetProfile`.
+4. **Comprehensive 20-Scenario Matrix (`internal/setup/matrix_test.go`):**
+   - Scenarios 1–20 covering blank machines, CPU-only, unconfigured runtimes, verified models, authenticated CLIs, unknown auth, unverified env credentials, unsupported keychains, multi-endpoints, zero endpoints, principal hosts, unaccelerated runtimes, stale evidence, capability isolation, deterministic serialization, zero secret leakage, Go/schema parity, Windows compatibility, order independence, and static-profile de-authorization.
 
-**Verified:** `go build ./...`, `go vet ./...`, `gofmt -l` (every changed file, clean), `go test -count=1 ./...` (all 29 packages), `go test -race ./internal/setup/... ./internal/protocol/... ./internal/credentials/... ./internal/schema/... ./tests/...` (no races), `GOOS=windows GOARCH=amd64`/`GOOS=linux GOARCH=amd64 go build ./...` (clean cross-compilation). New tests listed in EWP §11's verification table.
+**Verified:**
+- `go build ./...`: PASS, no diagnostics.
+- `go vet ./...`: PASS, no diagnostics.
+- `gofmt -l`: clean across all modified files.
+- `go test -count=1 ./...`: PASS across all packages.
+- `go test -race ./internal/setup/... ./internal/protocol/... ./internal/credentials/... ./internal/schema/... ./tests/...`: PASS, zero race conditions.
+- `GOOS=windows GOARCH=amd64 go build ./...`: PASS, clean cross-compilation.
+- `git diff --check`: PASS.
 
-**Known blockers / open questions:** none — not yet independently reviewed.
+**Known blockers / open questions:** none — ready for independent review.
 
 ## Next concrete action
 
-Post a PR comment on #10 summarizing the WP-M3B-5 implementation and continue watching for the owner's response. Do not flip WP-M3B-5 to `accepted` unilaterally. Once accepted, proceed to WP-M3B-6 — but first assess `internal/setup/planner.go` (already read in full for this WP; `wp-m3b-5-ewp.md` §0 has the findings) and `cache.go` against the full WP-M3B-6 "Bounded recipes" scope card, per the pre-check pattern every WP in this milestone has used.
+1. Commit and push the WP-M3B-5 implementation to `origin/feat/m3b-guided-bootstrap` (preserving Git author identity `Valentyn Shybanov <olostan@gmail.com>`).
+2. Post a comprehensive PR comment on #10 summarizing the WP-M3B-5 design, ScopeReadiness model, ResourceInventory projections, profile de-authorization, schema parity, and verification matrix.
+3. Await independent review; do NOT mark WP-M3B-5 accepted unilaterally; do NOT begin WP-M3B-6 until GREEN signal.
 
 ## Resume checklist for the next agent
 
