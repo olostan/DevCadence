@@ -146,8 +146,8 @@ implementing on top of it or rewriting it.
 | WP-M3B-2 | accepted | `bb01bc9` | all PASS (see EWP §13) | independent review complete — [comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5805603916), 7 findings, all addressed in EWP §14 |
 | WP-M3B-3 | **accepted** (§21) | `cc799cd` | `go build ./...`, `go vet ./...`, `go test -count=1 ./...`, `go test -race ./internal/setup/... ./internal/cognition/mlx/... ./internal/environment/...`, `GOOS=windows GOARCH=amd64 go build ./...` all PASS | 7 independent review rounds, 25 findings total, all resolved — see EWP §15–§21. Final acceptance: [comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5809019161) |
 | WP-M3B-4 | **accepted** (§16) | `75e65a7` | `go build ./...`, `go vet ./...`, `go test -count=1 ./...`, `go test -race ./internal/credentials/... ./internal/protocol/... ./internal/cognition/...`, `GOOS=windows GOARCH=amd64 go build ./...` all PASS | 3 independent review rounds, 6+3+2 findings total, all resolved — see EWP §13–§16. Final acceptance: [comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5819033678) |
-| WP-M3B-6 | implemented, NOT accepted — round 1 (4 FIX_NOW findings) fixed, awaiting round-2 review (EWP §10) | current branch HEAD (see "Expected remote HEAD" above) | `go build ./...`, `go vet ./...`, `go test -count=1 ./...`, `go test -race ./internal/setup/... ./internal/protocol/... ./internal/credentials/... ./internal/schema/... ./internal/environment/... ./tests/...`, `GOOS=windows/linux GOARCH=amd64 go build ./...` all PASS | round 1 — [comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5834040833), 4 FIX_NOW findings (Ollama pre-resolution didn't enforce an immutable digest; planner didn't bind resolver output to requested runtime/model identity; `install_rocm_driver` unreachable from the real planning path; driver/device-permission recipes verified only `command_available`) — all fixed, EWP §10, not yet re-reviewed |
-| WP-M3B-7 | not started | — | — | blocked on WP-M3B-6 review |
+| WP-M3B-6 | **ACCEPTED** at `62f5254` — round 1 (4 FIX_NOW findings, EWP §10) and round 2 (4 required repairs, EWP §11) fixed; round 3 confirmed GREEN | `62f5254` | `go build ./...`, `go vet ./...`, `go test -count=1 ./...`, `go test -race ./internal/setup/... ./internal/protocol/... ./internal/credentials/... ./internal/schema/... ./internal/environment/... ./tests/...`, `GOOS=windows/linux GOARCH=amd64 go build ./...` all PASS; `gofmt -l` clean on every file the round-2 repair touched (the broad `internal/setup/ internal/protocol/` check reports pre-existing, unrelated `ledger.go`) | round 1 — [comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5834040833), fixed EWP §10. round 2 — [comment id `5836314553`](https://github.com/olostan/DevCadence/pull/10#issuecomment-5836314553), fixed EWP §11. round 3 (acceptance) — [comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5836690733), "GREEN for WP-M3B-6... accepted at this checkpoint" |
+| WP-M3B-7 | not started | — | — | unblocked — WP-M3B-6 accepted |
 | WP-M3B-8 | not started — verification suite and docs sync (formerly WP9) | — | — | blocked on all prior |
 
 (Never write "merged" for a WP checkpoint — nothing is merged to `main`
@@ -327,7 +327,7 @@ Full detail in `docs/work-packages/wp-m3b-5-ewp.md` §19.
 
 **Acceptance:** [comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5832032107), owner, 2026-09-25, at head `75ac877`. The round-6 fix was confirmed correct; a regression sweep over every earlier repair (rounds 1–6) found nothing reopened. **"WP-M3B-5 is accepted. GREEN to proceed to WP-M3B-6."** PR #10 itself remains open/draft for the rest of M3B. Per the acceptance comment's own instruction, this acceptance is recorded here rather than in a separate SHA-only bookkeeping commit.
 
-## WP-M3B-6 — Bounded recipes (implementation complete, awaiting review)
+## WP-M3B-6 — Bounded recipes (ACCEPTED)
 
 - **EWP status:** authored, frozen, and committed at `docs/work-packages/wp-m3b-6-ewp.md`.
 - **Base commit this WP started from:** `a8af45608a879e4c4b7f4b8eb61a4101dc4beb5f`
@@ -386,11 +386,15 @@ Full detail in `docs/work-packages/wp-m3b-6-ewp.md` §10.
 6. Added negative tests for regular files, missing devices in sysfs, unbound devices, wrong drivers, and corrected state transitions.
 Full detail in `docs/work-packages/wp-m3b-6-ewp.md` §11.
 
-**Known blockers / open questions:** none — awaiting round-3 review to confirm the §11 fixes.
+**Evidence correction** (raised by the round-3 review itself, see below): the round-2 PR comment's verification list stated `gofmt -l internal/setup/ internal/protocol/` was clean. That broad two-directory check is **not** clean on this checkout — it reports `internal/protocol/ledger.go` — but `ledger.go` was already in that unformatted state at `ab69189`, is unchanged by the round-2 repair, and gofmt is clean on every file the repair actually touched (`internal/protocol/setup.go`, `internal/setup/conditions.go`, `internal/setup/conditions_test.go`, `internal/setup/executor.go`, `internal/setup/recipes.go`, `internal/setup/recipes_test.go`). The narrower, accurate claim is: gofmt is clean on the files this repair changed; the broad two-directory check was not, for a pre-existing, unrelated reason.
+
+**Independent review round 3 — ACCEPTANCE** ([comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5836690733), owner, 2026-09-25, head `62f5254`): confirmed the remaining round-2 finding resolved and all 4 original FIX_NOW findings closed. **"Disposition: GREEN for WP-M3B-6... WP-M3B-6 can be marked accepted at this checkpoint; WP-M3B-7 may proceed under the handoff protocol."** The review also flagged the gofmt evidence-accuracy issue corrected above, and noted Windows/Linux results are cross-builds, not execution tests on those hosts. **WP-M3B-6 is accepted as of `62f5254`.**
+
+**Known blockers / open questions:** none.
 
 ## Next concrete action
 
-Post a PR comment on #10 summarizing the round-2 fix round and poll for the owner's response using `/github-pr-comment-poller`. Do not flip WP-M3B-6 to `accepted` unilaterally. Once accepted, proceed to WP-M3B-7 (`devcadence doctor` / `devcadence setup` CLI surface).
+WP-M3B-6 is accepted. Proceed to WP-M3B-7 (`devcadence doctor` / `devcadence setup` CLI surface) per the handoff protocol: read the WP-M3B-7 scope card in `docs/WORK_PACKAGES.md`, author its EWP before any implementation code (AGENTS.md §6), and follow the same implement -> verify -> independent-review -> fix cycle established across WP-M3B-1 through WP-M3B-6.
 
 ## Resume checklist for the next agent
 
