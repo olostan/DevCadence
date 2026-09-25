@@ -10,6 +10,12 @@
     "total_memory_bytes": 17179869184,
     "accelerator_backends": ["cpu"]
   },
+  "profile": {
+    "profile_id": "profile-0001",
+    "machine_fingerprint": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+    "observed_at": "2026-09-24T10:00:00.000000Z",
+    "probe_depth": "health"
+  },
   "cognition_endpoints": [
     {
       "id": "ollama:qwen2.5-coder",

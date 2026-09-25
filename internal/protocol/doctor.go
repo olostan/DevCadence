@@ -5,6 +5,14 @@ import (
 )
 
 // ReadinessStatus indicates overall readiness against the evaluated scope.
+//
+// READY does not require EvaluationScope.TargetProfile to be set. An
+// earlier revision required it, silently making the informational
+// DeploymentProfile label an authority over canonical readiness — exactly
+// what ADR-0014 §92 forbids. Canonical readiness is evidence-driven
+// (ScopeReadiness / at least one viable cognition path), never gated by
+// whether a UX label happened to be chosen (independent-review follow-up
+// on WP-M3B-5, finding 1).
 type ReadinessStatus string
 
 const (
@@ -195,11 +203,6 @@ func (r *DoctorReport) Validate() error {
 	if !r.Readiness.Valid() {
 		return errs.New(errs.CategoryInvalidArgument, "%s: invalid readiness %q", kind, string(r.Readiness))
 	}
-	// Profile-level READY requires an evaluated target profile (ADR-0014)
-	if r.Readiness == ReadinessReady && r.EvaluationScope.TargetProfile == nil {
-		return errs.New(errs.CategoryInvalidArgument, "%s: cannot claim READY without an explicit evaluated target_profile", kind)
-	}
-
 	for _, f := range r.Findings {
 		if err := f.Validate(); err != nil {
 			return err
@@ -219,6 +222,19 @@ func (r *DoctorReport) Validate() error {
 		if err := r.ResourceInventory.Validate(); err != nil {
 			return err
 		}
+		// The report and its embedded inventory each carry a
+		// machine_fingerprint/readiness snapshot; they must not silently
+		// contradict each other (independent-review follow-up on
+		// WP-M3B-5, finding 4d).
+		if r.ResourceInventory.MachineFingerprint != r.MachineFingerprint {
+			return errs.New(errs.CategoryInvalidArgument,
+				"%s: resource_inventory.machine_fingerprint %q does not match report machine_fingerprint %q",
+				kind, r.ResourceInventory.MachineFingerprint, r.MachineFingerprint)
+		}
+		if len(r.ScopeReadiness) > 0 && !scopeReadinessSetsEqual(r.ScopeReadiness, r.ResourceInventory.Readiness) {
+			return errs.New(errs.CategoryInvalidArgument,
+				"%s: scope_readiness does not match resource_inventory.readiness", kind)
+		}
 	}
 	if r.RecommendedProfile != nil {
 		if err := r.RecommendedProfile.Validate(); err != nil {
@@ -226,11 +242,8 @@ func (r *DoctorReport) Validate() error {
 		}
 	}
 	for _, ep := range r.DiscoveredEndpoints {
-		if ep.ID == "" {
-			return errs.New(errs.CategoryInvalidArgument, "%s: endpoint id cannot be empty", kind)
-		}
-		if !ep.Kind.Valid() {
-			return errs.New(errs.CategoryInvalidArgument, "%s: invalid endpoint kind %q", kind, ep.Kind)
+		if err := ep.Validate(); err != nil {
+			return err
 		}
 	}
 	for _, h := range r.PrincipalHosts {
@@ -239,4 +252,27 @@ func (r *DoctorReport) Validate() error {
 		}
 	}
 	return nil
+}
+
+// scopeReadinessSetsEqual reports whether two ScopeReadiness slices agree
+// on every scope's status/reason, ignoring order — used to keep
+// DoctorReport.ScopeReadiness and its embedded ResourceInventory.Readiness
+// from silently contradicting each other (finding 4d above). Both slices
+// are already individually validated (no duplicate scopes) by the time
+// this runs.
+func scopeReadinessSetsEqual(a, b []ScopeReadiness) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	byScope := make(map[ScopeKind]ScopeReadiness, len(a))
+	for _, sr := range a {
+		byScope[sr.Scope] = sr
+	}
+	for _, sr := range b {
+		other, ok := byScope[sr.Scope]
+		if !ok || other.Status != sr.Status || other.Reason != sr.Reason {
+			return false
+		}
+	}
+	return true
 }

@@ -58,7 +58,7 @@ func TestBuildResourceInventoryNilCredentialManagerDegradesGracefully(t *testing
 		t.Fatalf("Fingerprint: %v", err)
 	}
 
-	inv, err := doc.BuildResourceInventory(ctx, facts, fp, nil, nil)
+	inv, err := doc.BuildResourceInventory(ctx, facts, fp, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("BuildResourceInventory: %v", err)
 	}
@@ -108,7 +108,7 @@ func TestBuildResourceInventoryChecksConfiguredCredentials(t *testing.T) {
 		t.Fatalf("Fingerprint: %v", err)
 	}
 
-	inv, err := doc.BuildResourceInventory(ctx, facts, fp, nil, nil)
+	inv, err := doc.BuildResourceInventory(ctx, facts, fp, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("BuildResourceInventory: %v", err)
 	}
@@ -172,7 +172,7 @@ func TestBuildResourceInventoryMalformedRefFailsClosed(t *testing.T) {
 		t.Fatalf("Fingerprint: %v", err)
 	}
 
-	if _, err := doc.BuildResourceInventory(ctx, facts, fp, nil, nil); err == nil {
+	if _, err := doc.BuildResourceInventory(ctx, facts, fp, nil, nil, nil, nil); err == nil {
 		t.Fatal("expected BuildResourceInventory to fail closed on a malformed configured CredentialRef")
 	}
 }
@@ -199,7 +199,7 @@ func TestBuildResourceInventoryProjectsPolicy(t *testing.T) {
 		t.Fatalf("Fingerprint: %v", err)
 	}
 
-	inv, err := doc.BuildResourceInventory(ctx, facts, fp, nil, nil)
+	inv, err := doc.BuildResourceInventory(ctx, facts, fp, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("BuildResourceInventory: %v", err)
 	}

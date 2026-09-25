@@ -43,6 +43,18 @@ type EndpointHealthChecker interface {
 	CheckEndpointHealthy(ctx context.Context, endpointID string) (healthy bool, detail string, err error)
 }
 
+// EndpointAuthChecker evaluates whether an endpoint has been verified
+// authenticated — never merely healthy (WP-M3B-4's "healthy != authenticated
+// != usable" invariant). Like EndpointHealthChecker, it is not implemented
+// by this package: it needs the WP-M3B-4 credential/auth evidence boundary
+// (internal/credentials.Manager or an M3A endpoint registry), which
+// internal/setup does not and should not duplicate. With none configured,
+// EvaluateCondition fails closed for endpoint_authenticated rather than
+// assuming true (independent-review follow-up on WP-M3B-5, finding 6).
+type EndpointAuthChecker interface {
+	CheckEndpointAuthenticated(ctx context.Context, endpointID string) (authenticated bool, detail string, err error)
+}
+
 // EvaluatorDeps supplies EvaluateCondition's live dependencies.
 type EvaluatorDeps struct {
 	Runner CommandRunner
@@ -52,6 +64,9 @@ type EvaluatorDeps struct {
 	// EndpointHealth is optional; nil means endpoint_healthy conditions
 	// fail closed.
 	EndpointHealth EndpointHealthChecker
+	// EndpointAuth is optional; nil means endpoint_authenticated conditions
+	// fail closed.
+	EndpointAuth EndpointAuthChecker
 	// ModelRuntimes dispatches model_present conditions to the adapter
 	// named by the condition's Runtime field — see modelruntime.go. nil
 	// means model_present conditions fail closed with an error, the same
@@ -80,6 +95,8 @@ func EvaluateCondition(ctx context.Context, deps EvaluatorDeps, cond protocol.Co
 		return evaluateModelPresent(ctx, deps, cond.ModelPresent)
 	case protocol.CondKindEndpointHealthy:
 		return evaluateEndpointHealthy(ctx, deps, cond.EndpointHealthy)
+	case protocol.CondKindEndpointAuthenticated:
+		return evaluateEndpointAuthenticated(ctx, deps, cond.EndpointAuthenticated)
 	default:
 		return false, "", errs.New(errs.CategoryInvalidArgument, "EvaluateCondition: unhandled condition kind %q", cond.Kind)
 	}
@@ -222,6 +239,14 @@ func evaluateEndpointHealthy(ctx context.Context, deps EvaluatorDeps, op *protoc
 			"evaluateEndpointHealthy: no EndpointHealthChecker configured for endpoint %q", op.EndpointID)
 	}
 	return deps.EndpointHealth.CheckEndpointHealthy(ctx, op.EndpointID)
+}
+
+func evaluateEndpointAuthenticated(ctx context.Context, deps EvaluatorDeps, op *protocol.EndpointOperand) (bool, string, error) {
+	if deps.EndpointAuth == nil {
+		return false, "", errs.New(errs.CategoryInvalidArgument,
+			"evaluateEndpointAuthenticated: no EndpointAuthChecker configured for endpoint %q", op.EndpointID)
+	}
+	return deps.EndpointAuth.CheckEndpointAuthenticated(ctx, op.EndpointID)
 }
 
 // processSpecFor builds a minimal, bounded process.Spec for a live

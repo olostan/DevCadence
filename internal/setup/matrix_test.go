@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/olostan/DevCadence/internal/clock"
+	"github.com/olostan/DevCadence/internal/cognition"
 	"github.com/olostan/DevCadence/internal/credentials"
 	"github.com/olostan/DevCadence/internal/ids"
 	"github.com/olostan/DevCadence/internal/protocol"
@@ -84,7 +85,7 @@ func TestMatrix_Scenario02_CPUOnlyMachine(t *testing.T) {
 		Memory: protocol.MemoryFacts{TotalBytes: &mem},
 	}
 
-	inv, err := doc.BuildResourceInventory(context.Background(), facts, "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", nil, nil)
+	inv, err := doc.BuildResourceInventory(context.Background(), facts, "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("BuildResourceInventory: %v", err)
 	}
@@ -243,7 +244,7 @@ func TestMatrix_Scenario07_CredentialEnvVarPresentUnverified(t *testing.T) {
 	facts := protocol.EnvironmentFacts{
 		Host: protocol.HostFacts{Family: protocol.OSLinux, Arch: "amd64"},
 	}
-	inv, err := doc.BuildResourceInventory(context.Background(), facts, "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", nil, nil)
+	inv, err := doc.BuildResourceInventory(context.Background(), facts, "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("BuildResourceInventory: %v", err)
 	}
@@ -280,7 +281,7 @@ func TestMatrix_Scenario08_UnsupportedKeychainBackend(t *testing.T) {
 	facts := protocol.EnvironmentFacts{
 		Host: protocol.HostFacts{Family: protocol.OSLinux, Arch: "amd64"},
 	}
-	inv, err := doc.BuildResourceInventory(context.Background(), facts, "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", nil, nil)
+	inv, err := doc.BuildResourceInventory(context.Background(), facts, "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("BuildResourceInventory: %v", err)
 	}
@@ -436,7 +437,10 @@ func TestMatrix_Scenario14_OneCapabilityUnavailableWithoutInvalidatingOthers(t *
 	}
 }
 
-// 15. deterministic ordering/stable serialization
+// 15. deterministic ordering/stable serialization of ScopeReadiness
+// specifically (not the full ResourceInventory — see
+// TestMatrix_Scenario19b_ResourceInventoryOrderIndependence for that,
+// added per the independent-review follow-up on WP-M3B-5's matrix note).
 func TestMatrix_Scenario15_DeterministicOrdering(t *testing.T) {
 	endpoints := []protocol.CognitionEndpointSummary{
 		{ID: "ollama:m", Kind: protocol.EndpointLocalRuntime, Health: protocol.EndpointHealthReady},
@@ -486,7 +490,7 @@ func TestMatrix_Scenario16_NoSecretMaterial(t *testing.T) {
 	facts := protocol.EnvironmentFacts{
 		Host: protocol.HostFacts{Family: protocol.OSLinux, Arch: "amd64"},
 	}
-	inv, err := doc.BuildResourceInventory(context.Background(), facts, "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", nil, nil)
+	inv, err := doc.BuildResourceInventory(context.Background(), facts, "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", nil, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -500,7 +504,12 @@ func TestMatrix_Scenario16_NoSecretMaterial(t *testing.T) {
 	}
 }
 
-// 17. Go/schema round-trip and negative parity
+// 17. Go/schema round-trip and one negative parity case (an invalid scope
+// name) at the top level. The nested CredentialRef/AuthEvidence structural
+// parity cases (the WP-M3B-4 rules a forked local schema copy previously
+// missed) are in TestResourceInventorySchemaParity
+// (internal/protocol/resource_inventory_test.go), added per the
+// independent-review follow-up on WP-M3B-5, finding 4a.
 func TestMatrix_Scenario17_GoSchemaParity(t *testing.T) {
 	validJSON, err := os.ReadFile(filepath.Join("..", "..", "fixtures", "protocol", "resource-inventory.valid.json"))
 	if err != nil {
@@ -560,15 +569,17 @@ func TestMatrix_Scenario18_WindowsCompatibility(t *testing.T) {
 	}
 	endpoints := []protocol.CognitionEndpointSummary{
 		{
-			ID:       "claude-code",
-			Kind:     protocol.EndpointAuthenticatedCLI,
-			Locality: protocol.LocalityRemote,
-			Health:   protocol.EndpointHealthReady,
-			Auth:     protocol.AuthAuthenticated,
+			ID:                     "claude-code",
+			Kind:                   protocol.EndpointAuthenticatedCLI,
+			Locality:               protocol.LocalityRemote,
+			Health:                 protocol.EndpointHealthReady,
+			Auth:                   protocol.AuthAuthenticated,
+			CostClass:              protocol.CostSubscriptionIncluded,
+			RequiredSourceExposure: protocol.ExposureFocusedSnippets,
 		},
 	}
 
-	inv, err := doc.BuildResourceInventory(context.Background(), facts, "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", endpoints, hosts)
+	inv, err := doc.BuildResourceInventory(context.Background(), facts, "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", endpoints, hosts, nil, nil)
 	if err != nil {
 		t.Fatalf("BuildResourceInventory failed on Windows facts: %v", err)
 	}
@@ -588,7 +599,12 @@ func TestMatrix_Scenario18_WindowsCompatibility(t *testing.T) {
 	}
 }
 
-// 19. ResourceInventory produced identically for equivalent facts regardless of order
+// 19. protocol.EvaluateScopeReadiness's own output is order-independent
+// regardless of input endpoint order. See
+// TestMatrix_Scenario19b_ResourceInventoryOrderIndependence immediately
+// below for the full-ResourceInventory version of this claim
+// (independent-review follow-up on WP-M3B-5: the original version of this
+// scenario's name/comment claimed the fuller guarantee without testing it).
 func TestMatrix_Scenario19_OrderIndependence(t *testing.T) {
 	ep1 := protocol.CognitionEndpointSummary{ID: "a", Kind: protocol.EndpointLocalRuntime, Health: protocol.EndpointHealthReady}
 	ep2 := protocol.CognitionEndpointSummary{ID: "b", Kind: protocol.EndpointAuthenticatedCLI, Health: protocol.EndpointHealthReady, Auth: protocol.AuthAuthenticated}
@@ -603,73 +619,222 @@ func TestMatrix_Scenario19_OrderIndependence(t *testing.T) {
 	}
 }
 
-// 20. old static-profile recommendation no longer influences canonical readiness/output
+// TestMatrix_Scenario19b_ResourceInventoryOrderIndependence is scenario 19's
+// missing half: the original scenario only compared
+// protocol.EvaluateScopeReadiness's own output order-independence, never
+// actually built two ResourceInventory values from differently-ordered
+// input and compared them (independent-review follow-up on WP-M3B-5,
+// finding 3's order-independence requirement). This builds two full
+// inventories — differing only in the order of CognitionEndpoints,
+// PrincipalHosts and CredentialRefs given to BuildResourceInventory — and
+// asserts their sorted collections (Hardware.AcceleratorBackends,
+// CognitionEndpoints, PrincipalHosts, Credentials, Readiness) serialize
+// identically once the two non-deterministic-by-construction fields
+// (InventoryID, from a sequential ID source; ObservedAt, only different if
+// the clock ticks between calls) are normalized away.
+func TestMatrix_Scenario19b_ResourceInventoryOrderIndependence(t *testing.T) {
+	clk := clock.NewFake(time.Date(2026, 9, 25, 10, 0, 0, 0, time.UTC), 0)
+	seq := ids.NewSequential()
+
+	env := credentials.NewMapEnvReader(map[string]string{"KEY_A": "present", "KEY_B": "present"})
+	mgr, err := credentials.NewManager(credentials.Options{Clock: clk, Env: env})
+	if err != nil {
+		t.Fatalf("NewManager: %v", err)
+	}
+	refA := protocol.CredentialRef{SchemaVersion: protocol.SchemaVersion1, RefID: "cred-a", Kind: protocol.CredRefEnvVar, Locator: "KEY_A"}
+	refB := protocol.CredentialRef{SchemaVersion: protocol.SchemaVersion1, RefID: "cred-b", Kind: protocol.CredRefEnvVar, Locator: "KEY_B"}
+
+	doc, err := NewDoctor(DoctorOptions{
+		Clock:             clk,
+		IDs:               seq,
+		HomeDir:           t.TempDir(),
+		CredentialManager: mgr,
+		CredentialRefs:    []protocol.CredentialRef{refA, refB},
+	})
+	if err != nil {
+		t.Fatalf("NewDoctor: %v", err)
+	}
+
+	facts := protocol.EnvironmentFacts{
+		Host: protocol.HostFacts{Family: protocol.OSLinux, Arch: "amd64"},
+	}
+	fp := "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+
+	epA := protocol.CognitionEndpointSummary{ID: "a-runtime", Kind: protocol.EndpointLocalRuntime, Locality: protocol.LocalityLocal, Health: protocol.EndpointHealthReady, Auth: protocol.AuthNotApplicable, CostClass: protocol.CostLocalCompute, RequiredSourceExposure: protocol.ExposureLocalOnly}
+	epB := protocol.CognitionEndpointSummary{ID: "b-cli", Kind: protocol.EndpointAuthenticatedCLI, Locality: protocol.LocalityRemote, Health: protocol.EndpointHealthReady, Auth: protocol.AuthAuthenticated, CostClass: protocol.CostSubscriptionIncluded, RequiredSourceExposure: protocol.ExposureFocusedSnippets}
+	hostA := protocol.PrincipalHostSummary{HostID: "cursor", Installed: true}
+	hostB := protocol.PrincipalHostSummary{HostID: "vscode", Installed: true}
+
+	scopeReadiness := protocol.EvaluateScopeReadiness(nil, []protocol.CognitionEndpointSummary{epA, epB}, []protocol.PrincipalHostSummary{hostA, hostB})
+
+	inv1, err := doc.BuildResourceInventory(context.Background(), facts, fp,
+		[]protocol.CognitionEndpointSummary{epA, epB},
+		[]protocol.PrincipalHostSummary{hostA, hostB},
+		nil, scopeReadiness)
+	if err != nil {
+		t.Fatalf("BuildResourceInventory (order 1): %v", err)
+	}
+
+	inv2, err := doc.BuildResourceInventory(context.Background(), facts, fp,
+		[]protocol.CognitionEndpointSummary{epB, epA},
+		[]protocol.PrincipalHostSummary{hostB, hostA},
+		nil, scopeReadiness)
+	if err != nil {
+		t.Fatalf("BuildResourceInventory (order 2): %v", err)
+	}
+
+	// Normalize the two fields that are legitimately allowed to differ
+	// between separate calls (a fresh sequential ID; observed_at would
+	// differ only if the clock ticked, which this fake clock does not).
+	inv1.InventoryID = ""
+	inv2.InventoryID = ""
+
+	b1, _ := json.Marshal(inv1)
+	b2, _ := json.Marshal(inv2)
+	if string(b1) != string(b2) {
+		t.Errorf("ResourceInventory differed based on input ordering:\n  order 1: %s\n  order 2: %s", b1, b2)
+	}
+}
+
+// 20. old static-profile recommendation no longer influences canonical
+// readiness/output — exercised through the real Doctor.Run path (not the
+// private evaluateReadiness helper directly), so the informational
+// RecommendedProfile is actually the same value Run computes and could, if
+// the finding-1 bug were still present, get silently promoted into
+// EvaluationScope.TargetProfile and gate readiness (independent-review
+// follow-up on WP-M3B-5: the prior version of this scenario called a
+// private helper and never caught that the real Run path still injected
+// the static profile).
 func TestMatrix_Scenario20_StaticProfileNoLongerGatesReadiness(t *testing.T) {
-	doc, _ := matrixTestEnv(t)
+	homeDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(homeDir, "state"), 0o700); err != nil {
+		t.Fatalf("mkdir state: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(homeDir, "artifacts", "setup"), 0o700); err != nil {
+		t.Fatalf("mkdir artifacts/setup: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(homeDir, "tmp"), 0o700); err != nil {
+		t.Fatalf("mkdir tmp: %v", err)
+	}
+	clk := clock.NewFake(time.Date(2026, 9, 25, 10, 0, 0, 0, time.UTC), 0)
+	idSrc := ids.NewSequential()
+
 	var mem int64 = 64 * 1024 * 1024 * 1024
 	facts := protocol.EnvironmentFacts{
 		Host:   protocol.HostFacts{Family: protocol.OSLinux, Arch: "amd64"},
 		Memory: protocol.MemoryFacts{TotalBytes: &mem},
+		Virtualization: protocol.VirtualizationFacts{
+			Container: protocol.ContainerNone,
+		},
+		Software: []protocol.SoftwarePresence{
+			{ID: "git", Category: protocol.SoftwareEngineering, Installed: true, Version: "2.40.0"},
+		},
 	}
 
-	endpoints := []protocol.CognitionEndpointSummary{
-		{
-			ID:                     "claude-code",
-			Kind:                   protocol.EndpointAuthenticatedCLI,
-			Locality:               protocol.LocalityRemote,
-			Health:                 protocol.EndpointHealthReady,
-			Auth:                   protocol.AuthAuthenticated,
-			CostClass:              protocol.CostSubscriptionIncluded,
-			RequiredSourceExposure: protocol.ExposureFocusedSnippets,
+	// An authenticated CLI (viable) plus an unaccelerated local runtime
+	// (makes local-heavy ineligible for the informational recommendation,
+	// but must not affect canonical readiness).
+	stub := &stubCognitionAdapter{
+		endpoints: []protocol.CognitionEndpoint{
+			{
+				ID:                     "claude-code",
+				Kind:                   protocol.EndpointAuthenticatedCLI,
+				Locality:               protocol.LocalityRemote,
+				Health:                 protocol.EndpointHealthReady,
+				Auth:                   protocol.AuthAuthenticated,
+				CostClass:              protocol.CostSubscriptionIncluded,
+				RequiredSourceExposure: protocol.ExposureFocusedSnippets,
+				StructuredOutput:       protocol.FeatureDeclared,
+				ToolUse:                protocol.FeatureDeclared,
+				ObservedAt:             protocol.NewTimestamp(clk.Now()),
+			},
+			{
+				ID:                     "ollama:qwen",
+				Kind:                   protocol.EndpointLocalRuntime,
+				Locality:               protocol.LocalityLocal,
+				Health:                 protocol.EndpointHealthReady,
+				Auth:                   protocol.AuthNotApplicable,
+				CostClass:              protocol.CostLocalCompute,
+				RequiredSourceExposure: protocol.ExposureLocalOnly,
+				StructuredOutput:       protocol.FeatureUnsupported,
+				ToolUse:                protocol.FeatureUnsupported,
+				ObservedAt:             protocol.NewTimestamp(clk.Now()),
+				Acceleration: &protocol.AccelerationEvidence{
+					Backend: protocol.BackendCPU,
+					State:   protocol.StateUnverified,
+				},
+			},
 		},
-		{
-			ID:                   "ollama:qwen",
-			Kind:                 protocol.EndpointLocalRuntime,
-			Locality:             protocol.LocalityLocal,
-			Health:               protocol.EndpointHealthReady,
-			AccelerationVerified: false, // unaccelerated local runtime -> local-heavy NOT eligible
-		},
+	}
+	service, err := cognition.NewService(cognition.Options{
+		Adapters: []cognition.Adapter{stub},
+		Clock:    clk,
+		IDs:      idSrc,
+	})
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
+	}
+
+	doc, err := NewDoctor(DoctorOptions{
+		Clock:            clk,
+		IDs:              idSrc,
+		HomeDir:          homeDir,
+		CognitionService: service,
+	})
+	if err != nil {
+		t.Fatalf("NewDoctor: %v", err)
 	}
 
 	scope := protocol.ReadinessEvaluationScope{
-		TargetProfile:  nil, // no profile forced
+		TargetProfile:  nil, // no profile forced by the caller
 		RequiredRoles:  []string{},
 		EvidenceStatus: "live",
 	}
 
-	// Canonical readiness evaluates as READY because authenticated CLI exists,
-	// even though local-heavy is not viable.
-	status := doc.evaluateReadiness(scope, nil, endpoints, nil, nil)
-	if status != protocol.ReadinessReady {
-		t.Errorf("expected READY despite unaccelerated local runtime because authenticated CLI is ready, got %s", status)
+	report, err := doc.Run(context.Background(), scope, facts)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
 	}
 
-	// Verify profile recommendation shows local-heavy as ineligible due to unverified acceleration
-	rec := doc.recommender.Recommend(RecommendationInput{
-		Facts:     facts,
-		Endpoints: endpoints,
-	})
+	// The recommendation is informational: local-heavy must show
+	// ineligible (unaccelerated local runtime), proving the scenario
+	// actually constructs the "recommendation would disagree with
+	// canonical readiness" case the finding was about.
 	foundHeavy := false
-	for _, alt := range rec.Alternatives {
-		if alt.Profile == protocol.ProfileLocalHeavy {
-			foundHeavy = true
-			if alt.Eligible {
-				t.Errorf("expected local-heavy to be ineligible without verified acceleration")
+	if report.RecommendedProfile != nil {
+		for _, alt := range report.RecommendedProfile.Alternatives {
+			if alt.Profile == protocol.ProfileLocalHeavy {
+				foundHeavy = true
+				if alt.Eligible {
+					t.Errorf("expected local-heavy to be ineligible without verified acceleration")
+				}
 			}
 		}
 	}
 	if !foundHeavy {
-		t.Errorf("expected local-heavy in alternatives")
+		t.Fatalf("expected local-heavy in alternatives")
 	}
 
-	// Verify ResourceInventory scope readiness explicitly
-	inv, err := doc.BuildResourceInventory(context.Background(), facts, "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", endpoints, nil)
-	if err != nil {
-		t.Fatalf("BuildResourceInventory: %v", err)
+	// The real Run path must not have promoted RecommendedProfile into
+	// EvaluationScope.TargetProfile.
+	if report.EvaluationScope.TargetProfile != nil {
+		t.Errorf("EvaluationScope.TargetProfile = %v, want nil (never auto-set from RecommendedProfile)", *report.EvaluationScope.TargetProfile)
+	}
+
+	// Canonical readiness is READY or READY_WITH_REDUCED_CAPABILITY (the
+	// latter only because this facts set declares no verified hardware
+	// accelerator at all, an honest warning unrelated to this scenario) —
+	// never PARTIALLY_READY/ACTION_REQUIRED, which is what the bug this
+	// scenario targets would have produced: local-heavy is ineligible, so
+	// a static-profile-gated readiness would have downgraded to
+	// PARTIALLY_READY even though an authenticated CLI provides a
+	// perfectly viable cognition path.
+	if report.Readiness != protocol.ReadinessReady && report.Readiness != protocol.ReadinessReadyWithReducedCap {
+		t.Errorf("Readiness = %s, want READY or READY_WITH_REDUCED_CAPABILITY (authenticated CLI is a viable path; no profile gate should apply)", report.Readiness)
 	}
 
 	findScope := func(k protocol.ScopeKind) protocol.ScopeReadiness {
-		for _, r := range inv.Readiness {
+		for _, r := range report.ScopeReadiness {
 			if r.Scope == k {
 				return r
 			}
@@ -677,11 +842,75 @@ func TestMatrix_Scenario20_StaticProfileNoLongerGatesReadiness(t *testing.T) {
 		t.Fatalf("scope %q not found", k)
 		return protocol.ScopeReadiness{}
 	}
-
 	if s := findScope(protocol.ScopeCanUseAuthenticatedCLI).Status; s != protocol.ScopeStatusReady {
 		t.Errorf("expected authenticated CLI ready, got %s", s)
 	}
 	if s := findScope(protocol.ScopeHasAnyViableCognitionPath).Status; s != protocol.ScopeStatusReady {
 		t.Errorf("expected viable cognition path ready, got %s", s)
+	}
+}
+
+// TestPlannerRecommendationLabelAloneCannotChangeSetupPlan proves a
+// DoctorReport's RecommendedProfile.SelectedProfile has no effect on which
+// SetupActions Planner.Plan generates: only the caller-supplied profile
+// parameter and concrete facts (DiscoveredEndpoints, selected runtimes) may
+// (independent-review follow-up on WP-M3B-5, finding 1's required
+// regression).
+func TestPlannerRecommendationLabelAloneCannotChangeSetupPlan(t *testing.T) {
+	clk := clock.NewFake(time.Date(2026, 9, 25, 10, 0, 0, 0, time.UTC), 0)
+	seq := ids.NewSequential()
+	planner, err := NewPlanner(PlannerOptions{Clock: clk, IDs: seq})
+	if err != nil {
+		t.Fatalf("NewPlanner: %v", err)
+	}
+
+	localHeavy := protocol.ProfileLocalHeavy
+	baseReport := func(recommended *protocol.DeploymentProfile) *protocol.DoctorReport {
+		r := &protocol.DoctorReport{
+			SchemaVersion:      protocol.SchemaVersion1,
+			ReportID:           "doc_000000000000000000000099",
+			MachineFingerprint: "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+			ObservedAt:         protocol.NewTimestamp(clk.Now()),
+			Readiness:          protocol.ReadinessReady,
+			EvaluationScope: protocol.ReadinessEvaluationScope{
+				RequiredRoles:  []string{},
+				EvidenceStatus: "live",
+			},
+			// No DiscoveredEndpoints at all: nothing concrete suggests a
+			// local model should be pulled.
+		}
+		if recommended != nil {
+			r.RecommendedProfile = &protocol.ProfileRecommendation{
+				SelectedProfile: recommended,
+				Rationale:       []string{"test rationale"},
+				Alternatives: []protocol.ProfileAlternative{
+					{Profile: *recommended, Eligible: true, Reasons: []string{"test"}},
+				},
+			}
+		}
+		return r
+	}
+
+	// With no RecommendedProfile at all, and no explicit profile passed:
+	planWithout, err := planner.Plan(baseReport(nil), protocol.TargetAll, "")
+	if err != nil {
+		t.Fatalf("Plan (no recommendation): %v", err)
+	}
+
+	// With RecommendedProfile.SelectedProfile = local-heavy, but still no
+	// explicit profile passed by the caller:
+	planWithLabel, err := planner.Plan(baseReport(&localHeavy), protocol.TargetAll, "")
+	if err != nil {
+		t.Fatalf("Plan (with recommendation label): %v", err)
+	}
+
+	if len(planWithout.Actions) != len(planWithLabel.Actions) {
+		t.Fatalf("RecommendedProfile label changed the plan: %d actions without vs %d with",
+			len(planWithout.Actions), len(planWithLabel.Actions))
+	}
+	for _, act := range planWithLabel.Actions {
+		if strings.Contains(act.RecipeID, "ollama") || strings.Contains(act.RecipeID, "mlx") {
+			t.Errorf("a local-model action (%s) was generated from RecommendedProfile alone, with no discovered endpoint or explicit selection", act.RecipeID)
+		}
 	}
 }

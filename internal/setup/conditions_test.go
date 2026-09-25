@@ -190,6 +190,77 @@ func TestEvaluateConditionEndpointHealthyUsesConfiguredChecker(t *testing.T) {
 	}
 }
 
+func TestEvaluateConditionEndpointAuthenticatedFailsClosedWithoutChecker(t *testing.T) {
+	deps := EvaluatorDeps{} // no EndpointAuth configured
+	_, _, err := EvaluateCondition(context.Background(), deps, protocol.Condition{
+		Kind:                  protocol.CondKindEndpointAuthenticated,
+		EndpointAuthenticated: &protocol.EndpointOperand{EndpointID: "ep-001"},
+	})
+	if err == nil {
+		t.Fatal("EvaluateCondition succeeded for endpoint_authenticated with no EndpointAuthChecker configured; expected a fail-closed error")
+	}
+}
+
+type stubEndpointAuthChecker struct {
+	authenticated bool
+	detail        string
+	err           error
+}
+
+func (s stubEndpointAuthChecker) CheckEndpointAuthenticated(ctx context.Context, endpointID string) (bool, string, error) {
+	return s.authenticated, s.detail, s.err
+}
+
+// TestEndpointHealthyAndEndpointAuthenticatedAreIndependent is the
+// independent-review follow-up on WP-M3B-5, finding 6's required
+// regression: an endpoint reporting healthy=true must not make
+// endpoint_authenticated pass too — health and authentication are checked
+// through entirely separate dependencies, so a re-authenticate action's
+// postcondition (which now uses endpoint_authenticated, not
+// endpoint_healthy) cannot be satisfied by mere health.
+func TestEndpointHealthyAndEndpointAuthenticatedAreIndependent(t *testing.T) {
+	deps := EvaluatorDeps{
+		EndpointHealth: stubEndpointHealthChecker{healthy: true, detail: "process is running"},
+		EndpointAuth:   stubEndpointAuthChecker{authenticated: false, detail: "session expired"},
+	}
+
+	healthyPassed, _, err := EvaluateCondition(context.Background(), deps, protocol.Condition{
+		Kind:            protocol.CondKindEndpointHealthy,
+		EndpointHealthy: &protocol.EndpointOperand{EndpointID: "ep-001"},
+	})
+	if err != nil {
+		t.Fatalf("EvaluateCondition(endpoint_healthy): %v", err)
+	}
+	if !healthyPassed {
+		t.Fatal("expected endpoint_healthy to pass (the endpoint is healthy in this scenario)")
+	}
+
+	authPassed, detail, err := EvaluateCondition(context.Background(), deps, protocol.Condition{
+		Kind:                  protocol.CondKindEndpointAuthenticated,
+		EndpointAuthenticated: &protocol.EndpointOperand{EndpointID: "ep-001"},
+	})
+	if err != nil {
+		t.Fatalf("EvaluateCondition(endpoint_authenticated): %v", err)
+	}
+	if authPassed {
+		t.Fatalf("SECURITY-ADJACENT BUG: endpoint_authenticated passed (detail=%q) for an endpoint that is healthy but not authenticated — a re-authenticate action's postcondition must not be satisfiable by mere health", detail)
+	}
+}
+
+func TestEvaluateConditionEndpointAuthenticatedUsesConfiguredChecker(t *testing.T) {
+	deps := EvaluatorDeps{EndpointAuth: stubEndpointAuthChecker{authenticated: true, detail: "logged in"}}
+	passed, detail, err := EvaluateCondition(context.Background(), deps, protocol.Condition{
+		Kind:                  protocol.CondKindEndpointAuthenticated,
+		EndpointAuthenticated: &protocol.EndpointOperand{EndpointID: "ep-001"},
+	})
+	if err != nil {
+		t.Fatalf("EvaluateCondition: %v", err)
+	}
+	if !passed || detail != "logged in" {
+		t.Errorf("passed=%v detail=%q, want true/\"logged in\"", passed, detail)
+	}
+}
+
 func TestEvaluateConditionModelPresentMLX(t *testing.T) {
 	cacheDir := t.TempDir()
 	modelRef := "mlx-community/Qwen2.5-Coder-7B-Instruct-4bit"

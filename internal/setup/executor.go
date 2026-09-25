@@ -25,6 +25,7 @@ type ExecutorOptions struct {
 	Clock          clock.Clock
 	IDs            ids.Source
 	EndpointHealth EndpointHealthChecker // optional; see conditions.go
+	EndpointAuth   EndpointAuthChecker   // optional; see conditions.go
 	// ModelRuntimes overrides the local model runtime adapter set; nil
 	// means DefaultModelRuntimeAdapters() (Ollama and MLX as equal
 	// peers). Tests set this to register a fake adapter, or to configure
@@ -45,6 +46,7 @@ type Executor struct {
 	clock          clock.Clock
 	ids            ids.Source
 	endpointHealth EndpointHealthChecker
+	endpointAuth   EndpointAuthChecker
 	modelRuntimes  *ModelRuntimeRegistry
 }
 
@@ -87,6 +89,7 @@ func NewExecutor(opts ExecutorOptions) (*Executor, error) {
 		clock:          opts.Clock,
 		ids:            opts.IDs,
 		endpointHealth: opts.EndpointHealth,
+		endpointAuth:   opts.EndpointAuth,
 		modelRuntimes:  opts.ModelRuntimes,
 	}, nil
 }
@@ -110,7 +113,7 @@ func (e *Executor) CheckPostconditions(ctx context.Context, conditions []protoco
 }
 
 func (e *Executor) evaluatorDeps() EvaluatorDeps {
-	return EvaluatorDeps{Runner: e.runner, Home: e.home, EndpointHealth: e.endpointHealth, ModelRuntimes: e.modelRuntimes}
+	return EvaluatorDeps{Runner: e.runner, Home: e.home, EndpointHealth: e.endpointHealth, EndpointAuth: e.endpointAuth, ModelRuntimes: e.modelRuntimes}
 }
 
 func (e *Executor) applierDeps() applierDeps {

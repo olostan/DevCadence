@@ -86,7 +86,15 @@ func TestResourceInventoryValidation_CognitionEndpoints(t *testing.T) {
 	}
 
 	inv.CognitionEndpoints = []protocol.CognitionEndpointSummary{
-		{ID: "ollama:small", Kind: protocol.EndpointLocalRuntime},
+		{
+			ID:                     "ollama:small",
+			Kind:                   protocol.EndpointLocalRuntime,
+			Locality:               protocol.LocalityLocal,
+			Health:                 protocol.EndpointHealthReady,
+			Auth:                   protocol.AuthNotApplicable,
+			CostClass:              protocol.CostLocalCompute,
+			RequiredSourceExposure: protocol.ExposureLocalOnly,
+		},
 	}
 	if err := inv.Validate(); err != nil {
 		t.Fatalf("expected valid endpoint to pass, got: %v", err)
@@ -209,6 +217,32 @@ func TestResourceInventorySchemaParity(t *testing.T) {
 			}}
 			return i
 		}()},
+		// The following two cases are the independent-review follow-up on
+		// WP-M3B-5, finding 4a's exact examples: before switching to a
+		// cross-schema $ref onto the canonical credential-ref.schema.json/
+		// auth-evidence.schema.json, resource-inventory.schema.json forked
+		// weaker local copies that didn't enforce these two WP-M3B-4
+		// structural rules, so Go rejected these while the (then-separate)
+		// nested schema accepted them — a real parity gap this proves is
+		// now closed.
+		{"nested credential_ref: lowercase env_var locator (WP4 rule)", func() protocol.ResourceInventory {
+			i := validResourceInventory()
+			i.Credentials = []protocol.CredentialInventoryEntry{{
+				Ref: protocol.CredentialRef{SchemaVersion: protocol.SchemaVersion1, RefID: "cred-1", Kind: protocol.CredRefEnvVar, Locator: "lowercase_key"},
+				Evidence: protocol.AuthEvidence{SchemaVersion: protocol.SchemaVersion1, RefID: "cred-1", Kind: protocol.CredRefEnvVar,
+					Status: protocol.AuthStatusIndeterminate, ProbeKind: protocol.AuthProbeEnvPresence, ObservedAt: validTestTimestamp()},
+			}}
+			return i
+		}()},
+		{"nested auth_evidence: kind/probe_kind mismatch (WP4 structural rule)", func() protocol.ResourceInventory {
+			i := validResourceInventory()
+			i.Credentials = []protocol.CredentialInventoryEntry{{
+				Ref: protocol.CredentialRef{SchemaVersion: protocol.SchemaVersion1, RefID: "cred-1", Kind: protocol.CredRefEnvVar, Locator: "SOME_KEY"},
+				Evidence: protocol.AuthEvidence{SchemaVersion: protocol.SchemaVersion1, RefID: "cred-1", Kind: protocol.CredRefEnvVar,
+					Status: protocol.AuthStatusIndeterminate, ProbeKind: protocol.AuthProbeCLIAuthCall, ObservedAt: validTestTimestamp()},
+			}}
+			return i
+		}()},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -224,4 +258,81 @@ func TestResourceInventorySchemaParity(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestEvaluateScopeReadinessRespectsAuthentication is the required
+// regression set from the independent-review follow-up on WP-M3B-5,
+// finding 5: has_any_viable_cognition_path and
+// can_use_existing_authenticated_cli must respect the WP-M3B-4 invariant
+// "healthy != authenticated != usable", not just endpoint health.
+func TestEvaluateScopeReadinessRespectsAuthentication(t *testing.T) {
+	localReady := protocol.CognitionEndpointSummary{
+		ID: "local", Kind: protocol.EndpointLocalRuntime, Locality: protocol.LocalityLocal,
+		Health: protocol.EndpointHealthReady, Auth: protocol.AuthNotApplicable,
+	}
+	cliExpired := protocol.CognitionEndpointSummary{
+		ID: "cli-expired", Kind: protocol.EndpointAuthenticatedCLI, Locality: protocol.LocalityRemote,
+		Health: protocol.EndpointHealthReady, Auth: protocol.AuthExpired,
+	}
+	cliUnknown := protocol.CognitionEndpointSummary{
+		ID: "cli-unknown", Kind: protocol.EndpointAuthenticatedCLI, Locality: protocol.LocalityRemote,
+		Health: protocol.EndpointHealthReady, Auth: protocol.AuthUnknown,
+	}
+	cliAuthenticated := protocol.CognitionEndpointSummary{
+		ID: "cli-authenticated", Kind: protocol.EndpointAuthenticatedCLI, Locality: protocol.LocalityRemote,
+		Health: protocol.EndpointHealthReady, Auth: protocol.AuthAuthenticated,
+	}
+
+	t.Run("ready CLI with expired auth has no viable cognition path", func(t *testing.T) {
+		got := protocol.EvaluateScopeReadiness(nil, []protocol.CognitionEndpointSummary{cliExpired}, nil)
+		if s := scopeStatus(got, protocol.ScopeHasAnyViableCognitionPath); s != protocol.ScopeStatusNotReady {
+			t.Errorf("has_any_viable_cognition_path = %q, want not_ready (ready health must not imply viable when auth is expired)", s)
+		}
+		if s := scopeStatus(got, protocol.ScopeCanUseAuthenticatedCLI); s != protocol.ScopeStatusNotReady {
+			t.Errorf("can_use_existing_authenticated_cli = %q, want not_ready", s)
+		}
+	})
+
+	t.Run("ready CLI with unknown auth is unknown, not silently not_ready or ready", func(t *testing.T) {
+		got := protocol.EvaluateScopeReadiness(nil, []protocol.CognitionEndpointSummary{cliUnknown}, nil)
+		if s := scopeStatus(got, protocol.ScopeHasAnyViableCognitionPath); s != protocol.ScopeStatusUnknown {
+			t.Errorf("has_any_viable_cognition_path = %q, want unknown", s)
+		}
+		if s := scopeStatus(got, protocol.ScopeCanUseAuthenticatedCLI); s != protocol.ScopeStatusUnknown {
+			t.Errorf("can_use_existing_authenticated_cli = %q, want unknown", s)
+		}
+	})
+
+	t.Run("ready local runtime is viable without any remote auth", func(t *testing.T) {
+		got := protocol.EvaluateScopeReadiness(nil, []protocol.CognitionEndpointSummary{localReady}, nil)
+		if s := scopeStatus(got, protocol.ScopeHasAnyViableCognitionPath); s != protocol.ScopeStatusReady {
+			t.Errorf("has_any_viable_cognition_path = %q, want ready (local runtime needs no auth)", s)
+		}
+	})
+
+	t.Run("one unusable remote endpoint plus one ready local endpoint is still viable", func(t *testing.T) {
+		got := protocol.EvaluateScopeReadiness(nil, []protocol.CognitionEndpointSummary{cliExpired, localReady}, nil)
+		if s := scopeStatus(got, protocol.ScopeHasAnyViableCognitionPath); s != protocol.ScopeStatusReady {
+			t.Errorf("has_any_viable_cognition_path = %q, want ready (the local endpoint alone makes a path viable)", s)
+		}
+	})
+
+	t.Run("a genuinely authenticated CLI is ready", func(t *testing.T) {
+		got := protocol.EvaluateScopeReadiness(nil, []protocol.CognitionEndpointSummary{cliAuthenticated}, nil)
+		if s := scopeStatus(got, protocol.ScopeHasAnyViableCognitionPath); s != protocol.ScopeStatusReady {
+			t.Errorf("has_any_viable_cognition_path = %q, want ready", s)
+		}
+		if s := scopeStatus(got, protocol.ScopeCanUseAuthenticatedCLI); s != protocol.ScopeStatusReady {
+			t.Errorf("can_use_existing_authenticated_cli = %q, want ready", s)
+		}
+	})
+}
+
+func scopeStatus(readiness []protocol.ScopeReadiness, scope protocol.ScopeKind) protocol.ScopeReadinessStatus {
+	for _, r := range readiness {
+		if r.Scope == scope {
+			return r.Status
+		}
+	}
+	return ""
 }

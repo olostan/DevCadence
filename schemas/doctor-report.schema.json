@@ -239,8 +239,6 @@
         }
       }
     },
-    "resource_inventory": {
-      "type": "object"
-    }
+    "resource_inventory": { "$ref": "devcadence:///resource-inventory.schema.json" }
   }
 }

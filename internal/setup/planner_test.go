@@ -890,8 +890,10 @@ func TestPlannerGeneratesReauthenticateActionForExpiredEndpoint(t *testing.T) {
 	if act.Operation != nil || act.ManualInstructions == nil {
 		t.Error("reauthenticate action must be manual (no Operation, has ManualInstructions)")
 	}
-	if act.Postconditions[0].Kind != protocol.CondKindEndpointHealthy || act.Postconditions[0].EndpointHealthy.EndpointID != "claude-cli" {
-		t.Errorf("postcondition does not target the expired endpoint: %+v", act.Postconditions)
+	// endpoint_authenticated, not endpoint_healthy: health does not prove
+	// authentication (independent-review follow-up on WP-M3B-5, finding 6).
+	if act.Postconditions[0].Kind != protocol.CondKindEndpointAuthenticated || act.Postconditions[0].EndpointAuthenticated.EndpointID != "claude-cli" {
+		t.Errorf("postcondition does not target the expired endpoint's authentication: %+v", act.Postconditions)
 	}
 
 	// Targeting only TargetHardware must not produce the auth action.

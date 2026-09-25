@@ -110,9 +110,12 @@ func (p *Planner) Plan(report *protocol.DoctorReport, target protocol.SetupTarge
 	if !target.Valid() {
 		return nil, errs.New(errs.CategoryInvalidArgument, "setup planner: invalid target %q", target)
 	}
-	if profile == "" && report.RecommendedProfile != nil && report.RecommendedProfile.SelectedProfile != nil {
-		profile = *report.RecommendedProfile.SelectedProfile
-	}
+	// profile is taken exactly as the caller passed it — never defaulted
+	// from report.RecommendedProfile.SelectedProfile. RecommendedProfile is
+	// an informational UX label (WP-M3B-5 de-authorizes it from readiness
+	// and remediation authority); silently promoting it here would let a
+	// label the operator never chose decide which SetupActions get planned
+	// (independent-review follow-up on WP-M3B-5, finding 1).
 
 	var actions []protocol.SetupAction
 	actionIndex := 1
@@ -257,17 +260,24 @@ func (p *Planner) Plan(report *protocol.DoctorReport, target protocol.SetupTarge
 						fmt.Sprintf("Run the login/authentication command for %s (e.g. its CLI's own login subcommand)", ep.ID),
 						"Re-run devcadence doctor to confirm the endpoint reports authenticated",
 					},
+					// endpoint_authenticated, not endpoint_healthy: health
+					// says nothing about credential validity (WP-M3B-4's
+					// "healthy != authenticated != usable" invariant) —
+					// using health here would let a re-auth action's
+					// postcondition pass while the endpoint is still
+					// unauthenticated (independent-review follow-up on
+					// WP-M3B-5, finding 6).
 					VerificationCheck: []protocol.Condition{
 						{
-							Kind:            protocol.CondKindEndpointHealthy,
-							EndpointHealthy: &protocol.EndpointOperand{EndpointID: ep.ID},
+							Kind:                  protocol.CondKindEndpointAuthenticated,
+							EndpointAuthenticated: &protocol.EndpointOperand{EndpointID: ep.ID},
 						},
 					},
 				},
 				Postconditions: []protocol.Condition{
 					{
-						Kind:            protocol.CondKindEndpointHealthy,
-						EndpointHealthy: &protocol.EndpointOperand{EndpointID: ep.ID},
+						Kind:                  protocol.CondKindEndpointAuthenticated,
+						EndpointAuthenticated: &protocol.EndpointOperand{EndpointID: ep.ID},
 					},
 				},
 				IdempotencyKey: fmt.Sprintf("reauthenticate_%s", ep.ID),
@@ -280,18 +290,31 @@ func (p *Planner) Plan(report *protocol.DoctorReport, target protocol.SetupTarge
 	// equal peer (INVARIANTS.md DCI-055, docs/MODEL_RUNTIME.md) — neither
 	// Ollama nor MLX gets a distinct code path shape; only their recipe
 	// inputs (command name, model ref, detection gate) differ.
-	if (profile == protocol.ProfileLocalHeavy || profile == protocol.ProfileHybridThin || profile == protocol.ProfileOffline) &&
-		(target == protocol.TargetAll || target == protocol.TargetCognition || target == protocol.TargetInference) {
+	//
+	// Gated on target plus concrete missing facts / explicit runtime
+	// selection only — never on the informational RecommendedProfile
+	// label, which an operator never necessarily chose (independent-review
+	// follow-up on WP-M3B-5, finding 1).
+	if target == protocol.TargetAll || target == protocol.TargetCognition || target == protocol.TargetInference {
 
-		shouldPullOllama := false
+		ollamaSelected := false
+		for _, r := range p.selectedRuntimes {
+			if strings.EqualFold(r, "ollama") {
+				ollamaSelected = true
+				break
+			}
+		}
+
+		ollamaDetected := false
 		for _, ep := range report.DiscoveredEndpoints {
 			if ep.Kind == protocol.EndpointLocalRuntime &&
 				(ep.Health == protocol.EndpointHealthReady || ep.Health == protocol.EndpointHealthNotConfigured) &&
 				strings.Contains(strings.ToLower(ep.ID), "ollama") {
-				shouldPullOllama = true
+				ollamaDetected = true
 				break
 			}
 		}
+		shouldPullOllama := ollamaDetected || ollamaSelected
 		if shouldPullOllama {
 			var ollamaPath, ollamaVersion string
 			if p.facts != nil {

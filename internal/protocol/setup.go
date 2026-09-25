@@ -399,6 +399,14 @@ const (
 	CondKindManagedDirExists   ConditionKind = "managed_dir_exists"
 	CondKindPortListening      ConditionKind = "port_listening"
 	CondKindEndpointHealthy    ConditionKind = "endpoint_healthy"
+	// CondKindEndpointAuthenticated checks that a credential/auth-backed
+	// endpoint has been verified authenticated — never satisfied by mere
+	// health (WP-M3B-4's "healthy != authenticated != usable" invariant;
+	// independent-review follow-up on WP-M3B-5, finding 6). A remediation
+	// action whose success means "this endpoint is authenticated" must
+	// use this condition, not endpoint_healthy, which says nothing about
+	// credential validity.
+	CondKindEndpointAuthenticated ConditionKind = "endpoint_authenticated"
 	// CondKindModelPresent is the runtime-agnostic counterpart to
 	// OpKindEnsureLocalModel: "this runtime has this immutable model
 	// revision available." Presence/revision semantics are entirely
@@ -411,20 +419,21 @@ const (
 
 func (k ConditionKind) Valid() bool {
 	switch k {
-	case CondKindCommandAvailable, CondKindExecutableVerified, CondKindManagedDirExists, CondKindPortListening, CondKindEndpointHealthy, CondKindModelPresent:
+	case CondKindCommandAvailable, CondKindExecutableVerified, CondKindManagedDirExists, CondKindPortListening, CondKindEndpointHealthy, CondKindEndpointAuthenticated, CondKindModelPresent:
 		return true
 	}
 	return false
 }
 
 type Condition struct {
-	Kind               ConditionKind              `json:"kind"`
-	CommandAvailable   *CommandAvailableOperand   `json:"command_available,omitempty"`
-	ExecutableVerified *ExecutableVerifiedOperand `json:"executable_verified,omitempty"`
-	ManagedDirExists   *ManagedDirOperand         `json:"managed_dir_exists,omitempty"`
-	PortListening      *PortOperand               `json:"port_listening,omitempty"`
-	EndpointHealthy    *EndpointOperand           `json:"endpoint_healthy,omitempty"`
-	ModelPresent       *ModelPresentOperand       `json:"model_present,omitempty"`
+	Kind                  ConditionKind              `json:"kind"`
+	CommandAvailable      *CommandAvailableOperand   `json:"command_available,omitempty"`
+	ExecutableVerified    *ExecutableVerifiedOperand `json:"executable_verified,omitempty"`
+	ManagedDirExists      *ManagedDirOperand         `json:"managed_dir_exists,omitempty"`
+	PortListening         *PortOperand               `json:"port_listening,omitempty"`
+	EndpointHealthy       *EndpointOperand           `json:"endpoint_healthy,omitempty"`
+	EndpointAuthenticated *EndpointOperand           `json:"endpoint_authenticated,omitempty"`
+	ModelPresent          *ModelPresentOperand       `json:"model_present,omitempty"`
 }
 
 type CommandAvailableOperand struct {
@@ -532,6 +541,9 @@ func (c Condition) Validate() error {
 	if c.EndpointHealthy != nil {
 		count++
 	}
+	if c.EndpointAuthenticated != nil {
+		count++
+	}
 	if c.ModelPresent != nil {
 		count++
 	}
@@ -585,6 +597,10 @@ func (c Condition) Validate() error {
 		}
 	case CondKindEndpointHealthy:
 		if c.EndpointHealthy == nil || c.EndpointHealthy.EndpointID == "" {
+			return errs.New(errs.CategoryInvalidArgument, "%s: endpoint_id is required", kind)
+		}
+	case CondKindEndpointAuthenticated:
+		if c.EndpointAuthenticated == nil || c.EndpointAuthenticated.EndpointID == "" {
 			return errs.New(errs.CategoryInvalidArgument, "%s: endpoint_id is required", kind)
 		}
 	case CondKindModelPresent:
@@ -977,7 +993,6 @@ func ComputePlanDigest(p *SetupPlan) (string, error) {
 func (p *SetupPlan) ComputePlanDigest() (string, error) {
 	return ComputePlanDigest(p)
 }
-
 
 // ActionStatus tracks individual action lifecycle.
 type ActionStatus string

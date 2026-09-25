@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/olostan/DevCadence/internal/clock"
@@ -160,21 +161,26 @@ func (d *Doctor) Run(ctx context.Context, scope protocol.ReadinessEvaluationScop
 		Policy:           d.policy,
 	})
 
-	// Default target profile for compatibility if not explicitly scoped
-	if scope.TargetProfile == nil && recommendation.SelectedProfile != nil {
-		scope.TargetProfile = recommendation.SelectedProfile
-	}
+	// scope.TargetProfile is used exactly as the caller passed it — never
+	// defaulted from recommendation.SelectedProfile. RecommendedProfile is
+	// an informational UX label; silently promoting it here would let a
+	// label the caller never chose gate canonical readiness, exactly the
+	// authority ADR-0014 §92 forbids (independent-review follow-up on
+	// WP-M3B-5, finding 1).
 
 	// 7. Evaluate Readiness
 	readiness := d.evaluateReadiness(scope, findings, endpoints, cognProfile, scope.TargetProfile)
 
-	// 8. Build ResourceInventory
-	inv, err := d.BuildResourceInventory(ctx, facts, fingerprint, endpoints, hosts)
+	// 8. Build ResourceInventory — computed from exactly the facts/findings/
+	// endpoints/hosts/profile this single Run call already gathered above,
+	// never by re-probing (independent-review follow-up on WP-M3B-5,
+	// finding 3). scopeReadiness is computed once and shared between the
+	// report and the inventory so the two can never disagree (finding 4d).
+	scopeReadiness := protocol.EvaluateScopeReadiness(findings, endpoints, hosts)
+	inv, err := d.BuildResourceInventory(ctx, facts, fingerprint, endpoints, hosts, cognProfile, scopeReadiness)
 	if err != nil {
 		return nil, err
 	}
-
-	scopeReadiness := protocol.EvaluateScopeReadiness(findings, endpoints, hosts)
 
 	report := &protocol.DoctorReport{
 		SchemaVersion:       protocol.SchemaVersion1,
@@ -198,13 +204,22 @@ func (d *Doctor) Run(ctx context.Context, scope protocol.ReadinessEvaluationScop
 	return report, nil
 }
 
-// BuildResourceInventory projects the facts, discovered endpoints, and
-// principal hosts a call to Run already gathered into a
-// protocol.ResourceInventory, and additionally checks any configured
-// CredentialRefs. It performs no new hardware/endpoint discovery of its
-// own — it is a pure projection over data the caller supplies, so it can
-// be called with Run's own outputs without re-probing anything
-// (WP-M3B-5 §5.2).
+// BuildResourceInventory projects the facts, discovered endpoints,
+// principal hosts, machine profile, and scope readiness a single call to
+// Run already gathered into a protocol.ResourceInventory, and additionally
+// checks any configured CredentialRefs. It performs no new hardware/
+// endpoint/git/state-root discovery of its own: it is a pure, deterministic
+// projection over data the caller supplies — it must never re-probe the
+// live filesystem or PATH itself, which would let the report and the
+// embedded inventory disagree via TOCTOU and would contaminate a synthetic
+// (e.g. cross-platform test) facts set with whatever happens to be true of
+// the actual host running the code (independent-review follow-up on
+// WP-M3B-5, finding 3).
+//
+// Collections are sorted into a stable order (endpoints/credentials by
+// their ID, hosts by HostID) before being stored, so two calls built from
+// the same facts in different input orderings produce byte-identical
+// inventories (finding 3's order-independence requirement).
 //
 // A nil credManager produces an empty Credentials section, the same
 // nil-safe degradation discoverEndpoints already uses for a nil
@@ -215,6 +230,8 @@ func (d *Doctor) BuildResourceInventory(
 	fingerprint string,
 	endpoints []protocol.CognitionEndpointSummary,
 	hosts []protocol.PrincipalHostSummary,
+	cognProfile *protocol.MachineCapabilityProfile,
+	scopeReadiness []protocol.ScopeReadiness,
 ) (*protocol.ResourceInventory, error) {
 	logicalCores := 0
 	if facts.CPU.LogicalCores != nil {
@@ -231,6 +248,16 @@ func (d *Doctor) BuildResourceInventory(
 			backends = append(backends, c.Backend)
 		}
 	}
+	sort.Slice(backends, func(i, j int) bool { return backends[i] < backends[j] })
+
+	sortedEndpoints := append([]protocol.CognitionEndpointSummary(nil), endpoints...)
+	sort.Slice(sortedEndpoints, func(i, j int) bool { return sortedEndpoints[i].ID < sortedEndpoints[j].ID })
+
+	sortedHosts := append([]protocol.PrincipalHostSummary(nil), hosts...)
+	sort.Slice(sortedHosts, func(i, j int) bool { return sortedHosts[i].HostID < sortedHosts[j].HostID })
+
+	sortedScopeReadiness := append([]protocol.ScopeReadiness(nil), scopeReadiness...)
+	sort.Slice(sortedScopeReadiness, func(i, j int) bool { return sortedScopeReadiness[i].Scope < sortedScopeReadiness[j].Scope })
 
 	inv := &protocol.ResourceInventory{
 		SchemaVersion:      protocol.SchemaVersion1,
@@ -244,18 +271,24 @@ func (d *Doctor) BuildResourceInventory(
 			TotalMemoryBytes:    totalMem,
 			AcceleratorBackends: backends,
 		},
-		CognitionEndpoints: endpoints,
-		PrincipalHosts:     hosts,
+		CognitionEndpoints: sortedEndpoints,
+		PrincipalHosts:     sortedHosts,
+		Readiness:          sortedScopeReadiness,
 	}
 
-	var findings []protocol.DiagnosticFinding
-	findings = append(findings, d.checkStateRoot()...)
-	findings = append(findings, d.checkGit(facts)...)
-	findings = append(findings, d.checkHardware(facts)...)
-	inv.Readiness = protocol.EvaluateScopeReadiness(findings, endpoints, hosts)
+	if cognProfile != nil {
+		inv.Profile = &protocol.MachineProfileRef{
+			ProfileID:          cognProfile.ProfileID,
+			MachineFingerprint: cognProfile.MachineFingerprint,
+			ObservedAt:         cognProfile.ObservedAt,
+			ProbeDepth:         cognProfile.ProbeDepth,
+		}
+	}
 
 	if d.credManager != nil {
-		for _, ref := range d.credRefs {
+		sortedRefs := append([]protocol.CredentialRef(nil), d.credRefs...)
+		sort.Slice(sortedRefs, func(i, j int) bool { return sortedRefs[i].RefID < sortedRefs[j].RefID })
+		for _, ref := range sortedRefs {
 			// CheckCredential errors only on a structurally malformed ref
 			// or an unknown CredentialRefKind — never on "the credential
 			// isn't there", which is already a valid
@@ -744,17 +777,25 @@ func (d *Doctor) evaluateReadiness(
 	var acceleratedLocal []protocol.CognitionEndpoint
 	var remoteEndpoints []protocol.CognitionEndpoint
 
+	// Viability (not mere health) is checked via the same
+	// protocol.EndpointViable predicate protocol.EvaluateScopeReadiness
+	// uses, so monolithic and scope-specific readiness cannot silently
+	// disagree about what "usable" means (independent-review follow-up on
+	// WP-M3B-5, finding 5).
 	for _, ep := range fullEndpoints {
 		if ep.Health != protocol.EndpointHealthReady {
 			continue
 		}
-		if ep.Locality == protocol.LocalityLocal || ep.Kind == protocol.EndpointLocalRuntime {
+		isLocal := ep.Locality == protocol.LocalityLocal || ep.Kind == protocol.EndpointLocalRuntime
+		isRemote := ep.Locality == protocol.LocalityRemote || ep.Kind == protocol.EndpointRemoteAPI || ep.Kind == protocol.EndpointAuthenticatedCLI
+		viable := protocol.EndpointViable(ep.Kind, ep.Locality, ep.Health, ep.Auth)
+		if isLocal && viable {
 			localEndpoints = append(localEndpoints, ep)
 			if ep.AccelerationVerified() {
 				acceleratedLocal = append(acceleratedLocal, ep)
 			}
 		}
-		if (ep.Locality == protocol.LocalityRemote || ep.Kind == protocol.EndpointRemoteAPI || ep.Kind == protocol.EndpointAuthenticatedCLI) && (ep.Auth == protocol.AuthAuthenticated || ep.Auth == protocol.AuthNotApplicable) {
+		if isRemote && viable {
 			remoteEndpoints = append(remoteEndpoints, ep)
 		}
 	}

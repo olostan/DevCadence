@@ -79,6 +79,25 @@ func (s ScopeReadiness) Validate() error {
 	return nil
 }
 
+// EndpointViable is the single authoritative definition of "this endpoint
+// can actually be used", not merely healthy — the WP-M3B-4 invariant
+// "healthy != authenticated != usable" applies exactly as much to
+// aggregate readiness as it does to per-credential evidence. A local
+// runtime is usable once ready (auth is not applicable to it); a
+// remote/CLI endpoint additionally requires verified authentication.
+// Centralized here so scope readiness and monolithic DoctorReport
+// readiness cannot silently disagree about what "viable" means
+// (independent-review follow-up on WP-M3B-5, finding 5).
+func EndpointViable(kind EndpointKind, locality Locality, health EndpointHealth, auth AuthStatus) bool {
+	if health != EndpointHealthReady {
+		return false
+	}
+	if kind == EndpointLocalRuntime || locality == LocalityLocal {
+		return true
+	}
+	return auth == AuthAuthenticated || auth == AuthNotApplicable
+}
+
 // EvaluateScopeReadiness deterministically evaluates the canonical capability scopes
 // from verified findings, endpoints, and hosts.
 func EvaluateScopeReadiness(
@@ -100,19 +119,26 @@ func EvaluateScopeReadiness(
 	// 2. has_any_viable_cognition_path
 	cogStatus := ScopeStatusUnavailable
 	cogReason := "No cognition endpoints detected on machine"
-	hasReadyEndpoint := false
+	hasViableEndpoint := false
+	hasUnknownAuthEndpoint := false
 	for _, ep := range endpoints {
-		if ep.Health == EndpointHealthReady {
-			hasReadyEndpoint = true
+		if EndpointViable(ep.Kind, ep.Locality, ep.Health, ep.Auth) {
+			hasViableEndpoint = true
 			break
 		}
+		if ep.Health == EndpointHealthReady && ep.Auth == AuthUnknown {
+			hasUnknownAuthEndpoint = true
+		}
 	}
-	if hasReadyEndpoint {
+	if hasViableEndpoint {
 		cogStatus = ScopeStatusReady
-		cogReason = "At least one ready cognition endpoint is available"
+		cogReason = "At least one ready and authenticated/usable cognition endpoint is available"
+	} else if hasUnknownAuthEndpoint {
+		cogStatus = ScopeStatusUnknown
+		cogReason = "A ready endpoint exists but its authentication has not yet been verified"
 	} else if len(endpoints) > 0 {
 		cogStatus = ScopeStatusNotReady
-		cogReason = "Cognition endpoints are present but none are ready or fully authenticated"
+		cogReason = "Cognition endpoints are present but none are ready and authenticated/usable"
 	}
 
 	// 3. can_run_local_inference
@@ -153,18 +179,25 @@ func EvaluateScopeReadiness(
 	cliReason := "No supported coding CLI installed"
 	hasCLI := false
 	hasAuthCLI := false
+	hasUnknownAuthCLI := false
 	for _, ep := range endpoints {
 		if ep.Kind == EndpointAuthenticatedCLI {
 			hasCLI = true
-			if ep.Health == EndpointHealthReady && ep.Auth == AuthAuthenticated {
+			if EndpointViable(ep.Kind, ep.Locality, ep.Health, ep.Auth) {
 				hasAuthCLI = true
 				break
+			}
+			if ep.Health == EndpointHealthReady && ep.Auth == AuthUnknown {
+				hasUnknownAuthCLI = true
 			}
 		}
 	}
 	if hasAuthCLI {
 		cliStatus = ScopeStatusReady
 		cliReason = "Authenticated coding CLI available and operational"
+	} else if hasUnknownAuthCLI {
+		cliStatus = ScopeStatusUnknown
+		cliReason = "Coding CLI is ready but its authentication has not yet been verified"
 	} else if hasCLI {
 		cliStatus = ScopeStatusNotReady
 		cliReason = "Coding CLI detected but authentication is expired or unverified"
@@ -219,6 +252,12 @@ func (h HardwareSummary) Validate() error {
 	}
 	if h.TotalMemoryBytes != nil && *h.TotalMemoryBytes < 0 {
 		return errs.New(errs.CategoryInvalidArgument, "%s: total_memory_bytes must not be negative", kind)
+	}
+	for _, b := range h.AcceleratorBackends {
+		if !b.Valid() {
+			return enumError(kind, "accelerator_backends[]", string(b),
+				"cpu", "metal", "cuda", "rocm", "vulkan", "unknown")
+		}
 	}
 	return nil
 }
@@ -277,21 +316,63 @@ func (p PolicySummary) Validate() error {
 	return nil
 }
 
+// MachineProfileRef is a typed pointer back to the MachineCapabilityProfile
+// observation that produced a ResourceInventory — profile_id, machine
+// fingerprint, observation time, and probe depth, without duplicating the
+// full profile (its endpoints, capability grades, provenance, and
+// runtime/model identity). ADR-0013 already established that machine
+// profiles are computed rather than persisted, and are cached/retrievable
+// by (MachineFingerprint, ProbeDepth); this reference is what lets a
+// future M3C/M3D consumer recover that full factual substrate instead of
+// being stuck with only CognitionEndpointSummary's deliberately-reduced
+// fields (independent-review follow-up on WP-M3B-5, finding 2: the
+// inventory was too lossy to satisfy the canonical "runtimes/models,
+// capability provenance" contract without this link).
+type MachineProfileRef struct {
+	ProfileID          string     `json:"profile_id"`
+	MachineFingerprint string     `json:"machine_fingerprint"`
+	ObservedAt         Timestamp  `json:"observed_at"`
+	ProbeDepth         ProbeDepth `json:"probe_depth"`
+}
+
+// Validate checks the profile reference is well-formed.
+func (p MachineProfileRef) Validate() error {
+	const kind = "MachineProfileRef"
+	if err := requireNonEmpty(kind, "profile_id", p.ProfileID); err != nil {
+		return err
+	}
+	if !hexSha256Regex.MatchString(p.MachineFingerprint) {
+		return errs.New(errs.CategoryInvalidArgument, "%s: machine_fingerprint must be sha256 hex, got %q", kind, p.MachineFingerprint)
+	}
+	if p.ObservedAt.Time().IsZero() {
+		return errs.New(errs.CategoryInvalidArgument, "%s: observed_at is required", kind)
+	}
+	if !p.ProbeDepth.Valid() {
+		return errs.New(errs.CategoryInvalidArgument, "%s: invalid probe_depth %q", kind, string(p.ProbeDepth))
+	}
+	return nil
+}
+
 // ResourceInventory is a deterministic, point-in-time snapshot of the
 // facts M3C/M3D's Portfolio Planner will read — never a decision itself
-// (ADR-0014 §92, ADR-0018). It references MachineCapabilityProfile and
-// CognitionEndpointSummary by the same provenance-carrying shapes those
-// types already use (ADR-0011) rather than re-deriving capability
-// grades, and follows ADR-0013's "computed, not persisted" discipline:
-// callers key freshness off MachineFingerprint/ObservedAt exactly as
-// DoctorReport already does. It has no Recommend/Select/Score method —
-// it decides nothing; a future consumer reads it and decides.
+// (ADR-0014 §92, ADR-0018). It references MachineCapabilityProfile (via
+// Profile, a MachineProfileRef) and CognitionEndpointSummary by the same
+// provenance-carrying shapes those types already use (ADR-0011) rather
+// than re-deriving capability grades, and follows ADR-0013's "computed,
+// not persisted" discipline: callers key freshness off
+// MachineFingerprint/ObservedAt exactly as DoctorReport already does. It
+// has no Recommend/Select/Score method — it decides nothing; a future
+// consumer reads it and decides.
 type ResourceInventory struct {
-	SchemaVersion      SchemaVersion              `json:"schema_version"`
-	InventoryID        string                     `json:"inventory_id"`
-	MachineFingerprint string                     `json:"machine_fingerprint"`
-	ObservedAt         Timestamp                  `json:"observed_at"`
-	Hardware           HardwareSummary            `json:"hardware"`
+	SchemaVersion      SchemaVersion   `json:"schema_version"`
+	InventoryID        string          `json:"inventory_id"`
+	MachineFingerprint string          `json:"machine_fingerprint"`
+	ObservedAt         Timestamp       `json:"observed_at"`
+	Hardware           HardwareSummary `json:"hardware"`
+	// Profile references the full MachineCapabilityProfile this inventory
+	// was projected from — nil only when no cognition discovery ran at all
+	// (e.g. Doctor configured without a CognitionService).
+	Profile            *MachineProfileRef         `json:"profile,omitempty"`
 	CognitionEndpoints []CognitionEndpointSummary `json:"cognition_endpoints,omitempty"`
 	PrincipalHosts     []PrincipalHostSummary     `json:"principal_hosts,omitempty"`
 	Credentials        []CredentialInventoryEntry `json:"credentials,omitempty"`
@@ -326,12 +407,19 @@ func (r *ResourceInventory) Validate() error {
 	if err := r.Hardware.Validate(); err != nil {
 		return err
 	}
-	for _, ep := range r.CognitionEndpoints {
-		if ep.ID == "" {
-			return errs.New(errs.CategoryInvalidArgument, "%s: cognition endpoint id cannot be empty", kind)
+	if r.Profile != nil {
+		if err := r.Profile.Validate(); err != nil {
+			return err
 		}
-		if !ep.Kind.Valid() {
-			return errs.New(errs.CategoryInvalidArgument, "%s: invalid cognition endpoint kind %q", kind, ep.Kind)
+		if r.Profile.MachineFingerprint != r.MachineFingerprint {
+			return errs.New(errs.CategoryInvalidArgument,
+				"%s: profile.machine_fingerprint %q does not match inventory machine_fingerprint %q",
+				kind, r.Profile.MachineFingerprint, r.MachineFingerprint)
+		}
+	}
+	for _, ep := range r.CognitionEndpoints {
+		if err := ep.Validate(); err != nil {
+			return err
 		}
 	}
 	for _, h := range r.PrincipalHosts {

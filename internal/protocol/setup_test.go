@@ -508,11 +508,16 @@ func TestDoctorReportValidation(t *testing.T) {
 		t.Fatalf("valid doctor report failed: %v", err)
 	}
 
-	// Claiming READY without target profile must fail
+	// READY no longer requires an evaluated target_profile: canonical
+	// readiness is evidence-driven (ScopeReadiness / a viable cognition
+	// path), never gated by whether the informational DeploymentProfile
+	// label happened to be set (independent-review follow-up on
+	// WP-M3B-5, finding 1 — an earlier revision of this test asserted
+	// the opposite, now-removed, rule).
 	repNoProfile := rep
 	repNoProfile.EvaluationScope.TargetProfile = nil
-	if err := repNoProfile.Validate(); err == nil {
-		t.Fatal("claiming READY without evaluated target_profile was accepted; expected error")
+	if err := repNoProfile.Validate(); err != nil {
+		t.Fatalf("READY with no target_profile should be accepted, got: %v", err)
 	}
 }
 

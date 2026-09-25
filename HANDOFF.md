@@ -146,7 +146,7 @@ implementing on top of it or rewriting it.
 | WP-M3B-2 | accepted | `bb01bc9` | all PASS (see EWP §13) | independent review complete — [comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5805603916), 7 findings, all addressed in EWP §14 |
 | WP-M3B-3 | **accepted** (§21) | `cc799cd` | `go build ./...`, `go vet ./...`, `go test -count=1 ./...`, `go test -race ./internal/setup/... ./internal/cognition/mlx/... ./internal/environment/...`, `GOOS=windows GOARCH=amd64 go build ./...` all PASS | 7 independent review rounds, 25 findings total, all resolved — see EWP §15–§21. Final acceptance: [comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5809019161) |
 | WP-M3B-4 | **accepted** (§16) | `75e65a7` | `go build ./...`, `go vet ./...`, `go test -count=1 ./...`, `go test -race ./internal/credentials/... ./internal/protocol/... ./internal/cognition/...`, `GOOS=windows GOARCH=amd64 go build ./...` all PASS | 3 independent review rounds, 6+3+2 findings total, all resolved — see EWP §13–§16. Final acceptance: [comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5819033678) |
-| WP-M3B-5 | implemented, NOT accepted — awaiting independent review; EWP substantially expanded/redesigned by a concurrent session on top of the initial implementation (ScopeReadiness model, §4/§13) | current branch HEAD (see "Expected remote HEAD" above) | `go build ./...`, `go vet ./...`, `go test -count=1 ./...`, `go test -race ./internal/setup/... ./internal/protocol/... ./internal/credentials/... ./internal/schema/... ./tests/...`, `GOOS=windows GOARCH=amd64 go build ./...` all PASS | not yet reviewed — [status comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5826502143) |
+| WP-M3B-5 | implemented, NOT accepted — 6 findings fixed, awaiting re-review (EWP §14) | current branch HEAD (see "Expected remote HEAD" above) | `go build ./...`, `go vet ./...`, `go test -count=1 ./...`, `go test -race ./internal/setup/... ./internal/protocol/... ./internal/credentials/... ./internal/schema/... ./tests/...`, `GOOS=windows GOARCH=amd64 go build ./...` all PASS | first review — [comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5826591074), 6 findings (static profiles still authoritative in Doctor/Planner, too-lossy ResourceInventory, BuildResourceInventory re-probing live state, Go/schema parity gaps, auth-blind viability check, reauth postcondition satisfiable by mere health) — all fixed, EWP §14, not yet re-reviewed |
 | WP-M3B-6 | unknown — likely partially pre-existing, unverified; `planner.go` already resolves immutable digests + license metadata for its model-pull recipes (found while pre-checking WP-M3B-5) | — | — | assess `internal/setup/planner.go` (already read in full for WP-M3B-5, findings in `wp-m3b-5-ewp.md` §0) and `cache.go` against the full WP-M3B-6 scope card next |
 | WP-M3B-7 | not started | — | — | blocked on WP-3/4/5/6 |
 | WP-M3B-8 | not started — verification suite and docs sync (formerly WP9) | — | — | blocked on all prior |
@@ -289,13 +289,20 @@ until the whole milestone closes.)
 - `GOOS=windows GOARCH=amd64 go build ./...`: PASS, clean cross-compilation.
 - `git diff --check`: PASS.
 
-**Known blockers / open questions:** none — ready for independent review.
+**First independent review** ([comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5826591074), owner, 2026-09-25) found 6 substantive blockers, all fixed this session:
+1. static deployment profiles were still authoritative in the real `Doctor.Run`/`Planner.Plan` path (the de-authorization the EWP claimed was done had not actually removed the promotion line, nor `Planner`'s mirror of it, nor `DoctorReport.Validate()`'s READY-requires-TargetProfile rule) — all three removed;
+2. `ResourceInventory` was too lossy (no link back to `MachineCapabilityProfile`) — new `MachineProfileRef` (profile_id/fingerprint/observed_at/probe_depth) added as `ResourceInventory.Profile`;
+3. `BuildResourceInventory` re-probed live state internally (TOCTOU risk) instead of being a pure projection, and stored collections unsorted — now takes `Run`'s already-computed data as parameters and sorts every collection;
+4. Go/JSON-Schema parity gaps: a forked local credential_ref/auth_evidence schema copy missing WP-M3B-4's structural rules (now a cross-schema `$ref` onto the canonical schemas), weak Go endpoint validation (now a single canonical `CognitionEndpointSummary.Validate()` reused everywhere), missing accelerator-backend enum check, and `doctor-report.schema.json`'s `resource_inventory` being untyped (now `$ref`'d, plus a report/inventory consistency check);
+5. `has_any_viable_cognition_path`/`can_use_existing_authenticated_cli` were auth-blind (health-only) — new shared `protocol.EndpointViable` predicate used by both scope readiness and monolithic readiness;
+6. the reauthenticate action's postcondition used `endpoint_healthy`, which doesn't prove authentication — new `endpoint_authenticated` condition kind with its own `EndpointAuthChecker` interface, mirroring the existing `EndpointHealthChecker` pattern.
+Full detail and every new test in `docs/work-packages/wp-m3b-5-ewp.md` §14.
+
+**Known blockers / open questions:** none — awaiting a follow-up review round to confirm the §14 fixes.
 
 ## Next concrete action
 
-1. Commit and push the WP-M3B-5 implementation to `origin/feat/m3b-guided-bootstrap` (preserving Git author identity `Valentyn Shybanov <olostan@gmail.com>`).
-2. Post a comprehensive PR comment on #10 summarizing the WP-M3B-5 design, ScopeReadiness model, ResourceInventory projections, profile de-authorization, schema parity, and verification matrix.
-3. Await independent review; do NOT mark WP-M3B-5 accepted unilaterally; do NOT begin WP-M3B-6 until GREEN signal.
+Post a PR comment on #10 summarizing the §14 fix round and continue watching for the owner's response. Do not flip WP-M3B-5 to `accepted` unilaterally. Once accepted, proceed to WP-M3B-6 — but first assess `internal/setup/planner.go` (already read in full for WP-M3B-5) and `cache.go` against the full WP-M3B-6 scope card, per the pre-check pattern every WP in this milestone has used.
 
 ## Resume checklist for the next agent
 

@@ -137,6 +137,19 @@
         },
         {
           "properties": {
+            "kind": { "const": "endpoint_authenticated" },
+            "endpoint_authenticated": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["endpoint_id"],
+              "properties": { "endpoint_id": { "type": "string" } }
+            }
+          },
+          "required": ["endpoint_authenticated"],
+          "additionalProperties": false
+        },
+        {
+          "properties": {
             "kind": { "const": "model_present" },
             "model_present": {
               "type": "object",
