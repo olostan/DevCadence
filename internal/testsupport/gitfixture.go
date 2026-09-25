@@ -51,6 +51,8 @@ func NewGitRepo(t *testing.T) *GitRepo {
 		t.Fatalf("resolve temp dir: %v", err)
 	}
 	runGit(t, dir, "init", "--quiet", "--initial-branch=main")
+	runGit(t, dir, "config", "user.name", "DevCadence Fixture")
+	runGit(t, dir, "config", "user.email", "fixture@devcadence.test")
 	repo := &GitRepo{t: t, Path: dir}
 	repo.WriteFile("README.md", "# fixture\n")
 	repo.Commit("initial commit")

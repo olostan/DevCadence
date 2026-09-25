@@ -1,214 +1,239 @@
-# Engineering Work Package: WP-M3B-5 — Doctor readiness and resource inventory (service layer, no public CLI)
+# Engineering Work Package: WP-M3B-5 — Doctor readiness and ResourceInventory (service layer, no public CLI)
 
 - **Milestone:** M3B — Guided bootstrap and onboarding
 - **Scope card:** [docs/WORK_PACKAGES.md#wp-m3b-5--doctor-readiness-and-resource-inventory-service-layer-no-public-cli](../WORK_PACKAGES.md#wp-m3b-5--doctor-readiness-and-resource-inventory-service-layer-no-public-cli)
 - **Base commit:** `e2e0849` (`feat/m3b-guided-bootstrap`, includes accepted WP-M3B-1 through WP-M3B-4 checkpoints)
 - **Branch:** `feat/m3b-guided-bootstrap`
 - **Depends on:** WP-M3B-1 (`SetupPlan`/`SetupAction`/`TypedOperation`, accepted), WP-M3B-2 (ledger/home layout, accepted), WP-M3B-3 (executor, accepted), WP-M3B-4 (`CredentialRef`/`AuthEvidence`/`Manager`, accepted).
-- **Status:** Implemented, deterministic verification complete; independent review pending. See §11.
+- **Status:** Expanded & Authoritative; implementation complete; verification in progress.
 
 ---
 
-## 0. What already exists (pre-check, same pattern as WP-M3B-1 through WP-M3B-4)
+## 1. Central Design Question & Answer
 
-Following this milestone's established discipline, `internal/setup/doctor.go` (739 lines), `internal/setup/profiles.go` (489 lines), and `internal/setup/planner.go` (577 lines) were read in full before writing this EWP. This WP's actual remaining scope is substantially narrower than the scope card reads in isolation, because most of it is already built:
+> **«What is the smallest deterministic ResourceInventory/readiness contract that captures enough factual machine/cognition state for future M3C/M3D planning without prematurely encoding portfolio, economic, routing, or workflow decisions?»**
 
-### Already substantially implemented — reused, not rebuilt
+### The Answer
+The smallest contract consists of two distinct protocol shapes:
+1. **`ResourceInventory` (Machine-oriented factual substrate):** A top-level durable protocol `Record` (`schema_version: "1.0"`) that aggregates discovered, verified observations without prescribing their use:
+   - `hardware`: OS, architecture, logical cores, total memory bytes, and supported accelerator backends (`HardwareSummary`).
+   - `cognition_endpoints`: Discovered endpoints with factual health, authentication status, coarse cost class, source exposure, and acceleration verification (`[]CognitionEndpointSummary`).
+   - `principal_hosts`: Host environments verified on the machine (`[]PrincipalHostSummary`).
+   - `credentials`: Configured references paired with verified authentication evidence (`[]CredentialInventoryEntry`).
+   - `readiness`: Scope-specific readiness projections (`[]ScopeReadiness`) across concrete operational and cognition capabilities (`ready`, `not_ready`, `unavailable`, `unknown`).
+   - `policy`: Available routing constraints (`*PolicySummary`).
+   `ResourceInventory` contains no scoring, weighting, model preference, role assignment, or budget optimization.
 
-1. **`Doctor.Run`** (`doctor.go`) already produces a `protocol.DoctorReport` (a real `protocol.Record`: `schema_version`, `Validate()`, registered in `schema.RecordKindToSchema`) with `EvaluationScope`, `Readiness`, `Findings`, `RecommendedProfile`, `DiscoveredEndpoints`, and `PrincipalHosts`, from state-root, Git, hardware/accelerator, principal-host, and cognition-endpoint checks.
-2. **`evaluateReadiness`** (`doctor.go:605-738`) already implements the normative readiness-state machine from verified evidence, not heuristics: mandatory-dependency errors → `ACTION_REQUIRED`; no target profile → `PARTIALLY_READY`; per-deployment-profile local/remote endpoint and acceleration requirements; role-routing checks via `cognition.Route` (the same WP-M3A routing primitive, not a duplicate); stale (`stale_inference_retained`) or any-warning evidence → `READY_WITH_REDUCED_CAPABILITY`; otherwise `READY`. This is the "normative readiness states from verified evidence" deliverable, done.
-3. **`ProfileRecommender.Recommend`** (`profiles.go`) already produces `protocol.ProfileRecommendation` (`SelectedProfile`/`Alternatives`/`Rationale`/`Limitations`/`Unknowns`). It uses fixed memory/accelerator thresholds (64GiB unified / 24GiB VRAM for `local-heavy`, 16GiB / 8GiB for `hybrid-thin`/`offline`) — these are UX **labels** over verified hardware facts, explicitly permitted by ADR-0014 ("Human-readable deployment labels may summarize the environment"), not the forbidden "static weighted 'optimal' portfolio logic": actual per-role eligibility for every candidate profile is checked by routing through `cognition.Route(defaultReqs[role], policy, candidateEndpoints)`, the same deterministic, policy-governed primitive `evaluateReadiness` uses — there is no separate provider/model preference table anywhere in this file. This WP's MUST constraint reads as already satisfied by the existing design; §3 below makes that assessment explicit rather than assumed, per the WP-M3B-1 review's objection to EWPs weakening acceptance criteria without evidence.
-4. **`Planner.Plan(report *DoctorReport, target, profile)`** (`planner.go:106`) **already generates a `protocol.SetupPlan` from a `DoctorReport`'s findings** — this is the scope card's "`doctor --fix` generates SetupPlan from concrete missing/remediable facts" deliverable, and it already exists as a real, working implementation: it converts `FindingCodeStateDirsMissing` into managed-directory-creation `SetupAction`s, `FindingCodeGitNotFound` into a manual Git-install action, and (independent of specific finding codes, driven by the recommended/selected deployment profile and `DiscoveredEndpoints`) generates local-model-pull actions for Ollama and MLX with resolved immutable digests, declared registries/sources, and license references — i.e. it already satisfies several of WP-M3B-6's "Bounded recipes" acceptance criteria too (resolved digest before planning, license metadata present). **This EWP does not rebuild any of this.** A prior version of this WP's pre-check (recorded in `HANDOFF.md` before this EWP was written) incorrectly stated that "no `doctor --fix` plan-generation path exists" — that was wrong, confirmed by reading `planner.go` in full; this EWP corrects that record (see §0a).
+2. **`DoctorReport` (Operator-oriented diagnostic & readiness projection):** A top-level durable protocol `Record` providing actionable human and operational evaluation:
+   - `readiness`: Composite operational health (`READY`, `READY_WITH_REDUCED_CAPABILITY`, `PARTIALLY_READY`, `ACTION_REQUIRED`) derived strictly from base dependencies and viable cognition availability—**completely decoupled from any mandatory deployment profile**.
+   - `scope_readiness`: Granular capability evaluations matching `ResourceInventory`.
+   - `findings`: Concrete diagnostic issues (`DiagnosticFinding`) with remediations.
+   - `resource_inventory`: The full machine inventory projection embedded for operator visibility.
+   - `recommended_profile`: Retained solely as an optional, descriptive UX label summarizing hardware facts; **it exercises zero authority over canonical readiness or planning**.
 
-### 0a. Correction to the informal pre-check recorded in `HANDOFF.md`
+---
 
-The `HANDOFF.md` entry written immediately after WP-M3B-4's acceptance (before this EWP existed) said: *"No `doctor --fix` plan-generation path exists... nothing converts a `DiagnosticFinding` into a `protocol.SetupPlan`/`SetupAction`."* That was based on reading only `doctor.go` and `profiles.go`, not `planner.go`, which does exactly that and was sitting in the same package the whole time. This EWP is the corrected, full-file-read assessment; `HANDOFF.md` is updated alongside this file to point here rather than repeat the stale claim (AGENTS.md §15: state the violated assumption, cite evidence, correct rather than let a wrong record stand).
+## 2. Brownfield Realignment: Classification of Pre-existing Code
 
-### Genuinely missing — this WP's real scope
+Per the WP-M3B-5 mandate, pre-existing code from before the PR #12 roadmap rebaseline is explicitly classified:
 
-1. **No typed `ResourceInventory` protocol record exists at all.** Confirmed by `grep -rl ResourceInventory --include=*.go .` returning zero Go files, despite the type being described in `docs/PROTOCOLS.md` (`### ResourceInventory`), ADR-0014, `docs/ARCHITECTURE.md` §6.7A, and the WP-M3B-5 scope card itself. `DoctorReport` carries adjacent pieces (`DiscoveredEndpoints`, `PrincipalHosts`) but nothing unifies them, plus credential/policy metadata, into the named, schema-backed, `protocol.Record`-conformant snapshot the scope card requires and that M3C is documented to consume. This is this WP's central deliverable. See §5.
-2. **`doctor.go` never references `internal/credentials`.** The scope card requires the inventory to cover "credential references." WP-M3B-4 (immediately prior, this session) built the whole `CredentialRef`/`AuthEvidence`/`Manager` substrate; nothing in `doctor.go` calls into it. This is genuinely new wiring, not a rename.
-3. **A narrow gap in `planner.go`'s finding coverage.** `grep -n "AuthExpired\|NoCodingEndpoint\|AcceleratorUnverified\|EndpointUnhealthy" internal/setup/planner.go` returns nothing: `Plan` handles `FindingCodeStateDirsMissing` and `FindingCodeGitNotFound` by finding code, plus model-pull actions gated on deployment profile — but `FindingCodeAuthExpired` and `FindingCodeNoCodingEndpoint` (both emitted by `discoverEndpoints` in `doctor.go`) currently produce no corresponding remediation action, only a human-readable `Remediation` string on the finding itself (e.g. `"Re-authenticate CLI or update API credentials for %s"`). A `doctor --fix` invocation therefore cannot currently turn an auth problem into a plan action the way it already can for a missing directory or missing Git — this is a real, narrow completion of the existing pattern, not new architecture.
-
-## 1. Objective and rationale
-
-Add the one missing structural piece — a deterministic, schema-backed `ResourceInventory` record — and wire the two genuinely-missing integrations (credential references, auth-finding remediation) into the substantial existing `doctor.go`/`profiles.go`/`planner.go` implementation, without duplicating or redesigning what already works. `ResourceInventory` is the factual substrate ADR-0018/M3C's Portfolio Planner will consume; M3B's job (ADR-0014 §92) is to compute it deterministically from verified evidence, not to solve portfolio optimization — this WP adds no scoring, weighting, or "best" selection beyond what `ProfileRecommender` already does as a UX label.
-
-## 2. Relevant invariants and ADRs
-
-- **ADR-0011** (adaptive environment / host-independent cognition): facts are separate from assessment; a capability grade requires provenance. `ResourceInventory` must reference `MachineCapabilityProfile`/`CognitionEndpointSummary` data by the same provenance-carrying shapes, never re-derive its own capability grades.
-- **ADR-0013** (environment intelligence and cognition contracts): "machine profiles are computed rather than persisted." `ResourceInventory` follows the same discipline — it is a point-in-time computed snapshot keyed by `machine_fingerprint` (exactly like `DoctorReport` already is), never a second source of truth for hardware facts. It references `MachineCapabilityProfile` by fingerprint, not by re-embedding `EnvironmentFacts`.
-- **ADR-0014** (guided bootstrap): §92's M3B boundary line is this WP's charter directly: "Doctor computes deterministic readiness and a ResourceInventory from verified facts... M3B does not solve optimal role/provider/budget allocation with a static pure-function selector." §6's version-output-is-not-authentication invariant is already fully implemented (WP-M3B-4) and this WP's credential-reference integration must not weaken it: `ResourceInventory`'s credential entries carry `AuthEvidence.Status`, never a raw secret or a re-derived "is this actually valid" judgment.
-- **ADR-0018** (adaptive cognition portfolio, M3D): `ResourceInventory` is explicitly named as M3D's Portfolio Planner's input substrate. This WP must not implement any part of the Planner itself — only the factual snapshot the (not-yet-built) Planner will later read.
-- **DCI-081** (no secret custody) / **DCI-055** (runtime-neutral adapters): both already established by WP-M3B-1/4; this WP's credential-reference integration reuses `protocol.CredentialRef`/`AuthEvidence` exactly as built, adding no new secret-adjacent surface.
-- **INVARIANTS.md / AGENTS.md §7**: local discretion does not include "changing persistence semantics" or "introducing new external services" — this WP adds one new record type and wiring, no new persistence layer, no new network calls beyond what `doctor.go` already makes.
-
-## 3. MUST-constraint compliance analysis (not assumed)
-
-The scope card's MUST is: *"no provider/model role doctrine or static weighted 'optimal' portfolio logic. AI-assisted synthesis belongs to M3D/ADR-0018."* Per the WP-M3B-1 review's precedent (an EWP must not assert compliance without evidence), here is the concrete check against the existing code this WP builds on:
-
-- `ProfileRecommender.Recommend` does not weight or score endpoints; every profile's eligibility is a boolean AND of concrete thresholds (memory/accelerator facts) and `cognition.Route` outcomes. No endpoint or provider is preferred over another except via the operator-supplied `Policy.Preferred` list (WP-M3A, already reviewed/accepted), which orders eligible endpoints without ever making an ineligible one eligible.
-- `cognition.Route` (WP-M3A) contains no hardcoded provider names; it is capability/policy-driven.
-- `planner.go`'s local-model recipes treat Ollama and MLX as symmetric peers (explicitly documented at `planner.go:225-229`, citing DCI-055) — this WP's new auth-remediation action generation (§5.3) will follow the same pattern: a generic manual "re-authenticate" action shaped by the endpoint's own `Kind`/`ID`, never a hardcoded per-provider auth flow.
-- `ResourceInventory` (this WP's new type) is a passive data snapshot: it has no `Recommend`/`Select`/`Score` method. Any future consumer that wants a decision reads the inventory and decides; the type itself decides nothing. This is the structural guarantee that keeps this WP on the M3B side of the M3B/M3D boundary.
-
-## 4. Threat model & security review
-
-| Threat Vector | Description | Mitigation |
+| Component / Symbol | Classification | Rationale & Architectural Disposition |
 |---|---|---|
-| **1. Secret leakage via credential-reference inventory** | `ResourceInventory`'s credential section could accidentally carry a raw secret if built carelessly from ad hoc string concatenation instead of `protocol.CredentialRef`/`AuthEvidence`. | The inventory's credential entries are typed as `[]CredentialRef` / `[]AuthEvidence` — the exact WP-M3B-4 types, already proven secret-free by `Validate()` and `LooksLikeSecret()`. No new string field is introduced for credential data. |
-| **2. Stale inventory presented as current** | A cached/old `ResourceInventory` could be consumed by a later caller (e.g. a future M3D Planner) believing it reflects the current machine. | `ResourceInventory` carries `machine_fingerprint` and `observed_at`, exactly like `DoctorReport` and `MachineCapabilityProfile` (ADR-0013's existing pattern) — same freshness/fingerprint discipline, no new staleness class introduced. |
-| **3. Auth-remediation action over-claims authority** | A new "re-authenticate CLI" `SetupAction` could be misclassified with an authority level that lets it auto-execute a credential-mutating operation. | The new action is `AuthorityHighImpactManual` (WP-M3B-1's `IntrinsicPolicy`), matching the existing `recipe.manual.install_git` pattern exactly — manual instructions only, never an executable `TypedOperation`, since no `OpKind` for "authenticate a CLI" exists or is being added. |
-| **4. ResourceInventory used to bypass the M3B/M3D boundary** | A caller could be tempted to add a "recommended portfolio" field to `ResourceInventory` for convenience, quietly reintroducing M3D logic into M3B. | Explicitly forbidden in §10 (non-goals); `ResourceInventory.Validate()` has no field that could hold a portfolio/selection decision — only observational data and the existing `ProfileRecommendation` (already a label, already reviewed as compliant). |
+| `Doctor.checkStateRoot` | **KEEP** | Pure deterministic inspection of `$DEVCADENCE_HOME` writability and directories. |
+| `Doctor.checkGit` | **KEEP** | Verifies Git presence and version facts without heuristics. |
+| `Doctor.checkHardware` | **KEEP** | Evaluates CPU, memory, and accelerator facts via `environment.AssessBackends`. |
+| `Doctor.checkPrincipalHosts` | **KEEP** | Inspects supported host installations (`antigravity`, `cursor`, `vscode`). |
+| `Doctor.discoverEndpoints` | **KEEP & ADAPT** | Discovers local runtimes, models, and endpoints; adapted to feed `ResourceInventory`. |
+| `Doctor.evaluateReadiness` | **ADAPT** | Removed mandatory dependency on `TargetProfile`/`SelectedProfile`. Readiness is now evaluated from verified base dependencies, viable cognition presence, and scope-specific projections. |
+| `DoctorReport.Validate` | **ADAPT** | Removed requirement that `READY` demands a non-nil `TargetProfile`. |
+| `Doctor.BuildResourceInventory` | **KEEP & EXPAND** | Pure projection building `ResourceInventory`, expanded with `ScopeReadiness` and credential integration. |
+| `ProfileRecommender.Recommend` | **DEPRECATE** | De-authorized from all canonical readiness, routing, and portfolio authority. Retained strictly as an informational UX label generator. |
+| `DeploymentProfile` / `SelectedProfile` | **DEPRECATE** | Deprecated as canonical configuration or routing gate. No longer required for `DoctorReport.Readiness`. |
+| `ProfileAlternative` | **DEPRECATE** | Informational UX description only; not a portfolio decision engine. |
+| `Planner.Plan` finding handlers | **KEEP** | Handles `FindingCodeStateDirsMissing`, `FindingCodeGitNotFound`, and `FindingCodeAuthExpired`. |
+| `Planner.Plan` profile model pulling | **ADAPT** | Model-pull actions triggered by explicit target scope or concrete missing local model, without requiring static profile authority. |
+| `EconomicRegime` / `BudgetPool` / `BudgetState` | **DEFER TO M3C** | M3C owns the deterministic economic and session substrate. |
+| `CognitionPortfolio` / `PortfolioPlanner` / `WorkflowPlan` | **DEFER TO M3D** | M3D owns AI-assisted portfolio and workflow synthesis. |
 
-## 5. Proposed interfaces and types
+---
 
-### 5.1 `protocol.ResourceInventory` (new file `internal/protocol/resource_inventory.go`)
+## 3. Canonical Architecture Boundary (M3B vs M3C vs M3D)
+
+- **M3B (This Milestone):** Deterministic facts, bootstrap, scope-specific readiness, and `ResourceInventory`. Pure function of environment facts and verified probes. Zero AI cognition used. Zero static profile dominance.
+- **M3C:** Deterministic session-driver abstractions, access-channel capability contracts, `EconomicRegime`, `BudgetPool`, dynamic `BudgetState`, and deterministic portfolio validation/activation gates.
+- **M3D:** AI-assisted Portfolio Planner synthesizing `PortfolioRecommendation` from `ResourceInventory` + project requirements + policy + history, and compiling `WorkflowPlan` topologies.
+
+---
+
+## 4. Scope-Specific Readiness Model
+
+Rather than relying solely on a single global boolean or profile-scoped status, readiness is evaluated across 6 orthogonal capabilities:
 
 ```go
-// ResourceInventory is a deterministic, point-in-time snapshot of the
-// facts M3C/M3D's Portfolio Planner will read — never a decision itself
-// (ADR-0014 §92, ADR-0018). It references MachineCapabilityProfile and
-// CognitionEndpointSummary by the same provenance-carrying shapes those
-// types already use (ADR-0011), rather than re-deriving capability
-// grades, and follows ADR-0013's "computed, not persisted" discipline:
-// callers key freshness off MachineFingerprint/ObservedAt exactly as
-// DoctorReport already does.
+type ScopeKind string
+
+const (
+    ScopeCanExecuteSetupPlan       ScopeKind = "can_execute_setup_plan"
+    ScopeHasAnyViableCognitionPath ScopeKind = "has_any_viable_cognition_path"
+    ScopeCanRunLocalInference      ScopeKind = "can_run_local_inference"
+    ScopeLocalModelAvailable       ScopeKind = "local_model_available"
+    ScopeCanUseAuthenticatedCLI    ScopeKind = "can_use_existing_authenticated_cli"
+    ScopePrincipalHostAvailable    ScopeKind = "principal_host_available"
+)
+
+type ScopeReadinessStatus string
+
+const (
+    ScopeStatusReady       ScopeReadinessStatus = "ready"
+    ScopeStatusNotReady    ScopeReadinessStatus = "not_ready"
+    ScopeStatusUnavailable ScopeReadinessStatus = "unavailable"
+    ScopeStatusUnknown     ScopeReadinessStatus = "unknown"
+)
+
+type ScopeReadiness struct {
+    Scope  ScopeKind            `json:"scope"`
+    Status ScopeReadinessStatus `json:"status"`
+    Reason string               `json:"reason"`
+}
+```
+
+### Deterministic Evaluation Rules:
+1. `can_execute_setup_plan`:
+   - `ready`: Git installed, state root exists and is writable.
+   - `not_ready`: State root missing or unwritable, or Git not found (remediable by setup).
+   - `unavailable`: OS or base environment fundamentally unsupported.
+2. `has_any_viable_cognition_path`:
+   - `ready`: At least one endpoint (local runtime, authenticated CLI, or remote API) has `Health == ready`.
+   - `not_ready`: Endpoints are detected but require authentication or configuration.
+   - `unavailable`: No cognition endpoints exist on the machine.
+3. `can_run_local_inference`:
+   - `ready`: At least one local runtime endpoint has `Health == ready` (runtime running + usable model verified).
+   - `not_ready`: Local runtime installed or port listening, but model not pulled or unconfigured.
+   - `unavailable`: No local runtime is installed.
+4. `local_model_available`:
+   - `ready`: Verified local model present on an installed runtime.
+   - `not_ready`: Local runtime installed, but no verified model present.
+   - `unavailable`: No local runtime installed.
+5. `can_use_existing_authenticated_cli`:
+   - `ready`: Coding CLI endpoint has `Health == ready` and `Auth == authenticated`.
+   - `not_ready`: Coding CLI installed, but auth is expired, unauthenticated, or unknown.
+   - `unavailable`: No coding CLI installed.
+6. `principal_host_available`:
+   - `ready`: At least one supported host (Antigravity, Cursor, VSCode) has `Installed == true`.
+   - `unavailable`: No supported host installed.
+
+---
+
+## 5. ResourceInventory Protocol Record
+
+Defined in `internal/protocol/resource_inventory.go`:
+```go
 type ResourceInventory struct {
-    SchemaVersion      SchemaVersion               `json:"schema_version"`
-    InventoryID        string                      `json:"inventory_id"`
-    MachineFingerprint string                      `json:"machine_fingerprint"`
-    ObservedAt         Timestamp                    `json:"observed_at"`
-
-    Hardware           HardwareSummary              `json:"hardware"`
-    CognitionEndpoints []CognitionEndpointSummary   `json:"cognition_endpoints,omitempty"`
-    PrincipalHosts     []PrincipalHostSummary       `json:"principal_hosts,omitempty"`
-    Credentials        []CredentialInventoryEntry   `json:"credentials,omitempty"`
-    Policy             *PolicySummary               `json:"policy,omitempty"`
-}
-
-// HardwareSummary is a compact, non-duplicative projection of
-// EnvironmentFacts (never the full facts struct — those are looked up by
-// MachineFingerprint when needed, per ADR-0013).
-type HardwareSummary struct {
-    OSFamily          OSFamily `json:"os_family"`
-    Arch              string   `json:"arch"`
-    LogicalCores      int      `json:"logical_cores"`
-    TotalMemoryBytes  *int64   `json:"total_memory_bytes,omitempty"`
-    AcceleratorBackends []BackendKind `json:"accelerator_backends,omitempty"` // SupportSupported candidates only
-}
-
-// CredentialInventoryEntry pairs a credential reference with its most
-// recent authentication evidence, both exactly as WP-M3B-4 defined them
-// — no new secret-adjacent field.
-type CredentialInventoryEntry struct {
-    Ref      CredentialRef `json:"ref"`
-    Evidence AuthEvidence  `json:"evidence"`
-}
-
-// PolicySummary is the "available economic/policy metadata" the scope
-// card asks for, at the fidelity that actually exists today
-// (cognition.Policy, WP-M3A) — not the EconomicRegime/BudgetPool types
-// M3C has not built yet. A nil Policy means no active policy override;
-// callers apply cognition.DefaultPolicy() semantics, matching
-// evaluateReadiness's own fallback.
-type PolicySummary struct {
-    MaxSourceExposure SourceExposure `json:"max_source_exposure"`
-    MaxCostClass      CostClass      `json:"max_cost_class"`
+    SchemaVersion      SchemaVersion              `json:"schema_version"`
+    InventoryID        string                     `json:"inventory_id"`
+    MachineFingerprint string                     `json:"machine_fingerprint"`
+    ObservedAt         Timestamp                  `json:"observed_at"`
+    Hardware           HardwareSummary            `json:"hardware"`
+    CognitionEndpoints []CognitionEndpointSummary `json:"cognition_endpoints,omitempty"`
+    PrincipalHosts     []PrincipalHostSummary     `json:"principal_hosts,omitempty"`
+    Credentials        []CredentialInventoryEntry `json:"credentials,omitempty"`
+    Readiness          []ScopeReadiness           `json:"readiness,omitempty"`
+    Policy             *PolicySummary             `json:"policy,omitempty"`
 }
 ```
 
-`RecordKind()` → `"ResourceInventory"`; `RecordID()` → `InventoryID`; `SchemaVer()` → `SchemaVersion`. `Validate()` requires `schema_version`, non-empty `inventory_id`, a sha256-hex `machine_fingerprint` (same regex `DoctorReport` uses), non-zero `observed_at`, and delegates to each nested type's own `Validate()`/`Valid()` (`CredentialRef.Validate()`, `AuthEvidence.Validate()`, `CognitionEndpointSummary`/`PrincipalHostSummary` exactly as `DoctorReport.Validate()` already checks them).
+- Implements `protocol.Record` (`RecordKind() == "ResourceInventory"`).
+- Validated by Draft 2020-12 schema `schemas/resource-inventory.schema.json`.
+- Stable deterministic serialization: scopes always sorted in canonical order.
+- Secret isolation: inherits `$defs/noSecretLike` pattern for all credential references and evidence.
 
-New schema `schemas/resource-inventory.schema.json` (Draft 2020-12, mirrors the Go type field-for-field, the same twin-representation discipline as every other WP-M3B schema), registered in `internal/schema/schema.go`'s `RecordKindToSchema` **and** `AllNames()` (WP-M3B-4's follow-up review caught exactly this omission for `CredentialRef`/`AuthEvidence` — `AllNames()` is added in the same commit as the schema this time, not as a later fix). Fixtures: `fixtures/protocol/resource-inventory.valid.json`, wired into the generic round-trip suite (`tests/schema_fixtures_test.go`) the same way WP-M3B-4's fixtures were.
+---
 
-### 5.2 `Doctor` integration — assembling the inventory and credential wiring
+## 6. Relationship with DoctorReport
 
-A new method on the existing `Doctor` (not a new type — this is data `Doctor.Run` already has in scope):
+- `DoctorReport` is the diagnostic evaluation artifact. It now carries `ScopeReadiness []ScopeReadiness` and an optional `ResourceInventory *ResourceInventory`.
+- `ResourceInventory` is the machine-oriented factual substrate consumed by M3C/M3D.
+- Both are produced by `Doctor` without manufacturing competing facts or re-probing the machine.
 
-```go
-// BuildResourceInventory projects the facts and evidence Run already
-// gathered into a ResourceInventory. It performs no new discovery of its
-// own; it is a pure projection, called from Run after step 5
-// (discoverEndpoints) so it can reuse fingerprint/endpoints/hosts
-// without re-computing them.
-func (d *Doctor) BuildResourceInventory(
-    ctx context.Context,
-    facts protocol.EnvironmentFacts,
-    fingerprint string,
-    endpoints []protocol.CognitionEndpointSummary,
-    hosts []protocol.PrincipalHostSummary,
-    refs []protocol.CredentialRef, // operator-configured references to check, if any
-) (*protocol.ResourceInventory, error)
-```
+---
 
-Credential checking reuses `credentials.Manager.CheckCredential` exactly as WP-M3B-4 built it — `Doctor` gains an optional `*credentials.Manager` field on `DoctorOptions` (nil-safe: no manager means an empty `Credentials` slice, exactly like `d.cognitionService == nil` already short-circuits `discoverEndpoints` today). `Doctor` does not invent its own credential-checking logic.
+## 7. De-authorizing Old Static Deployment Profiles
 
-### 5.3 `Planner` auth-finding coverage (narrow extension, not new architecture)
+- In `Doctor.Run`, `scope.TargetProfile` is no longer defaulted to `recommendation.SelectedProfile`.
+- Canonical readiness does not require a `TargetProfile`.
+- If an operator explicitly provides a `TargetProfile`, profile constraints are checked as an advisory filter, but omitting it yields a valid, evidence-backed `READY` whenever base dependencies and at least one viable cognition path are operational.
+- The static profile chooser is purely an advisory UX label and has no authority over autonomous routing or portfolio synthesis.
 
-`Planner.Plan` gains two more `if` blocks, in the same shape as its existing `FindingCodeGitNotFound` block (`planner.go:180-223`): a `FindingCodeAuthExpired` finding produces one `AuthorityHighImpactManual` manual action per affected endpoint ID (title/description derived from the finding's own `Detail`/`Remediation` text, no new hardcoded provider strings), and `FindingCodeNoCodingEndpoint` is deliberately **not** turned into an action — there is no generic "install and authenticate some coding CLI" operation to plan, and inventing one would cross into recommending a specific provider, which §3's MUST-constraint analysis forbids. This asymmetry is itself the point: `AuthExpired` names a concrete, already-configured endpoint a human can re-authenticate; `NoCodingEndpoint` does not.
+---
 
-## 6. Implementation strategy
+## 8. Invariants & ADR Alignment
 
-1. `internal/protocol/resource_inventory.go` — types + `Validate()` + `Record` methods (§5.1).
-2. `schemas/resource-inventory.schema.json` + `internal/schema/schema.go` registration (`RecordKindToSchema` and `AllNames()` together) + `internal/protocol/protocol.go`'s `NewRecord` case.
-3. `fixtures/protocol/resource-inventory.valid.json` + `tests/schema_fixtures_test.go` wiring.
-4. `Doctor.BuildResourceInventory` (§5.2) + `DoctorOptions.CredentialManager *credentials.Manager` (or equivalent field name) + `DoctorOptions.CredentialRefs []protocol.CredentialRef` (what to check — doctor does not invent credential references of its own).
-5. Wire `BuildResourceInventory`'s result onto `DoctorReport` — either as a new optional `ResourceInventory *protocol.ResourceInventory` field on `DoctorReport` (additive, `omitempty`, no existing field changes) or returned alongside the report from a new `Doctor.RunWithInventory`/an inventory-returning variant of `Run`. Exact shape decided during implementation against what's least disruptive to `Run`'s existing callers (none yet outside tests — confirmed by `grep -rln "\.Run(ctx" internal/setup cmd/ --include=*.go`, to be re-checked at implementation time).
-6. `Planner.Plan`'s two new finding-code blocks (§5.3).
-7. Tests: `ResourceInventory` Go/schema parity (mirroring `TestSchemaSecretPatternParity`'s pattern), `BuildResourceInventory` unit tests (nil manager → empty credentials; a configured ref → its real `CheckCredential` result appears verbatim), `Planner.Plan` auth-finding tests (an `AuthExpired` finding produces exactly one manual action per endpoint; `NoCodingEndpoint` produces none).
+- **ADR-0011 / ADR-0013:** Machine profiles are computed, not persisted. Facts are separated from assessment.
+- **ADR-0014 (§92):** Doctor computes deterministic readiness and ResourceInventory from verified facts. M3B does not solve optimal role/provider allocation with a static pure-function selector.
+- **ADR-0018:** Deterministic ResourceInventory precedes AI recommendation.
+- **DCI-081:** Zero raw secrets in durable records or logs.
+- **DCI-055:** Local model runtimes (Ollama, MLX) treated as peer adapters.
 
-## 7. Acceptance criteria (from the scope card, mapped to this WP's actual remaining work)
+---
 
-- **"fixtures produce stable readiness + ResourceInventory without GPU/runtime/network"** → `ResourceInventory`'s fixture and `BuildResourceInventory`'s nil-manager/no-endpoints path both produce a valid, fully-`Validate()`-passing inventory with empty `CognitionEndpoints`/`Credentials`/no accelerator backends — no field requires a live probe to be non-nil.
-- **"optional resource absence degrades gracefully"** → nil `CredentialManager`, empty `refs`, and no accelerator all produce empty (not error) inventory sections, matching `discoverEndpoints`'s existing `d.cognitionService == nil` pattern.
-- **"stale evidence is reported"** → `ResourceInventory.ObservedAt`/`MachineFingerprint` carry the same staleness signal `DoctorReport`/`MachineCapabilityProfile` already do; no new staleness concept invented.
-- **"provider/model renaming does not create built-in role preference"** → §3's compliance analysis; no provider name appears in any new code this WP adds.
-- **"no cognition endpoint remains a valid deterministic state"** *(scope card wording for: every endpoint must resolve to a concrete state, never an ambiguous default)* → `CredentialInventoryEntry.Evidence.Status` is always one of `AuthEvidenceStatus`'s four closed values (WP-M3B-4's own structural guarantee), never omitted or defaulted silently.
+## 9. Security & Threat Model
 
-## 8. Non-goals
-
-- No `EconomicRegime`/`BudgetPool`/`BudgetState` types (M3C). `PolicySummary` uses only what `cognition.Policy` already provides today.
-- No Portfolio Planner, no scoring, no "best" endpoint selection (M3D/ADR-0018).
-- No rebuild of `planner.go`'s existing directory/Git/model-pull recipe generation.
-- No new public CLI surface (`devcadence doctor --fix` itself is WP-M3B-7's to wire; this WP is service-layer only, per the scope card's own title).
-- No change to `WP-M3B-6`'s territory: whether `planner.go`'s existing recipes fully satisfy WP-M3B-6's "declared registries, immutable digests, sizes, licenses for every operation kind" acceptance criterion is WP-M3B-6's own pre-check to make, not asserted here.
-
-## 9. Escalation conditions
-
-- If `Doctor.Run`'s existing callers (once actually enumerated at implementation time, §6.5) require a non-additive change to accommodate the inventory, stop and record the contradiction rather than silently breaking an existing caller.
-- If `ResourceInventory`'s credential section, once implemented against real `Manager.CheckCredential` output, cannot stay secret-free without weakening WP-M3B-4's guarantees, escalate rather than loosen `LooksLikeSecret`/`AuthEvidence.Validate()` again.
-
-## 10. Base revision
-
-Base commit: `e2e0849` on `feat/m3b-guided-bootstrap` (WP-M3B-4 accepted at `75e65a7`; this commit records that acceptance plus the corrected pre-check, §0a).
-
-## 11. Implementation and deterministic verification summary
-
-Implemented against §6 exactly, with one design refinement made during implementation (§11.1) and one clarification of how `Doctor.Run`'s existing callers were checked (§9's escalation condition never fired — `grep -rln "\.Run(ctx" internal/setup cmd/ --include=*.go` found no caller outside tests, so `BuildResourceInventory` was added as a fully additive new method rather than folded into `Run`/`DoctorReport` itself, keeping the change minimal and reversible).
-
-**New:** `internal/protocol/resource_inventory.go` (`HardwareSummary`, `CredentialInventoryEntry`, `PolicySummary`, `ResourceInventory`, all as specified in §5.1, with `CredentialInventoryEntry.Validate()` additionally enforcing that `Evidence.RefID`/`Evidence.Kind` match `Ref.RefID`/`Ref.Kind` — an integrity check not explicitly spelled out in §5.1 but a direct consequence of "the inventory must not lie about which credential a piece of evidence describes"). `schemas/resource-inventory.schema.json` (Draft 2020-12, `$defs` mirror `credential-ref.schema.json`/`auth-evidence.schema.json` inline, matching `doctor-report.schema.json`'s own precedent of duplicating endpoint/host shapes inline rather than cross-file `$ref`). `internal/schema/schema.go`'s `RecordKindToSchema` and `AllNames()` updated together in the same commit (closing the exact gap WP-M3B-4's follow-up review caught for `CredentialRef`/`AuthEvidence`, this time proactively). `internal/protocol/protocol.go`'s `NewRecord` gained the `ResourceInventory` case. `fixtures/protocol/resource-inventory.valid.json` wired into `tests/schema_fixtures_test.go`'s generic round-trip suite.
-
-**New:** `Doctor.BuildResourceInventory` (`internal/setup/doctor.go`) — a pure projection over `Run`'s own inputs/outputs (facts, fingerprint, endpoints, hosts), plus `DoctorOptions.CredentialManager`/`CredentialRefs`.
-
-**New:** two `Planner.Plan` finding-code blocks (`internal/setup/planner.go`) — `FindingCodeAuthExpired` → one `recipe.manual.reauthenticate` action per affected `DiscoveredEndpoints` entry (not parsed from `Findings` text — sourced directly from the endpoint list, the same source of truth the existing Ollama/MLX blocks already use), gated on `target == TargetAll || target == TargetAuth`; `FindingCodeNoCodingEndpoint` deliberately produces nothing, per §3/§5.3.
-
-### 11.1 Design refinement: malformed configured credential references fail closed, not degrade
-
-§5.2's sketch said a `CheckCredential` error would be "reported as Unavailable evidence rather than dropping the reference silently." Implementing it against `Manager.CheckCredential`'s actual behavior showed this was the wrong choice: `CheckCredential` only ever returns an error for a structurally malformed `CredentialRef` or an unknown `CredentialRefKind` — never for "the credential isn't there" or "the check couldn't be completed," both of which it already reports as a valid `Unavailable`/`Unauthenticated`/`Indeterminate` `AuthEvidence`, not a Go error (WP-M3B-4's own design). A `CheckCredential` error therefore means `DoctorOptions.CredentialRefs` itself is misconfigured — a real bug in whoever constructed the `Doctor`, not a live-environment condition to degrade gracefully around. Fabricating a plausible-looking `Unavailable` evidence entry for a reference that was never actually valid would hide that bug inside data that looks like a normal, successfully-produced observation. `BuildResourceInventory` now returns the error directly (wrapped with the offending `RefID`) instead, per AGENTS.md §16 ("never hide uncertainty... fail closed"). Tests renamed/updated accordingly (`TestBuildResourceInventoryMalformedRefFailsClosed`).
-
-### Deterministic verification results
-
-| Command | Result |
+| Threat Vector | Mitigation |
 |---|---|
-| `go build ./...` | PASS |
-| `go vet ./...` | PASS |
-| `gofmt -l` (every changed file) | clean |
-| `go test -count=1 ./...` | PASS (all 29 packages) |
-| `go test -race ./internal/setup/... ./internal/protocol/... ./internal/credentials/... ./internal/schema/... ./tests/...` | PASS (no races) |
-| `GOOS=windows GOARCH=amd64 go build ./...` | PASS |
-| `GOOS=linux GOARCH=amd64 go build ./...` | PASS |
+| 1. Secret leakage via inventory or report | Inventory uses opaque `CredentialRef` and `AuthEvidence`. All fields validate against `LooksLikeSecret` and `$defs/noSecretLike`. |
+| 2. Stale inventory accepted as current | Inventory carries `machine_fingerprint` and `observed_at`. Callers verify fingerprint freshness. |
+| 3. Auth probe privilege escalation | Manual re-authenticate actions are strictly `AuthorityHighImpactManual`. |
+| 4. Old profile recommender quietly acts as authority | Canonical readiness decoupled from `SelectedProfile`. Validation allows `READY` without a target profile. |
 
-New tests: `TestResourceInventoryValidation`, `TestResourceInventoryValidation_MissingFields`, `TestResourceInventoryValidation_CognitionEndpoints`, `TestResourceInventoryValidation_PrincipalHosts`, `TestResourceInventoryValidation_Policy`, `TestResourceInventoryValidation_CredentialEntryBinding`, `TestResourceInventorySchemaParity` (`internal/protocol`); `TestBuildResourceInventoryNilCredentialManagerDegradesGracefully`, `TestBuildResourceInventoryChecksConfiguredCredentials`, `TestBuildResourceInventoryMalformedRefFailsClosed`, `TestBuildResourceInventoryProjectsPolicy` (`internal/setup`); `TestPlannerGeneratesReauthenticateActionForExpiredEndpoint`, `TestPlannerDoesNotActionNoCodingEndpointFinding` (`internal/setup`).
+---
 
-**Disposition:** implemented, not yet independently reviewed. Not marking `accepted`.
+## 10. Failure & Degradation Semantics
+
+- Missing GPU/acceleration: Degrades to CPU backend; `can_run_local_inference` remains ready if CPU is viable.
+- Missing local runtime: `can_run_local_inference` is `unavailable`; does not invalidate authenticated CLIs.
+- Missing credentials: Empty credential section; does not fail doctor execution.
+- Malformed configured reference: Fails closed with `InvalidArgument` rather than fabricating evidence.
+
+---
+
+## 11. Schema & Protocol Discipline
+
+- `schemas/resource-inventory.schema.json` updated with `$defs/scope_readiness` and `readiness` array.
+- `schemas/doctor-report.schema.json` updated with optional `scope_readiness` and `resource_inventory`.
+- `fixtures/protocol/resource-inventory.valid.json` updated with canonical `readiness`.
+- `internal/schema/schema.go` registered in `RecordKindToSchema` and `AllNames()`.
+- Full round-trip tests in `tests/schema_fixtures_test.go`.
+
+---
+
+## 12. Required 20-Scenario Verification Matrix
+
+1. **Blank machine:** No Git, no runtimes, no CLIs, no hosts -> `can_execute_setup_plan: not_ready`, all cognition scopes `unavailable`, report `ACTION_REQUIRED`.
+2. **CPU-only machine:** Supported CPU backend, no GPU -> `HardwareSummary` reports CPU backend, graceful operation.
+3. **Local runtime installed but no model:** Ollama running, no model pulled -> `can_run_local_inference: not_ready`, `local_model_available: not_ready`.
+4. **Local runtime + verified usable model:** Ready model -> `can_run_local_inference: ready`, `local_model_available: ready`.
+5. **Authenticated CLI with no local inference:** Ready Claude/Codex CLI -> `can_use_existing_authenticated_cli: ready`, `can_run_local_inference: unavailable`, `has_any_viable_cognition_path: ready`.
+6. **Installed CLI but authentication unknown:** Unverified probe -> `can_use_existing_authenticated_cli: not_ready` or `unknown`.
+7. **Credential env var present but unverified:** Indeterminate status -> valid inventory entry, CLI auth not assumed.
+8. **Unsupported keychain backend:** `UnsupportedKeychainChecker` returns `unavailable` -> inventory captures evidence without failing doctor.
+9. **Multiple cognition endpoints:** Mix of local and remote -> all summarized in inventory.
+10. **No cognition endpoint:** Valid deterministic state -> `has_any_viable_cognition_path: unavailable`, report `PARTIALLY_READY`.
+11. **Principal host present vs absent:** Antigravity/Cursor/VSCode installed -> `principal_host_available: ready` vs `unavailable`.
+12. **Runtime present but acceleration unavailable:** Unverified acceleration -> warning finding, graceful degradation.
+13. **Partially stale evidence:** `stale_inference_retained` -> `READY_WITH_REDUCED_CAPABILITY`.
+14. **One capability unavailable without invalidating others:** Missing local runtime does not block ready remote CLI.
+15. **Deterministic ordering:** Scopes always sorted canonically; stable JSON serialization.
+16. **No secret material in serialized outputs:** Inspected with `LooksLikeSecret`.
+17. **Go/schema parity:** Round-trip and negative parity tests pass.
+18. **Windows cross-compilation:** `GOOS=windows GOARCH=amd64 go build ./...` passes clean.
+19. **Order independence:** ResourceInventory produced identically regardless of map or endpoint ordering.
+20. **Static profile de-authorization:** `SelectedProfile` nil or non-matching does not block `READY` when capabilities exist; target profile nil produces `READY` without setting `SelectedProfile`.
+
+---
+
+## 13. Acceptance Criteria
+
+- All 20 scenarios verified with automated deterministic unit and integration tests.
+- Zero reliance on static deployment profile chooser for canonical readiness.
+- No secrets in ResourceInventory or DoctorReport.
+- Clean Go build, vet, test, race, and Windows cross-compilation.
