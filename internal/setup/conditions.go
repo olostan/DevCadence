@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/olostan/DevCadence/internal/credentials"
 	"github.com/olostan/DevCadence/internal/errs"
 	"github.com/olostan/DevCadence/internal/process"
 	"github.com/olostan/DevCadence/internal/protocol"
@@ -53,6 +54,61 @@ type EndpointHealthChecker interface {
 // assuming true (independent-review follow-up on WP-M3B-5, finding 6).
 type EndpointAuthChecker interface {
 	CheckEndpointAuthenticated(ctx context.Context, endpointID string) (authenticated bool, detail string, err error)
+}
+
+// CredentialsEndpointAuthChecker verifies endpoint authentication by delegating to a
+// credentials.Manager (the WP-M3B-4 credential and auth-evidence authority).
+type CredentialsEndpointAuthChecker struct {
+	manager *credentials.Manager
+}
+
+// NewCredentialsEndpointAuthChecker constructs an EndpointAuthChecker backed by the
+// WP-M3B-4 credential manager.
+func NewCredentialsEndpointAuthChecker(mgr *credentials.Manager) *CredentialsEndpointAuthChecker {
+	return &CredentialsEndpointAuthChecker{manager: mgr}
+}
+
+// CheckEndpointAuthenticated evaluates authentication for endpointID using the configured credentials.Manager.
+func (c *CredentialsEndpointAuthChecker) CheckEndpointAuthenticated(ctx context.Context, endpointID string) (bool, string, error) {
+	if c == nil || c.manager == nil {
+		return false, "no credential manager configured", nil
+	}
+	locators := []string{endpointID}
+	if trimmed := strings.TrimPrefix(endpointID, "cli:"); trimmed != endpointID {
+		locators = append(locators, trimmed)
+	}
+
+	var lastDetail string
+	for _, loc := range locators {
+		refID := "check-auth-" + loc
+		if len(refID) > 128 {
+			refID = refID[:128]
+		}
+		ref := protocol.CredentialRef{
+			SchemaVersion: protocol.SchemaVersion1,
+			RefID:         refID,
+			Kind:          protocol.CredRefCLISession,
+			Locator:       loc,
+		}
+		if err := ref.Validate(); err != nil {
+			continue
+		}
+		evidence, err := c.manager.CheckCredential(ctx, ref)
+		if err != nil {
+			return false, "", err
+		}
+		if evidence.Status == protocol.AuthStatusAuthenticated {
+			return true, evidence.Detail, nil
+		}
+		lastDetail = evidence.Detail
+		if evidence.Status != protocol.AuthStatusIndeterminate || evidence.Detail != "no auth probe adapter available for CLI locator" {
+			return false, evidence.Detail, nil
+		}
+	}
+	if lastDetail != "" {
+		return false, lastDetail, nil
+	}
+	return false, "no auth probe adapter available for endpoint", nil
 }
 
 // EvaluatorDeps supplies EvaluateCondition's live dependencies.

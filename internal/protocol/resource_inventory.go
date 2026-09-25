@@ -92,7 +92,7 @@ func EndpointViable(kind EndpointKind, locality Locality, health EndpointHealth,
 	if health != EndpointHealthReady {
 		return false
 	}
-	if kind == EndpointLocalRuntime || locality == LocalityLocal {
+	if kind == EndpointLocalRuntime {
 		return true
 	}
 	return auth == AuthAuthenticated || auth == AuthNotApplicable
@@ -407,6 +407,10 @@ func (r *ResourceInventory) Validate() error {
 	if err := r.Hardware.Validate(); err != nil {
 		return err
 	}
+	if len(r.CognitionEndpoints) > 0 && r.Profile == nil {
+		return errs.New(errs.CategoryInvalidArgument,
+			"%s: profile reference is required when cognition endpoints are present to preserve runtime/model and capability provenance", kind)
+	}
 	if r.Profile != nil {
 		if err := r.Profile.Validate(); err != nil {
 			return err
@@ -417,20 +421,35 @@ func (r *ResourceInventory) Validate() error {
 				kind, r.Profile.MachineFingerprint, r.MachineFingerprint)
 		}
 	}
+	seenEndpoints := make(map[string]bool, len(r.CognitionEndpoints))
 	for _, ep := range r.CognitionEndpoints {
 		if err := ep.Validate(); err != nil {
 			return err
 		}
+		if seenEndpoints[ep.ID] {
+			return errs.New(errs.CategoryInvalidArgument, "%s: duplicate endpoint %q in cognition_endpoints", kind, ep.ID)
+		}
+		seenEndpoints[ep.ID] = true
 	}
+	seenHosts := make(map[string]bool, len(r.PrincipalHosts))
 	for _, h := range r.PrincipalHosts {
 		if err := h.Validate(); err != nil {
 			return err
 		}
+		if seenHosts[h.HostID] {
+			return errs.New(errs.CategoryInvalidArgument, "%s: duplicate host %q in principal_hosts", kind, h.HostID)
+		}
+		seenHosts[h.HostID] = true
 	}
+	seenCreds := make(map[string]bool, len(r.Credentials))
 	for _, c := range r.Credentials {
 		if err := c.Validate(); err != nil {
 			return err
 		}
+		if seenCreds[c.Ref.RefID] {
+			return errs.New(errs.CategoryInvalidArgument, "%s: duplicate credential ref_id %q in credentials", kind, c.Ref.RefID)
+		}
+		seenCreds[c.Ref.RefID] = true
 	}
 	seenScopes := make(map[ScopeKind]bool, len(r.Readiness))
 	for _, rd := range r.Readiness {

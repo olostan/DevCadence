@@ -459,6 +459,21 @@ func (e CognitionEndpointSummary) Validate() error {
 			"%s: endpoint %q is %s and cannot report verified local acceleration",
 			kind, e.ID, e.Locality)
 	}
+	if e.Kind == EndpointLocalRuntime && e.Locality != LocalityLocal {
+		return errs.New(errs.CategoryInvalidArgument,
+			"%s: endpoint %q is local_runtime but has locality %q; local runtimes must be local",
+			kind, e.ID, e.Locality)
+	}
+	if e.Kind == EndpointLocalRuntime && e.Auth != AuthNotApplicable && e.Auth != AuthUnknown {
+		return errs.New(errs.CategoryInvalidArgument,
+			"%s: endpoint %q is a local runtime with auth_status %s; local runtimes have no account",
+			kind, e.ID, e.Auth)
+	}
+	if e.Kind == EndpointRemoteAPI && e.Locality == LocalityLocal {
+		return errs.New(errs.CategoryInvalidArgument,
+			"%s: endpoint %q is remote_api but has locality local; remote APIs cannot be local",
+			kind, e.ID)
+	}
 	return nil
 }
 

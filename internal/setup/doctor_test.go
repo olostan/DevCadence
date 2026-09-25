@@ -9,6 +9,7 @@ import (
 
 	"github.com/olostan/DevCadence/internal/clock"
 	"github.com/olostan/DevCadence/internal/cognition"
+	"github.com/olostan/DevCadence/internal/environment"
 	"github.com/olostan/DevCadence/internal/ids"
 	"github.com/olostan/DevCadence/internal/protocol"
 )
@@ -428,7 +429,6 @@ func TestDoctorCachedInferenceEvidenceMergedAndPreserved(t *testing.T) {
 		t.Fatalf("NewCacheManager: %v", err)
 	}
 
-	fingerprint := "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 	facts := protocol.EnvironmentFacts{
 		Host: protocol.HostFacts{
 			Family: protocol.OSDarwin,
@@ -437,6 +437,10 @@ func TestDoctorCachedInferenceEvidenceMergedAndPreserved(t *testing.T) {
 		Virtualization: protocol.VirtualizationFacts{
 			Container: protocol.ContainerNone,
 		},
+	}
+	fingerprint, err := environment.Fingerprint(facts)
+	if err != nil {
+		t.Fatalf("Fingerprint: %v", err)
 	}
 
 	// Prime the cache with verified acceleration and evaluated implementation capability
@@ -598,5 +602,270 @@ func TestDoctorCachedInferenceEvidenceMergedAndPreserved(t *testing.T) {
 	}
 	if statusExpired2 != "stale_inference_retained" {
 		t.Fatalf("expected evidenceStatus stale_inference_retained on second run, got %q", statusExpired2)
+	}
+}
+
+func doctorE2ETestSetup(t *testing.T, now time.Time, endpoints []protocol.CognitionEndpoint) (*Doctor, protocol.EnvironmentFacts, protocol.ReadinessEvaluationScope) {
+	t.Helper()
+	tmpHome := t.TempDir()
+	for _, sub := range []string{"state", filepath.Join("artifacts", "setup"), "tmp"} {
+		if err := os.MkdirAll(filepath.Join(tmpHome, sub), 0700); err != nil {
+			t.Fatalf("setup state dir %s: %v", sub, err)
+		}
+	}
+
+	clk := clock.NewFake(now, 0)
+	seq := ids.NewSequential()
+
+	stub := &stubCognitionAdapter{endpoints: endpoints}
+	service, err := cognition.NewService(cognition.Options{
+		Adapters: []cognition.Adapter{stub},
+		Clock:    clk,
+		IDs:      seq,
+	})
+	if err != nil {
+		t.Fatalf("cognition.NewService: %v", err)
+	}
+
+	doc, err := NewDoctor(DoctorOptions{
+		Clock:            clk,
+		IDs:              seq,
+		HomeDir:          tmpHome,
+		CognitionService: service,
+	})
+	if err != nil {
+		t.Fatalf("NewDoctor: %v", err)
+	}
+
+	facts := protocol.EnvironmentFacts{
+		Host: protocol.HostFacts{
+			Family: protocol.OSDarwin,
+			Arch:   "arm64",
+		},
+		CPU: protocol.CPUFacts{},
+		Memory: protocol.MemoryFacts{
+			TotalBytes: int64Ptr(32 * 1024 * 1024 * 1024),
+		},
+		Virtualization: protocol.VirtualizationFacts{
+			Container: protocol.ContainerNone,
+		},
+		Software: []protocol.SoftwarePresence{
+			{ID: "git", Category: protocol.SoftwareEngineering, Installed: true, Version: "2.45.0"},
+		},
+	}
+
+	targetProfile := protocol.ProfileCustom
+	scope := protocol.ReadinessEvaluationScope{
+		TargetProfile:  &targetProfile,
+		RequiredRoles:  []string{"implementation"},
+		EvidenceStatus: "live",
+	}
+
+	return doc, facts, scope
+}
+
+func hasFinding(findings []protocol.DiagnosticFinding, code string) bool {
+	for _, f := range findings {
+		if f.Code == code {
+			return true
+		}
+	}
+	return false
+}
+
+func getScopeStatus(readiness []protocol.ScopeReadiness, scope protocol.ScopeKind) protocol.ScopeReadinessStatus {
+	for _, r := range readiness {
+		if r.Scope == scope {
+			return r.Status
+		}
+	}
+	return ""
+}
+
+func TestDoctorRun_HealthReadyExpiredAuthCLI(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 9, 25, 12, 0, 0, 0, time.UTC)
+	endpoint := protocol.CognitionEndpoint{
+		ID:                     "cli:claude",
+		Kind:                   protocol.EndpointAuthenticatedCLI,
+		Locality:               protocol.LocalityLocal,
+		Health:                 protocol.EndpointHealthReady,
+		Auth:                   protocol.AuthExpired,
+		CostClass:              protocol.CostUnknown,
+		RequiredSourceExposure: protocol.ExposureLocalOnly,
+		StructuredOutput:       protocol.FeatureDeclared,
+		ToolUse:                protocol.FeatureDeclared,
+		ObservedAt:             protocol.NewTimestamp(now),
+	}
+
+	doc, facts, scope := doctorE2ETestSetup(t, now, []protocol.CognitionEndpoint{endpoint})
+	report, err := doc.Run(ctx, scope, facts)
+	if err != nil {
+		t.Fatalf("doc.Run: %v", err)
+	}
+	if err := report.Validate(); err != nil {
+		t.Fatalf("report validation: %v", err)
+	}
+
+	if !hasFinding(report.Findings, FindingCodeAuthExpired) {
+		t.Errorf("expected finding %s for expired CLI", FindingCodeAuthExpired)
+	}
+	if !hasFinding(report.Findings, FindingCodeNoCodingEndpoint) {
+		t.Errorf("expected finding %s when only coding endpoint has expired auth", FindingCodeNoCodingEndpoint)
+	}
+	if hasFinding(report.Findings, FindingCodeEndpointReady) {
+		t.Errorf("expected endpoint %s with expired auth NOT to emit %s", endpoint.ID, FindingCodeEndpointReady)
+	}
+
+	if s := getScopeStatus(report.ScopeReadiness, protocol.ScopeHasAnyViableCognitionPath); s != protocol.ScopeStatusNotReady {
+		t.Errorf("report scope has_any_viable_cognition_path = %q, want not_ready", s)
+	}
+	if s := getScopeStatus(report.ScopeReadiness, protocol.ScopeCanUseAuthenticatedCLI); s != protocol.ScopeStatusNotReady {
+		t.Errorf("report scope can_use_existing_authenticated_cli = %q, want not_ready", s)
+	}
+
+	if report.ResourceInventory == nil {
+		t.Fatal("expected ResourceInventory to be populated")
+	}
+	if s := getScopeStatus(report.ResourceInventory.Readiness, protocol.ScopeHasAnyViableCognitionPath); s != protocol.ScopeStatusNotReady {
+		t.Errorf("inventory scope has_any_viable_cognition_path = %q, want not_ready", s)
+	}
+}
+
+func TestDoctorRun_HealthReadyUnknownAuthCLI(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 9, 25, 12, 0, 0, 0, time.UTC)
+	endpoint := protocol.CognitionEndpoint{
+		ID:                     "cli:codex",
+		Kind:                   protocol.EndpointAuthenticatedCLI,
+		Locality:               protocol.LocalityLocal,
+		Health:                 protocol.EndpointHealthReady,
+		Auth:                   protocol.AuthUnknown,
+		CostClass:              protocol.CostUnknown,
+		RequiredSourceExposure: protocol.ExposureLocalOnly,
+		StructuredOutput:       protocol.FeatureDeclared,
+		ToolUse:                protocol.FeatureDeclared,
+		ObservedAt:             protocol.NewTimestamp(now),
+	}
+
+	doc, facts, scope := doctorE2ETestSetup(t, now, []protocol.CognitionEndpoint{endpoint})
+	report, err := doc.Run(ctx, scope, facts)
+	if err != nil {
+		t.Fatalf("doc.Run: %v", err)
+	}
+	if err := report.Validate(); err != nil {
+		t.Fatalf("report validation: %v", err)
+	}
+
+	if !hasFinding(report.Findings, FindingCodeAuthUnknown) {
+		t.Errorf("expected finding %s for CLI with unknown auth", FindingCodeAuthUnknown)
+	}
+	if !hasFinding(report.Findings, FindingCodeNoCodingEndpoint) {
+		t.Errorf("expected finding %s when only coding endpoint has unknown auth", FindingCodeNoCodingEndpoint)
+	}
+	if hasFinding(report.Findings, FindingCodeEndpointReady) {
+		t.Errorf("expected endpoint %s with unknown auth NOT to emit %s", endpoint.ID, FindingCodeEndpointReady)
+	}
+
+	if s := getScopeStatus(report.ScopeReadiness, protocol.ScopeHasAnyViableCognitionPath); s != protocol.ScopeStatusUnknown {
+		t.Errorf("report scope has_any_viable_cognition_path = %q, want unknown", s)
+	}
+	if s := getScopeStatus(report.ScopeReadiness, protocol.ScopeCanUseAuthenticatedCLI); s != protocol.ScopeStatusUnknown {
+		t.Errorf("report scope can_use_existing_authenticated_cli = %q, want unknown", s)
+	}
+}
+
+func TestDoctorRun_LocalRuntimeReady(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 9, 25, 12, 0, 0, 0, time.UTC)
+	endpoint := protocol.CognitionEndpoint{
+		ID:                     "ollama_local",
+		Kind:                   protocol.EndpointLocalRuntime,
+		Locality:               protocol.LocalityLocal,
+		Health:                 protocol.EndpointHealthReady,
+		Auth:                   protocol.AuthNotApplicable,
+		CostClass:              protocol.CostLocalCompute,
+		RequiredSourceExposure: protocol.ExposureLocalOnly,
+		StructuredOutput:       protocol.FeatureDeclared,
+		ToolUse:                protocol.FeatureDeclared,
+		ObservedAt:             protocol.NewTimestamp(now),
+	}
+
+	doc, facts, scope := doctorE2ETestSetup(t, now, []protocol.CognitionEndpoint{endpoint})
+	report, err := doc.Run(ctx, scope, facts)
+	if err != nil {
+		t.Fatalf("doc.Run: %v", err)
+	}
+	if err := report.Validate(); err != nil {
+		t.Fatalf("report validation: %v", err)
+	}
+
+	if !hasFinding(report.Findings, FindingCodeEndpointReady) {
+		t.Errorf("expected finding %s for ready local runtime endpoint", FindingCodeEndpointReady)
+	}
+	if hasFinding(report.Findings, FindingCodeNoCodingEndpoint) {
+		t.Errorf("expected finding %s NOT to be emitted when local runtime is ready", FindingCodeNoCodingEndpoint)
+	}
+
+	if s := getScopeStatus(report.ScopeReadiness, protocol.ScopeHasAnyViableCognitionPath); s != protocol.ScopeStatusReady {
+		t.Errorf("report scope has_any_viable_cognition_path = %q, want ready", s)
+	}
+	if s := getScopeStatus(report.ScopeReadiness, protocol.ScopeCanRunLocalInference); s != protocol.ScopeStatusReady {
+		t.Errorf("report scope can_run_local_inference = %q, want ready", s)
+	}
+}
+
+func TestDoctorRun_MixedUnusableRemoteAndUsableLocal(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 9, 25, 12, 0, 0, 0, time.UTC)
+	remoteEndpoint := protocol.CognitionEndpoint{
+		ID:                     "anthropic_api",
+		Kind:                   protocol.EndpointRemoteAPI,
+		Locality:               protocol.LocalityRemote,
+		Health:                 protocol.EndpointHealthReady,
+		Auth:                   protocol.AuthUnauthenticated,
+		CostClass:              protocol.CostRemoteEconomy,
+		RequiredSourceExposure: protocol.ExposureLocalOnly,
+		StructuredOutput:       protocol.FeatureDeclared,
+		ToolUse:                protocol.FeatureDeclared,
+		ObservedAt:             protocol.NewTimestamp(now),
+	}
+	localEndpoint := protocol.CognitionEndpoint{
+		ID:                     "ollama_local",
+		Kind:                   protocol.EndpointLocalRuntime,
+		Locality:               protocol.LocalityLocal,
+		Health:                 protocol.EndpointHealthReady,
+		Auth:                   protocol.AuthNotApplicable,
+		CostClass:              protocol.CostLocalCompute,
+		RequiredSourceExposure: protocol.ExposureLocalOnly,
+		StructuredOutput:       protocol.FeatureDeclared,
+		ToolUse:                protocol.FeatureDeclared,
+		ObservedAt:             protocol.NewTimestamp(now),
+	}
+
+	doc, facts, scope := doctorE2ETestSetup(t, now, []protocol.CognitionEndpoint{remoteEndpoint, localEndpoint})
+	report, err := doc.Run(ctx, scope, facts)
+	if err != nil {
+		t.Fatalf("doc.Run: %v", err)
+	}
+	if err := report.Validate(); err != nil {
+		t.Fatalf("report validation: %v", err)
+	}
+
+	if !hasFinding(report.Findings, FindingCodeAuthUnauthenticated) {
+		t.Errorf("expected finding %s for unauthenticated remote endpoint", FindingCodeAuthUnauthenticated)
+	}
+	if !hasFinding(report.Findings, FindingCodeEndpointReady) {
+		t.Errorf("expected finding %s for ready local endpoint", FindingCodeEndpointReady)
+	}
+	if hasFinding(report.Findings, FindingCodeNoCodingEndpoint) {
+		t.Errorf("expected finding %s NOT to be emitted when at least one endpoint is viable", FindingCodeNoCodingEndpoint)
+	}
+
+	if s := getScopeStatus(report.ScopeReadiness, protocol.ScopeHasAnyViableCognitionPath); s != protocol.ScopeStatusReady {
+		t.Errorf("report scope has_any_viable_cognition_path = %q, want ready", s)
+	}
+	if s := getScopeStatus(report.ScopeReadiness, protocol.ScopeCanRunLocalInference); s != protocol.ScopeStatusReady {
+		t.Errorf("report scope can_run_local_inference = %q, want ready", s)
 	}
 }

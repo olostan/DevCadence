@@ -79,13 +79,6 @@ func TestResourceInventoryValidation_CognitionEndpoints(t *testing.T) {
 	}
 
 	inv.CognitionEndpoints = []protocol.CognitionEndpointSummary{
-		{ID: "ep-1", Kind: "not-a-real-kind"},
-	}
-	if err := inv.Validate(); err == nil {
-		t.Fatal("expected error for endpoint with invalid kind")
-	}
-
-	inv.CognitionEndpoints = []protocol.CognitionEndpointSummary{
 		{
 			ID:                     "ollama:small",
 			Kind:                   protocol.EndpointLocalRuntime,
@@ -96,8 +89,26 @@ func TestResourceInventoryValidation_CognitionEndpoints(t *testing.T) {
 			RequiredSourceExposure: protocol.ExposureLocalOnly,
 		},
 	}
+	// Profile reference is required when cognition endpoints are present
+	if err := inv.Validate(); err == nil {
+		t.Fatal("expected error when cognition endpoints are present but profile is nil")
+	}
+
+	inv.Profile = &protocol.MachineProfileRef{
+		ProfileID:          "mcp-001",
+		MachineFingerprint: inv.MachineFingerprint,
+		ObservedAt:         validTestTimestamp(),
+		ProbeDepth:         protocol.DepthHealth,
+	}
 	if err := inv.Validate(); err != nil {
-		t.Fatalf("expected valid endpoint to pass, got: %v", err)
+		t.Fatalf("expected valid endpoint and profile to pass, got: %v", err)
+	}
+
+	inv.CognitionEndpoints = []protocol.CognitionEndpointSummary{
+		{ID: "ep-1", Kind: "not-a-real-kind"},
+	}
+	if err := inv.Validate(); err == nil {
+		t.Fatal("expected error for endpoint with invalid kind")
 	}
 }
 
@@ -187,6 +198,12 @@ func TestResourceInventorySchemaParity(t *testing.T) {
 		{"minimal valid", validResourceInventory()},
 		{"with endpoints/hosts/policy", func() protocol.ResourceInventory {
 			i := validResourceInventory()
+			i.Profile = &protocol.MachineProfileRef{
+				ProfileID:          "mcp-001",
+				MachineFingerprint: i.MachineFingerprint,
+				ObservedAt:         validTestTimestamp(),
+				ProbeDepth:         protocol.DepthHealth,
+			}
 			i.CognitionEndpoints = []protocol.CognitionEndpointSummary{
 				{ID: "ollama:small", Kind: protocol.EndpointLocalRuntime, Locality: protocol.LocalityLocal,
 					Health: protocol.EndpointHealthReady, Auth: protocol.AuthNotApplicable,
@@ -241,6 +258,101 @@ func TestResourceInventorySchemaParity(t *testing.T) {
 				Evidence: protocol.AuthEvidence{SchemaVersion: protocol.SchemaVersion1, RefID: "cred-1", Kind: protocol.CredRefEnvVar,
 					Status: protocol.AuthStatusIndeterminate, ProbeKind: protocol.AuthProbeCLIAuthCall, ObservedAt: validTestTimestamp()},
 			}}
+			return i
+		}()},
+		{"remote endpoint claiming verified acceleration", func() protocol.ResourceInventory {
+			i := validResourceInventory()
+			i.Profile = &protocol.MachineProfileRef{
+				ProfileID:          "mcp-001",
+				MachineFingerprint: i.MachineFingerprint,
+				ObservedAt:         validTestTimestamp(),
+				ProbeDepth:         protocol.DepthHealth,
+			}
+			backend := protocol.BackendCUDA
+			i.CognitionEndpoints = []protocol.CognitionEndpointSummary{
+				{
+					ID:                     "remote-ep",
+					Kind:                   protocol.EndpointRemoteAPI,
+					Locality:               protocol.LocalityRemote,
+					Health:                 protocol.EndpointHealthReady,
+					Auth:                   protocol.AuthAuthenticated,
+					CostClass:              protocol.CostRemoteEconomy,
+					RequiredSourceExposure: protocol.ExposureLocalOnly,
+					AccelerationVerified:   true,
+					AccelerationBackend:    &backend,
+				},
+			}
+			return i
+		}()},
+		{"local runtime with remote locality", func() protocol.ResourceInventory {
+			i := validResourceInventory()
+			i.Profile = &protocol.MachineProfileRef{
+				ProfileID:          "mcp-001",
+				MachineFingerprint: i.MachineFingerprint,
+				ObservedAt:         validTestTimestamp(),
+				ProbeDepth:         protocol.DepthHealth,
+			}
+			i.CognitionEndpoints = []protocol.CognitionEndpointSummary{
+				{
+					ID:                     "ollama-remote",
+					Kind:                   protocol.EndpointLocalRuntime,
+					Locality:               protocol.LocalityRemote,
+					Health:                 protocol.EndpointHealthReady,
+					Auth:                   protocol.AuthNotApplicable,
+					CostClass:              protocol.CostLocalCompute,
+					RequiredSourceExposure: protocol.ExposureLocalOnly,
+				},
+			}
+			return i
+		}()},
+		{"duplicate scope readiness", func() protocol.ResourceInventory {
+			i := validResourceInventory()
+			i.Readiness = []protocol.ScopeReadiness{
+				{Scope: protocol.ScopeCanRunLocalInference, Status: protocol.ScopeStatusReady, Reason: "ready"},
+				{Scope: protocol.ScopeCanRunLocalInference, Status: protocol.ScopeStatusNotReady, Reason: "duplicate"},
+			}
+			return i
+		}()},
+		{"duplicate endpoint summaries", func() protocol.ResourceInventory {
+			i := validResourceInventory()
+			i.Profile = &protocol.MachineProfileRef{
+				ProfileID:          "mcp-001",
+				MachineFingerprint: i.MachineFingerprint,
+				ObservedAt:         validTestTimestamp(),
+				ProbeDepth:         protocol.DepthHealth,
+			}
+			ep := protocol.CognitionEndpointSummary{
+				ID:                     "ollama:small",
+				Kind:                   protocol.EndpointLocalRuntime,
+				Locality:               protocol.LocalityLocal,
+				Health:                 protocol.EndpointHealthReady,
+				Auth:                   protocol.AuthNotApplicable,
+				CostClass:              protocol.CostLocalCompute,
+				RequiredSourceExposure: protocol.ExposureLocalOnly,
+			}
+			i.CognitionEndpoints = []protocol.CognitionEndpointSummary{ep, ep}
+			return i
+		}()},
+		{"duplicate host summaries", func() protocol.ResourceInventory {
+			i := validResourceInventory()
+			h := protocol.PrincipalHostSummary{HostID: "vscode", Installed: true}
+			i.PrincipalHosts = []protocol.PrincipalHostSummary{h, h}
+			return i
+		}()},
+		{"missing profile when cognition endpoints present", func() protocol.ResourceInventory {
+			i := validResourceInventory()
+			i.Profile = nil
+			i.CognitionEndpoints = []protocol.CognitionEndpointSummary{
+				{
+					ID:                     "ollama:small",
+					Kind:                   protocol.EndpointLocalRuntime,
+					Locality:               protocol.LocalityLocal,
+					Health:                 protocol.EndpointHealthReady,
+					Auth:                   protocol.AuthNotApplicable,
+					CostClass:              protocol.CostLocalCompute,
+					RequiredSourceExposure: protocol.ExposureLocalOnly,
+				},
+			}
 			return i
 		}()},
 	}
@@ -335,4 +447,297 @@ func scopeStatus(readiness []protocol.ScopeReadiness, scope protocol.ScopeKind) 
 		}
 	}
 	return ""
+}
+
+func TestResourceInventoryValidation_DuplicateIDs(t *testing.T) {
+	t.Run("duplicate endpoint ID with different fields", func(t *testing.T) {
+		inv := validResourceInventory()
+		inv.Profile = &protocol.MachineProfileRef{
+			ProfileID:          "mcp-001",
+			MachineFingerprint: inv.MachineFingerprint,
+			ObservedAt:         validTestTimestamp(),
+			ProbeDepth:         protocol.DepthHealth,
+		}
+		inv.CognitionEndpoints = []protocol.CognitionEndpointSummary{
+			{
+				ID:                     "ep-1",
+				Kind:                   protocol.EndpointLocalRuntime,
+				Locality:               protocol.LocalityLocal,
+				Health:                 protocol.EndpointHealthReady,
+				Auth:                   protocol.AuthNotApplicable,
+				CostClass:              protocol.CostLocalCompute,
+				RequiredSourceExposure: protocol.ExposureLocalOnly,
+			},
+			{
+				ID:                     "ep-1",
+				Kind:                   protocol.EndpointLocalRuntime,
+				Locality:               protocol.LocalityLocal,
+				Health:                 protocol.EndpointHealthUnhealthy,
+				Auth:                   protocol.AuthNotApplicable,
+				CostClass:              protocol.CostLocalCompute,
+				RequiredSourceExposure: protocol.ExposureLocalOnly,
+			},
+		}
+		if err := inv.Validate(); err == nil {
+			t.Fatal("expected error for duplicate endpoint ID in CognitionEndpoints")
+		}
+	})
+
+	t.Run("duplicate principal host ID with different fields", func(t *testing.T) {
+		inv := validResourceInventory()
+		inv.PrincipalHosts = []protocol.PrincipalHostSummary{
+			{HostID: "vscode", Installed: true, Path: "/usr/bin/code"},
+			{HostID: "vscode", Installed: false, Path: "/usr/local/bin/code"},
+		}
+		if err := inv.Validate(); err == nil {
+			t.Fatal("expected error for duplicate host ID in PrincipalHosts")
+		}
+	})
+
+	t.Run("duplicate credential ref_id with different evidence", func(t *testing.T) {
+		inv := validResourceInventory()
+		ref1 := protocol.CredentialRef{
+			SchemaVersion: protocol.SchemaVersion1,
+			RefID:         "cred-claude",
+			Kind:          protocol.CredRefCLISession,
+			Locator:       "claude",
+		}
+		ev1 := protocol.AuthEvidence{
+			SchemaVersion: protocol.SchemaVersion1,
+			RefID:         "cred-claude",
+			Kind:          protocol.CredRefCLISession,
+			Status:        protocol.AuthStatusAuthenticated,
+			ProbeKind:     protocol.AuthProbeCLIAuthCall,
+			ObservedAt:    validTestTimestamp(),
+			ProbeTarget:   "claude",
+		}
+		ev2 := protocol.AuthEvidence{
+			SchemaVersion: protocol.SchemaVersion1,
+			RefID:         "cred-claude",
+			Kind:          protocol.CredRefCLISession,
+			Status:        protocol.AuthStatusUnauthenticated,
+			ProbeKind:     protocol.AuthProbeCLIAuthCall,
+			ObservedAt:    validTestTimestamp(),
+			ProbeTarget:   "claude",
+		}
+		inv.Credentials = []protocol.CredentialInventoryEntry{
+			{Ref: ref1, Evidence: ev1},
+			{Ref: ref1, Evidence: ev2},
+		}
+		if err := inv.Validate(); err == nil {
+			t.Fatal("expected error for duplicate credential ref_id in Credentials")
+		}
+	})
+}
+
+func TestDoctorReportValidation_DuplicatesAndInventoryParity(t *testing.T) {
+	validReport := func() protocol.DoctorReport {
+		inv := validResourceInventory()
+		inv.Profile = &protocol.MachineProfileRef{
+			ProfileID:          "mcp-001",
+			MachineFingerprint: inv.MachineFingerprint,
+			ObservedAt:         validTestTimestamp(),
+			ProbeDepth:         protocol.DepthHealth,
+		}
+		ep := protocol.CognitionEndpointSummary{
+			ID:                     "ollama:small",
+			Kind:                   protocol.EndpointLocalRuntime,
+			Locality:               protocol.LocalityLocal,
+			Health:                 protocol.EndpointHealthReady,
+			Auth:                   protocol.AuthNotApplicable,
+			CostClass:              protocol.CostLocalCompute,
+			RequiredSourceExposure: protocol.ExposureLocalOnly,
+		}
+		host := protocol.PrincipalHostSummary{HostID: "vscode", Installed: true}
+		inv.CognitionEndpoints = []protocol.CognitionEndpointSummary{ep}
+		inv.PrincipalHosts = []protocol.PrincipalHostSummary{host}
+		inv.Readiness = []protocol.ScopeReadiness{
+			{Scope: protocol.ScopeCanRunLocalInference, Status: protocol.ScopeStatusReady, Reason: "ok"},
+		}
+
+		targetProfile := protocol.ProfileCustom
+		return protocol.DoctorReport{
+			SchemaVersion:       protocol.SchemaVersion1,
+			ReportID:            "doc-001",
+			ObservedAt:          validTestTimestamp(),
+			MachineFingerprint:  inv.MachineFingerprint,
+			EvaluationScope:     protocol.ReadinessEvaluationScope{TargetProfile: &targetProfile, EvidenceStatus: "live"},
+			Readiness:           protocol.ReadinessReady,
+			DiscoveredEndpoints: []protocol.CognitionEndpointSummary{ep},
+			PrincipalHosts:      []protocol.PrincipalHostSummary{host},
+			ScopeReadiness: []protocol.ScopeReadiness{
+				{Scope: protocol.ScopeCanRunLocalInference, Status: protocol.ScopeStatusReady, Reason: "ok"},
+			},
+			ResourceInventory: &inv,
+		}
+	}
+
+	t.Run("valid report passes", func(t *testing.T) {
+		r := validReport()
+		if err := r.Validate(); err != nil {
+			t.Fatalf("expected valid report to pass: %v", err)
+		}
+	})
+
+	t.Run("duplicate endpoint in DiscoveredEndpoints rejected", func(t *testing.T) {
+		r := validReport()
+		ep2 := r.DiscoveredEndpoints[0]
+		ep2.Health = protocol.EndpointHealthUnhealthy
+		r.DiscoveredEndpoints = append(r.DiscoveredEndpoints, ep2)
+		if err := r.Validate(); err == nil {
+			t.Fatal("expected error for duplicate endpoint in DiscoveredEndpoints")
+		}
+	})
+
+	t.Run("duplicate host in PrincipalHosts rejected", func(t *testing.T) {
+		r := validReport()
+		h2 := r.PrincipalHosts[0]
+		h2.Installed = false
+		r.PrincipalHosts = append(r.PrincipalHosts, h2)
+		if err := r.Validate(); err == nil {
+			t.Fatal("expected error for duplicate host in PrincipalHosts")
+		}
+	})
+
+	t.Run("contradictory endpoints between report and inventory rejected", func(t *testing.T) {
+		r := validReport()
+		ep2 := r.DiscoveredEndpoints[0]
+		ep2.Health = protocol.EndpointHealthUnhealthy
+		r.ResourceInventory.CognitionEndpoints = []protocol.CognitionEndpointSummary{ep2}
+		if err := r.Validate(); err == nil {
+			t.Fatal("expected error when DiscoveredEndpoints contradicts ResourceInventory.CognitionEndpoints")
+		}
+	})
+
+	t.Run("contradictory hosts between report and inventory rejected", func(t *testing.T) {
+		r := validReport()
+		h2 := r.PrincipalHosts[0]
+		h2.Installed = false
+		r.ResourceInventory.PrincipalHosts = []protocol.PrincipalHostSummary{h2}
+		if err := r.Validate(); err == nil {
+			t.Fatal("expected error when PrincipalHosts contradicts ResourceInventory.PrincipalHosts")
+		}
+	})
+}
+
+func TestDoctorReportSchemaParity(t *testing.T) {
+	schemas, err := schema.Default()
+	if err != nil {
+		t.Fatalf("failed to compile schemas: %v", err)
+	}
+
+	validReport := func() protocol.DoctorReport {
+		inv := validResourceInventory()
+		inv.Profile = &protocol.MachineProfileRef{
+			ProfileID:          "mcp-001",
+			MachineFingerprint: inv.MachineFingerprint,
+			ObservedAt:         validTestTimestamp(),
+			ProbeDepth:         protocol.DepthHealth,
+		}
+		ep := protocol.CognitionEndpointSummary{
+			ID:                     "ollama:small",
+			Kind:                   protocol.EndpointLocalRuntime,
+			Locality:               protocol.LocalityLocal,
+			Health:                 protocol.EndpointHealthReady,
+			Auth:                   protocol.AuthNotApplicable,
+			CostClass:              protocol.CostLocalCompute,
+			RequiredSourceExposure: protocol.ExposureLocalOnly,
+		}
+		host := protocol.PrincipalHostSummary{HostID: "vscode", Installed: true}
+		inv.CognitionEndpoints = []protocol.CognitionEndpointSummary{ep}
+		inv.PrincipalHosts = []protocol.PrincipalHostSummary{host}
+		inv.Readiness = []protocol.ScopeReadiness{
+			{Scope: protocol.ScopeCanRunLocalInference, Status: protocol.ScopeStatusReady, Reason: "ok"},
+		}
+
+		targetProfile := protocol.ProfileCustom
+		return protocol.DoctorReport{
+			SchemaVersion:       protocol.SchemaVersion1,
+			ReportID:            "doc-001",
+			ObservedAt:          validTestTimestamp(),
+			MachineFingerprint:  inv.MachineFingerprint,
+			EvaluationScope:     protocol.ReadinessEvaluationScope{TargetProfile: &targetProfile, RequiredRoles: []string{}, EvidenceStatus: "live"},
+			Readiness:           protocol.ReadinessReady,
+			Findings:            []protocol.DiagnosticFinding{},
+			DiscoveredEndpoints: []protocol.CognitionEndpointSummary{ep},
+			PrincipalHosts:      []protocol.PrincipalHostSummary{host},
+			ScopeReadiness: []protocol.ScopeReadiness{
+				{Scope: protocol.ScopeCanRunLocalInference, Status: protocol.ScopeStatusReady, Reason: "ok"},
+			},
+			ResourceInventory: &inv,
+		}
+	}
+
+	cases := []struct {
+		name   string
+		report func() protocol.DoctorReport
+	}{
+		{"valid report", validReport},
+		{"duplicate scope readiness", func() protocol.DoctorReport {
+			r := validReport()
+			r.ScopeReadiness = append(r.ScopeReadiness, protocol.ScopeReadiness{
+				Scope: protocol.ScopeCanRunLocalInference, Status: protocol.ScopeStatusNotReady, Reason: "dup",
+			})
+			return r
+		}},
+		{"remote endpoint claiming verified acceleration", func() protocol.DoctorReport {
+			r := validReport()
+			backend := protocol.BackendCUDA
+			r.DiscoveredEndpoints = []protocol.CognitionEndpointSummary{
+				{
+					ID:                     "remote-ep",
+					Kind:                   protocol.EndpointRemoteAPI,
+					Locality:               protocol.LocalityRemote,
+					Health:                 protocol.EndpointHealthReady,
+					Auth:                   protocol.AuthAuthenticated,
+					CostClass:              protocol.CostRemoteEconomy,
+					RequiredSourceExposure: protocol.ExposureLocalOnly,
+					AccelerationVerified:   true,
+					AccelerationBackend:    &backend,
+				},
+			}
+			return r
+		}},
+		{"local runtime with remote locality", func() protocol.DoctorReport {
+			r := validReport()
+			r.DiscoveredEndpoints = []protocol.CognitionEndpointSummary{
+				{
+					ID:                     "ollama-remote",
+					Kind:                   protocol.EndpointLocalRuntime,
+					Locality:               protocol.LocalityRemote,
+					Health:                 protocol.EndpointHealthReady,
+					Auth:                   protocol.AuthNotApplicable,
+					CostClass:              protocol.CostLocalCompute,
+					RequiredSourceExposure: protocol.ExposureLocalOnly,
+				},
+			}
+			return r
+		}},
+		{"duplicate endpoint items", func() protocol.DoctorReport {
+			r := validReport()
+			r.DiscoveredEndpoints = append(r.DiscoveredEndpoints, r.DiscoveredEndpoints[0])
+			return r
+		}},
+		{"duplicate host items", func() protocol.DoctorReport {
+			r := validReport()
+			r.PrincipalHosts = append(r.PrincipalHosts, r.PrincipalHosts[0])
+			return r
+		}},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			rep := tc.report()
+			goErr := rep.Validate()
+			data, err := json.Marshal(rep)
+			if err != nil {
+				t.Fatalf("marshal: %v", err)
+			}
+			schemaErr := schemas.ValidateBytes(schema.NameDoctorReport, data)
+			if (goErr == nil) != (schemaErr == nil) {
+				t.Fatalf("parity mismatch: go accepted=%v (err=%v), schema accepted=%v (err=%v)",
+					goErr == nil, goErr, schemaErr == nil, schemaErr)
+			}
+		})
+	}
 }

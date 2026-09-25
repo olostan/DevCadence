@@ -104,6 +104,7 @@
     },
     "discovered_endpoints": {
       "type": "array",
+      "uniqueItems": true,
       "items": {
         "type": "object",
         "additionalProperties": false,
@@ -195,11 +196,47 @@
               null
             ]
           }
-        }
+        },
+        "allOf": [
+          {
+            "description": "Verified local acceleration is impossible for an endpoint whose inference is not local.",
+            "if": {
+              "properties": {
+                "acceleration_verified": {
+                  "const": true
+                }
+              },
+              "required": [
+                "acceleration_verified"
+              ]
+            },
+            "then": {
+              "properties": {
+                "locality": {
+                  "const": "local"
+                }
+              }
+            }
+          },
+          {
+            "description": "Local runtimes must have locality local.",
+            "if": {
+              "properties": {
+                "kind": { "const": "local_runtime" }
+              }
+            },
+            "then": {
+              "properties": {
+                "locality": { "const": "local" }
+              }
+            }
+          }
+        ]
       }
     },
     "principal_hosts": {
       "type": "array",
+      "uniqueItems": true,
       "items": {
         "type": "object",
         "additionalProperties": false,
@@ -214,6 +251,7 @@
     },
     "scope_readiness": {
       "type": "array",
+      "uniqueItems": true,
       "items": {
         "type": "object",
         "additionalProperties": false,
@@ -237,7 +275,15 @@
             "minLength": 1
           }
         }
-      }
+      },
+      "allOf": [
+        { "contains": { "properties": { "scope": { "const": "can_execute_setup_plan" } } }, "minContains": 0, "maxContains": 1 },
+        { "contains": { "properties": { "scope": { "const": "has_any_viable_cognition_path" } } }, "minContains": 0, "maxContains": 1 },
+        { "contains": { "properties": { "scope": { "const": "can_run_local_inference" } } }, "minContains": 0, "maxContains": 1 },
+        { "contains": { "properties": { "scope": { "const": "local_model_available" } } }, "minContains": 0, "maxContains": 1 },
+        { "contains": { "properties": { "scope": { "const": "can_use_existing_authenticated_cli" } } }, "minContains": 0, "maxContains": 1 },
+        { "contains": { "properties": { "scope": { "const": "principal_host_available" } } }, "minContains": 0, "maxContains": 1 }
+      ]
     },
     "resource_inventory": { "$ref": "devcadence:///resource-inventory.schema.json" }
   }

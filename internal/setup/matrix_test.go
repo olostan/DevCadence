@@ -579,7 +579,14 @@ func TestMatrix_Scenario18_WindowsCompatibility(t *testing.T) {
 		},
 	}
 
-	inv, err := doc.BuildResourceInventory(context.Background(), facts, "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", endpoints, hosts, nil, nil)
+	cognProfile := &protocol.MachineCapabilityProfile{
+		ProfileID:          "mcp-windows",
+		MachineFingerprint: "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+		ObservedAt:         protocol.NewTimestamp(doc.clock.Now()),
+		ProbeDepth:         protocol.DepthHealth,
+	}
+
+	inv, err := doc.BuildResourceInventory(context.Background(), facts, "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", endpoints, hosts, cognProfile, nil)
 	if err != nil {
 		t.Fatalf("BuildResourceInventory failed on Windows facts: %v", err)
 	}
@@ -667,10 +674,17 @@ func TestMatrix_Scenario19b_ResourceInventoryOrderIndependence(t *testing.T) {
 
 	scopeReadiness := protocol.EvaluateScopeReadiness(nil, []protocol.CognitionEndpointSummary{epA, epB}, []protocol.PrincipalHostSummary{hostA, hostB})
 
+	cognProfile := &protocol.MachineCapabilityProfile{
+		ProfileID:          "mcp-order-test",
+		MachineFingerprint: fp,
+		ObservedAt:         protocol.NewTimestamp(clk.Now()),
+		ProbeDepth:         protocol.DepthHealth,
+	}
+
 	inv1, err := doc.BuildResourceInventory(context.Background(), facts, fp,
 		[]protocol.CognitionEndpointSummary{epA, epB},
 		[]protocol.PrincipalHostSummary{hostA, hostB},
-		nil, scopeReadiness)
+		cognProfile, scopeReadiness)
 	if err != nil {
 		t.Fatalf("BuildResourceInventory (order 1): %v", err)
 	}
@@ -678,7 +692,7 @@ func TestMatrix_Scenario19b_ResourceInventoryOrderIndependence(t *testing.T) {
 	inv2, err := doc.BuildResourceInventory(context.Background(), facts, fp,
 		[]protocol.CognitionEndpointSummary{epB, epA},
 		[]protocol.PrincipalHostSummary{hostB, hostA},
-		nil, scopeReadiness)
+		cognProfile, scopeReadiness)
 	if err != nil {
 		t.Fatalf("BuildResourceInventory (order 2): %v", err)
 	}

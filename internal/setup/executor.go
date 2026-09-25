@@ -7,6 +7,7 @@ import (
 
 	"github.com/olostan/DevCadence/internal/artifacts"
 	"github.com/olostan/DevCadence/internal/clock"
+	"github.com/olostan/DevCadence/internal/credentials"
 	"github.com/olostan/DevCadence/internal/errs"
 	"github.com/olostan/DevCadence/internal/ids"
 	"github.com/olostan/DevCadence/internal/protocol"
@@ -20,12 +21,13 @@ import (
 // than $DEVCADENCE_HOME (ADR-0014 §4) by construction, not by caller
 // discipline.
 type ExecutorOptions struct {
-	Runner         CommandRunner
-	Home           string
-	Clock          clock.Clock
-	IDs            ids.Source
-	EndpointHealth EndpointHealthChecker // optional; see conditions.go
-	EndpointAuth   EndpointAuthChecker   // optional; see conditions.go
+	Runner            CommandRunner
+	Home              string
+	Clock             clock.Clock
+	IDs               ids.Source
+	CredentialManager *credentials.Manager  // optional; provides default EndpointAuth via CredentialsEndpointAuthChecker
+	EndpointHealth    EndpointHealthChecker // optional; see conditions.go
+	EndpointAuth      EndpointAuthChecker   // optional; see conditions.go
 	// ModelRuntimes overrides the local model runtime adapter set; nil
 	// means DefaultModelRuntimeAdapters() (Ollama and MLX as equal
 	// peers). Tests set this to register a fake adapter, or to configure
@@ -81,6 +83,21 @@ func NewExecutor(opts ExecutorOptions) (*Executor, error) {
 		return nil, err
 	}
 
+	endpointAuth := opts.EndpointAuth
+	if endpointAuth == nil {
+		if opts.CredentialManager != nil {
+			endpointAuth = NewCredentialsEndpointAuthChecker(opts.CredentialManager)
+		} else if opts.Runner != nil {
+			mgr, err := credentials.NewManager(credentials.Options{
+				Clock:  opts.Clock,
+				Runner: opts.Runner,
+			})
+			if err == nil {
+				endpointAuth = NewCredentialsEndpointAuthChecker(mgr)
+			}
+		}
+	}
+
 	return &Executor{
 		runner:         opts.Runner,
 		home:           opts.Home,
@@ -89,7 +106,7 @@ func NewExecutor(opts ExecutorOptions) (*Executor, error) {
 		clock:          opts.Clock,
 		ids:            opts.IDs,
 		endpointHealth: opts.EndpointHealth,
-		endpointAuth:   opts.EndpointAuth,
+		endpointAuth:   endpointAuth,
 		modelRuntimes:  opts.ModelRuntimes,
 	}, nil
 }

@@ -263,3 +263,158 @@ func (c *CacheManager) Remove(ctx context.Context, target protocol.CacheTarget) 
 	}
 	return nil
 }
+
+// profilePath returns the file path for an immutable cached MachineCapabilityProfile.
+func (c *CacheManager) profilePath(profileID string) (string, error) {
+	if profileID == "" {
+		return "", errs.New(errs.CategoryInvalidArgument, "setup cache: profile_id is required")
+	}
+	if filepath.Base(profileID) != profileID {
+		return "", errs.New(errs.CategoryInvalidArgument, "setup cache: invalid profile_id %q", profileID)
+	}
+	return filepath.Join(c.rootDir, "profiles", profileID+".json"), nil
+}
+
+// WriteProfile atomically serializes an immutable MachineCapabilityProfile indexed
+// by its ProfileID under a dedicated profiles/ subdirectory, and also updates the
+// latest machine-profile target cache.
+func WriteProfile(ctx context.Context, c *CacheManager, profile protocol.MachineCapabilityProfile, ttl time.Duration) error {
+	if ttl <= 0 {
+		ttl = c.defaultTTL
+	}
+	expiresAt := c.clock.Now().Add(ttl)
+	return WriteProfileWithExpiresAt(ctx, c, profile, expiresAt)
+}
+
+// WriteProfileWithExpiresAt atomically serializes an immutable MachineCapabilityProfile indexed
+// by its ProfileID with an explicit expiration time.
+func WriteProfileWithExpiresAt(ctx context.Context, c *CacheManager, profile protocol.MachineCapabilityProfile, expiresAt time.Time) error {
+	if err := profile.Validate(); err != nil {
+		return err
+	}
+	now := c.clock.Now()
+
+	profilesDir := filepath.Join(c.rootDir, "profiles")
+	if err := os.MkdirAll(profilesDir, 0700); err != nil {
+		return errs.Wrap(errs.CategoryInternal, err, "create profiles cache dir %s", profilesDir)
+	}
+
+	path, err := c.profilePath(profile.ProfileID)
+	if err != nil {
+		return err
+	}
+
+	lockPath := path + ".lock"
+	lockFile, err := os.OpenFile(lockPath, os.O_RDWR|os.O_CREATE, 0600)
+	if err != nil {
+		return errs.Wrap(errs.CategoryInternal, err, "open profile cache lock file %s", lockPath)
+	}
+	defer lockFile.Close()
+
+	if err := lockExclusive(lockFile); err != nil {
+		return errs.Wrap(errs.CategoryInternal, err, "lock profile cache lock file %s", lockPath)
+	}
+	defer unlock(lockFile)
+
+	env := CacheEnvelope[protocol.MachineCapabilityProfile]{
+		SchemaVersion:      protocol.SchemaVersion1,
+		CreatedAt:          protocol.NewTimestamp(now),
+		ExpiresAt:          protocol.NewTimestamp(expiresAt),
+		MachineFingerprint: profile.MachineFingerprint,
+		Data:               profile,
+	}
+
+	bytes, err := json.MarshalIndent(env, "", "  ")
+	if err != nil {
+		return errs.Wrap(errs.CategoryInternal, err, "marshal profile cache envelope")
+	}
+
+	tmpPath := fmt.Sprintf("%s.tmp.%d", path, now.UnixNano())
+	tmpFile, err := os.OpenFile(tmpPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
+	if err != nil {
+		return errs.Wrap(errs.CategoryInternal, err, "create temp profile cache file %s", tmpPath)
+	}
+
+	_, writeErr := tmpFile.Write(bytes)
+	syncErr := tmpFile.Sync()
+	closeErr := tmpFile.Close()
+
+	if writeErr != nil {
+		_ = os.Remove(tmpPath)
+		return errs.Wrap(errs.CategoryInternal, writeErr, "write temp profile cache file")
+	}
+	if syncErr != nil {
+		_ = os.Remove(tmpPath)
+		return errs.Wrap(errs.CategoryInternal, syncErr, "sync temp profile cache file")
+	}
+	if closeErr != nil {
+		_ = os.Remove(tmpPath)
+		return errs.Wrap(errs.CategoryInternal, closeErr, "close temp profile cache file")
+	}
+
+	if err := os.Rename(tmpPath, path); err != nil {
+		_ = os.Remove(tmpPath)
+		return errs.Wrap(errs.CategoryInternal, err, "commit profile cache file %s", path)
+	}
+
+	if dirFile, err := os.Open(profilesDir); err == nil {
+		_ = dirFile.Sync()
+		_ = dirFile.Close()
+	}
+
+	// Also update the latest machine-profile target cache for quick unkeyed lookup.
+	return WriteWithExpiresAt(ctx, c, protocol.CacheTargetMachineProfile, profile.MachineFingerprint, profile, expiresAt)
+}
+
+// ReadProfileByID loads an immutable MachineCapabilityProfile by its unique ProfileID.
+// If missing or corrupted, it returns (zero, false, nil).
+func ReadProfileByID(ctx context.Context, c *CacheManager, profileID string) (protocol.MachineCapabilityProfile, bool, error) {
+	var zero protocol.MachineCapabilityProfile
+	path, err := c.profilePath(profileID)
+	if err != nil {
+		return zero, false, err
+	}
+
+	lockPath := path + ".lock"
+	lockFile, err := os.OpenFile(lockPath, os.O_RDWR|os.O_CREATE, 0600)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return zero, false, nil
+		}
+		return zero, false, errs.Wrap(errs.CategoryInternal, err, "open profile cache lock file %s", lockPath)
+	}
+	defer lockFile.Close()
+
+	if err := lockShared(lockFile); err != nil {
+		return zero, false, errs.Wrap(errs.CategoryInternal, err, "lock profile cache lock file %s", lockPath)
+	}
+	defer unlock(lockFile)
+
+	f, err := os.OpenFile(path, os.O_RDONLY, 0)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return zero, false, nil
+		}
+		return zero, false, errs.Wrap(errs.CategoryInternal, err, "open profile cache file %s", path)
+	}
+	defer f.Close()
+
+	var env CacheEnvelope[protocol.MachineCapabilityProfile]
+	dec := json.NewDecoder(f)
+	if err := dec.Decode(&env); err != nil {
+		_ = os.Remove(path)
+		return zero, false, nil
+	}
+
+	if env.SchemaVersion != protocol.SchemaVersion1 {
+		_ = os.Remove(path)
+		return zero, false, nil
+	}
+
+	if err := env.Data.Validate(); err != nil {
+		_ = os.Remove(path)
+		return zero, false, nil
+	}
+
+	return env.Data, true, nil
+}

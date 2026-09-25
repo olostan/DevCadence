@@ -218,14 +218,34 @@ func (r *DoctorReport) Validate() error {
 		}
 		seenScopes[sr.Scope] = true
 	}
+	seenEndpoints := make(map[string]bool, len(r.DiscoveredEndpoints))
+	for _, ep := range r.DiscoveredEndpoints {
+		if err := ep.Validate(); err != nil {
+			return err
+		}
+		if seenEndpoints[ep.ID] {
+			return errs.New(errs.CategoryInvalidArgument, "%s: duplicate endpoint %q in discovered_endpoints", kind, ep.ID)
+		}
+		seenEndpoints[ep.ID] = true
+	}
+	seenHosts := make(map[string]bool, len(r.PrincipalHosts))
+	for _, h := range r.PrincipalHosts {
+		if err := h.Validate(); err != nil {
+			return err
+		}
+		if seenHosts[h.HostID] {
+			return errs.New(errs.CategoryInvalidArgument, "%s: duplicate host %q in principal_hosts", kind, h.HostID)
+		}
+		seenHosts[h.HostID] = true
+	}
 	if r.ResourceInventory != nil {
 		if err := r.ResourceInventory.Validate(); err != nil {
 			return err
 		}
 		// The report and its embedded inventory each carry a
-		// machine_fingerprint/readiness snapshot; they must not silently
-		// contradict each other (independent-review follow-up on
-		// WP-M3B-5, finding 4d).
+		// machine_fingerprint/readiness/endpoint/host snapshot; they must not
+		// silently contradict each other (independent-review follow-up on
+		// WP-M3B-5, findings 3c and 4d).
 		if r.ResourceInventory.MachineFingerprint != r.MachineFingerprint {
 			return errs.New(errs.CategoryInvalidArgument,
 				"%s: resource_inventory.machine_fingerprint %q does not match report machine_fingerprint %q",
@@ -235,19 +255,21 @@ func (r *DoctorReport) Validate() error {
 			return errs.New(errs.CategoryInvalidArgument,
 				"%s: scope_readiness does not match resource_inventory.readiness", kind)
 		}
+		if len(r.DiscoveredEndpoints) > 0 || len(r.ResourceInventory.CognitionEndpoints) > 0 {
+			if !cognitionEndpointsEqual(r.DiscoveredEndpoints, r.ResourceInventory.CognitionEndpoints) {
+				return errs.New(errs.CategoryInvalidArgument,
+					"%s: discovered_endpoints does not match resource_inventory.cognition_endpoints", kind)
+			}
+		}
+		if len(r.PrincipalHosts) > 0 || len(r.ResourceInventory.PrincipalHosts) > 0 {
+			if !principalHostsEqual(r.PrincipalHosts, r.ResourceInventory.PrincipalHosts) {
+				return errs.New(errs.CategoryInvalidArgument,
+					"%s: principal_hosts does not match resource_inventory.principal_hosts", kind)
+			}
+		}
 	}
 	if r.RecommendedProfile != nil {
 		if err := r.RecommendedProfile.Validate(); err != nil {
-			return err
-		}
-	}
-	for _, ep := range r.DiscoveredEndpoints {
-		if err := ep.Validate(); err != nil {
-			return err
-		}
-	}
-	for _, h := range r.PrincipalHosts {
-		if err := h.Validate(); err != nil {
 			return err
 		}
 	}
@@ -271,6 +293,55 @@ func scopeReadinessSetsEqual(a, b []ScopeReadiness) bool {
 	for _, sr := range b {
 		other, ok := byScope[sr.Scope]
 		if !ok || other.Status != sr.Status || other.Reason != sr.Reason {
+			return false
+		}
+	}
+	return true
+}
+
+func cognitionEndpointsEqual(a, b []CognitionEndpointSummary) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	byID := make(map[string]CognitionEndpointSummary, len(a))
+	for _, ep := range a {
+		byID[ep.ID] = ep
+	}
+	for _, ep := range b {
+		other, ok := byID[ep.ID]
+		if !ok {
+			return false
+		}
+		if other.Kind != ep.Kind ||
+			other.Locality != ep.Locality ||
+			other.Health != ep.Health ||
+			other.Auth != ep.Auth ||
+			other.CostClass != ep.CostClass ||
+			other.RequiredSourceExposure != ep.RequiredSourceExposure ||
+			other.AccelerationVerified != ep.AccelerationVerified {
+			return false
+		}
+		if (other.AccelerationBackend == nil) != (ep.AccelerationBackend == nil) {
+			return false
+		}
+		if other.AccelerationBackend != nil && *other.AccelerationBackend != *ep.AccelerationBackend {
+			return false
+		}
+	}
+	return true
+}
+
+func principalHostsEqual(a, b []PrincipalHostSummary) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	byID := make(map[string]PrincipalHostSummary, len(a))
+	for _, h := range a {
+		byID[h.HostID] = h
+	}
+	for _, h := range b {
+		other, ok := byID[h.HostID]
+		if !ok || other.Installed != h.Installed || other.Path != h.Path {
 			return false
 		}
 	}

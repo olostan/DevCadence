@@ -58,7 +58,42 @@
           "type": ["string", "null"],
           "enum": ["cpu", "metal", "cuda", "rocm", "vulkan", "unknown", null]
         }
-      }
+      },
+      "allOf": [
+        {
+          "description": "Verified local acceleration is impossible for an endpoint whose inference is not local.",
+          "if": {
+            "properties": {
+              "acceleration_verified": {
+                "const": true
+              }
+            },
+            "required": [
+              "acceleration_verified"
+            ]
+          },
+          "then": {
+            "properties": {
+              "locality": {
+                "const": "local"
+              }
+            }
+          }
+        },
+        {
+          "description": "Local runtimes must have locality local.",
+          "if": {
+            "properties": {
+              "kind": { "const": "local_runtime" }
+            }
+          },
+          "then": {
+            "properties": {
+              "locality": { "const": "local" }
+            }
+          }
+        }
+      ]
     },
     "principal_host_summary": {
       "type": "object",
@@ -130,19 +165,31 @@
     "profile": { "$ref": "#/$defs/machine_profile_ref" },
     "cognition_endpoints": {
       "type": "array",
+      "uniqueItems": true,
       "items": { "$ref": "#/$defs/cognition_endpoint_summary" }
     },
     "principal_hosts": {
       "type": "array",
+      "uniqueItems": true,
       "items": { "$ref": "#/$defs/principal_host_summary" }
     },
     "credentials": {
       "type": "array",
+      "uniqueItems": true,
       "items": { "$ref": "#/$defs/credential_inventory_entry" }
     },
     "readiness": {
       "type": "array",
-      "items": { "$ref": "#/$defs/scope_readiness" }
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/scope_readiness" },
+      "allOf": [
+        { "contains": { "properties": { "scope": { "const": "can_execute_setup_plan" } } }, "minContains": 0, "maxContains": 1 },
+        { "contains": { "properties": { "scope": { "const": "has_any_viable_cognition_path" } } }, "minContains": 0, "maxContains": 1 },
+        { "contains": { "properties": { "scope": { "const": "can_run_local_inference" } } }, "minContains": 0, "maxContains": 1 },
+        { "contains": { "properties": { "scope": { "const": "local_model_available" } } }, "minContains": 0, "maxContains": 1 },
+        { "contains": { "properties": { "scope": { "const": "can_use_existing_authenticated_cli" } } }, "minContains": 0, "maxContains": 1 },
+        { "contains": { "properties": { "scope": { "const": "principal_host_available" } } }, "minContains": 0, "maxContains": 1 }
+      ]
     },
     "policy": {
       "type": "object",
@@ -157,5 +204,22 @@
         }
       }
     }
-  }
+  },
+  "allOf": [
+    {
+      "description": "profile reference is required when cognition endpoints are present to preserve runtime/model and capability provenance",
+      "if": {
+        "properties": {
+          "cognition_endpoints": {
+            "type": "array",
+            "minItems": 1
+          }
+        },
+        "required": ["cognition_endpoints"]
+      },
+      "then": {
+        "required": ["profile"]
+      }
+    }
+  ]
 }

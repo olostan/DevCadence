@@ -5,7 +5,11 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
+	"github.com/olostan/DevCadence/internal/clock"
+	"github.com/olostan/DevCadence/internal/credentials"
+	"github.com/olostan/DevCadence/internal/ids"
 	"github.com/olostan/DevCadence/internal/process"
 	"github.com/olostan/DevCadence/internal/protocol"
 )
@@ -258,6 +262,119 @@ func TestEvaluateConditionEndpointAuthenticatedUsesConfiguredChecker(t *testing.
 	}
 	if !passed || detail != "logged in" {
 		t.Errorf("passed=%v detail=%q, want true/\"logged in\"", passed, detail)
+	}
+}
+
+func TestCredentialsEndpointAuthChecker_EvaluatesAuthViaCredentialManager(t *testing.T) {
+	ctx := context.Background()
+	clk := clock.NewFake(time.Date(2026, 9, 25, 12, 0, 0, 0, time.UTC), 0)
+	adapterClaude := &credentials.StaticCLIAuthAdapter{
+		ID:     "adapter-claude",
+		Target: "claude",
+		Status: protocol.AuthStatusAuthenticated,
+		Detail: "claude session active",
+	}
+	adapterCodex := &credentials.StaticCLIAuthAdapter{
+		ID:     "adapter-codex",
+		Target: "codex",
+		Status: protocol.AuthStatusUnauthenticated,
+		Detail: "codex session unauthenticated",
+	}
+	mgr, err := credentials.NewManager(credentials.Options{
+		Clock:       clk,
+		CLIAdapters: []credentials.CLISessionAuthAdapter{adapterClaude, adapterCodex},
+	})
+	if err != nil {
+		t.Fatalf("credentials.NewManager: %v", err)
+	}
+
+	checker := NewCredentialsEndpointAuthChecker(mgr)
+
+	t.Run("authenticated endpoint with cli: prefix", func(t *testing.T) {
+		authed, detail, err := checker.CheckEndpointAuthenticated(ctx, "cli:claude")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !authed || detail != "claude session active" {
+			t.Errorf("authed=%v detail=%q, want true/\"claude session active\"", authed, detail)
+		}
+	})
+
+	t.Run("authenticated endpoint bare handle", func(t *testing.T) {
+		authed, detail, err := checker.CheckEndpointAuthenticated(ctx, "claude")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !authed || detail != "claude session active" {
+			t.Errorf("authed=%v detail=%q, want true/\"claude session active\"", authed, detail)
+		}
+	})
+
+	t.Run("unauthenticated endpoint", func(t *testing.T) {
+		authed, detail, err := checker.CheckEndpointAuthenticated(ctx, "cli:codex")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if authed || detail != "codex session unauthenticated" {
+			t.Errorf("authed=%v detail=%q, want false/\"codex session unauthenticated\"", authed, detail)
+		}
+	})
+
+	t.Run("unrecognized endpoint", func(t *testing.T) {
+		authed, _, err := checker.CheckEndpointAuthenticated(ctx, "cli:unknown-cli")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if authed {
+			t.Errorf("authed=%v, want false for unknown endpoint", authed)
+		}
+	})
+}
+
+func TestExecutor_ProductionWiredEndpointAuthEvaluatesCondition(t *testing.T) {
+	ctx := context.Background()
+	clk := clock.NewFake(time.Date(2026, 9, 25, 12, 0, 0, 0, time.UTC), 0)
+	seq := ids.NewSequential()
+	tmpHome := t.TempDir()
+
+	adapterClaude := &credentials.StaticCLIAuthAdapter{
+		ID:     "adapter-claude",
+		Target: "claude",
+		Status: protocol.AuthStatusAuthenticated,
+		Detail: "session ok",
+	}
+	mgr, err := credentials.NewManager(credentials.Options{
+		Clock:       clk,
+		CLIAdapters: []credentials.CLISessionAuthAdapter{adapterClaude},
+	})
+	if err != nil {
+		t.Fatalf("credentials.NewManager: %v", err)
+	}
+
+	exec, err := NewExecutor(ExecutorOptions{
+		Runner:            &fakeCommandRunner{},
+		Home:              tmpHome,
+		Clock:             clk,
+		IDs:               seq,
+		CredentialManager: mgr,
+		// EndpointAuth is intentionally nil to prove NewExecutor wires it via CredentialManager
+	})
+	if err != nil {
+		t.Fatalf("NewExecutor: %v", err)
+	}
+
+	conds := []protocol.Condition{
+		{
+			Kind:                  protocol.CondKindEndpointAuthenticated,
+			EndpointAuthenticated: &protocol.EndpointOperand{EndpointID: "cli:claude"},
+		},
+	}
+	passed, detail, err := exec.CheckPostconditions(ctx, conds)
+	if err != nil {
+		t.Fatalf("CheckPostconditions: %v", err)
+	}
+	if !passed {
+		t.Fatalf("expected postcondition to pass via production wired auth checker, got detail: %s", detail)
 	}
 }
 
