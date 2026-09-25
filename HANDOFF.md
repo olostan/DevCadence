@@ -433,26 +433,24 @@ Full detail in `docs/work-packages/wp-m3b-6-ewp.md` §11.
   - `GOOS=windows GOARCH=amd64 go build ./...` and `GOOS=linux GOARCH=amd64 go build ./...`: PASS, clean cross-compilation.
   - `git diff --check`: PASS.
 
-**Independent review round 1** ([comment id `5837092761`](https://github.com/olostan/DevCadence/pull/10#issuecomment-5837092761), owner, 2026-09-25, head `c272f35`) found the implementation not yet green, with 4 closure-threshold FIX_NOW findings, fixed this session:
-1. Exit code 5 was unreachable for invalid plan artifacts — `setup apply`/`setup recover` classified decode/validate/schema failures as exit 2 (or, for recover, skipped schema validation entirely). Fixed with a single shared `loadSetupPlanArtifact` boundary in `cmd_setup.go`: missing file stays exit 3, everything else wrong about an existing plan file (malformed JSON, failed semantic `Validate()`, unsupported `schema_version`, failed schema validation) is now uniformly exit 5.
-2. `setup recover --json` emitted an unvalidated ad hoc `map[string]any`, outside the governed JSON contract, and lost each status's `action_id`. Fixed with a new versioned protocol record `protocol.SetupRecoveryReport` (+ `schemas/setup-recovery-report.schema.json`), and `Executor.Recover`'s return type changed from `[]protocol.ActionStatus` to `[]protocol.RecoveryActionResult` so the CLI has the identity it needs to build a real record.
-3. `doctor --scope` was parsed and silently discarded; `doctor --target` was validated only when `--fix` was passed; `setup plan` permitted a positional target to silently conflict with `--target` and dropped extra positionals. Fixed: `--scope` now rejects any value other than `"default"` deterministically; `--target` is validated unconditionally; `setup plan` rejects more than one positional argument and a positional/`--target` conflict.
-4. Acceptance evidence overclaimed exact deterministic coverage for several verification-matrix rows (readiness 0/1, `--fix` no-op 0, `--yes` success 0, missing/invalid plan 3/5, ANSI absence). Fixed by extracting `doctorReadinessExitError`/`planActionsExitError` as pure functions with direct unit tests, adding the missing CLI-level exit-code tests, and — in the process of writing exact assertions — catching and fixing a real latent bug in the pre-existing recovery-ledger CLI tests: `Ledger.Append` errors were being discarded, every append was silently failing required-field validation, and `setup recover` was reconciling zero actions in every test that exercised it, undetected because the assertions only substring-matched a generic banner.
-Full detail in `docs/work-packages/wp-m3b-7-ewp.md` §8.
+**Independent review round 1** ([comment id `5837092761`](https://github.com/olostan/DevCadence/pull/10#issuecomment-5837092761), owner, 2026-09-25, head `c272f35`) found 4 closure-threshold FIX_NOW findings: exit code 5 reachability, typed `SetupRecoveryReport` for `setup recover --json`, discarded/ambiguous CLI inputs, and deterministic matrix coverage.
 
-**Verification (round-1 revision):** `go build ./...`, `go vet ./...`, `gofmt -l` clean on every file this repair touched, `go test -count=1 ./...` (all 30 packages), `go test -race ./cmd/devcadence/... ./internal/setup/... ./internal/protocol/... ./internal/credentials/... ./internal/schema/... ./internal/environment/... ./tests/...` (clean), `GOOS=windows GOARCH=amd64`/`GOOS=linux GOARCH=amd64`/`GOOS=darwin GOARCH=arm64 go build ./...` (clean), `git diff --check` (clean).
+**Independent review round 2** ([comment id `5837723410`](https://github.com/olostan/DevCadence/pull/10#issuecomment-5837723410), owner, 2026-09-25, head `0aef342`) confirmed FIX_NOW-1, FIX_NOW-2, and FIX_NOW-4 are closed, and `--scope` / `setup plan` argument handling from FIX_NOW-3 are closed. It requested one residual repair under FIX_NOW-3:
+- In `0aef342`, `--target` was validated unconditionally, but when `--fix` was omitted, any valid target (`doctor --target hardware --json`) was silently accepted with no effect on diagnosis or readiness.
+- Fixed: `cmd/devcadence/cmd_doctor.go` now inspects `fs.Visit` to detect whether `--target` was explicitly supplied. When `--fix` is false, any explicit target is rejected deterministically with exit code 2 (`doctor: --target requires --fix`). Added exact regression tests `TestCLIDoctorRejectsExplicitTargetWithoutFix` and `TestCLIDoctorRejectsInvalidTargetWithFix`.
+Full detail in `docs/work-packages/wp-m3b-7-ewp.md` §8 and §9.
 
-**Known blockers / open questions:** none — awaiting round-2 review to confirm the §8 fixes.
+**Verification (round-2 repair):** `go build ./...`, `go vet ./...`, `gofmt -l` clean on every touched file, `go test -count=1 ./...` (all 30 packages `ok`), `go test -race ./cmd/devcadence/... ./internal/setup/... ./internal/protocol/... ./internal/credentials/... ./internal/schema/... ./internal/environment/... ./tests/...` (clean), `GOOS=windows GOARCH=amd64`/`GOOS=linux GOARCH=amd64`/`GOOS=darwin GOARCH=arm64 go build ./...` (clean), `git diff --check` (clean).
+
+**Known blockers / open questions:** none — awaiting round-3 review on the residual `--target` repair.
 
 ## Next concrete action
 
-Post a PR comment on #10 summarizing the round-1 fix and continue watching for the owner's response. Do not flip WP-M3B-7 to `accepted` unilaterally. Once accepted, proceed to WP-M3B-8 (Milestone Closure & Verification).
+Commit and push the residual repair to `feat/m3b-guided-bootstrap`, post a reply on PR #10, and monitor for round-3 review using `poll-pr-comments`. Once accepted, proceed to WP-M3B-8 (Milestone Closure & Verification).
 
 ## Resume checklist for the next agent
 
-1. `git fetch origin feat/m3b-guided-bootstrap` and check out the branch.
-   Record the fetched `HEAD` SHA as your own session's "Expected remote
-   HEAD" baseline.
+1. `git fetch origin feat/m3b-guided-bootstrap` and verify remote HEAD.
 2. Verify test suite with `go test -count=1 ./...`.
 3. Check PR #10 comments for independent review findings on WP-M3B-7.
 4. If review is GREEN/Accepted, proceed to WP-M3B-8 (Milestone Closure & Verification).

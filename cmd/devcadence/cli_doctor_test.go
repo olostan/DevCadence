@@ -228,6 +228,20 @@ func TestCLIDoctorRejectsUnsupportedScope(t *testing.T) {
 	}
 }
 
+func TestCLIDoctorRejectsExplicitTargetWithoutFix(t *testing.T) {
+	c := newCLI(t)
+	_, _, err := c.run("doctor", "--target", "hardware")
+	if err == nil {
+		t.Fatal("doctor accepted an explicit --target without --fix")
+	}
+	if code := exitCode(err); code != ExitCodeInvalidArgument {
+		t.Errorf("expected exit code %d (invalid argument), got %d (err: %v)", ExitCodeInvalidArgument, code, err)
+	}
+	if !strings.Contains(err.Error(), "--target requires --fix") {
+		t.Errorf("expected '--target requires --fix' in error message, got: %v", err)
+	}
+}
+
 func TestCLIDoctorRejectsInvalidTargetEvenWithoutFix(t *testing.T) {
 	c := newCLI(t)
 	_, _, err := c.run("doctor", "--target", "not-a-real-target")
@@ -236,6 +250,20 @@ func TestCLIDoctorRejectsInvalidTargetEvenWithoutFix(t *testing.T) {
 	}
 	if code := exitCode(err); code != ExitCodeInvalidArgument {
 		t.Errorf("expected exit code %d (invalid argument), got %d (err: %v)", ExitCodeInvalidArgument, code, err)
+	}
+}
+
+func TestCLIDoctorRejectsInvalidTargetWithFix(t *testing.T) {
+	c := newCLI(t)
+	_, _, err := c.run("doctor", "--fix", "--target", "not-a-real-target")
+	if err == nil {
+		t.Fatal("doctor accepted an invalid --target value with --fix")
+	}
+	if code := exitCode(err); code != ExitCodeInvalidArgument {
+		t.Errorf("expected exit code %d (invalid argument), got %d (err: %v)", ExitCodeInvalidArgument, code, err)
+	}
+	if !strings.Contains(err.Error(), "invalid setup target") {
+		t.Errorf("expected 'invalid setup target' in error message, got: %v", err)
 	}
 }
 

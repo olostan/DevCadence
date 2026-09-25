@@ -73,10 +73,20 @@ func runDoctor(ctx context.Context, e *env, args []string) error {
 			"doctor does not run inference; use `cognition probe` to verify an endpoint")
 	}
 
-	// target is validated unconditionally, not only when --fix is passed:
-	// an operator-supplied invalid value must never be silently accepted
-	// just because it currently has no effect without --fix (independent-
-	// review follow-up on WP-M3B-7, FIX_NOW-3).
+	// --target is meaningful only when --fix is specified. An explicitly
+	// supplied target without --fix has no effect on diagnosis or
+	// readiness, so it is rejected deterministically as invalid CLI input
+	// (independent-review follow-up on WP-M3B-7, FIX_NOW-3 residual).
+	var targetSupplied bool
+	fs.Visit(func(f *flag.Flag) {
+		if f.Name == "target" {
+			targetSupplied = true
+		}
+	})
+	if targetSupplied && !*fix {
+		return errs.New(errs.CategoryInvalidArgument, "doctor: --target requires --fix")
+	}
+
 	target := protocol.SetupTarget(*targetFlag)
 	if !target.Valid() {
 		return errs.New(errs.CategoryInvalidArgument, "invalid setup target %q", *targetFlag)
