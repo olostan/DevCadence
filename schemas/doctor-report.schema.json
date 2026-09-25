@@ -103,6 +103,7 @@
       }
     },
     "discovered_endpoints": {
+      "description": "uniqueItems rejects byte-identical duplicate entries only. Rejecting two entries that share an id but differ in content is a stricter, Go-only invariant (DoctorReport.Validate), because JSON Schema cannot express 'unique keyed by id, equal on the rest' without restructuring this array into a keyed object.",
       "type": "array",
       "uniqueItems": true,
       "items": {
@@ -235,6 +236,7 @@
       }
     },
     "principal_hosts": {
+      "description": "uniqueItems rejects byte-identical duplicate entries only; duplicate host_id with differing content is a Go-only invariant (DoctorReport.Validate), same rationale as discovered_endpoints.",
       "type": "array",
       "uniqueItems": true,
       "items": {

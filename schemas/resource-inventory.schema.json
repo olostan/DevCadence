@@ -164,16 +164,19 @@
     },
     "profile": { "$ref": "#/$defs/machine_profile_ref" },
     "cognition_endpoints": {
+      "description": "uniqueItems rejects byte-identical duplicate entries only. Rejecting two entries that share an id but differ in content is a stricter, Go-only invariant (ResourceInventory.Validate), because JSON Schema cannot express 'unique keyed by id, equal on the rest' without restructuring this array into a keyed object.",
       "type": "array",
       "uniqueItems": true,
       "items": { "$ref": "#/$defs/cognition_endpoint_summary" }
     },
     "principal_hosts": {
+      "description": "uniqueItems rejects byte-identical duplicate entries only; duplicate host_id with differing content is a Go-only invariant (ResourceInventory.Validate), same rationale as cognition_endpoints.",
       "type": "array",
       "uniqueItems": true,
       "items": { "$ref": "#/$defs/principal_host_summary" }
     },
     "credentials": {
+      "description": "uniqueItems rejects byte-identical duplicate entries only; duplicate ref.ref_id with differing content is a Go-only invariant (ResourceInventory.Validate), same rationale as cognition_endpoints.",
       "type": "array",
       "uniqueItems": true,
       "items": { "$ref": "#/$defs/credential_inventory_entry" }
