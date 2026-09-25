@@ -66,6 +66,23 @@ func isImmutableHFRevision(rev string) bool {
 	return hfCommitHashPattern.MatchString(rev)
 }
 
+// ollamaManifestDigestPattern matches an Ollama content-addressed manifest
+// digest (sha256:<64 lowercase hex>) — the only revision form that pins an
+// immutable manifest. A mutable tag like "latest" or "main" fails this, by
+// design, the same way a Hugging Face branch ref fails
+// isImmutableHFRevision.
+var ollamaManifestDigestPattern = regexp.MustCompile(`^sha256:[a-f0-9]{64}$`)
+
+// isImmutableOllamaRevision reports whether rev is an immutable Ollama
+// manifest digest rather than a mutable tag. ResolvedModel.Validate uses
+// this for runtime "ollama" the same way it uses isImmutableHFRevision for
+// "mlx" — pre-resolution validation must be runtime-specific, since
+// different runtimes pin immutability with different identifier shapes
+// (independent-review follow-up on WP-M3B-6, FIX_NOW 1).
+func isImmutableOllamaRevision(rev string) bool {
+	return ollamaManifestDigestPattern.MatchString(rev)
+}
+
 // PlannerOptions configures the remediation planner.
 type PlannerOptions struct {
 	Clock            clock.Clock
@@ -295,6 +312,9 @@ func (p *Planner) PlanWithContext(ctx context.Context, report *protocol.DoctorRe
 			if err := resolved.Validate(); err != nil {
 				return nil, errs.Wrap(errs.CategoryInvalidArgument, err, "setup planner: resolved model %q for runtime %q failed validation", modelRef, "ollama")
 			}
+			if err := verifyResolvedIdentity(resolved, "ollama", modelRef); err != nil {
+				return nil, err
+			}
 
 			var ollamaPath, ollamaVersion string
 			if p.facts != nil {
@@ -320,6 +340,13 @@ func (p *Planner) PlanWithContext(ctx context.Context, report *protocol.DoctorRe
 				executableVersion: ollamaVersion,
 				recipeIDAuto:      "recipe.ollama.pull_model",
 				recipeIDManual:    "recipe.manual.pull_ollama_model",
+				// Defense in depth alongside ResolvedModel.Validate's own
+				// runtime-specific immutability check above: even if a
+				// future refactor ever let an unvalidated ResolvedModel
+				// reach this point, the automated path still cannot be
+				// built from a mutable Ollama tag (independent-review
+				// follow-up on WP-M3B-6, FIX_NOW 1).
+				revisionIsImmutable: isImmutableOllamaRevision,
 				manualSteps: []string{
 					"Ensure Ollama is running and accessible",
 					fmt.Sprintf("Run: ollama pull %s", resolved.ModelRef),
@@ -378,6 +405,9 @@ func (p *Planner) PlanWithContext(ctx context.Context, report *protocol.DoctorRe
 			}
 			if err := resolved.Validate(); err != nil {
 				return nil, errs.Wrap(errs.CategoryInvalidArgument, err, "setup planner: resolved model %q for runtime %q failed validation", modelRef, "mlx")
+			}
+			if err := verifyResolvedIdentity(resolved, "mlx", modelRef); err != nil {
+				return nil, err
 			}
 
 			// "hf" is the current Hugging Face Hub CLI; the older

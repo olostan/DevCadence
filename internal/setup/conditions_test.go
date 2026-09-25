@@ -525,3 +525,86 @@ func TestEvaluateConditionModelPresentRejectsUnregisteredRuntime(t *testing.T) {
 		t.Fatal("EvaluateCondition succeeded for an unregistered runtime; expected a fail-closed error")
 	}
 }
+
+// TestEvaluateDeviceNodeAccessible is the independent-review follow-up on
+// WP-M3B-6, FIX_NOW 4: hardware driver/device-permission manual recipes
+// must verify the actual remediation state (device-node existence and, when
+// required, current-user read/write accessibility) rather than a proxy
+// like command_available. These regressions prove the condition
+// distinguishes "does not exist" from "exists but inaccessible" from
+// "exists and accessible", and that the transition from a pre-remediation
+// state to the corrected state flips the evaluated result.
+func TestEvaluateDeviceNodeAccessible(t *testing.T) {
+	t.Run("missing node fails both existence and accessibility checks", func(t *testing.T) {
+		missing := filepath.Join(t.TempDir(), "does-not-exist")
+		passed, _, err := EvaluateCondition(context.Background(), EvaluatorDeps{}, protocol.Condition{
+			Kind:                 protocol.CondKindDeviceNodeAccessible,
+			DeviceNodeAccessible: &protocol.DeviceNodeOperand{Path: missing},
+		})
+		if err != nil {
+			t.Fatalf("EvaluateCondition: %v", err)
+		}
+		if passed {
+			t.Error("passed = true for a nonexistent device node, want false")
+		}
+	})
+
+	t.Run("existing node satisfies existence-only check regardless of permissions", func(t *testing.T) {
+		dir := t.TempDir()
+		node := filepath.Join(dir, "node")
+		if err := os.WriteFile(node, nil, 0000); err != nil {
+			t.Fatalf("create fixture node: %v", err)
+		}
+		defer os.Chmod(node, 0600) //nolint:errcheck // best-effort cleanup so t.TempDir can remove it
+		passed, _, err := EvaluateCondition(context.Background(), EvaluatorDeps{}, protocol.Condition{
+			Kind:                 protocol.CondKindDeviceNodeAccessible,
+			DeviceNodeAccessible: &protocol.DeviceNodeOperand{Path: node},
+		})
+		if err != nil {
+			t.Fatalf("EvaluateCondition: %v", err)
+		}
+		if !passed {
+			t.Error("passed = false for an existing device node with existence-only check, want true (existence alone is the fact being verified — e.g. a driver having bound and created the node)")
+		}
+	})
+
+	t.Run("existing but inaccessible node fails the accessibility check: pre-remediation state", func(t *testing.T) {
+		if os.Geteuid() == 0 {
+			t.Skip("running as root: permission bits cannot deny access to this process")
+		}
+		dir := t.TempDir()
+		node := filepath.Join(dir, "node")
+		if err := os.WriteFile(node, nil, 0000); err != nil {
+			t.Fatalf("create fixture node: %v", err)
+		}
+		passed, detail, err := EvaluateCondition(context.Background(), EvaluatorDeps{}, protocol.Condition{
+			Kind:                 protocol.CondKindDeviceNodeAccessible,
+			DeviceNodeAccessible: &protocol.DeviceNodeOperand{Path: node, RequireAccessible: true},
+		})
+		if err != nil {
+			t.Fatalf("EvaluateCondition: %v", err)
+		}
+		if passed {
+			t.Fatalf("passed = true for a 0000-mode device node, want false (pre-remediation state); detail=%q", detail)
+		}
+
+		// Corrected state: the same recipe's remediation (granting rw
+		// access) makes the identical condition pass, without recreating
+		// the node — proving this checks live accessibility, not merely
+		// whether the path existed at some point.
+		if err := os.Chmod(node, 0600); err != nil {
+			t.Fatalf("chmod fixture node: %v", err)
+		}
+		defer os.Chmod(node, 0600) //nolint:errcheck
+		passed, detail, err = EvaluateCondition(context.Background(), EvaluatorDeps{}, protocol.Condition{
+			Kind:                 protocol.CondKindDeviceNodeAccessible,
+			DeviceNodeAccessible: &protocol.DeviceNodeOperand{Path: node, RequireAccessible: true},
+		})
+		if err != nil {
+			t.Fatalf("EvaluateCondition: %v", err)
+		}
+		if !passed {
+			t.Fatalf("passed = false after granting rw access, want true (corrected state); detail=%q", detail)
+		}
+	})
+}

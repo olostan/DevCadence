@@ -415,11 +415,23 @@ const (
 	// every runtime represents model identity the way Ollama's manifest
 	// digest does.
 	CondKindModelPresent ConditionKind = "model_present"
+	// CondKindDeviceNodeAccessible checks a device special file's actual
+	// remediation state: that it exists (a kernel driver bound something
+	// there — command_available's "the vendor CLI binary is on PATH" says
+	// nothing about this) and, when required, that the current user can
+	// open it for read/write (a separate, narrower fact than mere
+	// existence — a device node can exist while still being root-only).
+	// This is the closed, read-only, typed probe hardware driver/
+	// device-permission manual recipes verify against, replacing a
+	// command_available check that could pass long before — or without
+	// ever requiring — the actual remediation (independent-review
+	// follow-up on WP-M3B-6, FIX_NOW 4).
+	CondKindDeviceNodeAccessible ConditionKind = "device_node_accessible"
 )
 
 func (k ConditionKind) Valid() bool {
 	switch k {
-	case CondKindCommandAvailable, CondKindExecutableVerified, CondKindManagedDirExists, CondKindPortListening, CondKindEndpointHealthy, CondKindEndpointAuthenticated, CondKindModelPresent:
+	case CondKindCommandAvailable, CondKindExecutableVerified, CondKindManagedDirExists, CondKindPortListening, CondKindEndpointHealthy, CondKindEndpointAuthenticated, CondKindModelPresent, CondKindDeviceNodeAccessible:
 		return true
 	}
 	return false
@@ -434,6 +446,7 @@ type Condition struct {
 	EndpointHealthy       *EndpointOperand           `json:"endpoint_healthy,omitempty"`
 	EndpointAuthenticated *EndpointOperand           `json:"endpoint_authenticated,omitempty"`
 	ModelPresent          *ModelPresentOperand       `json:"model_present,omitempty"`
+	DeviceNodeAccessible  *DeviceNodeOperand         `json:"device_node_accessible,omitempty"`
 }
 
 type CommandAvailableOperand struct {
@@ -495,6 +508,21 @@ type ManagedDirOperand struct {
 type PortOperand struct {
 	Host string `json:"host"`
 	Port int    `json:"port"`
+}
+
+// DeviceNodeOperand names a filesystem device special file and how strictly
+// its accessibility must be verified. Path must be absolute — a relative
+// path invites the same PATH-substitution class of issue
+// ExecutableVerified's CanonicalPath already guards against.
+type DeviceNodeOperand struct {
+	Path string `json:"path"`
+	// RequireAccessible additionally requires the current process can open
+	// Path for read/write, not merely that it exists. false means "exists"
+	// alone is the remediation state being verified (e.g. a driver having
+	// bound and created the node at all); true means the narrower
+	// current-user read/write permission fact (e.g. a device-permission
+	// remediation).
+	RequireAccessible bool `json:"require_accessible,omitempty"`
 }
 
 type EndpointOperand struct {
@@ -560,6 +588,9 @@ func (c Condition) Validate() error {
 		count++
 	}
 	if c.ModelPresent != nil {
+		count++
+	}
+	if c.DeviceNodeAccessible != nil {
 		count++
 	}
 	if count != 1 {
@@ -642,6 +673,10 @@ func (c Condition) Validate() error {
 		}
 		if c.ModelPresent.ExpectedSizeBytes < 0 {
 			return errs.New(errs.CategoryInvalidArgument, "%s: expected_size_bytes must not be negative", kind)
+		}
+	case CondKindDeviceNodeAccessible:
+		if c.DeviceNodeAccessible == nil || !strings.HasPrefix(c.DeviceNodeAccessible.Path, "/") {
+			return errs.New(errs.CategoryInvalidArgument, "%s: device_node_accessible.path must be absolute", kind)
 		}
 	}
 	return nil

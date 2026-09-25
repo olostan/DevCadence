@@ -146,7 +146,7 @@ implementing on top of it or rewriting it.
 | WP-M3B-2 | accepted | `bb01bc9` | all PASS (see EWP §13) | independent review complete — [comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5805603916), 7 findings, all addressed in EWP §14 |
 | WP-M3B-3 | **accepted** (§21) | `cc799cd` | `go build ./...`, `go vet ./...`, `go test -count=1 ./...`, `go test -race ./internal/setup/... ./internal/cognition/mlx/... ./internal/environment/...`, `GOOS=windows GOARCH=amd64 go build ./...` all PASS | 7 independent review rounds, 25 findings total, all resolved — see EWP §15–§21. Final acceptance: [comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5809019161) |
 | WP-M3B-4 | **accepted** (§16) | `75e65a7` | `go build ./...`, `go vet ./...`, `go test -count=1 ./...`, `go test -race ./internal/credentials/... ./internal/protocol/... ./internal/cognition/...`, `GOOS=windows GOARCH=amd64 go build ./...` all PASS | 3 independent review rounds, 6+3+2 findings total, all resolved — see EWP §13–§16. Final acceptance: [comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5819033678) |
-| WP-M3B-6 | implementation complete | awaiting review | `go build ./...`, `go vet ./...`, `go test -count=1 ./...`, `go test -race ./internal/setup/... ./internal/protocol/... ./internal/credentials/... ./internal/schema/... ./tests/...`, `GOOS=windows/linux GOARCH=amd64 go build ./...` all PASS | author `docs/work-packages/wp-m3b-6-ewp.md` frozen, 20-scenario verification matrix implemented in `recipes_test.go` |
+| WP-M3B-6 | implemented, NOT accepted — round 1 (4 FIX_NOW findings) fixed, awaiting round-2 review (EWP §10) | current branch HEAD (see "Expected remote HEAD" above) | `go build ./...`, `go vet ./...`, `go test -count=1 ./...`, `go test -race ./internal/setup/... ./internal/protocol/... ./internal/credentials/... ./internal/schema/... ./internal/environment/... ./tests/...`, `GOOS=windows/linux GOARCH=amd64 go build ./...` all PASS | round 1 — [comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5834040833), 4 FIX_NOW findings (Ollama pre-resolution didn't enforce an immutable digest; planner didn't bind resolver output to requested runtime/model identity; `install_rocm_driver` unreachable from the real planning path; driver/device-permission recipes verified only `command_available`) — all fixed, EWP §10, not yet re-reviewed |
 | WP-M3B-7 | not started | — | — | blocked on WP-M3B-6 review |
 | WP-M3B-8 | not started — verification suite and docs sync (formerly WP9) | — | — | blocked on all prior |
 
@@ -370,9 +370,18 @@ Full detail in `docs/work-packages/wp-m3b-5-ewp.md` §19.
   - `GOOS=windows GOARCH=amd64 go build ./...` and `GOOS=linux GOARCH=amd64 go build ./...`: clean cross-compilation.
   - `git diff --check`: clean.
 
+**Independent review round 1** ([comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5834040833), owner, 2026-09-25, base `a8af456`, head `88fee78`) confirmed the recipe/resolver architecture was viable, then found 4 closure-threshold FIX_NOW findings, fixed this session:
+1. Ollama pre-resolution accepted any non-empty revision (including a mutable tag like `"main"`) — `ResolvedModel.Validate()` now dispatches per runtime, with a new `isImmutableOllamaRevision` (`sha256:<64 lowercase hex>`) alongside the existing MLX check, and fails closed for any runtime with no known verification rule;
+2. the planner trusted `ModelResolver` output blindly — a resolver could return a valid record for a different runtime/model and the plan would silently target it — new `verifyResolvedIdentity` fails closed on any mismatch;
+3. `recipe.manual.install_rocm_driver` was unreachable from the real `AssessBackends -> Planner` path (AMD assessment never distinguished "driver not bound" from "`/dev/kfd` inaccessible," and scenario 11 tested the wrong branch while claiming to cover it) — `amdCandidates` now checks `DriverInUse == "amdgpu"` first, mirroring `nvidiaCandidate`'s existing pattern;
+4. the four hardware manual recipes verified only `command_available` (a vendor CLI on PATH proves neither driver binding nor device accessibility) — new closed `device_node_accessible` condition checks the actual device-node state via `os.Stat`/a real open-for-read-write probe.
+Full detail in `docs/work-packages/wp-m3b-6-ewp.md` §10.
+
+**Known blockers / open questions:** none — awaiting a round-2 review to confirm the §10 fixes.
+
 ## Next concrete action
 
-WP-M3B-6 implementation is complete. Post a checkpoint update on PR #10 summarizing the deliverables and verification evidence for independent review. Once accepted, proceed to WP-M3B-7 (`devcadence doctor` / `devcadence setup` CLI surface).
+Post a PR comment on #10 summarizing the §10 fix round and continue watching for the owner's response. Do not flip WP-M3B-6 to `accepted` unilaterally. Once accepted, proceed to WP-M3B-7 (`devcadence doctor` / `devcadence setup` CLI surface).
 
 ## Resume checklist for the next agent
 

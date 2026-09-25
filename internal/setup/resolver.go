@@ -13,6 +13,25 @@ type ModelResolver interface {
 	ResolveModel(ctx context.Context, runtime, modelRef string) (ResolvedModel, error)
 }
 
+// verifyResolvedIdentity fails closed unless resolved's own Runtime/ModelRef
+// exactly match what was requested. ModelResolver is a caller-pluggable
+// interface, and the fail-closed pre-resolution contract cannot depend on
+// every implementation being bug-free: a resolver that returns a
+// perfectly valid, immutable record for a different runtime or model would
+// otherwise let the approved plan silently target the wrong artifact
+// (independent-review follow-up on WP-M3B-6, FIX_NOW 2).
+func verifyResolvedIdentity(resolved ResolvedModel, wantRuntime, wantModelRef string) error {
+	if resolved.Runtime != wantRuntime {
+		return errs.New(errs.CategoryInvalidArgument,
+			"setup planner: model resolver returned runtime %q for requested runtime %q; refusing to plan a mismatched identity", resolved.Runtime, wantRuntime)
+	}
+	if resolved.ModelRef != wantModelRef {
+		return errs.New(errs.CategoryInvalidArgument,
+			"setup planner: model resolver returned model_ref %q for requested model_ref %q; refusing to plan a mismatched identity", resolved.ModelRef, wantModelRef)
+	}
+	return nil
+}
+
 // ResolvedModel contains verified supply-chain metadata for an install-class model operation.
 type ResolvedModel struct {
 	Runtime           string `json:"runtime"`
@@ -35,10 +54,27 @@ func (m ResolvedModel) Validate() error {
 	if m.ResolvedRevision == "" {
 		return errs.New(errs.CategoryInvalidArgument, "%s: resolved_revision is required", kind)
 	}
-	// For Hugging Face/MLX, revision must be an immutable 40-hex commit hash.
-	if m.Runtime == "mlx" && !isImmutableHFRevision(m.ResolvedRevision) {
+	// Revision-immutability format is runtime-specific: each runtime pins
+	// an immutable snapshot with a different identifier shape (a Hugging
+	// Face commit hash for MLX, a content-addressed manifest digest for
+	// Ollama), so this cannot be a single shared check. A resolver result
+	// for a runtime this package does not yet know how to verify fails
+	// closed rather than being silently accepted as "non-empty is enough"
+	// (independent-review follow-up on WP-M3B-6, FIX_NOW 1).
+	switch m.Runtime {
+	case "mlx":
+		if !isImmutableHFRevision(m.ResolvedRevision) {
+			return errs.New(errs.CategoryInvalidArgument,
+				"%s: mlx revision %q is not an immutable 40-character commit hash", kind, m.ResolvedRevision)
+		}
+	case "ollama":
+		if !isImmutableOllamaRevision(m.ResolvedRevision) {
+			return errs.New(errs.CategoryInvalidArgument,
+				"%s: ollama revision %q is not an immutable sha256 manifest digest", kind, m.ResolvedRevision)
+		}
+	default:
 		return errs.New(errs.CategoryInvalidArgument,
-			"%s: mlx revision %q is not an immutable 40-character commit hash", kind, m.ResolvedRevision)
+			"%s: runtime %q has no known immutable-revision verification rule; refusing to treat %q as pinned", kind, m.Runtime, m.ResolvedRevision)
 	}
 	if m.ExpectedSizeBytes <= 0 {
 		return errs.New(errs.CategoryInvalidArgument,

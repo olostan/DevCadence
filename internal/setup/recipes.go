@@ -66,7 +66,22 @@ func NewWriteManagedConfigAction(actionID string, key protocol.ManagedConfigKey,
 		Effects:       effects,
 		Operation:     &op,
 		DependsOn:     dependsOn,
-		Preconditions: []protocol.Condition{},
+		// Restores the frozen EWP §3.1 contract (independent-review
+		// follow-up on WP-M3B-6, contract-drift cleanup): dependsOn
+		// already orders this after the state-directory creation action
+		// (see planner.go's dirActionIDs threading), so this precondition
+		// is always satisfiable by the time this action runs — it is not
+		// asking the applier to do something the dependency graph doesn't
+		// already guarantee.
+		Preconditions: []protocol.Condition{
+			{
+				Kind: protocol.CondKindManagedDirExists,
+				ManagedDirExists: &protocol.ManagedDirOperand{
+					Location:    protocol.LocationState,
+					FileModeOct: "0700",
+				},
+			},
+		},
 		Postconditions: []protocol.Condition{
 			{
 				Kind: protocol.CondKindManagedDirExists,
@@ -97,16 +112,27 @@ func NewRemoveStaleCacheAction(actionID string, target protocol.CacheTarget, dep
 	}
 	effects, auth := protocol.IntrinsicPolicy(op)
 	return protocol.SetupAction{
-		ActionID:       actionID,
-		RecipeID:       fmt.Sprintf("recipe.cache.remove.%s", target),
-		RecipeVersion:  recipeSetVersion,
-		Title:          fmt.Sprintf("Remove stale cache: %s", target),
-		Description:    fmt.Sprintf("Evicts stale or expired cache for target %s", target),
-		Authority:      auth,
-		Effects:        effects,
-		Operation:      &op,
-		DependsOn:      dependsOn,
-		Preconditions:  []protocol.Condition{},
+		ActionID:      actionID,
+		RecipeID:      fmt.Sprintf("recipe.cache.remove.%s", target),
+		RecipeVersion: recipeSetVersion,
+		Title:         fmt.Sprintf("Remove stale cache: %s", target),
+		Description:   fmt.Sprintf("Evicts stale or expired cache for target %s", target),
+		Authority:     auth,
+		Effects:       effects,
+		Operation:     &op,
+		DependsOn:     dependsOn,
+		// Restores the frozen EWP §3.1 contract (independent-review
+		// follow-up on WP-M3B-6, contract-drift cleanup) — see
+		// NewWriteManagedConfigAction's identical comment.
+		Preconditions: []protocol.Condition{
+			{
+				Kind: protocol.CondKindManagedDirExists,
+				ManagedDirExists: &protocol.ManagedDirOperand{
+					Location:    protocol.LocationState,
+					FileModeOct: "0700",
+				},
+			},
+		},
 		Postconditions: []protocol.Condition{},
 		ExpectedMutations: []protocol.ExpectedMutation{
 			{
@@ -208,12 +234,27 @@ func NewManualReauthenticateAction(actionID, endpointID, credentialRef, recipeSe
 	}
 }
 
+// nvidiaControlNodePath is the NVIDIA proprietary driver's global control
+// device — the same path internal/environment/compatibility.go's
+// nvidiaCandidate already checks for driver-bound/control-node
+// accessibility, reused here so the manual recipe verifies the identical
+// real-world fact its own Description claims to remediate.
+const nvidiaControlNodePath = "/dev/nvidiactl"
+
+// rocmComputeNodePath is the ROCm/KFD compute device — the same path
+// amdCandidates already checks.
+const rocmComputeNodePath = "/dev/kfd"
+
 // NewManualNvidiaDriverAction constructs a high-impact manual action for installing proprietary NVIDIA drivers.
 func NewManualNvidiaDriverAction(actionID, deviceID, recipeSetVersion string) protocol.SetupAction {
+	// Existence of the control node (regardless of this user's access to
+	// it) is what proves the proprietary kernel driver is actually bound
+	// — a vendor CLI binary being on PATH proves neither (independent-
+	// review follow-up on WP-M3B-6, FIX_NOW 4).
 	cond := protocol.Condition{
-		Kind: protocol.CondKindCommandAvailable,
-		CommandAvailable: &protocol.CommandAvailableOperand{
-			CommandName: "nvidia-smi",
+		Kind: protocol.CondKindDeviceNodeAccessible,
+		DeviceNodeAccessible: &protocol.DeviceNodeOperand{
+			Path: nvidiaControlNodePath,
 		},
 	}
 	return protocol.SetupAction{
@@ -246,10 +287,16 @@ func NewManualNvidiaDriverAction(actionID, deviceID, recipeSetVersion string) pr
 
 // NewManualNvidiaDevicePermissionsAction constructs a high-impact manual action for configuring access to NVIDIA control nodes.
 func NewManualNvidiaDevicePermissionsAction(actionID, deviceID, recipeSetVersion string) protocol.SetupAction {
+	// RequireAccessible: existence alone is not the fact this recipe
+	// remediates — the driver is already bound (that's why this recipe,
+	// not install_nvidia_driver, was planned); what must be verified is
+	// specifically that the current user can now open the node
+	// (independent-review follow-up on WP-M3B-6, FIX_NOW 4).
 	cond := protocol.Condition{
-		Kind: protocol.CondKindCommandAvailable,
-		CommandAvailable: &protocol.CommandAvailableOperand{
-			CommandName: "nvidia-smi",
+		Kind: protocol.CondKindDeviceNodeAccessible,
+		DeviceNodeAccessible: &protocol.DeviceNodeOperand{
+			Path:              nvidiaControlNodePath,
+			RequireAccessible: true,
 		},
 	}
 	return protocol.SetupAction{
@@ -281,10 +328,13 @@ func NewManualNvidiaDevicePermissionsAction(actionID, deviceID, recipeSetVersion
 
 // NewManualRocmDriverAction constructs a high-impact manual action for installing AMD ROCm drivers and compute stack.
 func NewManualRocmDriverAction(actionID, deviceID, recipeSetVersion string) protocol.SetupAction {
+	// Existence of /dev/kfd (regardless of this user's access to it) is
+	// what proves the amdgpu/amdkfd kernel driver is actually bound —
+	// independent-review follow-up on WP-M3B-6, FIX_NOW 4.
 	cond := protocol.Condition{
-		Kind: protocol.CondKindCommandAvailable,
-		CommandAvailable: &protocol.CommandAvailableOperand{
-			CommandName: "rocminfo",
+		Kind: protocol.CondKindDeviceNodeAccessible,
+		DeviceNodeAccessible: &protocol.DeviceNodeOperand{
+			Path: rocmComputeNodePath,
 		},
 	}
 	return protocol.SetupAction{
@@ -317,10 +367,15 @@ func NewManualRocmDriverAction(actionID, deviceID, recipeSetVersion string) prot
 
 // NewManualAmdgpuDevicePermissionsAction constructs a high-impact manual action for configuring AMD /dev/kfd device permissions.
 func NewManualAmdgpuDevicePermissionsAction(actionID, deviceID, recipeSetVersion string) protocol.SetupAction {
+	// RequireAccessible: the driver is already bound (that's why this
+	// recipe, not install_rocm_driver, was planned); what must be
+	// verified is specifically that the current user can now open the
+	// node (independent-review follow-up on WP-M3B-6, FIX_NOW 4).
 	cond := protocol.Condition{
-		Kind: protocol.CondKindCommandAvailable,
-		CommandAvailable: &protocol.CommandAvailableOperand{
-			CommandName: "rocminfo",
+		Kind: protocol.CondKindDeviceNodeAccessible,
+		DeviceNodeAccessible: &protocol.DeviceNodeOperand{
+			Path:              rocmComputeNodePath,
+			RequireAccessible: true,
 		},
 	}
 	return protocol.SetupAction{

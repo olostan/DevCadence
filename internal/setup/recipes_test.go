@@ -248,6 +248,132 @@ func TestRecipe_Scenario06_FailClosedOnMissingLicense(t *testing.T) {
 	}
 }
 
+// FailClosedOnMutableOllamaRevision is the independent-review follow-up on
+// WP-M3B-6, FIX_NOW 1: Ollama pre-resolution must reject a mutable
+// revision (e.g. a tag like "main") the same way MLX's does, not merely
+// require it to be non-empty.
+func TestRecipe_FailClosedOnMutableOllamaRevision(t *testing.T) {
+	clk := clock.NewFake(time.Date(2026, 9, 25, 12, 0, 0, 0, time.UTC), 0)
+	seq := ids.NewSequential()
+
+	resolver := &mockResolver{
+		resolveFn: func(ctx context.Context, runtime, modelRef string) (setup.ResolvedModel, error) {
+			return setup.ResolvedModel{
+				Runtime:           "ollama",
+				ModelRef:          "custom-model",
+				ResolvedRevision:  "main", // mutable tag — invalid!
+				ExpectedSizeBytes: 1000,
+				AllowedSource:     "registry.ollama.ai",
+				LicenseReference:  "Apache-2.0",
+			}, nil
+		},
+	}
+
+	planner, err := setup.NewPlanner(setup.PlannerOptions{
+		Clock:            clk,
+		IDs:              seq,
+		SelectedRuntimes: []string{"ollama"},
+		ModelResolver:    resolver,
+		ModelRefs:        map[string]string{"ollama": "custom-model"},
+	})
+	if err != nil {
+		t.Fatalf("NewPlanner: %v", err)
+	}
+
+	report := testReport("")
+	_, err = planner.Plan(report, protocol.TargetCognition, "")
+	if err == nil {
+		t.Fatalf("expected Plan to fail when Ollama revision is mutable, but succeeded")
+	}
+	if !strings.Contains(err.Error(), "not an immutable sha256 manifest digest") {
+		t.Errorf("expected error about non-immutable sha256 manifest digest, got: %v", err)
+	}
+}
+
+// FailClosedOnResolverRuntimeMismatch and
+// FailClosedOnResolverModelRefMismatch are the independent-review
+// follow-up on WP-M3B-6, FIX_NOW 2: the planner must not blindly trust a
+// ModelResolver implementation's returned identity — a resolver that
+// returns a perfectly valid, immutable record for a different
+// runtime/model must not let the plan silently target that artifact.
+func TestRecipe_FailClosedOnResolverRuntimeMismatch(t *testing.T) {
+	clk := clock.NewFake(time.Date(2026, 9, 25, 12, 0, 0, 0, time.UTC), 0)
+	seq := ids.NewSequential()
+
+	resolver := &mockResolver{
+		resolveFn: func(ctx context.Context, runtime, modelRef string) (setup.ResolvedModel, error) {
+			return setup.ResolvedModel{
+				// Requested runtime is "ollama"; resolver returns "mlx".
+				Runtime:           "mlx",
+				ModelRef:          modelRef,
+				ResolvedRevision:  strings.Repeat("a", 40),
+				ExpectedSizeBytes: 1000,
+				AllowedSource:     "huggingface.co",
+				LicenseReference:  "Apache-2.0",
+			}, nil
+		},
+	}
+
+	planner, err := setup.NewPlanner(setup.PlannerOptions{
+		Clock:            clk,
+		IDs:              seq,
+		SelectedRuntimes: []string{"ollama"},
+		ModelResolver:    resolver,
+		ModelRefs:        map[string]string{"ollama": "custom-model"},
+	})
+	if err != nil {
+		t.Fatalf("NewPlanner: %v", err)
+	}
+
+	report := testReport("")
+	_, err = planner.Plan(report, protocol.TargetCognition, "")
+	if err == nil {
+		t.Fatalf("expected Plan to fail when the resolver returns a mismatched runtime, but succeeded")
+	}
+	if !strings.Contains(err.Error(), "mismatched identity") {
+		t.Errorf("expected a mismatched-identity error, got: %v", err)
+	}
+}
+
+func TestRecipe_FailClosedOnResolverModelRefMismatch(t *testing.T) {
+	clk := clock.NewFake(time.Date(2026, 9, 25, 12, 0, 0, 0, time.UTC), 0)
+	seq := ids.NewSequential()
+
+	resolver := &mockResolver{
+		resolveFn: func(ctx context.Context, runtime, modelRef string) (setup.ResolvedModel, error) {
+			return setup.ResolvedModel{
+				Runtime: "ollama",
+				// Requested model_ref is "custom-model"; resolver returns a different one.
+				ModelRef:          "a-different-model",
+				ResolvedRevision:  "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+				ExpectedSizeBytes: 1000,
+				AllowedSource:     "registry.ollama.ai",
+				LicenseReference:  "Apache-2.0",
+			}, nil
+		},
+	}
+
+	planner, err := setup.NewPlanner(setup.PlannerOptions{
+		Clock:            clk,
+		IDs:              seq,
+		SelectedRuntimes: []string{"ollama"},
+		ModelResolver:    resolver,
+		ModelRefs:        map[string]string{"ollama": "custom-model"},
+	})
+	if err != nil {
+		t.Fatalf("NewPlanner: %v", err)
+	}
+
+	report := testReport("")
+	_, err = planner.Plan(report, protocol.TargetCognition, "")
+	if err == nil {
+		t.Fatalf("expected Plan to fail when the resolver returns a mismatched model_ref, but succeeded")
+	}
+	if !strings.Contains(err.Error(), "mismatched identity") {
+		t.Errorf("expected a mismatched-identity error, got: %v", err)
+	}
+}
+
 // 7. Fallback to manual model pull on untrusted CLI identity
 func TestRecipe_Scenario07_ManualModelPullFallbackOnUntrustedIdentity(t *testing.T) {
 	clk := clock.NewFake(time.Date(2026, 9, 25, 12, 0, 0, 0, time.UTC), 0)
@@ -462,6 +588,16 @@ func TestRecipe_Scenario10_HardwareDriverRemediationNvidiaDeviceAccess(t *testin
 }
 
 // 11. Hardware driver remediation: AMD ROCm missing driver
+//
+// The fixture deliberately leaves Accelerators[0].DriverInUse empty (no
+// amdgpu kernel driver bound at all) — the "driver absent" state, distinct
+// from "driver bound but /dev/kfd inaccessible" (see
+// TestRecipe_Scenario11b below). Before the independent-review follow-up
+// on WP-M3B-6, FIX_NOW 3, amdCandidates could not tell these two states
+// apart and always routed to configure_amdgpu_device_permissions,
+// leaving recipe.manual.install_rocm_driver unreachable from the real
+// AssessBackends -> Planner path; this scenario now actually exercises
+// that reachability, which is what its name always claimed.
 func TestRecipe_Scenario11_HardwareDriverRemediationRocmDriver(t *testing.T) {
 	clk := clock.NewFake(time.Date(2026, 9, 25, 12, 0, 0, 0, time.UTC), 0)
 	seq := ids.NewSequential()
@@ -472,7 +608,7 @@ func TestRecipe_Scenario11_HardwareDriverRemediationRocmDriver(t *testing.T) {
 			{
 				ID:           "pci:0000:03:00.0",
 				Vendor:       protocol.VendorAMD,
-				Architecture: "gfx90a", // Supported architecture, but no kfd/dri
+				Architecture: "gfx90a", // Supported architecture, but no amdgpu driver bound.
 			},
 		},
 	}
@@ -495,16 +631,75 @@ func TestRecipe_Scenario11_HardwareDriverRemediationRocmDriver(t *testing.T) {
 
 	var rocmAct *protocol.SetupAction
 	for i := range plan.Actions {
-		if plan.Actions[i].RecipeID == "recipe.manual.configure_amdgpu_device_permissions" {
+		if plan.Actions[i].RecipeID == "recipe.manual.install_rocm_driver" {
 			rocmAct = &plan.Actions[i]
 			break
 		}
 	}
 	if rocmAct == nil {
-		t.Fatalf("expected recipe.manual.configure_amdgpu_device_permissions in plan")
+		t.Fatalf("expected recipe.manual.install_rocm_driver in plan")
 	}
 	if rocmAct.Authority != protocol.AuthorityHighImpactManual {
 		t.Errorf("expected AuthorityHighImpactManual, got %s", rocmAct.Authority)
+	}
+}
+
+// 11b. Hardware driver remediation: AMD ROCm driver present but /dev/kfd
+// inaccessible, exercised through the real AssessBackends -> Planner path
+// (not by calling NewManualAmdgpuDevicePermissionsAction directly, which
+// scenario 12 already covers but which never tests AssessBackends'
+// routing logic). Companion regression to scenario 11, per the
+// independent-review follow-up on WP-M3B-6, FIX_NOW 3's required-repair
+// list.
+func TestRecipe_Scenario11b_HardwareDriverRemediationAmdgpuDeviceAccessViaAssessBackends(t *testing.T) {
+	clk := clock.NewFake(time.Date(2026, 9, 25, 12, 0, 0, 0, time.UTC), 0)
+	seq := ids.NewSequential()
+
+	facts := protocol.EnvironmentFacts{
+		Host: protocol.HostFacts{Family: protocol.OSLinux, Arch: "x86_64"},
+		Accelerators: []protocol.AcceleratorDevice{
+			{
+				ID:           "pci:0000:03:00.0",
+				Vendor:       protocol.VendorAMD,
+				Architecture: "gfx90a",
+				DriverInUse:  "amdgpu", // Driver bound; /dev/kfd is still missing/inaccessible.
+			},
+		},
+	}
+	fp, _ := environment.Fingerprint(facts)
+	report := testReport(fp)
+
+	planner, err := setup.NewPlanner(setup.PlannerOptions{
+		Clock: clk,
+		IDs:   seq,
+		Facts: &facts,
+	})
+	if err != nil {
+		t.Fatalf("NewPlanner: %v", err)
+	}
+
+	plan, err := planner.Plan(report, protocol.TargetHardware, "")
+	if err != nil {
+		t.Fatalf("Plan failed: %v", err)
+	}
+
+	var permAct *protocol.SetupAction
+	for i := range plan.Actions {
+		if plan.Actions[i].RecipeID == "recipe.manual.configure_amdgpu_device_permissions" {
+			permAct = &plan.Actions[i]
+			break
+		}
+	}
+	if permAct == nil {
+		t.Fatalf("expected recipe.manual.configure_amdgpu_device_permissions in plan")
+	}
+	if permAct.Authority != protocol.AuthorityHighImpactManual {
+		t.Errorf("expected AuthorityHighImpactManual, got %s", permAct.Authority)
+	}
+	for i := range plan.Actions {
+		if plan.Actions[i].RecipeID == "recipe.manual.install_rocm_driver" {
+			t.Fatalf("did not expect recipe.manual.install_rocm_driver when the amdgpu driver is already bound")
+		}
 	}
 }
 

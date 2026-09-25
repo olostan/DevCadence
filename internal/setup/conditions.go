@@ -184,6 +184,8 @@ func EvaluateCondition(ctx context.Context, deps EvaluatorDeps, cond protocol.Co
 		return evaluateEndpointHealthy(ctx, deps, cond.EndpointHealthy)
 	case protocol.CondKindEndpointAuthenticated:
 		return evaluateEndpointAuthenticated(ctx, deps, cond.EndpointAuthenticated)
+	case protocol.CondKindDeviceNodeAccessible:
+		return evaluateDeviceNodeAccessible(cond.DeviceNodeAccessible)
 	default:
 		return false, "", errs.New(errs.CategoryInvalidArgument, "EvaluateCondition: unhandled condition kind %q", cond.Kind)
 	}
@@ -195,6 +197,38 @@ func evaluateCommandAvailable(op *protocol.CommandAvailableOperand) (bool, strin
 		return false, fmt.Sprintf("command %q not found on PATH", op.CommandName), nil
 	}
 	return true, fmt.Sprintf("command %q resolved to %s", op.CommandName, path), nil
+}
+
+// evaluateDeviceNodeAccessible is the closed, read-only probe hardware
+// driver/device-permission manual recipes verify against: it checks the
+// actual remediation state of a device special file, not a proxy for it
+// (independent-review follow-up on WP-M3B-6, FIX_NOW 4 — a vendor CLI
+// binary being on PATH proves neither that a kernel driver is bound nor
+// that the current user can access the device it created).
+func evaluateDeviceNodeAccessible(op *protocol.DeviceNodeOperand) (bool, string, error) {
+	info, err := os.Stat(op.Path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false, fmt.Sprintf("device node %s does not exist", op.Path), nil
+		}
+		return false, fmt.Sprintf("device node %s could not be inspected: %v", op.Path, err), nil
+	}
+	if !op.RequireAccessible {
+		return true, fmt.Sprintf("device node %s exists (mode %s)", op.Path, info.Mode()), nil
+	}
+	// A read-only probe cannot merely inspect permission bits and trust
+	// them (ACLs, group membership not yet applied to this process, etc.
+	// can all disagree with the raw mode bits) — actually attempting to
+	// open the node for read/write is the only check that reflects what
+	// this process can really do with it right now. The node is never
+	// written to: the open call itself, immediately closed, is the whole
+	// probe.
+	f, err := os.OpenFile(op.Path, os.O_RDWR, 0)
+	if err != nil {
+		return false, fmt.Sprintf("device node %s exists but is not read/write accessible by the current user: %v", op.Path, err), nil
+	}
+	_ = f.Close()
+	return true, fmt.Sprintf("device node %s is read/write accessible", op.Path), nil
 }
 
 func evaluateExecutableVerified(ctx context.Context, deps EvaluatorDeps, op *protocol.ExecutableVerifiedOperand) (bool, string, error) {
