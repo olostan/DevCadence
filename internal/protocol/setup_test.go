@@ -1,11 +1,14 @@
 package protocol_test
 
 import (
+	"encoding/json"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/olostan/DevCadence/internal/protocol"
+	"github.com/olostan/DevCadence/internal/schema"
 )
 
 func validTestTimestamp() protocol.Timestamp {
@@ -551,4 +554,92 @@ func TestComputeDigestForFixtures(t *testing.T) {
 		t.Fatalf("compute event digest: %v", err)
 	}
 	t.Logf("Computed event digest: %s", evDigest)
+}
+
+// TestSetupPlanEndpointAuthenticatedCredentialRefIDSchemaParity is the
+// independent-review follow-up on WP-M3B-5, round-5 finding 1's required
+// regression: EndpointOperand.CredentialRefID is semantically a WP-M3B-4
+// CredentialRef.RefID, so it must be validated with that same bounded
+// opaque-identifier / never-secret-looking contract in both Go and the
+// setup-plan JSON Schema, not merely required to be non-empty.
+func TestSetupPlanEndpointAuthenticatedCredentialRefIDSchemaParity(t *testing.T) {
+	schemas, err := schema.Default()
+	if err != nil {
+		t.Fatalf("failed to compile schemas: %v", err)
+	}
+
+	buildPlan := func(credentialRefID string) protocol.SetupPlan {
+		act1 := validExecutableAction()
+		act2 := validManualAction()
+		act2.DependsOn = []string{act1.ActionID}
+		act2.ManualInstructions.VerificationCheck = []protocol.Condition{
+			{
+				Kind: protocol.CondKindEndpointAuthenticated,
+				EndpointAuthenticated: &protocol.EndpointOperand{
+					EndpointID:      "cli:claude-code",
+					CredentialRefID: credentialRefID,
+				},
+			},
+		}
+		act2.Postconditions = []protocol.Condition{
+			{
+				Kind: protocol.CondKindEndpointAuthenticated,
+				EndpointAuthenticated: &protocol.EndpointOperand{
+					EndpointID:      "cli:claude-code",
+					CredentialRefID: credentialRefID,
+				},
+			},
+		}
+		return protocol.SetupPlan{
+			SchemaVersion:      protocol.SchemaVersion1,
+			PlanID:             "plan-001",
+			RecipeSetVersion:   "1.0",
+			MachineFingerprint: "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+			CreatedAt:          validTestTimestamp(),
+			Target:             protocol.TargetAll,
+			Actions:            []protocol.SetupAction{act1, act2},
+			RequiredAuthority:  protocol.AuthorityHighImpactManual,
+			TotalEffects: []protocol.EffectCategory{
+				protocol.EffectDevicePermissionChange,
+				protocol.EffectFilesystemWrite,
+				protocol.EffectModelDownload,
+				protocol.EffectNetworkAccess,
+				protocol.EffectPrivilegeElevation,
+			},
+		}
+	}
+
+	cases := []struct {
+		name            string
+		credentialRefID string
+	}{
+		{"valid", "claude-cli-ref"},
+		{"empty", ""},
+		{"secret-shaped", "sk-ant-api03-abcdefghijklmnop"},
+		{"token= keyword", "token=abcdef123456"},
+		{"invalid character", "claude cli ref"},
+		{"at 128-byte limit", strings.Repeat("a", 128)},
+		{"over 128-byte limit", strings.Repeat("a", 129)},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			plan := buildPlan(tc.credentialRefID)
+			digest, err := protocol.ComputePlanDigest(&plan)
+			if err != nil {
+				t.Fatalf("compute plan digest: %v", err)
+			}
+			plan.PlanDigest = digest
+
+			goErr := plan.Validate()
+			data, err := json.Marshal(plan)
+			if err != nil {
+				t.Fatalf("marshal: %v", err)
+			}
+			schemaErr := schemas.ValidateBytes(schema.NameSetupPlan, data)
+			if (goErr == nil) != (schemaErr == nil) {
+				t.Fatalf("parity mismatch: go accepted=%v (err=%v), schema accepted=%v (err=%v)",
+					goErr == nil, goErr, schemaErr == nil, schemaErr)
+			}
+		})
+	}
 }

@@ -352,6 +352,18 @@ func archiveProfile(ctx context.Context, c *CacheManager, profile protocol.Machi
 			return errs.New(errs.CategoryConflict,
 				"setup cache: profile_id %q already has an unparseable archive entry at %s; refusing to overwrite", profile.ProfileID, path)
 		}
+		// Validate the whole existing envelope, not only its embedded Data:
+		// a matching Data payload under a malformed envelope (e.g. an
+		// invalid schema_version, or a fingerprint that disagrees with the
+		// Data it wraps) would let this function report idempotent success
+		// for an archive entry ReadProfileByID/ReadProfileByRef would then
+		// reject — a resolvable-on-write, unresolvable-on-read
+		// contradiction (independent-review follow-up on WP-M3B-5,
+		// round-5 finding 2b).
+		if existingEnv.SchemaVersion != protocol.SchemaVersion1 {
+			return errs.New(errs.CategoryConflict,
+				"setup cache: profile_id %q's archive envelope has invalid schema_version %q; refusing to treat as idempotent", profile.ProfileID, existingEnv.SchemaVersion)
+		}
 		if valErr := existingEnv.Data.Validate(); valErr != nil {
 			return errs.New(errs.CategoryConflict,
 				"setup cache: profile_id %q already has an invalid archived profile at %s (%v); refusing to overwrite", profile.ProfileID, path, valErr)
@@ -359,6 +371,11 @@ func archiveProfile(ctx context.Context, c *CacheManager, profile protocol.Machi
 		if existingEnv.Data.ProfileID != profile.ProfileID {
 			return errs.New(errs.CategoryConflict,
 				"setup cache: profile_id %q's archive file contains profile_id %q instead; refusing to overwrite", profile.ProfileID, existingEnv.Data.ProfileID)
+		}
+		if existingEnv.MachineFingerprint != existingEnv.Data.MachineFingerprint {
+			return errs.New(errs.CategoryConflict,
+				"setup cache: profile_id %q's archive envelope fingerprint %q disagrees with its own Data.MachineFingerprint %q; refusing to treat as idempotent",
+				profile.ProfileID, existingEnv.MachineFingerprint, existingEnv.Data.MachineFingerprint)
 		}
 		existingCanonical, existingCanonErr := protocol.CanonicalJSON(existingEnv.Data)
 		if existingCanonErr != nil {
@@ -461,20 +478,24 @@ func ReadProfileByID(ctx context.Context, c *CacheManager, profileID string) (pr
 	}
 	defer f.Close()
 
+	// This is the immutable provenance archive, not the disposable mutable
+	// cache: a read that finds corrupt/invalid content must fail closed
+	// (not-found, or an integrity error) without deleting anything.
+	// Deleting on read would let a later archiveProfile call see a missing
+	// path and freely create different bytes under the same ProfileID —
+	// exactly the replacement the immutable-key design exists to prohibit
+	// (independent-review follow-up on WP-M3B-5, round-5 finding 2a).
 	var env CacheEnvelope[protocol.MachineCapabilityProfile]
 	dec := json.NewDecoder(f)
 	if err := dec.Decode(&env); err != nil {
-		_ = os.Remove(path)
 		return zero, false, nil
 	}
 
 	if env.SchemaVersion != protocol.SchemaVersion1 {
-		_ = os.Remove(path)
 		return zero, false, nil
 	}
 
 	if err := env.Data.Validate(); err != nil {
-		_ = os.Remove(path)
 		return zero, false, nil
 	}
 
@@ -485,7 +506,6 @@ func ReadProfileByID(ctx context.Context, c *CacheManager, profileID string) (pr
 	// profile for that ID (independent-review follow-up on WP-M3B-5,
 	// finding 1c's resolver-validation ask).
 	if env.Data.ProfileID != profileID {
-		_ = os.Remove(path)
 		return zero, false, nil
 	}
 

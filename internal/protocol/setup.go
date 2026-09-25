@@ -622,9 +622,13 @@ func (c Condition) Validate() error {
 		// credential binding is not evidence, it's a condition that can
 		// never be verified — a plan must not claim it has one when it
 		// does not (independent-review follow-up on WP-M3B-5, round-4
-		// finding 1).
-		if c.EndpointAuthenticated.CredentialRefID == "" {
-			return errs.New(errs.CategoryInvalidArgument, "%s: credential_ref_id is required for endpoint_authenticated", kind)
+		// finding 1). CredentialRefID is semantically a WP-M3B-4
+		// CredentialRef.RefID and SetupPlan is a durable record, so it
+		// gets the same bounded opaque-identifier/never-secret-looking
+		// contract RefID itself uses, not just a non-empty check
+		// (independent-review follow-up on WP-M3B-5, round-5 finding 1).
+		if err := validateOpaqueID(kind, "credential_ref_id", c.EndpointAuthenticated.CredentialRefID, 128, true); err != nil {
+			return err
 		}
 	case CondKindModelPresent:
 		if c.ModelPresent == nil {

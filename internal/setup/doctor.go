@@ -90,6 +90,12 @@ type Doctor struct {
 	credManager      *credentials.Manager
 	credRefs         []protocol.CredentialRef
 	endpointCredRefs map[string]string
+	// credRefIndex is the set of RefIDs among credRefs, computed once in
+	// NewDoctor (which already validated every entry structurally and every
+	// endpointCredRefs value against it). discoverEndpoints uses it to
+	// decide whether an adapter-declared CognitionEndpoint.CredentialRef is
+	// safe to treat as machine-verifiable.
+	credRefIndex map[string]bool
 }
 
 // NewDoctor returns a Doctor engine.
@@ -119,6 +125,29 @@ func NewDoctor(opts DoctorOptions) (*Doctor, error) {
 		defPolicy := cognition.DefaultPolicy()
 		policy = &defPolicy
 	}
+
+	// The endpoint->CredentialRef binding must be referentially valid, not
+	// only syntactically valid: an EndpointCredentialRefs value that looks
+	// like a well-formed RefID but names no actually-configured
+	// CredentialRef would let Planner generate an endpoint_authenticated
+	// condition the production checker can never resolve — the exact
+	// "impossible plan" shape earlier rounds eliminated for the guessed-
+	// locator case, reintroduced here via a typo'd binding instead
+	// (independent-review follow-up on WP-M3B-5, round-5 finding 1).
+	refIndex := make(map[string]bool, len(opts.CredentialRefs))
+	for _, ref := range opts.CredentialRefs {
+		if err := ref.Validate(); err != nil {
+			return nil, errs.Wrap(errs.CategoryInvalidArgument, err, "NewDoctor: DoctorOptions.CredentialRefs contains an invalid entry")
+		}
+		refIndex[ref.RefID] = true
+	}
+	for endpointID, refID := range opts.EndpointCredentialRefs {
+		if !refIndex[refID] {
+			return nil, errs.New(errs.CategoryInvalidArgument,
+				"NewDoctor: EndpointCredentialRefs[%q] names credential_ref_id %q, which is not among the configured CredentialRefs", endpointID, refID)
+		}
+	}
+
 	return &Doctor{
 		clock:            opts.Clock,
 		ids:              opts.IDs,
@@ -131,6 +160,7 @@ func NewDoctor(opts DoctorOptions) (*Doctor, error) {
 		credManager:      opts.CredentialManager,
 		credRefs:         opts.CredentialRefs,
 		endpointCredRefs: opts.EndpointCredentialRefs,
+		credRefIndex:     refIndex,
 	}, nil
 }
 
@@ -740,7 +770,18 @@ func (d *Doctor) discoverEndpoints(ctx context.Context, facts protocol.Environme
 		// declared on the endpoint itself: it is the deliberate, reviewed
 		// source of truth, not a best-effort discovery byproduct
 		// (independent-review follow-up on WP-M3B-5, round-4 finding 1).
-		credRef := ep.CredentialRef
+		// An adapter-declared CredentialRef is only carried through as
+		// machine-verifiable when it resolves to the same configured
+		// CredentialRef set NewDoctor already validated
+		// EndpointCredentialRefs against — an unrecognized adapter-supplied
+		// value is diagnostic-only (left empty here), never treated as a
+		// real binding Planner could turn into an unverifiable
+		// endpoint_authenticated condition (independent-review follow-up on
+		// WP-M3B-5, round-5 finding 1).
+		credRef := ""
+		if d.credRefIndex[ep.CredentialRef] {
+			credRef = ep.CredentialRef
+		}
 		if bound, ok := d.endpointCredRefs[ep.ID]; ok && bound != "" {
 			credRef = bound
 		}

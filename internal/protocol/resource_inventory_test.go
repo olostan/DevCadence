@@ -615,6 +615,65 @@ func TestResourceInventoryValidation_DuplicateIDs(t *testing.T) {
 	})
 }
 
+// TestResourceInventoryValidation_EndpointCredentialRefMustResolve is the
+// independent-review follow-up on WP-M3B-5, round-5 finding 1's "valuable"
+// suggestion: when Credentials is populated (the authoritative binding
+// substrate), an endpoint's non-empty CredentialRef must name an actual
+// entry there, so the durable inventory can never internally contradict
+// itself about which endpoints are bound to which credentials.
+func TestResourceInventoryValidation_EndpointCredentialRefMustResolve(t *testing.T) {
+	buildInventory := func(endpointCredRef string, includeMatchingCredential bool) protocol.ResourceInventory {
+		inv := validResourceInventory()
+		inv.Profile = &protocol.MachineProfileRef{
+			ProfileID: "mcp-001", MachineFingerprint: inv.MachineFingerprint,
+			ObservedAt: validTestTimestamp(), ProbeDepth: protocol.DepthHealth,
+		}
+		inv.CognitionEndpoints = []protocol.CognitionEndpointSummary{
+			{
+				ID: "cli:claude", Kind: protocol.EndpointAuthenticatedCLI, Locality: protocol.LocalityRemote,
+				Health: protocol.EndpointHealthReady, Auth: protocol.AuthAuthenticated,
+				CostClass: protocol.CostSubscriptionIncluded, RequiredSourceExposure: protocol.ExposureFocusedSnippets,
+				CredentialRef: endpointCredRef,
+			},
+		}
+		if includeMatchingCredential {
+			inv.Credentials = []protocol.CredentialInventoryEntry{
+				{
+					Ref: protocol.CredentialRef{SchemaVersion: protocol.SchemaVersion1, RefID: "cred-claude", Kind: protocol.CredRefCLISession, Locator: "claude"},
+					Evidence: protocol.AuthEvidence{
+						SchemaVersion: protocol.SchemaVersion1, RefID: "cred-claude", Kind: protocol.CredRefCLISession,
+						Status: protocol.AuthStatusAuthenticated, ProbeKind: protocol.AuthProbeCLIAuthCall,
+						ObservedAt: validTestTimestamp(), ProbeTarget: "claude",
+					},
+				},
+			}
+		}
+		return inv
+	}
+
+	t.Run("endpoint CredentialRef matches an entry in Credentials", func(t *testing.T) {
+		inv := buildInventory("cred-claude", true)
+		if err := inv.Validate(); err != nil {
+			t.Fatalf("expected valid inventory, got: %v", err)
+		}
+	})
+
+	t.Run("endpoint CredentialRef naming an unrelated RefID is rejected", func(t *testing.T) {
+		inv := buildInventory("cred-typo", true)
+		if err := inv.Validate(); err == nil {
+			t.Fatal("expected error: endpoint CredentialRef names a RefID absent from Credentials")
+		}
+	})
+
+	t.Run("empty Credentials does not trigger the check (no authoritative substrate to contradict)", func(t *testing.T) {
+		inv := buildInventory("cred-claude", false)
+		inv.Credentials = nil
+		if err := inv.Validate(); err != nil {
+			t.Fatalf("expected valid inventory when Credentials is empty, got: %v", err)
+		}
+	})
+}
+
 func TestDoctorReportValidation_DuplicatesAndInventoryParity(t *testing.T) {
 	validReport := func() protocol.DoctorReport {
 		inv := validResourceInventory()

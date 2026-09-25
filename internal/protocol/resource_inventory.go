@@ -451,6 +451,22 @@ func (r *ResourceInventory) Validate() error {
 		}
 		seenCreds[c.Ref.RefID] = true
 	}
+	// When Credentials is populated, it is the authoritative binding
+	// substrate for this inventory: an endpoint claiming a CredentialRef
+	// that names no entry there would let the durable inventory contradict
+	// itself (a binding the inventory itself cannot back). Credentials
+	// being empty is not itself an error — an inventory can validly omit
+	// credential observation entirely — so this check only activates once
+	// there is something to be inconsistent with (independent-review
+	// follow-up on WP-M3B-5, round-5 finding 1).
+	if len(r.Credentials) > 0 {
+		for _, ep := range r.CognitionEndpoints {
+			if ep.CredentialRef != "" && !seenCreds[ep.CredentialRef] {
+				return errs.New(errs.CategoryInvalidArgument,
+					"%s: cognition_endpoints[%s].credential_ref %q does not match any entry in credentials", kind, ep.ID, ep.CredentialRef)
+			}
+		}
+	}
 	seenScopes := make(map[ScopeKind]bool, len(r.Readiness))
 	for _, rd := range r.Readiness {
 		if err := rd.Validate(); err != nil {

@@ -752,3 +752,218 @@ func TestReadProfileByRef_CrossChecksFullReference(t *testing.T) {
 		}
 	})
 }
+
+// TestReadProfileByID_NonMutatingOnCorruption is the independent-review
+// follow-up on WP-M3B-5, round-5 finding 2a: reading the immutable
+// provenance archive must never delete the entry as a side effect,
+// regardless of why it fails to resolve — deleting on read would let a
+// later archiveProfile call see a missing path and freely create different
+// bytes under the same ProfileID, defeating the immutable-key guarantee.
+func TestReadProfileByID_NonMutatingOnCorruption(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 9, 25, 10, 0, 0, 0, time.UTC)
+	clk := clock.NewFake(now, 0)
+
+	cases := []struct {
+		name    string
+		content []byte
+	}{
+		{"malformed JSON", []byte("{not valid json")},
+		{"schema_version invalid", func() []byte {
+			env := CacheEnvelope[protocol.MachineCapabilityProfile]{
+				SchemaVersion:      "9.9",
+				CreatedAt:          protocol.NewTimestamp(now),
+				ExpiresAt:          protocol.NewTimestamp(now.Add(time.Hour)),
+				MachineFingerprint: "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+				Data: protocol.MachineCapabilityProfile{
+					SchemaVersion: protocol.SchemaVersion1, ProfileID: "mcp-corrupt-id",
+					MachineFingerprint: "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+					ObservedAt:         protocol.NewTimestamp(now), KnowledgeRevision: "2026-09-22",
+					ProbeDepth: protocol.DepthHealth, Assessment: protocol.AssessmentReady,
+					Environment: protocol.EnvironmentFacts{
+						Host:           protocol.HostFacts{Family: protocol.OSLinux, Arch: "amd64"},
+						Virtualization: protocol.VirtualizationFacts{Container: protocol.ContainerNone},
+					},
+					AcceleratorCandidates: []protocol.AcceleratorCandidate{},
+				},
+			}
+			b, _ := json.Marshal(env)
+			return b
+		}()},
+		{"invalid profile content", func() []byte {
+			env := CacheEnvelope[protocol.MachineCapabilityProfile]{
+				SchemaVersion:      protocol.SchemaVersion1,
+				CreatedAt:          protocol.NewTimestamp(now),
+				ExpiresAt:          protocol.NewTimestamp(now.Add(time.Hour)),
+				MachineFingerprint: "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+				Data:               protocol.MachineCapabilityProfile{SchemaVersion: protocol.SchemaVersion1},
+			}
+			b, _ := json.Marshal(env)
+			return b
+		}()},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			cm, err := NewCacheManager(tmpDir, clk, 24*time.Hour)
+			if err != nil {
+				t.Fatalf("NewCacheManager: %v", err)
+			}
+			profilesDir := filepath.Join(tmpDir, "profiles")
+			if err := os.MkdirAll(profilesDir, 0700); err != nil {
+				t.Fatalf("mkdir profiles: %v", err)
+			}
+			path := filepath.Join(profilesDir, "mcp-corrupt-id.json")
+			if err := os.WriteFile(path, tc.content, 0600); err != nil {
+				t.Fatalf("write fixture: %v", err)
+			}
+
+			_, found, err := ReadProfileByID(ctx, cm, "mcp-corrupt-id")
+			if err != nil {
+				t.Fatalf("ReadProfileByID: %v", err)
+			}
+			if found {
+				t.Errorf("expected corrupt archive entry to not resolve")
+			}
+
+			after, readErr := os.ReadFile(path)
+			if readErr != nil {
+				t.Fatalf("expected archive file to still exist after a failed read, got: %v", readErr)
+			}
+			if string(after) != string(tc.content) {
+				t.Errorf("archive file bytes changed as a side effect of reading it")
+			}
+		})
+	}
+}
+
+// TestArchiveProfile_InvalidExistingEnvelopeFailsClosed is the
+// independent-review follow-up on WP-M3B-5, round-5 finding 2b:
+// archiveProfile must validate the whole existing envelope — not only its
+// embedded Data — before declaring a write idempotent, so it can never
+// report success for an archive entry ReadProfileByID/ReadProfileByRef
+// would then reject.
+func TestArchiveProfile_InvalidExistingEnvelopeFailsClosed(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 9, 25, 10, 0, 0, 0, time.UTC)
+	clk := clock.NewFake(now, 0)
+
+	facts := protocol.EnvironmentFacts{
+		Host:           protocol.HostFacts{Family: protocol.OSLinux, Arch: "amd64"},
+		Virtualization: protocol.VirtualizationFacts{Container: protocol.ContainerNone},
+	}
+	profile := protocol.MachineCapabilityProfile{
+		SchemaVersion:         protocol.SchemaVersion1,
+		ProfileID:             "mcp-envelope-id",
+		MachineFingerprint:    "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+		ObservedAt:            protocol.NewTimestamp(now),
+		KnowledgeRevision:     "2026-09-22",
+		ProbeDepth:            protocol.DepthHealth,
+		Assessment:            protocol.AssessmentReady,
+		Environment:           facts,
+		AcceleratorCandidates: []protocol.AcceleratorCandidate{},
+	}
+
+	cases := []struct {
+		name string
+		env  CacheEnvelope[protocol.MachineCapabilityProfile]
+	}{
+		{"valid Data, invalid envelope schema_version", CacheEnvelope[protocol.MachineCapabilityProfile]{
+			SchemaVersion:      "9.9",
+			CreatedAt:          protocol.NewTimestamp(now),
+			ExpiresAt:          protocol.NewTimestamp(now.Add(time.Hour)),
+			MachineFingerprint: profile.MachineFingerprint,
+			Data:               profile,
+		}},
+		{"envelope fingerprint disagrees with Data fingerprint", CacheEnvelope[protocol.MachineCapabilityProfile]{
+			SchemaVersion:      protocol.SchemaVersion1,
+			CreatedAt:          protocol.NewTimestamp(now),
+			ExpiresAt:          protocol.NewTimestamp(now.Add(time.Hour)),
+			MachineFingerprint: "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+			Data:               profile,
+		}},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			cm, err := NewCacheManager(tmpDir, clk, 24*time.Hour)
+			if err != nil {
+				t.Fatalf("NewCacheManager: %v", err)
+			}
+			profilesDir := filepath.Join(tmpDir, "profiles")
+			if err := os.MkdirAll(profilesDir, 0700); err != nil {
+				t.Fatalf("mkdir profiles: %v", err)
+			}
+			bytes, err := json.Marshal(tc.env)
+			if err != nil {
+				t.Fatalf("marshal fixture envelope: %v", err)
+			}
+			path := filepath.Join(profilesDir, "mcp-envelope-id.json")
+			if err := os.WriteFile(path, bytes, 0600); err != nil {
+				t.Fatalf("write fixture: %v", err)
+			}
+
+			err = WriteProfile(ctx, cm, profile, 24*time.Hour)
+			if err == nil {
+				t.Fatalf("expected archiveProfile to fail closed on an invalid existing envelope, not report idempotent success")
+			}
+			if errs.CategoryOf(err) != errs.CategoryConflict {
+				t.Errorf("expected CategoryConflict, got: %v", err)
+			}
+		})
+	}
+}
+
+// TestArchiveProfile_SuccessAlwaysMakesReadProfileByRefResolve is the
+// independent-review follow-up on WP-M3B-5, round-5 finding 2's required
+// invariant: after every successful archiveProfile outcome (a fresh write
+// or an idempotent no-op), ReadProfileByRef for the corresponding
+// MachineProfileRef must resolve.
+func TestArchiveProfile_SuccessAlwaysMakesReadProfileByRefResolve(t *testing.T) {
+	ctx := context.Background()
+	tmpDir := t.TempDir()
+	now := time.Date(2026, 9, 25, 10, 0, 0, 0, time.UTC)
+	clk := clock.NewFake(now, 0)
+	cm, err := NewCacheManager(tmpDir, clk, 24*time.Hour)
+	if err != nil {
+		t.Fatalf("NewCacheManager: %v", err)
+	}
+
+	facts := protocol.EnvironmentFacts{
+		Host:           protocol.HostFacts{Family: protocol.OSLinux, Arch: "amd64"},
+		Virtualization: protocol.VirtualizationFacts{Container: protocol.ContainerNone},
+	}
+	profile := protocol.MachineCapabilityProfile{
+		SchemaVersion:         protocol.SchemaVersion1,
+		ProfileID:             "mcp-invariant-id",
+		MachineFingerprint:    "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+		ObservedAt:            protocol.NewTimestamp(now),
+		KnowledgeRevision:     "2026-09-22",
+		ProbeDepth:            protocol.DepthHealth,
+		Assessment:            protocol.AssessmentReady,
+		Environment:           facts,
+		AcceleratorCandidates: []protocol.AcceleratorCandidate{},
+	}
+	ref := protocol.MachineProfileRef{
+		ProfileID: profile.ProfileID, MachineFingerprint: profile.MachineFingerprint,
+		ObservedAt: profile.ObservedAt, ProbeDepth: profile.ProbeDepth,
+	}
+
+	// First write: fresh archive.
+	if err := WriteProfile(ctx, cm, profile, 24*time.Hour); err != nil {
+		t.Fatalf("WriteProfile (first): %v", err)
+	}
+	if _, found, err := ReadProfileByRef(ctx, cm, ref); err != nil || !found {
+		t.Fatalf("expected ReadProfileByRef to resolve after first write: found=%v, err=%v", found, err)
+	}
+
+	// Second write: idempotent no-op (identical content).
+	if err := WriteProfile(ctx, cm, profile, 24*time.Hour); err != nil {
+		t.Fatalf("WriteProfile (idempotent): %v", err)
+	}
+	if _, found, err := ReadProfileByRef(ctx, cm, ref); err != nil || !found {
+		t.Fatalf("expected ReadProfileByRef to resolve after idempotent write: found=%v, err=%v", found, err)
+	}
+}

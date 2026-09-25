@@ -145,9 +145,11 @@
               "properties": {
                 "endpoint_id": { "type": "string" },
                 "credential_ref_id": {
-                  "type": "string",
-                  "minLength": 1,
-                  "description": "Explicit, non-secret CredentialRef.RefID this endpoint is bound to. Required: a machine-evaluable authentication condition with no configured binding can never be verified, so a plan must not claim to have one when it does not — never a locator guessed from endpoint_id (independent-review follow-up on WP-M3B-5, round-3 finding 2 and round-4 finding 1)."
+                  "description": "Explicit, non-secret CredentialRef.RefID this endpoint is bound to (the same bounded opaque-identifier contract as CredentialRef.RefID, reusing its canonical noSecretLike check). Required: a machine-evaluable authentication condition with no configured binding can never be verified, so a plan must not claim to have one when it does not — never a locator guessed from endpoint_id (independent-review follow-up on WP-M3B-5, round-3 finding 2, round-4 finding 1, round-5 finding 1).",
+                  "allOf": [
+                    { "$ref": "devcadence:///credential-ref.schema.json#/$defs/noSecretLike" },
+                    { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-:]+$" }
+                  ]
                 }
               }
             }

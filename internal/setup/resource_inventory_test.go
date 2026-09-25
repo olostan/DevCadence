@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/olostan/DevCadence/internal/clock"
+	"github.com/olostan/DevCadence/internal/cognition"
 	"github.com/olostan/DevCadence/internal/credentials"
 	"github.com/olostan/DevCadence/internal/environment"
 	"github.com/olostan/DevCadence/internal/ids"
@@ -133,15 +134,18 @@ func TestBuildResourceInventoryChecksConfiguredCredentials(t *testing.T) {
 	}
 }
 
-// TestBuildResourceInventoryMalformedRefFailsClosed proves a structurally
-// malformed configured CredentialRef fails BuildResourceInventory outright
-// (a real configuration bug in DoctorOptions.CredentialRefs, distinct from
-// "the credential isn't there", which CheckCredential already reports as a
-// valid Unavailable/Unauthenticated AuthEvidence rather than a Go error) —
-// fail closed rather than fabricating a plausible-looking evidence entry
-// for a reference that was never actually checkable (AGENTS.md §16, DCI-104).
-func TestBuildResourceInventoryMalformedRefFailsClosed(t *testing.T) {
-	ctx := context.Background()
+// TestNewDoctorMalformedRefFailsClosed proves a structurally malformed
+// configured CredentialRef fails NewDoctor outright (a real configuration
+// bug in DoctorOptions.CredentialRefs, distinct from "the credential isn't
+// there", which CheckCredential already reports as a valid
+// Unavailable/Unauthenticated AuthEvidence rather than a Go error) — fail
+// closed as early as construction, rather than fabricating a
+// plausible-looking evidence entry for a reference that was never actually
+// checkable (AGENTS.md §16, DCI-104). NewDoctor validates every configured
+// CredentialRef structurally, since round-5's referential-validity fix
+// (independent-review follow-up on WP-M3B-5) needs a clean RefID index to
+// check EndpointCredentialRefs bindings against.
+func TestNewDoctorMalformedRefFailsClosed(t *testing.T) {
 	clk := clock.NewFake(time.Date(2026, 9, 24, 10, 0, 0, 0, time.UTC), 0)
 	seq := ids.NewSequential()
 
@@ -151,16 +155,97 @@ func TestBuildResourceInventoryMalformedRefFailsClosed(t *testing.T) {
 	}
 
 	// Malformed: locator is required and this leaves it empty, which
-	// fails CredentialRef.Validate() and so CheckCredential returns an
-	// error rather than a valid AuthEvidence.
+	// fails CredentialRef.Validate().
 	badRef := protocol.CredentialRef{SchemaVersion: protocol.SchemaVersion1, RefID: "cred-bad", Kind: protocol.CredRefEnvVar, Locator: ""}
 
-	doc, err := NewDoctor(DoctorOptions{
+	_, err = NewDoctor(DoctorOptions{
 		Clock:             clk,
 		IDs:               seq,
 		HomeDir:           t.TempDir(),
 		CredentialManager: mgr,
 		CredentialRefs:    []protocol.CredentialRef{badRef},
+	})
+	if err == nil {
+		t.Fatal("expected NewDoctor to fail closed on a malformed configured CredentialRef")
+	}
+}
+
+// TestNewDoctorRejectsEndpointCredentialRefBindingToUnknownRefID is the
+// independent-review follow-up on WP-M3B-5, round-5 finding 1: an
+// EndpointCredentialRefs value that names no actually-configured
+// CredentialRef (a typo, or a stale binding after a CredentialRefs entry
+// was removed) must fail NewDoctor at construction time, not silently
+// produce an unverifiable endpoint_authenticated condition downstream.
+func TestNewDoctorRejectsEndpointCredentialRefBindingToUnknownRefID(t *testing.T) {
+	clk := clock.NewFake(time.Date(2026, 9, 24, 10, 0, 0, 0, time.UTC), 0)
+	seq := ids.NewSequential()
+
+	_, err := NewDoctor(DoctorOptions{
+		Clock:   clk,
+		IDs:     seq,
+		HomeDir: t.TempDir(),
+		CredentialRefs: []protocol.CredentialRef{
+			{SchemaVersion: protocol.SchemaVersion1, RefID: "cred-real", Kind: protocol.CredRefCLISession, Locator: "claude"},
+		},
+		EndpointCredentialRefs: map[string]string{
+			"cli:claude": "cred-typo",
+		},
+	})
+	if err == nil {
+		t.Fatal("expected NewDoctor to reject an EndpointCredentialRefs binding to a RefID absent from CredentialRefs")
+	}
+}
+
+// TestDoctorDiscoverEndpoints_IgnoresUnrecognizedAdapterCredentialRef is
+// the independent-review follow-up on WP-M3B-5, round-5 finding 1: an
+// adapter-declared CognitionEndpoint.CredentialRef that does not resolve
+// against the configured CredentialRefs index must be treated as
+// diagnostic-only (left out of the summary), never carried through as a
+// machine-verifiable binding Planner could turn into an unverifiable
+// endpoint_authenticated condition.
+func TestDoctorDiscoverEndpoints_IgnoresUnrecognizedAdapterCredentialRef(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 9, 25, 12, 0, 0, 0, time.UTC)
+	clk := clock.NewFake(now, 0)
+	seq := ids.NewSequential()
+	tmpHome := t.TempDir()
+
+	stub := &stubCognitionAdapter{
+		endpoints: []protocol.CognitionEndpoint{
+			{
+				ID:                     "remote:some-provider",
+				Kind:                   protocol.EndpointRemoteAPI,
+				Locality:               protocol.LocalityRemote,
+				Health:                 protocol.EndpointHealthReady,
+				Auth:                   protocol.AuthAuthenticated,
+				CostClass:              protocol.CostRemoteEconomy,
+				RequiredSourceExposure: protocol.ExposureFocusedSnippets,
+				StructuredOutput:       protocol.FeatureDeclared,
+				ToolUse:                protocol.FeatureDeclared,
+				ObservedAt:             protocol.NewTimestamp(now),
+				// Declared by the adapter itself, but never configured in
+				// DoctorOptions.CredentialRefs below.
+				CredentialRef: "unconfigured-ref",
+			},
+		},
+	}
+	service, err := cognition.NewService(cognition.Options{
+		Adapters: []cognition.Adapter{stub},
+		Clock:    clk,
+		IDs:      seq,
+	})
+	if err != nil {
+		t.Fatalf("cognition.NewService: %v", err)
+	}
+
+	doc, err := NewDoctor(DoctorOptions{
+		Clock:            clk,
+		IDs:              seq,
+		HomeDir:          tmpHome,
+		CognitionService: service,
+		CredentialRefs: []protocol.CredentialRef{
+			{SchemaVersion: protocol.SchemaVersion1, RefID: "cred-real", Kind: protocol.CredRefCLISession, Locator: "claude"},
+		},
 	})
 	if err != nil {
 		t.Fatalf("NewDoctor: %v", err)
@@ -172,8 +257,15 @@ func TestBuildResourceInventoryMalformedRefFailsClosed(t *testing.T) {
 		t.Fatalf("Fingerprint: %v", err)
 	}
 
-	if _, err := doc.BuildResourceInventory(ctx, facts, fp, nil, nil, nil, nil); err == nil {
-		t.Fatal("expected BuildResourceInventory to fail closed on a malformed configured CredentialRef")
+	summaries, _, _, _, err := doc.discoverEndpoints(ctx, facts, fp)
+	if err != nil {
+		t.Fatalf("discoverEndpoints: %v", err)
+	}
+	if len(summaries) != 1 {
+		t.Fatalf("expected 1 endpoint summary, got %d", len(summaries))
+	}
+	if got := summaries[0].CredentialRef; got != "" {
+		t.Fatalf("CredentialRef = %q, want empty (an unrecognized adapter-declared ref must not be carried through as machine-verifiable)", got)
 	}
 }
 
