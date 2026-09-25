@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -17,8 +18,10 @@ import (
 // Running in-process rather than building a binary keeps the suite fast and
 // lets it assert on error categories rather than only on exit codes.
 type cli struct {
-	t  *testing.T
-	db string
+	t          *testing.T
+	db         string
+	stdin      io.Reader
+	isTerminal func() bool
 }
 
 func newCLI(t *testing.T) *cli {
@@ -30,7 +33,7 @@ func (c *cli) run(args ...string) (string, string, error) {
 	c.t.Helper()
 	var stdout, stderr bytes.Buffer
 	full := append([]string{"-db", c.db}, args...)
-	err := run(context.Background(), full, &stdout, &stderr)
+	err := runWithEnv(context.Background(), full, &stdout, &stderr, c.stdin, c.isTerminal)
 	return stdout.String(), stderr.String(), err
 }
 

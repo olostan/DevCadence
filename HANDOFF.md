@@ -392,34 +392,59 @@ Full detail in `docs/work-packages/wp-m3b-6-ewp.md` §11.
 
 **Known blockers / open questions:** none.
 
-## WP-M3B-7 — CLI surface and minimal guided interaction (in progress)
+## WP-M3B-7 — CLI surface and minimal guided interaction (implementation complete, ready for review)
 
 - **EWP status:** authored, frozen, and committed at `docs/work-packages/wp-m3b-7-ewp.md`.
 - **Base commit this WP started from:** `bae6d2a86f0a78ba36f36296be04106be0c7fbcc`
-- **Scope:**
-  - `devcadence doctor` command (plain text summary and `--json` output validated against `doctor-report.schema.json`), including `--fix` generating `SetupPlan`.
-  - `devcadence setup plan [target]` command (plain text plan summary and `--json` output validated against `setup-plan.schema.json`).
-  - `devcadence setup apply` command (`--plan`, `--approve-plan`, `--yes`, `--json` output validated against `setup-execution-report.schema.json`, minimal interactive confirmation, non-interactive fail-closed validation, and drift detection).
-  - `devcadence setup recover` command (`--plan`, `--json`) reconciling interrupted actions.
-  - Defined exit code contract: `0` (no-op/clean), `1` (execution failure), `2` (invalid argument), `3` (not found), `4` (precondition drift / refresh required), `5` (integrity), `6` (plan generated).
-  - Pure adapter pattern: no domain logic or duplicate checks in CLI layer.
-  - Non-interactive mode emits zero ANSI escape sequences.
-  - `--no-tui` accepted as compatibility no-op flag across all setup/doctor subcommands.
+- **Implementation deliverables:**
+  1. `cmd/devcadence/main.go`:
+     - Added `ExitCoder` interface and exit code constants (0–6).
+     - Mapped `CategoryConflict` to `ExitCodePreconditionDrift` (4) and `CategoryPlanGenerated` to `ExitCodePlanGenerated` (6).
+     - Silenced stderr noise for `ExitCodePlanGenerated` (a plan generated is a normal expected outcome).
+  2. `cmd/devcadence/run.go`:
+     - Added `stdin io.Reader` and `isTerminal func() bool` to `env` struct.
+     - Added `homeDir()` resolver fallback to user cache/home directories.
+     - Registered `doctor` and `setup` subcommands in `commands()`.
+  3. `cmd/devcadence/cmd_doctor.go`:
+     - Implemented `devcadence doctor` with plain text summary, `--json` structured output, `--fix` plan generation, and schema validation against `schemas/doctor-report.schema.json` and `schemas/setup-plan.schema.json`.
+     - Explicit exit codes: 0 (clean/ready), 1 (remediations needed without `--fix`), 6 (plan generated with `--fix`).
+     - Refuses `inference` probe depth per ADR-0014 §2.
+  4. `cmd/devcadence/cmd_setup.go`:
+     - Implemented `devcadence setup plan [target]` (`--output`, `--json`, `--profile`, `--depth`, `--target`, `--no-tui`), emitting exit code 6 if actions are pending or exit code 0 if already satisfied.
+     - Implemented `devcadence setup apply` (`--plan`, `--approve-plan`, `--yes`, `--json`, `--no-tui`):
+       - Enforces two-step approval workflow.
+       - Validates plan file existence and schema/model integrity (exit code 5 on corrupt/invalid plans, exit code 3 on missing file).
+       - Enforces non-interactive fail-closed validation when `approve-plan` is missing on non-TTY.
+       - Supports interactive confirmation (`[y/N]`) on TTY.
+       - Verifies `--yes` authorization scope against required plan authority.
+       - Handles precondition drift gracefully with exit code 4 (`CategoryConflict`).
+       - Validates execution report against `schemas/setup-execution-report.schema.json`.
+     - Implemented `devcadence setup recover` (`--plan`, `--json`, `--no-tui`) reconciling interrupted actions via sandboxed executor.
+     - Added `reorderArgs` flag reordering helper for ergonomic CLI option ordering across subcommands.
+  5. `cmd/devcadence/cli_doctor_test.go` and `cmd/devcadence/cli_setup_test.go`:
+     - Comprehensive unit and end-to-end tests covering all doctor and setup workflows, schema validation, exit code mappings (0, 1, 2, 3, 4, 5, 6), interactive approval/rejection, non-interactive fail-closed checks, drift detection, and ANSI-free output.
+
+- **Verification evidence:**
+  - `go build ./...`: PASS, no diagnostics.
+  - `go vet ./...`: PASS, no diagnostics.
+  - `gofmt -l cmd/devcadence/`: PASS, all files clean.
+  - `go test -count=1 ./...`: PASS across all packages.
+  - `go test -race -count=1 ./cmd/devcadence/... ./internal/setup/... ./internal/protocol/... ./internal/credentials/... ./internal/schema/... ./tests/...`: PASS, zero race reports.
+  - `GOOS=windows GOARCH=amd64 go build ./...` and `GOOS=linux GOARCH=amd64 go build ./...`: PASS, clean cross-compilation.
+  - `git diff --check`: PASS.
 
 ## Next concrete action
 
-Implement WP-M3B-7 against the frozen EWP:
-1. Extend `cmd/devcadence/main.go` and `cmd/devcadence/run.go` with exit code mapping and command dispatch.
-2. Implement `cmd/devcadence/cmd_doctor.go` and `cmd/devcadence/cmd_setup.go`.
-3. Add full unit and end-to-end test suite in `cmd/devcadence/cli_doctor_test.go` and `cmd/devcadence/cli_setup_test.go`.
-4. Verify with full verification suite, then commit, push, and request independent review.
+1. Commit and push WP-M3B-7 implementation to `feat/m3b-guided-bootstrap`.
+2. Post review request comment on PR #10 with documentation references and checkpoint details.
+3. Launch background `/github-pr-comment-poller` to await independent review.
 
 ## Resume checklist for the next agent
 
 1. `git fetch origin feat/m3b-guided-bootstrap` and check out the branch.
    Record the fetched `HEAD` SHA as your own session's "Expected remote
    HEAD" baseline.
-2. Do not trust this file blindly: run `go build ./... && go test -count=1 ./...`
-   and confirm it matches what's claimed above.
-3. Read `docs/work-packages/wp-m3b-7-ewp.md` and PR #10 comments for review disposition.
-4. Continue from "Next concrete action" above.
+2. Verify test suite with `go test -count=1 ./...`.
+3. Check PR #10 comments for independent review findings on WP-M3B-7.
+4. If review is GREEN/Accepted, proceed to WP-M3B-8 (Milestone Closure & Verification).
+5. If review requests fixes, implement repairs per the EWP and review instructions.

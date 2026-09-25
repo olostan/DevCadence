@@ -22,6 +22,22 @@ import (
 // -ldflags "-X main.version=..."; "dev" is the honest answer otherwise.
 var version = "dev"
 
+// ExitCoder is implemented by errors that specify an explicit process exit status.
+type ExitCoder interface {
+	ExitCode() int
+}
+
+// Standard exit codes distinguishing operational outcomes per WP-M3B-7.
+const (
+	ExitCodeSuccess         = 0
+	ExitCodeExecutionError  = 1
+	ExitCodeInvalidArgument = 2
+	ExitCodeNotFound        = 3
+	ExitCodeDrift           = 4
+	ExitCodeIntegrity       = 5
+	ExitCodePlanGenerated   = 6
+)
+
 func main() {
 	// Cancelling on SIGINT/SIGTERM propagates through every context-aware
 	// operation, which is what ENGINEERING_STANDARDS.md §7 asks of anything
@@ -34,27 +50,34 @@ func main() {
 		if errors.Is(err, errFlagHelp) {
 			return
 		}
-		fmt.Fprintln(os.Stderr, "devcadence: "+err.Error())
-		os.Exit(exitCode(err))
+		code := exitCode(err)
+		if code != ExitCodePlanGenerated {
+			fmt.Fprintln(os.Stderr, "devcadence: "+err.Error())
+		}
+		os.Exit(code)
 	}
 }
 
-// exitCode maps an error category to a process exit status so that scripts
+// exitCode maps an error category or ExitCoder to a process exit status so that scripts
 // can react without parsing messages.
 func exitCode(err error) int {
 	if errors.Is(err, errFlagHelp) {
-		return 0
+		return ExitCodeSuccess
+	}
+	var coder ExitCoder
+	if errors.As(err, &coder) {
+		return coder.ExitCode()
 	}
 	switch errs.CategoryOf(err) {
 	case errs.CategoryInvalidArgument:
-		return 2
+		return ExitCodeInvalidArgument
 	case errs.CategoryNotFound:
-		return 3
+		return ExitCodeNotFound
 	case errs.CategoryInvalidTransition, errs.CategoryConflict:
-		return 4
+		return ExitCodeDrift
 	case errs.CategoryIntegrity, errs.CategorySchemaVersionUnsupported:
-		return 5
+		return ExitCodeIntegrity
 	default:
-		return 1
+		return ExitCodeExecutionError
 	}
 }
