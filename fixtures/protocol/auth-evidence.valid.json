@@ -1,0 +1,11 @@
+{
+  "schema_version": "1.0",
+  "ref_id": "cred-claude-cli",
+  "kind": "cli_session",
+  "status": "authenticated",
+  "probe_kind": "cli_auth_call",
+  "observed_at": "2026-09-24T10:00:00.000000Z",
+  "probe_target": "claude",
+  "adapter_id": "claude-auth-probe",
+  "detail": "session verified via CLI auth probe"
+}

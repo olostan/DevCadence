@@ -184,6 +184,9 @@ func NewTimestamp(t time.Time) Timestamp {
 // Time returns the underlying instant.
 func (t Timestamp) Time() time.Time { return time.Time(t) }
 
+// IsZero reports whether the underlying instant is the zero time.
+func (t Timestamp) IsZero() bool { return time.Time(t).IsZero() }
+
 // String renders the canonical textual form.
 func (t Timestamp) String() string {
 	return time.Time(t).UTC().Format(timestampLayout)
@@ -435,8 +438,16 @@ func NewRecord(kind string) (Record, error) {
 		return &SetupPlan{}, nil
 	case "SetupExecutionReport":
 		return &SetupExecutionReport{}, nil
+	case "SetupRecoveryReport":
+		return &SetupRecoveryReport{}, nil
 	case "SetupLedgerEvent":
 		return &SetupLedgerEvent{}, nil
+	case "CredentialRef":
+		return &CredentialRef{}, nil
+	case "AuthEvidence":
+		return &AuthEvidence{}, nil
+	case "ResourceInventory":
+		return &ResourceInventory{}, nil
 	}
 	return nil, errs.New(errs.CategoryInvalidArgument, "unknown record kind %q", kind)
 }

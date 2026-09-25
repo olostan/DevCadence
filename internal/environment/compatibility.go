@@ -209,14 +209,30 @@ func amdCandidates(facts protocol.EnvironmentFacts, device protocol.AcceleratorD
 			"architecture "+device.Architecture+" is not in this build's rocm-supported set; "+
 				"it may still work, and vulkan is the safer candidate")
 	}
-	if !deviceNodeUsable(facts, "/dev/kfd") {
+	// Mirrors nvidiaCandidate's driver-bound/control-node distinction
+	// (independent-review follow-up on WP-M3B-6, FIX_NOW 3): "the amdgpu
+	// kernel driver is not bound at all" and "the driver is bound but
+	// /dev/kfd is not usable by this user" are different remediations
+	// (install the driver vs. fix device permissions) and must emit
+	// different RequiredSoftware signals so Planner can route to the
+	// correct manual recipe.
+	driverBound := device.DriverInUse == "amdgpu"
+	switch {
+	case !driverBound:
+		rocm.Reasons = append(rocm.Reasons,
+			"no amdgpu kernel driver is bound to the device, so the rocm compute path is unusable")
+		rocm.RequiredSoftware = append(rocm.RequiredSoftware, "amdgpu-driver")
+		if rocm.Support == protocol.SupportSupported {
+			rocm.Support = protocol.SupportUncertain
+		}
+	case !deviceNodeUsable(facts, "/dev/kfd"):
 		rocm.Reasons = append(rocm.Reasons,
 			"/dev/kfd is missing or not writable by this user, so the rocm compute path is not usable as configured")
 		rocm.RequiredSoftware = append(rocm.RequiredSoftware, "amdkfd-device-access")
 		if rocm.Support == protocol.SupportSupported {
 			rocm.Support = protocol.SupportUncertain
 		}
-	} else if rocm.Support == protocol.SupportSupported {
+	case rocm.Support == protocol.SupportSupported:
 		if runtimes := presentRuntimes(installed); len(runtimes) > 0 {
 			rocm.State = protocol.StateRuntimeAvailable
 			rocm.Reasons = append(rocm.Reasons, "installed local runtime(s): "+strings.Join(runtimes, ", "))

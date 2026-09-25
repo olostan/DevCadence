@@ -145,6 +145,46 @@ func TestNoCachedModelIsNotAFailure(t *testing.T) {
 	}
 }
 
+// TestCachedModelsHonorHFHubCacheOverride proves discovery resolves the
+// Hugging Face cache through environment.HuggingFaceCacheDir (via the
+// injected Getenv) rather than a hardcoded homeDir/.cache/huggingface/hub
+// path — the same resolver internal/setup's MLXAdapter uses, so a model
+// WP-M3B setup installed into a non-default cache (HF_HUB_CACHE, HF_HOME,
+// or XDG_CACHE_HOME) is the same cache this discovery layer looks in,
+// not a silently different default.
+func TestCachedModelsHonorHFHubCacheOverride(t *testing.T) {
+	in, commands := appleSiliconFixture(t, protocol.DepthHealth)
+	outcomeFor(commands, "python3 -c", environment.Observed(
+		`{"mlx_version":"0.32.2","mlx_lm_version":"0.29.0","default_device":"Device(gpu, 0)","metal_available":true}`))
+
+	overrideCache := "/mnt/shared-hf-cache"
+	sys := environment.FakeSysProbe{Files: map[string]string{}, Dirs: map[string][]string{}}
+	entry := "models--mlx-community--Qwen3-4B-4bit"
+	sys.Dirs[overrideCache+"/"+entry+"/snapshots"] = []string{"abc123"}
+	sys.Dirs[overrideCache] = []string{entry}
+
+	adapter, err := mlx.New(mlx.Options{
+		Commands: commands, Sys: sys, HomeDir: homeDir,
+		Getenv: func(key string) string {
+			if key == "HF_HUB_CACHE" {
+				return overrideCache
+			}
+			return ""
+		},
+	})
+	if err != nil {
+		t.Fatalf("new adapter: %v", err)
+	}
+
+	endpoints, err := adapter.Discover(context.Background(), in)
+	if err != nil {
+		t.Fatalf("discover: %v", err)
+	}
+	if len(endpoints) != 1 || endpoints[0].Health != protocol.EndpointHealthUnverified {
+		t.Fatalf("endpoints = %+v, want one unverified endpoint found via the HF_HUB_CACHE override, not the homeDir default", endpoints)
+	}
+}
+
 func TestCachedMLXModelsBecomeUnverifiedEndpoints(t *testing.T) {
 	in, commands := appleSiliconFixture(t, protocol.DepthHealth)
 	outcomeFor(commands, "python3 -c", environment.Observed(

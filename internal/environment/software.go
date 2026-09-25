@@ -99,6 +99,17 @@ func DefaultInventory() []SoftwareDescriptor {
 			ID: "mlx-lm", Category: protocol.SoftwareCognitionRuntime,
 			Executables: []string{"mlx_lm.generate"},
 		},
+		{
+			// The Hugging Face Hub CLI — MLX-LM's own model distribution
+			// path (internal/setup's MLXAdapter shells out to it). "hf" is
+			// the current CLI name; the older "huggingface-cli" name was
+			// removed in huggingface_hub v1.0
+			// (https://huggingface.co/docs/huggingface_hub/concepts/migration).
+			// It exposes a "version" subcommand, not a "--version" flag
+			// (https://huggingface.co/docs/huggingface_hub/main/package_reference/cli).
+			ID: "hf", Category: protocol.SoftwareCognitionRuntime,
+			Executables: []string{"hf"}, VersionArgs: []string{"version"},
+		},
 
 		// Coding and agent CLIs. No version floor is asserted: these tools
 		// release frequently and a stale floor would mislabel a working

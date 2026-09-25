@@ -103,103 +103,15 @@
       }
     },
     "discovered_endpoints": {
+      "description": "uniqueItems rejects byte-identical duplicate entries only. Rejecting two entries that share an id but differ in content is a stricter, Go-only invariant (DoctorReport.Validate), because JSON Schema cannot express 'unique keyed by id, equal on the rest' without restructuring this array into a keyed object.",
       "type": "array",
-      "items": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "id",
-          "kind",
-          "locality",
-          "health",
-          "auth_status",
-          "cost_class",
-          "required_source_exposure"
-        ],
-        "properties": {
-          "id": {
-            "type": "string",
-            "minLength": 1
-          },
-          "kind": {
-            "enum": [
-              "local_runtime",
-              "authenticated_cli",
-              "remote_api"
-            ]
-          },
-          "locality": {
-            "enum": [
-              "local",
-              "remote_inference_local_tools",
-              "remote"
-            ]
-          },
-          "health": {
-            "enum": [
-              "not_installed",
-              "installed",
-              "not_configured",
-              "unhealthy",
-              "unverified",
-              "ready",
-              "unsupported",
-              "unknown"
-            ]
-          },
-          "auth_status": {
-            "enum": [
-              "not_applicable",
-              "authenticated",
-              "unauthenticated",
-              "expired",
-              "unknown",
-              "error"
-            ]
-          },
-          "cost_class": {
-            "enum": [
-              "local_compute",
-              "subscription_included",
-              "remote_economy",
-              "remote_strong",
-              "frontier_expensive",
-              "unknown"
-            ]
-          },
-          "required_source_exposure": {
-            "enum": [
-              "local_only",
-              "semantic_evidence_only",
-              "focused_snippets",
-              "selected_files",
-              "tool_mediated_worktree",
-              "unrestricted_authorized"
-            ]
-          },
-          "acceleration_verified": {
-            "type": "boolean"
-          },
-          "acceleration_backend": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "enum": [
-              "cpu",
-              "metal",
-              "cuda",
-              "rocm",
-              "vulkan",
-              "unknown",
-              null
-            ]
-          }
-        }
-      }
+      "uniqueItems": true,
+      "items": { "$ref": "devcadence:///resource-inventory.schema.json#/$defs/cognition_endpoint_summary" }
     },
     "principal_hosts": {
+      "description": "uniqueItems rejects byte-identical duplicate entries only; duplicate host_id with differing content is a Go-only invariant (DoctorReport.Validate), same rationale as discovered_endpoints.",
       "type": "array",
+      "uniqueItems": true,
       "items": {
         "type": "object",
         "additionalProperties": false,
@@ -211,6 +123,43 @@
           "version": { "type": "string" }
         }
       }
-    }
+    },
+    "scope_readiness": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["scope", "status", "reason"],
+        "properties": {
+          "scope": {
+            "enum": [
+              "can_execute_setup_plan",
+              "has_any_viable_cognition_path",
+              "can_run_local_inference",
+              "local_model_available",
+              "can_use_existing_authenticated_cli",
+              "principal_host_available"
+            ]
+          },
+          "status": {
+            "enum": ["ready", "not_ready", "unavailable", "unknown"]
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "allOf": [
+        { "contains": { "properties": { "scope": { "const": "can_execute_setup_plan" } } }, "minContains": 0, "maxContains": 1 },
+        { "contains": { "properties": { "scope": { "const": "has_any_viable_cognition_path" } } }, "minContains": 0, "maxContains": 1 },
+        { "contains": { "properties": { "scope": { "const": "can_run_local_inference" } } }, "minContains": 0, "maxContains": 1 },
+        { "contains": { "properties": { "scope": { "const": "local_model_available" } } }, "minContains": 0, "maxContains": 1 },
+        { "contains": { "properties": { "scope": { "const": "can_use_existing_authenticated_cli" } } }, "minContains": 0, "maxContains": 1 },
+        { "contains": { "properties": { "scope": { "const": "principal_host_available" } } }, "minContains": 0, "maxContains": 1 }
+      ]
+    },
+    "resource_inventory": { "$ref": "devcadence:///resource-inventory.schema.json" }
   }
 }

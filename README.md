@@ -335,10 +335,11 @@ If that hypothesis fails, the architecture must be revised before adding autonom
 
 ## Running the control plane
 
-M1, M2 and M3A are implemented, so the control plane can be built, can safely
-operate on real repositories, and can describe the machine and its cognition
-endpoints from observed evidence — all without requiring any model runtime.
-M3B will add guided setup, remediation planning, credential-safe ResourceInventory/readiness and a safe plain/JSON/basic-terminal surface; richer adaptive onboarding is deliberately deferred to M3D.
+M1, M2, M3A and M3B are implemented, so the control plane can be built, can safely
+operate on real repositories, can describe the machine and its cognition
+endpoints from observed evidence, and can diagnose/remediate environments
+safely via `doctor` and `setup` — all without requiring any model runtime.
+Richer adaptive onboarding is deliberately deferred to M3D.
 
 ```bash
 go build -o bin/devcadence ./cmd/devcadence
@@ -431,7 +432,7 @@ Every one of these is a thin adapter over `internal/repository`,
 
 ## Status
 
-DevCadence has completed **M0 (normative baseline)**, **M1 (domain core and canonical state)**, **M2 (repository, worktree and process execution)** and **M3A (environment intelligence and cognition runtime)**.
+DevCadence has completed **M0 (normative baseline)**, **M1 (domain core and canonical state)**, **M2 (repository, worktree and process execution)**, **M3A (environment intelligence and cognition runtime)**, and **M3B (guided deterministic bootstrap and onboarding)**.
 
 M2 is merged on `main`: DevCadence can operate deterministically on real Git repositories using isolated worktrees, controlled subprocesses, content-addressed artifacts, validation profiles, commit-bound evidence and non-mutating candidate/integration inspection without requiring any LLM.
 
@@ -452,11 +453,18 @@ bin/devcadence cognition probe <endpoint>  # explicit synthetic inference probe
 bin/devcadence cognition route --role implementer
 ```
 
-See [docs/adr/0013-environment-intelligence-and-cognition-contracts.md](docs/adr/0013-environment-intelligence-and-cognition-contracts.md)
-for the durable contracts this settled.
+M3B adds guided deterministic bootstrap, environment diagnosis, and safe remediation:
+
+```bash
+bin/devcadence doctor                      # factual diagnostic evaluation
+bin/devcadence setup plan                  # dry-run setup plan with visible mutations
+bin/devcadence setup apply --plan <file> --approve-plan <digest>  # executed with explicit digest approval
+bin/devcadence setup recover --plan <file> # crash recovery via append-only ledger
+```
+
+See [docs/adr/0013-environment-intelligence-and-cognition-contracts.md](docs/adr/0013-environment-intelligence-and-cognition-contracts.md) and [docs/adr/0014-guided-bootstrap-and-remediation.md](docs/adr/0014-guided-bootstrap-and-remediation.md) for durable contracts.
 
 The active roadmap now proceeds through:
-- **M3B:** deterministic bootstrap, doctor/setup/auth, ResourceInventory and a safe plain/JSON CLI;
 - **M3C:** cognition resource/session/economic substrate and deterministic portfolio validation;
 - **M3D:** AI-assisted cognition portfolio + adaptive workflow synthesis and richer setup/explanation UX;
 - **M4:** adaptive-cognition vertical-slice evidence gate against simpler baselines;

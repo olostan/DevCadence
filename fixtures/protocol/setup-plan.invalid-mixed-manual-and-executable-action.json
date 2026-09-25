@@ -1,0 +1,76 @@
+{
+  "schema_version": "1.0",
+  "plan_id": "plan_000000000000000000000003",
+  "plan_digest": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "recipe_set_version": "1.0",
+  "machine_fingerprint": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "created_at": "2026-09-22T12:00:00.000000Z",
+  "target": "hardware",
+  "required_authority": "high_impact_manual",
+  "total_effects": [
+    "device_permission_change",
+    "privilege_elevation"
+  ],
+  "actions": [
+    {
+      "action_id": "act-002",
+      "recipe_id": "recipe-install-cuda",
+      "recipe_version": "1.0",
+      "title": "Install NVIDIA CUDA Drivers",
+      "description": "Manual installation of system GPU drivers, with a forbidden executable operation also attached",
+      "authority": "high_impact_manual",
+      "effects": [
+        "privilege_elevation",
+        "device_permission_change"
+      ],
+      "preconditions": [
+        {
+          "kind": "managed_dir_exists",
+          "managed_dir_exists": {
+            "location": "state",
+            "file_mode_oct": "0700"
+          }
+        }
+      ],
+      "postconditions": [
+        {
+          "kind": "command_available",
+          "command_available": {
+            "command_name": "nvidia-smi"
+          }
+        }
+      ],
+      "expected_mutations": [
+        {
+          "kind": "config_key_set",
+          "target": "driver",
+          "detail": "NVIDIA driver installed"
+        }
+      ],
+      "idempotency_key": "install-cuda-drivers",
+      "operation": {
+        "kind": "create_directory",
+        "create_directory": {
+          "location": "state",
+          "file_mode_oct": "0700"
+        }
+      },
+      "manual_instructions": {
+        "summary": "Install NVIDIA proprietary drivers from official vendor packages",
+        "steps": [
+          "Download driver from NVIDIA official repository",
+          "Install driver package via system package manager",
+          "Reboot system"
+        ],
+        "verification_check": [
+          {
+            "kind": "command_available",
+            "command_available": {
+              "command_name": "nvidia-smi"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -6,10 +6,13 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
+	"time"
 
 	"github.com/olostan/DevCadence/internal/clock"
 	"github.com/olostan/DevCadence/internal/cognition"
+	"github.com/olostan/DevCadence/internal/credentials"
 	"github.com/olostan/DevCadence/internal/environment"
 	"github.com/olostan/DevCadence/internal/errs"
 	"github.com/olostan/DevCadence/internal/ids"
@@ -30,6 +33,8 @@ const (
 	FindingCodeEndpointReady         = "ENDPOINT_READY"
 	FindingCodeEndpointUnhealthy     = "ENDPOINT_UNHEALTHY"
 	FindingCodeAuthExpired           = "AUTH_EXPIRED"
+	FindingCodeAuthUnauthenticated   = "AUTH_UNAUTHENTICATED"
+	FindingCodeAuthUnknown           = "AUTH_UNKNOWN"
 	FindingCodeNoCodingEndpoint      = "NO_CODING_ENDPOINT"
 )
 
@@ -49,6 +54,26 @@ type DoctorOptions struct {
 	VerifyEndpointID string // If non-empty, authorizes targeted inference probe for this endpoint only
 	Cache            *CacheManager
 	Policy           *cognition.Policy
+	// CredentialManager checks the CredentialRefs below and reports
+	// AuthEvidence for BuildResourceInventory's credentials section. Nil
+	// is a supported state (no credential checking performed, same
+	// nil-safe pattern CognitionService already uses) — WP-M3B-5.
+	CredentialManager *credentials.Manager
+	// CredentialRefs are the operator-configured references to check.
+	// Doctor never invents credential references of its own.
+	CredentialRefs []protocol.CredentialRef
+	// EndpointCredentialRefs is an explicit, operator-configured binding
+	// from a discovered CognitionEndpoint's ID to the CredentialRef.RefID
+	// (among CredentialRefs above) that verifies its authentication. Doctor
+	// applies this when constructing CognitionEndpointSummary.CredentialRef
+	// instead of ever guessing a binding from the endpoint ID itself — the
+	// coding-CLI adapter deliberately never invents a CredentialRef, so
+	// without an explicit binding here (or one a cognition adapter itself
+	// declared), a discovered CLI endpoint's CredentialRef stays empty and
+	// Planner will not generate a machine-verifiable endpoint_authenticated
+	// remediation for it (independent-review follow-up on WP-M3B-5,
+	// round-4 finding 1).
+	EndpointCredentialRefs map[string]string
 }
 
 // Doctor executes non-invasive diagnostic checks across the environment, state root,
@@ -62,6 +87,16 @@ type Doctor struct {
 	verifyEndpointID string
 	cache            *CacheManager
 	policy           *cognition.Policy
+	credManager      *credentials.Manager
+	credRefs         []protocol.CredentialRef
+	endpointCredRefs map[string]string
+	// credRefIndex indexes credRefs by RefID, computed once in NewDoctor via
+	// buildCredentialRefIndex (which already validated every entry
+	// structurally, rejected duplicate RefIDs, and validated every
+	// endpointCredRefs value against it). discoverEndpoints uses it to
+	// decide whether an adapter-declared CognitionEndpoint.CredentialRef is
+	// safe to treat as machine-verifiable.
+	credRefIndex map[string]protocol.CredentialRef
 }
 
 // NewDoctor returns a Doctor engine.
@@ -91,6 +126,32 @@ func NewDoctor(opts DoctorOptions) (*Doctor, error) {
 		defPolicy := cognition.DefaultPolicy()
 		policy = &defPolicy
 	}
+
+	// The endpoint->CredentialRef binding must be referentially valid, not
+	// only syntactically valid: an EndpointCredentialRefs value that looks
+	// like a well-formed RefID but names no actually-configured
+	// CredentialRef would let Planner generate an endpoint_authenticated
+	// condition the production checker can never resolve — the exact
+	// "impossible plan" shape earlier rounds eliminated for the guessed-
+	// locator case, reintroduced here via a typo'd binding instead
+	// (independent-review follow-up on WP-M3B-5, round-5 finding 1).
+	// buildCredentialRefIndex also rejects a duplicate configured RefID
+	// outright — CredentialRef.RefID is meant to be a unique identity, and
+	// Doctor/Executor sharing this one helper is what keeps them from
+	// independently building two different "last write wins" indexes over
+	// the same ambiguous input (independent-review follow-up on
+	// WP-M3B-5, round-6 finding).
+	refIndex, err := buildCredentialRefIndex(opts.CredentialRefs)
+	if err != nil {
+		return nil, errs.Wrap(errs.CategoryInvalidArgument, err, "NewDoctor: DoctorOptions.CredentialRefs")
+	}
+	for endpointID, refID := range opts.EndpointCredentialRefs {
+		if _, ok := refIndex[refID]; !ok {
+			return nil, errs.New(errs.CategoryInvalidArgument,
+				"NewDoctor: EndpointCredentialRefs[%q] names credential_ref_id %q, which is not among the configured CredentialRefs", endpointID, refID)
+		}
+	}
+
 	return &Doctor{
 		clock:            opts.Clock,
 		ids:              opts.IDs,
@@ -100,6 +161,10 @@ func NewDoctor(opts DoctorOptions) (*Doctor, error) {
 		verifyEndpointID: opts.VerifyEndpointID,
 		cache:            cache,
 		policy:           policy,
+		credManager:      opts.CredentialManager,
+		credRefs:         opts.CredentialRefs,
+		endpointCredRefs: opts.EndpointCredentialRefs,
+		credRefIndex:     refIndex,
 	}, nil
 }
 
@@ -139,7 +204,7 @@ func (d *Doctor) Run(ctx context.Context, scope protocol.ReadinessEvaluationScop
 		scope.EvidenceStatus = evidenceStatus
 	}
 
-	// 6. Profile recommendation
+	// 6. Profile recommendation (informational UX labels only; de-authorized from canonical readiness and routing)
 	recommendation := d.recommender.Recommend(RecommendationInput{
 		Facts:            facts,
 		Endpoints:        endpoints,
@@ -147,13 +212,26 @@ func (d *Doctor) Run(ctx context.Context, scope protocol.ReadinessEvaluationScop
 		Policy:           d.policy,
 	})
 
-	// Ensure evaluated scope has a TargetProfile before checking READY (ADR-0014)
-	if scope.TargetProfile == nil && recommendation.SelectedProfile != nil {
-		scope.TargetProfile = recommendation.SelectedProfile
-	}
+	// scope.TargetProfile is used exactly as the caller passed it — never
+	// defaulted from recommendation.SelectedProfile. RecommendedProfile is
+	// an informational UX label; silently promoting it here would let a
+	// label the caller never chose gate canonical readiness, exactly the
+	// authority ADR-0014 §92 forbids (independent-review follow-up on
+	// WP-M3B-5, finding 1).
 
 	// 7. Evaluate Readiness
 	readiness := d.evaluateReadiness(scope, findings, endpoints, cognProfile, scope.TargetProfile)
+
+	// 8. Build ResourceInventory — computed from exactly the facts/findings/
+	// endpoints/hosts/profile this single Run call already gathered above,
+	// never by re-probing (independent-review follow-up on WP-M3B-5,
+	// finding 3). scopeReadiness is computed once and shared between the
+	// report and the inventory so the two can never disagree (finding 4d).
+	scopeReadiness := protocol.EvaluateScopeReadiness(findings, endpoints, hosts)
+	inv, err := d.BuildResourceInventory(ctx, facts, fingerprint, endpoints, hosts, cognProfile, scopeReadiness)
+	if err != nil {
+		return nil, err
+	}
 
 	report := &protocol.DoctorReport{
 		SchemaVersion:       protocol.SchemaVersion1,
@@ -163,6 +241,8 @@ func (d *Doctor) Run(ctx context.Context, scope protocol.ReadinessEvaluationScop
 		EvaluationScope:     scope,
 		Readiness:           readiness,
 		Findings:            findings,
+		ScopeReadiness:      scopeReadiness,
+		ResourceInventory:   inv,
 		RecommendedProfile:  &recommendation,
 		DiscoveredEndpoints: endpoints,
 		PrincipalHosts:      hosts,
@@ -173,6 +253,160 @@ func (d *Doctor) Run(ctx context.Context, scope protocol.ReadinessEvaluationScop
 	}
 
 	return report, nil
+}
+
+// ObserveCredentials gathers CredentialInventoryEntry items for the Doctor's
+// configured CredentialRefs. It is an observational phase that performs IO via
+// the CredentialManager, separating live evidence gathering from the pure
+// ProjectResourceInventory projection.
+func (d *Doctor) ObserveCredentials(ctx context.Context) ([]protocol.CredentialInventoryEntry, error) {
+	if d.credManager == nil {
+		return nil, nil
+	}
+	sortedRefs := append([]protocol.CredentialRef(nil), d.credRefs...)
+	sort.Slice(sortedRefs, func(i, j int) bool { return sortedRefs[i].RefID < sortedRefs[j].RefID })
+	var entries []protocol.CredentialInventoryEntry
+	for _, ref := range sortedRefs {
+		// CheckCredential errors only on a structurally malformed ref
+		// or an unknown CredentialRefKind — never on "the credential
+		// isn't there", which is already a valid
+		// Unavailable/Unauthenticated AuthEvidence, not a Go error.
+		// A malformed *configured* reference is a real bug in
+		// DoctorOptions.CredentialRefs, so it propagates and fails
+		// rather than being papered over with a fabricated evidence entry
+		// (fail closed, AGENTS.md §16; DCI-104).
+		evidence, err := d.credManager.CheckCredential(ctx, ref)
+		if err != nil {
+			return nil, errs.Wrap(errs.CategoryInvalidArgument, err,
+				"resource inventory: configured credential reference %q is invalid", ref.RefID)
+		}
+		entries = append(entries, protocol.CredentialInventoryEntry{
+			Ref:      ref,
+			Evidence: evidence,
+		})
+	}
+	return entries, nil
+}
+
+// ProjectResourceInventory is a pure, deterministic projection from already-observed
+// facts, endpoints, hosts, profile, scope readiness, credential entries, and policy
+// into a protocol.ResourceInventory. It performs no I/O, subprocess execution, or
+// environment inspection.
+//
+// Collections are sorted into a stable order (endpoints/credentials by
+// their ID, hosts by HostID, scopes by ScopeKind, backends alphabetically)
+// before being stored, so two calls built from the same facts in different
+// input orderings produce byte-identical inventories.
+func ProjectResourceInventory(
+	inventoryID string,
+	observedAt time.Time,
+	facts protocol.EnvironmentFacts,
+	fingerprint string,
+	endpoints []protocol.CognitionEndpointSummary,
+	hosts []protocol.PrincipalHostSummary,
+	cognProfile *protocol.MachineCapabilityProfile,
+	scopeReadiness []protocol.ScopeReadiness,
+	credentials []protocol.CredentialInventoryEntry,
+	policy *cognition.Policy,
+) (*protocol.ResourceInventory, error) {
+	logicalCores := 0
+	if facts.CPU.LogicalCores != nil {
+		logicalCores = *facts.CPU.LogicalCores
+	}
+	var totalMem *int64
+	if facts.Memory.TotalBytes != nil {
+		totalMem = facts.Memory.TotalBytes
+	}
+
+	var backends []protocol.BackendKind
+	for _, c := range environment.AssessBackends(facts) {
+		if c.Support == protocol.SupportSupported {
+			backends = append(backends, c.Backend)
+		}
+	}
+	sort.Slice(backends, func(i, j int) bool { return backends[i] < backends[j] })
+
+	sortedEndpoints := append([]protocol.CognitionEndpointSummary(nil), endpoints...)
+	sort.Slice(sortedEndpoints, func(i, j int) bool { return sortedEndpoints[i].ID < sortedEndpoints[j].ID })
+
+	sortedHosts := append([]protocol.PrincipalHostSummary(nil), hosts...)
+	sort.Slice(sortedHosts, func(i, j int) bool { return sortedHosts[i].HostID < sortedHosts[j].HostID })
+
+	sortedScopeReadiness := append([]protocol.ScopeReadiness(nil), scopeReadiness...)
+	sort.Slice(sortedScopeReadiness, func(i, j int) bool { return sortedScopeReadiness[i].Scope < sortedScopeReadiness[j].Scope })
+
+	sortedCreds := append([]protocol.CredentialInventoryEntry(nil), credentials...)
+	sort.Slice(sortedCreds, func(i, j int) bool { return sortedCreds[i].Ref.RefID < sortedCreds[j].Ref.RefID })
+
+	inv := &protocol.ResourceInventory{
+		SchemaVersion:      protocol.SchemaVersion1,
+		InventoryID:        inventoryID,
+		MachineFingerprint: fingerprint,
+		ObservedAt:         protocol.NewTimestamp(observedAt),
+		Hardware: protocol.HardwareSummary{
+			OSFamily:            facts.Host.Family,
+			Arch:                facts.Host.Arch,
+			LogicalCores:        logicalCores,
+			TotalMemoryBytes:    totalMem,
+			AcceleratorBackends: backends,
+		},
+		CognitionEndpoints: sortedEndpoints,
+		PrincipalHosts:     sortedHosts,
+		Readiness:          sortedScopeReadiness,
+		Credentials:        sortedCreds,
+	}
+
+	if cognProfile != nil {
+		inv.Profile = &protocol.MachineProfileRef{
+			ProfileID:          cognProfile.ProfileID,
+			MachineFingerprint: cognProfile.MachineFingerprint,
+			ObservedAt:         cognProfile.ObservedAt,
+			ProbeDepth:         cognProfile.ProbeDepth,
+		}
+	}
+
+	if policy != nil {
+		inv.Policy = &protocol.PolicySummary{
+			MaxSourceExposure: policy.MaxSourceExposure,
+			MaxCostClass:      policy.MaxCostClass,
+		}
+	}
+
+	if err := inv.Validate(); err != nil {
+		return nil, errs.Wrap(errs.CategoryInternal, err, "resource inventory validation failed")
+	}
+
+	return inv, nil
+}
+
+// BuildResourceInventory coordinates credential observation for configured CredentialRefs
+// and projects the already-observed facts, endpoints, hosts, profile, and scope readiness
+// into a protocol.ResourceInventory via ProjectResourceInventory.
+func (d *Doctor) BuildResourceInventory(
+	ctx context.Context,
+	facts protocol.EnvironmentFacts,
+	fingerprint string,
+	endpoints []protocol.CognitionEndpointSummary,
+	hosts []protocol.PrincipalHostSummary,
+	cognProfile *protocol.MachineCapabilityProfile,
+	scopeReadiness []protocol.ScopeReadiness,
+) (*protocol.ResourceInventory, error) {
+	creds, err := d.ObserveCredentials(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return ProjectResourceInventory(
+		d.ids.New("inv"),
+		d.clock.Now(),
+		facts,
+		fingerprint,
+		endpoints,
+		hosts,
+		cognProfile,
+		scopeReadiness,
+		creds,
+		d.policy,
+	)
 }
 
 func (d *Doctor) checkStateRoot() []protocol.DiagnosticFinding {
@@ -492,9 +726,30 @@ func (d *Doctor) discoverEndpoints(ctx context.Context, facts protocol.Environme
 	// Durably cache the discovered machine profile according to probe depth:
 	// - Full inference probes write fresh cache with DefaultCacheTTL.
 	// - Health probes with unexpired cached inference write back preserving the original inference expiration.
-	// - Health probes with expired cached inference DO NOT write to cache (never refresh stale inference).
+	// - Health probes with expired cached inference DO NOT refresh the mutable "latest" cache slot (never refresh stale inference).
 	// - Shallow probes without cached inference write fresh health profile with DefaultCacheTTL.
+	//
+	// The immutable profiles/<profile_id> archive is written unconditionally,
+	// separately from that "latest" TTL policy: every ResourceInventory.Profile
+	// this Doctor run may go on to embed cites activeProfile.ProfileID, so that
+	// exact observation must always be archived and recoverable — including on
+	// the stale-inference-retained path, which deliberately skips the latest
+	// cache refresh but must not also skip archival (independent-review
+	// follow-up on WP-M3B-5, finding 1b). A failed archive write is fatal
+	// rather than silently ignored (finding 1a): a ResourceInventory whose
+	// Profile reference cannot resolve would violate the provenance guarantee
+	// the reference exists to provide.
 	if d.cache != nil {
+		archiveTTL := DefaultCacheTTL
+		archiveExpiresAt := d.clock.Now().Add(archiveTTL)
+		if usedCachedInference && !cachedExpired {
+			archiveExpiresAt = cachedEnv.ExpiresAt.Time()
+		}
+		if err := archiveProfile(ctx, d.cache, *activeProfile, archiveExpiresAt); err != nil {
+			return nil, nil, nil, "", errs.Wrap(errs.CategoryInternal, err,
+				"archive machine capability profile %s so its ResourceInventory reference remains resolvable", activeProfile.ProfileID)
+		}
+
 		if d.verifyEndpointID != "" {
 			_ = Write(ctx, d.cache, protocol.CacheTargetMachineProfile, fingerprint, *activeProfile, DefaultCacheTTL)
 		} else if usedCachedInference {
@@ -514,6 +769,26 @@ func (d *Doctor) discoverEndpoints(ctx context.Context, facts protocol.Environme
 			backend = &ep.Acceleration.Backend
 			isVerified = ep.AccelerationVerified()
 		}
+		// An explicit operator-configured binding (EndpointCredentialRefs)
+		// takes precedence over whatever a cognition adapter opportunistically
+		// declared on the endpoint itself: it is the deliberate, reviewed
+		// source of truth, not a best-effort discovery byproduct
+		// (independent-review follow-up on WP-M3B-5, round-4 finding 1).
+		// An adapter-declared CredentialRef is only carried through as
+		// machine-verifiable when it resolves to the same configured
+		// CredentialRef set NewDoctor already validated
+		// EndpointCredentialRefs against — an unrecognized adapter-supplied
+		// value is diagnostic-only (left empty here), never treated as a
+		// real binding Planner could turn into an unverifiable
+		// endpoint_authenticated condition (independent-review follow-up on
+		// WP-M3B-5, round-5 finding 1).
+		credRef := ""
+		if _, ok := d.credRefIndex[ep.CredentialRef]; ok {
+			credRef = ep.CredentialRef
+		}
+		if bound, ok := d.endpointCredRefs[ep.ID]; ok && bound != "" {
+			credRef = bound
+		}
 		summary := protocol.CognitionEndpointSummary{
 			ID:                     ep.ID,
 			Kind:                   ep.Kind,
@@ -524,28 +799,60 @@ func (d *Doctor) discoverEndpoints(ctx context.Context, facts protocol.Environme
 			RequiredSourceExposure: ep.RequiredSourceExposure,
 			AccelerationVerified:   isVerified,
 			AccelerationBackend:    backend,
+			CredentialRef:          credRef,
 		}
 		summaries = append(summaries, summary)
 
-		if ep.Health == protocol.EndpointHealthReady {
+		if protocol.EndpointViable(ep.Kind, ep.Locality, ep.Health, ep.Auth) {
 			hasCoding = true
 			findings = append(findings, protocol.DiagnosticFinding{
 				Category: "cognition",
 				Severity: SeverityInfo,
 				Code:     FindingCodeEndpointReady,
 				Title:    fmt.Sprintf("Endpoint ready: %s", ep.ID),
-				Detail:   fmt.Sprintf("Kind %s, Locality %s, Health %s", ep.Kind, ep.Locality, ep.Health),
+				Detail:   fmt.Sprintf("Kind %s, Locality %s, Health %s, Auth %s", ep.Kind, ep.Locality, ep.Health, ep.Auth),
 			})
-		} else if ep.Auth == protocol.AuthExpired {
-			remed := fmt.Sprintf("Re-authenticate CLI or update API credentials for %s", ep.ID)
-			findings = append(findings, protocol.DiagnosticFinding{
-				Category:    "auth",
-				Severity:    SeverityWarning,
-				Code:        FindingCodeAuthExpired,
-				Title:       fmt.Sprintf("Authentication expired: %s", ep.ID),
-				Detail:      fmt.Sprintf("Endpoint %s auth status is expired", ep.ID),
-				Remediation: &remed,
-			})
+		} else if ep.Health == protocol.EndpointHealthReady {
+			switch ep.Auth {
+			case protocol.AuthExpired:
+				remed := fmt.Sprintf("Re-authenticate CLI or update API credentials for %s", ep.ID)
+				findings = append(findings, protocol.DiagnosticFinding{
+					Category:    "auth",
+					Severity:    SeverityWarning,
+					Code:        FindingCodeAuthExpired,
+					Title:       fmt.Sprintf("Authentication expired: %s", ep.ID),
+					Detail:      fmt.Sprintf("Endpoint %s auth status is expired", ep.ID),
+					Remediation: &remed,
+				})
+			case protocol.AuthUnauthenticated:
+				remed := fmt.Sprintf("Authenticate CLI or configure API credentials for %s", ep.ID)
+				findings = append(findings, protocol.DiagnosticFinding{
+					Category:    "auth",
+					Severity:    SeverityWarning,
+					Code:        FindingCodeAuthUnauthenticated,
+					Title:       fmt.Sprintf("Authentication missing: %s", ep.ID),
+					Detail:      fmt.Sprintf("Endpoint %s is unauthenticated", ep.ID),
+					Remediation: &remed,
+				})
+			case protocol.AuthUnknown:
+				findings = append(findings, protocol.DiagnosticFinding{
+					Category: "cognition",
+					Severity: SeverityInfo,
+					Code:     FindingCodeAuthUnknown,
+					Title:    fmt.Sprintf("Endpoint authentication unverified: %s", ep.ID),
+					Detail:   fmt.Sprintf("Endpoint %s health is ready, but its authentication has not been verified", ep.ID),
+				})
+			default:
+				remed := fmt.Sprintf("Check authentication credentials for %s", ep.ID)
+				findings = append(findings, protocol.DiagnosticFinding{
+					Category:    "auth",
+					Severity:    SeverityWarning,
+					Code:        FindingCodeAuthUnauthenticated,
+					Title:       fmt.Sprintf("Authentication invalid: %s", ep.ID),
+					Detail:      fmt.Sprintf("Endpoint %s auth status is %s", ep.ID, ep.Auth),
+					Remediation: &remed,
+				})
+			}
 		} else {
 			findings = append(findings, protocol.DiagnosticFinding{
 				Category: "cognition",
@@ -563,8 +870,8 @@ func (d *Doctor) discoverEndpoints(ctx context.Context, facts protocol.Environme
 			Category:    "cognition",
 			Severity:    SeverityWarning,
 			Code:        FindingCodeNoCodingEndpoint,
-			Title:       "No healthy coding endpoint found",
-			Detail:      "DevCadence requires at least one healthy cognition endpoint for code execution",
+			Title:       "No viable coding endpoint found",
+			Detail:      "DevCadence requires at least one viable (healthy and authenticated) cognition endpoint for code execution",
 			Remediation: &remed,
 		})
 	}
@@ -616,12 +923,7 @@ func (d *Doctor) evaluateReadiness(
 		}
 	}
 
-	// 2. If no target profile is specified or selected, we cannot be fully READY
-	if targetProfile == nil {
-		return protocol.ReadinessPartiallyReady
-	}
-
-	// 3. Classify candidate endpoints using full CognitionEndpoints
+	// 2. Classify candidate endpoints using full CognitionEndpoints
 	var fullEndpoints []protocol.CognitionEndpoint
 	if cognProfile != nil && len(cognProfile.Endpoints) > 0 {
 		fullEndpoints = cognProfile.Endpoints
@@ -633,50 +935,65 @@ func (d *Doctor) evaluateReadiness(
 	var acceleratedLocal []protocol.CognitionEndpoint
 	var remoteEndpoints []protocol.CognitionEndpoint
 
+	// Viability (not mere health) is checked via the same
+	// protocol.EndpointViable predicate protocol.EvaluateScopeReadiness
+	// uses, so monolithic and scope-specific readiness cannot silently
+	// disagree about what "usable" means (independent-review follow-up on
+	// WP-M3B-5, finding 5).
 	for _, ep := range fullEndpoints {
 		if ep.Health != protocol.EndpointHealthReady {
 			continue
 		}
-		if ep.Locality == protocol.LocalityLocal || ep.Kind == protocol.EndpointLocalRuntime {
+		isLocal := ep.Locality == protocol.LocalityLocal || ep.Kind == protocol.EndpointLocalRuntime
+		isRemote := ep.Locality == protocol.LocalityRemote || ep.Kind == protocol.EndpointRemoteAPI || ep.Kind == protocol.EndpointAuthenticatedCLI
+		viable := protocol.EndpointViable(ep.Kind, ep.Locality, ep.Health, ep.Auth)
+		if isLocal && viable {
 			localEndpoints = append(localEndpoints, ep)
 			if ep.AccelerationVerified() {
 				acceleratedLocal = append(acceleratedLocal, ep)
 			}
 		}
-		if (ep.Locality == protocol.LocalityRemote || ep.Kind == protocol.EndpointRemoteAPI || ep.Kind == protocol.EndpointAuthenticatedCLI) && (ep.Auth == protocol.AuthAuthenticated || ep.Auth == protocol.AuthNotApplicable) {
+		if isRemote && viable {
 			remoteEndpoints = append(remoteEndpoints, ep)
 		}
 	}
 
-	// 4. Verify target profile constraints
-	switch *targetProfile {
-	case protocol.ProfileCloudCognition:
-		if len(remoteEndpoints) == 0 {
-			return protocol.ReadinessPartiallyReady
+	// 3. Verify target profile constraints if a target profile is specified
+	if targetProfile != nil {
+		switch *targetProfile {
+		case protocol.ProfileCloudCognition:
+			if len(remoteEndpoints) == 0 {
+				return protocol.ReadinessPartiallyReady
+			}
+		case protocol.ProfileOffline:
+			if len(localEndpoints) == 0 {
+				return protocol.ReadinessPartiallyReady
+			}
+		case protocol.ProfileLocalHeavy:
+			if len(localEndpoints) == 0 {
+				return protocol.ReadinessPartiallyReady
+			}
+			if len(acceleratedLocal) == 0 {
+				// Local-heavy requires verified hardware acceleration (ADR-0014: PARTIALLY_READY)
+				return protocol.ReadinessPartiallyReady
+			}
+		case protocol.ProfileHybridThin:
+			if len(localEndpoints) == 0 || len(remoteEndpoints) == 0 {
+				return protocol.ReadinessPartiallyReady
+			}
+		case protocol.ProfileCustom:
+			if len(localEndpoints) == 0 && len(remoteEndpoints) == 0 {
+				return protocol.ReadinessPartiallyReady
+			}
 		}
-	case protocol.ProfileOffline:
-		if len(localEndpoints) == 0 {
-			return protocol.ReadinessPartiallyReady
-		}
-	case protocol.ProfileLocalHeavy:
-		if len(localEndpoints) == 0 {
-			return protocol.ReadinessPartiallyReady
-		}
-		if len(acceleratedLocal) == 0 {
-			// Local-heavy requires verified hardware acceleration (ADR-0014: PARTIALLY_READY)
-			return protocol.ReadinessPartiallyReady
-		}
-	case protocol.ProfileHybridThin:
-		if len(localEndpoints) == 0 || len(remoteEndpoints) == 0 {
-			return protocol.ReadinessPartiallyReady
-		}
-	case protocol.ProfileCustom:
+	} else {
+		// When no target profile is specified, canonical readiness requires at least one ready cognition path
 		if len(localEndpoints) == 0 && len(remoteEndpoints) == 0 {
 			return protocol.ReadinessPartiallyReady
 		}
 	}
 
-	// 5. Verify required roles under routing policy and capability evidence
+	// 4. Verify required roles under routing policy and capability evidence
 	defaultReqs := cognition.DefaultRequirements()
 	effPolicy := cognition.DefaultPolicy()
 	if d.policy != nil {
@@ -696,23 +1013,27 @@ func (d *Doctor) evaluateReadiness(
 		}
 
 		var candidateEndpoints []protocol.CognitionEndpoint
-		switch *targetProfile {
-		case protocol.ProfileOffline:
-			candidateEndpoints = localEndpoints
-		case protocol.ProfileLocalHeavy:
-			candidateEndpoints = localEndpoints
-		case protocol.ProfileCloudCognition:
-			candidateEndpoints = remoteEndpoints
-		case protocol.ProfileHybridThin:
-			switch cRole {
-			case cognition.RoleScout, cognition.RoleClassifier:
+		if targetProfile != nil {
+			switch *targetProfile {
+			case protocol.ProfileOffline:
 				candidateEndpoints = localEndpoints
-			case cognition.RoleImplementer, cognition.RoleArchitectureReviewer:
+			case protocol.ProfileLocalHeavy:
+				candidateEndpoints = localEndpoints
+			case protocol.ProfileCloudCognition:
 				candidateEndpoints = remoteEndpoints
-			default:
+			case protocol.ProfileHybridThin:
+				switch cRole {
+				case cognition.RoleScout, cognition.RoleClassifier:
+					candidateEndpoints = localEndpoints
+				case cognition.RoleImplementer, cognition.RoleArchitectureReviewer:
+					candidateEndpoints = remoteEndpoints
+				default:
+					candidateEndpoints = append(append([]protocol.CognitionEndpoint(nil), localEndpoints...), remoteEndpoints...)
+				}
+			case protocol.ProfileCustom:
 				candidateEndpoints = append(append([]protocol.CognitionEndpoint(nil), localEndpoints...), remoteEndpoints...)
 			}
-		case protocol.ProfileCustom:
+		} else {
 			candidateEndpoints = append(append([]protocol.CognitionEndpoint(nil), localEndpoints...), remoteEndpoints...)
 		}
 

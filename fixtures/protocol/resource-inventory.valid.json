@@ -1,0 +1,95 @@
+{
+  "schema_version": "1.0",
+  "inventory_id": "inv-0001",
+  "machine_fingerprint": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "observed_at": "2026-09-24T10:00:00.000000Z",
+  "hardware": {
+    "os_family": "linux",
+    "arch": "amd64",
+    "logical_cores": 8,
+    "total_memory_bytes": 17179869184,
+    "accelerator_backends": ["cpu"]
+  },
+  "profile": {
+    "profile_id": "profile-0001",
+    "machine_fingerprint": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+    "observed_at": "2026-09-24T10:00:00.000000Z",
+    "probe_depth": "health"
+  },
+  "cognition_endpoints": [
+    {
+      "id": "ollama:qwen2.5-coder",
+      "kind": "local_runtime",
+      "locality": "local",
+      "health": "ready",
+      "auth_status": "not_applicable",
+      "cost_class": "local_compute",
+      "required_source_exposure": "local_only",
+      "acceleration_verified": false
+    }
+  ],
+  "principal_hosts": [
+    {
+      "host_id": "vscode",
+      "installed": true,
+      "path": "/usr/bin/code",
+      "version": "1.90.0"
+    }
+  ],
+  "credentials": [
+    {
+      "ref": {
+        "schema_version": "1.0",
+        "ref_id": "cred-claude",
+        "kind": "cli_session",
+        "locator": "claude"
+      },
+      "evidence": {
+        "schema_version": "1.0",
+        "ref_id": "cred-claude",
+        "kind": "cli_session",
+        "status": "indeterminate",
+        "probe_kind": "cli_version_only",
+        "observed_at": "2026-09-24T10:00:00.000000Z",
+        "probe_target": "claude",
+        "detail": "software is installed; version output proves installation only, not authentication"
+      }
+    }
+  ],
+  "readiness": [
+    {
+      "scope": "can_execute_setup_plan",
+      "status": "ready",
+      "reason": "Git and writable state root are available for setup execution"
+    },
+    {
+      "scope": "has_any_viable_cognition_path",
+      "status": "ready",
+      "reason": "At least one ready cognition endpoint is available"
+    },
+    {
+      "scope": "can_run_local_inference",
+      "status": "ready",
+      "reason": "Local runtime is running with a verified usable model"
+    },
+    {
+      "scope": "local_model_available",
+      "status": "ready",
+      "reason": "Verified usable local model present in runtime"
+    },
+    {
+      "scope": "can_use_existing_authenticated_cli",
+      "status": "unavailable",
+      "reason": "No supported coding CLI installed"
+    },
+    {
+      "scope": "principal_host_available",
+      "status": "ready",
+      "reason": "Supported principal host installed"
+    }
+  ],
+  "policy": {
+    "max_source_exposure": "focused_snippets",
+    "max_cost_class": "remote_economy"
+  }
+}

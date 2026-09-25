@@ -28,12 +28,33 @@ type globals struct {
 	logJSON  bool
 }
 
-// env is the environment a subcommand runs in. Passing writers explicitly
-// rather than using os.Stdout directly is what makes the CLI testable.
+// env is the environment a subcommand runs in. Passing writers and readers explicitly
+// rather than using os.Stdout/os.Stdin directly is what makes the CLI testable.
 type env struct {
-	globals globals
-	stdout  io.Writer
-	stderr  io.Writer
+	globals    globals
+	stdout     io.Writer
+	stderr     io.Writer
+	stdin      io.Reader
+	isTerminal func() bool
+}
+
+// homeDir resolves the root DevCadence directory for state, caches, and artifacts.
+func (e *env) homeDir() string {
+	if h := os.Getenv("DEVCADENCE_HOME"); h != "" {
+		return h
+	}
+	if e.globals.dbPath != "" && e.globals.dbPath != storage.MemoryPath {
+		dir := filepath.Dir(e.globals.dbPath)
+		if filepath.Base(dir) == "state" {
+			return filepath.Dir(dir)
+		}
+		return dir
+	}
+	userHome, err := os.UserHomeDir()
+	if err == nil {
+		return filepath.Join(userHome, ".devcadence")
+	}
+	return "."
 }
 
 // command is one CLI verb.
@@ -60,10 +81,16 @@ func commands() []command {
 		{"candidate", "show deterministic candidate/diff/integration metadata", runCandidate},
 		{"environment", "inspect observed hardware, software and backend candidates", runEnvironment},
 		{"cognition", "list, probe and route discovered cognition endpoints", runCognition},
+		{"doctor", "diagnose environment readiness, inspect inventory, and plan remediation", runDoctor},
+		{"setup", "plan and apply bounded remediation recipes", runSetup},
 	}
 }
 
 func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
+	return runWithEnv(ctx, args, stdout, stderr, os.Stdin, nil)
+}
+
+func runWithEnv(ctx context.Context, args []string, stdout, stderr io.Writer, stdin io.Reader, isTerminal func() bool) error {
 	fs := flag.NewFlagSet("devcadence", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	var g globals
@@ -90,7 +117,28 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 		g.dbPath = resolved
 	}
 
-	e := &env{globals: g, stdout: stdout, stderr: stderr}
+	if stdin == nil {
+		stdin = os.Stdin
+	}
+	if isTerminal == nil {
+		isTerminal = func() bool {
+			if f, ok := stdin.(*os.File); ok {
+				stat, err := f.Stat()
+				if err == nil {
+					return (stat.Mode() & os.ModeCharDevice) != 0
+				}
+			}
+			return false
+		}
+	}
+
+	e := &env{
+		globals:    g,
+		stdout:     stdout,
+		stderr:     stderr,
+		stdin:      stdin,
+		isTerminal: isTerminal,
+	}
 	for _, c := range commands() {
 		if c.name == rest[0] {
 			return c.run(ctx, e, rest[1:])

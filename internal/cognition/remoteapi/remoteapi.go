@@ -275,17 +275,17 @@ func orUnknownCost(cost protocol.CostClass) protocol.CostClass {
 	return cost
 }
 
+// looksLikeSecret delegates to protocol.LooksLikeSecret for canonical
+// prefix/keyword secret-shape detection, plus this package's own
+// field-specific length bound: CredentialRef/AccountRef are opaque handles
+// (the same ~128-byte contract protocol.CredentialRef.RefID/Locator use),
+// so an overlong value is refused here rather than by a length threshold
+// baked into the shared LooksLikeSecret helper itself (independent-review
+// follow-up on WP-M3B-4, finding 2 — see internal/cognition.looksLikeSecret
+// for the fuller rationale).
 func looksLikeSecret(value string) bool {
-	if len(value) > 128 {
-		return true
-	}
-	lowered := strings.ToLower(value)
-	for _, prefix := range []string{"sk-", "sk_", "pat_", "ghp_", "bearer ", "aws_"} {
-		if strings.HasPrefix(lowered, prefix) {
-			return true
-		}
-	}
-	return false
+	const maxHandleLength = 128
+	return protocol.LooksLikeSecret(value) || len(value) > maxHandleLength
 }
 
 // StaticClient is a deterministic Client for tests and for proving the boundary.

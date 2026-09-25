@@ -31,12 +31,12 @@ type ProjectState struct {
 	// states produced outside the journal; this build always sets it.
 	EventHighWatermark *string `json:"event_high_watermark"`
 
-	Git        GitState         `json:"git"`
-	Product    *ProductState    `json:"product,omitempty"`
-	Milestone  MilestoneState   `json:"milestone"`
-	Components []ComponentState `json:"components,omitempty"`
+	Git        GitState           `json:"git"`
+	Product    *ProductState      `json:"product,omitempty"`
+	Milestone  MilestoneState     `json:"milestone"`
+	Components []ComponentState   `json:"components,omitempty"`
 	Modules    []ModuleDefinition `json:"modules,omitempty"`
-	Tasks      TaskBuckets      `json:"tasks"`
+	Tasks      TaskBuckets        `json:"tasks"`
 
 	ActiveInvariants []string `json:"active_invariants,omitempty"`
 	ActiveDecisions  []string `json:"active_decisions,omitempty"`
@@ -385,6 +385,14 @@ type CognitionEndpointSummary struct {
 	// AccelerationBackend names the backend the state refers to, so
 	// "verified: false" can be distinguished from "no backend considered".
 	AccelerationBackend *BackendKind `json:"acceleration_backend,omitempty"`
+	// CredentialRef mirrors CognitionEndpoint.CredentialRef: an opaque,
+	// non-secret WP-M3B-4 CredentialRef.RefID this endpoint is explicitly
+	// configured to authenticate against, when known. Empty means no
+	// configured binding is known — a consumer (e.g. a generated
+	// endpoint_authenticated SetupAction) must not guess one from the
+	// endpoint ID (independent-review follow-up on WP-M3B-5, round-3
+	// finding 2).
+	CredentialRef string `json:"credential_ref,omitempty"`
 }
 
 // Validate checks the projection's enumerations.
@@ -397,7 +405,7 @@ func (c *CognitionCapabilities) Validate() error {
 	}
 	seen := make(map[string]bool, len(c.Endpoints))
 	for _, e := range c.Endpoints {
-		if err := requireNonEmpty(kind, "capabilities.cognition.endpoints[].id", e.ID); err != nil {
+		if err := e.Validate(); err != nil {
 			return err
 		}
 		if seen[e.ID] {
@@ -405,45 +413,84 @@ func (c *CognitionCapabilities) Validate() error {
 				"%s: capabilities.cognition.endpoints[] lists %q twice", kind, e.ID)
 		}
 		seen[e.ID] = true
-		if !e.Kind.Valid() {
-			return enumError(kind, "capabilities.cognition.endpoints[].kind", string(e.Kind),
-				"local_runtime", "authenticated_cli", "remote_api")
-		}
-		if !e.Locality.Valid() {
-			return enumError(kind, "capabilities.cognition.endpoints[].locality", string(e.Locality),
-				"local", "remote_inference_local_tools", "remote")
-		}
-		if !e.Health.Valid() {
-			return enumError(kind, "capabilities.cognition.endpoints[].health", string(e.Health),
-				"not_installed", "installed", "not_configured", "unhealthy",
-				"unverified", "ready", "unsupported", "unknown")
-		}
-		if !e.Auth.Valid() {
-			return enumError(kind, "capabilities.cognition.endpoints[].auth_status", string(e.Auth),
-				"not_applicable", "authenticated", "unauthenticated", "expired", "unknown", "error")
-		}
-		if !e.CostClass.Valid() {
-			return enumError(kind, "capabilities.cognition.endpoints[].cost_class", string(e.CostClass),
-				"local_compute", "subscription_included", "remote_economy",
-				"remote_strong", "frontier_expensive", "unknown")
-		}
-		if !e.RequiredSourceExposure.Valid() {
-			return enumError(kind, "capabilities.cognition.endpoints[].required_source_exposure",
-				string(e.RequiredSourceExposure),
-				"local_only", "semantic_evidence_only", "focused_snippets",
-				"selected_files", "tool_mediated_worktree", "unrestricted_authorized")
-		}
-		if e.AccelerationBackend != nil && !e.AccelerationBackend.Valid() {
-			return enumError(kind, "capabilities.cognition.endpoints[].acceleration_backend",
-				string(*e.AccelerationBackend), "cpu", "metal", "cuda", "rocm", "vulkan", "unknown")
-		}
-		// A remote endpoint cannot have verified local acceleration; the
-		// inference is not happening here.
-		if e.AccelerationVerified && e.Locality != LocalityLocal {
-			return errs.New(errs.CategoryInvalidArgument,
-				"%s: capabilities.cognition.endpoints[%s] is %s and cannot report verified local acceleration",
-				kind, e.ID, e.Locality)
-		}
+	}
+	return nil
+}
+
+// Validate checks the endpoint summary's enumerations and internal
+// consistency. It is the single canonical validator every caller
+// (ProjectState, DoctorReport, ResourceInventory) uses, so a summary
+// cannot be valid in one context and silently malformed in another
+// (independent-review follow-up on WP-M3B-5, finding 4b: Go endpoint
+// validation was previously much weaker than the JSON Schema twin).
+func (e CognitionEndpointSummary) Validate() error {
+	const kind = "CognitionEndpointSummary"
+	if err := requireNonEmpty(kind, "id", e.ID); err != nil {
+		return err
+	}
+	if !e.Kind.Valid() {
+		return enumError(kind, "kind", string(e.Kind),
+			"local_runtime", "authenticated_cli", "remote_api")
+	}
+	if !e.Locality.Valid() {
+		return enumError(kind, "locality", string(e.Locality),
+			"local", "remote_inference_local_tools", "remote")
+	}
+	if !e.Health.Valid() {
+		return enumError(kind, "health", string(e.Health),
+			"not_installed", "installed", "not_configured", "unhealthy",
+			"unverified", "ready", "unsupported", "unknown")
+	}
+	if !e.Auth.Valid() {
+		return enumError(kind, "auth_status", string(e.Auth),
+			"not_applicable", "authenticated", "unauthenticated", "expired", "unknown", "error")
+	}
+	if !e.CostClass.Valid() {
+		return enumError(kind, "cost_class", string(e.CostClass),
+			"local_compute", "subscription_included", "remote_economy",
+			"remote_strong", "frontier_expensive", "unknown")
+	}
+	if !e.RequiredSourceExposure.Valid() {
+		return enumError(kind, "required_source_exposure",
+			string(e.RequiredSourceExposure),
+			"local_only", "semantic_evidence_only", "focused_snippets",
+			"selected_files", "tool_mediated_worktree", "unrestricted_authorized")
+	}
+	if e.AccelerationBackend != nil && !e.AccelerationBackend.Valid() {
+		return enumError(kind, "acceleration_backend",
+			string(*e.AccelerationBackend), "cpu", "metal", "cuda", "rocm", "vulkan", "unknown")
+	}
+	// CredentialRef claims to be a WP-M3B-4 CredentialRef.RefID, not an
+	// arbitrary opaque string, so it must satisfy the same bounded
+	// identifier contract every other RefID-shaped field does — otherwise
+	// this durable projection could carry an arbitrary or secret-shaped
+	// value while claiming to be a safe RefID (independent-review
+	// follow-up on WP-M3B-5, round-4 finding 1's "smaller validation
+	// issue").
+	if err := validateOpaqueID(kind, "credential_ref", e.CredentialRef, 128, false); err != nil {
+		return err
+	}
+	// A remote endpoint cannot have verified local acceleration; the
+	// inference is not happening here.
+	if e.AccelerationVerified && e.Locality != LocalityLocal {
+		return errs.New(errs.CategoryInvalidArgument,
+			"%s: endpoint %q is %s and cannot report verified local acceleration",
+			kind, e.ID, e.Locality)
+	}
+	if e.Kind == EndpointLocalRuntime && e.Locality != LocalityLocal {
+		return errs.New(errs.CategoryInvalidArgument,
+			"%s: endpoint %q is local_runtime but has locality %q; local runtimes must be local",
+			kind, e.ID, e.Locality)
+	}
+	if e.Kind == EndpointLocalRuntime && e.Auth != AuthNotApplicable && e.Auth != AuthUnknown {
+		return errs.New(errs.CategoryInvalidArgument,
+			"%s: endpoint %q is a local runtime with auth_status %s; local runtimes have no account",
+			kind, e.ID, e.Auth)
+	}
+	if e.Kind == EndpointRemoteAPI && e.Locality == LocalityLocal {
+		return errs.New(errs.CategoryInvalidArgument,
+			"%s: endpoint %q is remote_api but has locality local; remote APIs cannot be local",
+			kind, e.ID)
 	}
 	return nil
 }

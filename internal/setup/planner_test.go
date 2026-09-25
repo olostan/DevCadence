@@ -1,6 +1,7 @@
 package setup
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -9,6 +10,166 @@ import (
 	"github.com/olostan/DevCadence/internal/ids"
 	"github.com/olostan/DevCadence/internal/protocol"
 )
+
+func TestIsImmutableHFRevision(t *testing.T) {
+	cases := map[string]bool{
+		"019cc73c45c770444708a6dd8690c66243cc5c80": true, // real, 40 lowercase hex chars
+		"main":      false,
+		"refs/pr/1": false,
+		"HEAD":      false,
+		"":          false,
+		"019CC73C45C770444708A6DD8690C66243CC5C80": false, // uppercase is not the canonical form this checks for
+	}
+	for rev, want := range cases {
+		if got := isImmutableHFRevision(rev); got != want {
+			t.Errorf("isImmutableHFRevision(%q) = %v, want %v", rev, got, want)
+		}
+	}
+}
+
+// TestEnsureLocalModelActionRejectsMutableRevisionEvenWithTrustworthyIdentity
+// isolates the immutability gate from the trustworthy-identity gate: both
+// must independently force the manual fallback. A planner-level test using
+// a mutable DefaultMLXRevision would conflate "forced manual because the
+// revision is mutable" with "forced manual because no verified hf
+// identity was found" (the existing MLX planner tests never configure a
+// trustworthy identity, so they only ever exercise the latter). This test
+// supplies a valid executable identity but a mutable revision, so the only
+// possible cause of falling back to manual is the immutability gate.
+func TestEnsureLocalModelActionRejectsMutableRevisionEvenWithTrustworthyIdentity(t *testing.T) {
+	p, err := NewPlanner(PlannerOptions{Clock: clock.NewFake(time.Date(2026, 9, 22, 12, 0, 0, 0, time.UTC), 0), IDs: ids.NewSequential()})
+	if err != nil {
+		t.Fatalf("NewPlanner: %v", err)
+	}
+	actionIndex := 0
+	action := p.ensureLocalModelAction(&actionIndex, nil, localModelRecipe{
+		runtime:             "mlx",
+		modelRef:            DefaultMLXModelRef,
+		resolvedRevision:    "main", // mutable — must never reach the automated path
+		expectedSizeBytes:   DefaultMLXSizeBytes,
+		allowedSource:       DefaultMLXSource,
+		licenseReference:    DefaultMLXLicense,
+		commandName:         "hf",
+		executablePath:      "/usr/local/bin/hf", // a trustworthy identity IS present
+		executableVersion:   "1.0.0",
+		recipeIDAuto:        "recipe.mlx.download_model",
+		recipeIDManual:      "recipe.manual.pull_mlx_model",
+		revisionIsImmutable: isImmutableHFRevision,
+		manualSteps:         []string{"step"},
+	})
+	if action.RecipeID != "recipe.manual.pull_mlx_model" {
+		t.Errorf("RecipeID = %q, want the manual recipe — a mutable resolved_revision must force manual even with a trustworthy executable identity", action.RecipeID)
+	}
+	if action.Operation != nil {
+		t.Error("Operation is non-nil, want nil for a manual action forced by a mutable revision")
+	}
+}
+
+// TestPlannerReachesAutomatedMLXRecipeFromDefaultInventory is an
+// integration-style regression proving the automated MLX path is actually
+// reachable through the real product discovery pipeline
+// (environment.DefaultInventory(), not hand-constructed facts) — a
+// planner-level unit test using facts built by hand could pass even if
+// DefaultInventory() never inventories the "hf" CLI at all, silently
+// leaving Ollama the only runtime with an automated peer in practice.
+func TestPlannerReachesAutomatedMLXRecipeFromDefaultInventory(t *testing.T) {
+	clk := clock.NewFake(time.Date(2026, 9, 24, 12, 0, 0, 0, time.UTC), 0)
+
+	fixture := environment.DarwinAppleSilicon()
+	fixture.Commands.Installed["hf"] = "/usr/local/bin/hf"
+	fixture.Commands.Outputs[environment.Key("hf", "version")] = environment.Observed("hf-hub 1.0.0")
+	fixture.Commands.Installed["mlx_lm.generate"] = "/usr/local/bin/mlx_lm.generate"
+
+	facts, err := fixture.Discover(context.Background(), clk, protocol.DepthHealth)
+	if err != nil {
+		t.Fatalf("Discover: %v", err)
+	}
+
+	var sawHF bool
+	for _, sw := range facts.Software {
+		if sw.ID == "hf" {
+			sawHF = true
+			if !sw.Installed || sw.Path == "" || sw.Version == "" {
+				t.Fatalf("discovered hf software presence is incomplete: %+v", sw)
+			}
+		}
+	}
+	if !sawHF {
+		t.Fatal("DefaultInventory() did not discover an \"hf\" software presence at all — the automated MLX path can never be reached from the real discovery pipeline")
+	}
+
+	fp, err := environment.Fingerprint(facts)
+	if err != nil {
+		t.Fatalf("Fingerprint: %v", err)
+	}
+
+	planner, err := NewPlanner(PlannerOptions{Clock: clk, IDs: ids.NewSequential(), Facts: &facts})
+	if err != nil {
+		t.Fatalf("NewPlanner: %v", err)
+	}
+
+	profile := protocol.ProfileLocalHeavy
+	report := &protocol.DoctorReport{
+		SchemaVersion:      protocol.SchemaVersion1,
+		ReportID:           "doc_000000000000000000000099",
+		MachineFingerprint: fp,
+		ObservedAt:         protocol.NewTimestamp(clk.Now()),
+		Readiness:          protocol.ReadinessReady,
+		EvaluationScope: protocol.ReadinessEvaluationScope{
+			TargetProfile:  &profile,
+			RequiredRoles:  []string{"implementation"},
+			EvidenceStatus: "live",
+		},
+		DiscoveredEndpoints: []protocol.CognitionEndpointSummary{
+			{
+				ID:                     "mlx_local",
+				Kind:                   protocol.EndpointLocalRuntime,
+				Locality:               protocol.LocalityLocal,
+				Health:                 protocol.EndpointHealthReady,
+				Auth:                   protocol.AuthNotApplicable,
+				CostClass:              protocol.CostLocalCompute,
+				RequiredSourceExposure: protocol.ExposureLocalOnly,
+				AccelerationVerified:   true,
+			},
+		},
+	}
+
+	plan, err := planner.Plan(report, protocol.TargetAll, profile)
+	if err != nil {
+		t.Fatalf("Plan: %v", err)
+	}
+
+	var mlxAction *protocol.SetupAction
+	for i := range plan.Actions {
+		if plan.Actions[i].RecipeID == "recipe.mlx.download_model" {
+			mlxAction = &plan.Actions[i]
+		}
+		if plan.Actions[i].RecipeID == "recipe.manual.pull_mlx_model" {
+			t.Fatalf("planner fell back to the manual MLX recipe despite a fully discovered, trustworthy hf identity: %+v", plan.Actions[i])
+		}
+	}
+	if mlxAction == nil {
+		t.Fatal("no recipe.mlx.download_model action found — MLX did not reach the automated path")
+	}
+	if mlxAction.Operation == nil || mlxAction.Operation.Kind != protocol.OpKindEnsureLocalModel {
+		t.Fatalf("mlxAction.Operation = %+v, want a non-nil ensure_local_model operation", mlxAction.Operation)
+	}
+	var sawExecutableVerified bool
+	for _, c := range mlxAction.Preconditions {
+		if c.Kind == protocol.CondKindExecutableVerified && c.ExecutableVerified != nil {
+			sawExecutableVerified = true
+			if c.ExecutableVerified.CanonicalPath != "/usr/local/bin/hf" {
+				t.Errorf("executable_verified.canonical_path = %q, want the discovered hf path", c.ExecutableVerified.CanonicalPath)
+			}
+		}
+	}
+	if !sawExecutableVerified {
+		t.Error("mlxAction has no executable_verified precondition binding the discovered hf identity")
+	}
+	if err := plan.Validate(); err != nil {
+		t.Fatalf("generated plan failed validation: %v", err)
+	}
+}
 
 func TestPlannerGeneratesValidPlan(t *testing.T) {
 	clk := clock.NewFake(time.Date(2026, 9, 22, 12, 0, 0, 0, time.UTC), 0)
@@ -217,12 +378,12 @@ func TestPlannerDoesNotTreatMLXAsOllama(t *testing.T) {
 		if act.RecipeID == "recipe.ollama.pull_model" {
 			t.Fatalf("MLX endpoint must NOT trigger recipe.ollama.pull_model")
 		}
-		if act.RecipeID == "recipe.manual.setup_mlx" {
+		if act.RecipeID == "recipe.manual.pull_mlx_model" {
 			foundMLXGuide = true
 		}
 	}
 	if !foundMLXGuide {
-		t.Fatalf("expected recipe.manual.setup_mlx for MLX endpoint on Darwin arm64")
+		t.Fatalf("expected recipe.manual.pull_mlx_model for MLX endpoint on Darwin arm64")
 	}
 }
 
@@ -537,8 +698,8 @@ func TestPlannerMLXAbsentOnLinuxDoesNotCreateSetupMLX(t *testing.T) {
 	}
 
 	for _, act := range plan.Actions {
-		if act.RecipeID == "recipe.manual.setup_mlx" {
-			t.Fatalf("absent MLX on Linux must NOT create recipe.manual.setup_mlx")
+		if act.RecipeID == "recipe.manual.pull_mlx_model" {
+			t.Fatalf("absent MLX on Linux must NOT create recipe.manual.pull_mlx_model")
 		}
 	}
 }
@@ -588,8 +749,8 @@ func TestPlannerMLXAbsentAndNonSelectedOnDarwinDoesNotCreateSetupMLX(t *testing.
 	}
 
 	for _, act := range plan.Actions {
-		if act.RecipeID == "recipe.manual.setup_mlx" {
-			t.Fatalf("absent and non-selected MLX on Darwin must NOT create recipe.manual.setup_mlx")
+		if act.RecipeID == "recipe.manual.pull_mlx_model" {
+			t.Fatalf("absent and non-selected MLX on Darwin must NOT create recipe.manual.pull_mlx_model")
 		}
 	}
 }
@@ -640,12 +801,239 @@ func TestPlannerMLXSelectedOnDarwinCreatesSetupMLX(t *testing.T) {
 
 	foundMLXGuide := false
 	for _, act := range plan.Actions {
-		if act.RecipeID == "recipe.manual.setup_mlx" {
+		if act.RecipeID == "recipe.manual.pull_mlx_model" {
 			foundMLXGuide = true
 			break
 		}
 	}
 	if !foundMLXGuide {
-		t.Fatalf("absent-but-selected MLX on Darwin arm64 must create recipe.manual.setup_mlx")
+		t.Fatalf("absent-but-selected MLX on Darwin arm64 must create recipe.manual.pull_mlx_model")
+	}
+}
+
+// TestPlannerGeneratesReauthenticateActionForExpiredEndpoint proves an
+// endpoint with Auth == AuthExpired produces exactly one manual
+// re-authenticate SetupAction (WP-M3B-5 §5.3).
+func TestPlannerGeneratesReauthenticateActionForExpiredEndpoint(t *testing.T) {
+	clk := clock.NewFake(time.Date(2026, 9, 22, 12, 0, 0, 0, time.UTC), 0)
+	seq := ids.NewSequential()
+
+	planner, err := NewPlanner(PlannerOptions{Clock: clk, IDs: seq})
+	if err != nil {
+		t.Fatalf("NewPlanner: %v", err)
+	}
+
+	profile := protocol.ProfileCloudCognition
+	report := &protocol.DoctorReport{
+		SchemaVersion:      protocol.SchemaVersion1,
+		ReportID:           "doc_000000000000000000000009",
+		MachineFingerprint: "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+		ObservedAt:         protocol.NewTimestamp(clk.Now()),
+		Readiness:          protocol.ReadinessActionRequired,
+		EvaluationScope: protocol.ReadinessEvaluationScope{
+			TargetProfile:  &profile,
+			RequiredRoles:  []string{"implementation"},
+			EvidenceStatus: "live",
+		},
+		Findings: []protocol.DiagnosticFinding{
+			{
+				Category: "auth",
+				Severity: SeverityWarning,
+				Code:     FindingCodeAuthExpired,
+				Title:    "Authentication expired: claude-cli",
+				Detail:   "Endpoint claude-cli auth status is expired",
+			},
+		},
+		DiscoveredEndpoints: []protocol.CognitionEndpointSummary{
+			{
+				ID:                     "claude-cli",
+				Kind:                   protocol.EndpointAuthenticatedCLI,
+				Locality:               protocol.LocalityRemote,
+				Health:                 protocol.EndpointHealthUnhealthy,
+				Auth:                   protocol.AuthExpired,
+				CostClass:              protocol.CostSubscriptionIncluded,
+				RequiredSourceExposure: protocol.ExposureFocusedSnippets,
+				CredentialRef:          "claude-cli-ref",
+			},
+			{
+				ID:                     "still-fine-endpoint",
+				Kind:                   protocol.EndpointRemoteAPI,
+				Locality:               protocol.LocalityRemote,
+				Health:                 protocol.EndpointHealthReady,
+				Auth:                   protocol.AuthAuthenticated,
+				CostClass:              protocol.CostRemoteEconomy,
+				RequiredSourceExposure: protocol.ExposureFocusedSnippets,
+			},
+		},
+	}
+
+	plan, err := planner.Plan(report, protocol.TargetAll, protocol.ProfileCloudCognition)
+	if err != nil {
+		t.Fatalf("planner.Plan: %v", err)
+	}
+	if err := plan.Validate(); err != nil {
+		t.Fatalf("plan.Validate: %v", err)
+	}
+
+	var reauthActions []protocol.SetupAction
+	for _, act := range plan.Actions {
+		if act.RecipeID == "recipe.manual.reauthenticate" {
+			reauthActions = append(reauthActions, act)
+		}
+	}
+	if len(reauthActions) != 1 {
+		t.Fatalf("expected exactly 1 reauthenticate action, got %d", len(reauthActions))
+	}
+	act := reauthActions[0]
+	if act.Authority != protocol.AuthorityHighImpactManual {
+		t.Errorf("authority = %q, want %q", act.Authority, protocol.AuthorityHighImpactManual)
+	}
+	if act.Operation != nil || act.ManualInstructions == nil {
+		t.Error("reauthenticate action must be manual (no Operation, has ManualInstructions)")
+	}
+	// endpoint_authenticated, not endpoint_healthy: health does not prove
+	// authentication (independent-review follow-up on WP-M3B-5, finding 6).
+	if act.Postconditions[0].Kind != protocol.CondKindEndpointAuthenticated || act.Postconditions[0].EndpointAuthenticated.EndpointID != "claude-cli" {
+		t.Errorf("postcondition does not target the expired endpoint's authentication: %+v", act.Postconditions)
+	}
+	// The condition must carry the endpoint's own explicit credential
+	// binding, not merely its ID — a checker resolving auth by guessing a
+	// locator from the endpoint ID string would misbind for any endpoint
+	// whose credential locator differs from its ID (independent-review
+	// follow-up on WP-M3B-5, round-3 finding 2).
+	if got := act.Postconditions[0].EndpointAuthenticated.CredentialRefID; got != "claude-cli-ref" {
+		t.Errorf("postcondition CredentialRefID = %q, want %q (propagated from the endpoint's own CredentialRef, not guessed)", got, "claude-cli-ref")
+	}
+	if got := act.ManualInstructions.VerificationCheck[0].EndpointAuthenticated.CredentialRefID; got != "claude-cli-ref" {
+		t.Errorf("VerificationCheck CredentialRefID = %q, want %q", got, "claude-cli-ref")
+	}
+
+	// Targeting only TargetHardware must not produce the auth action.
+	planHW, err := planner.Plan(report, protocol.TargetHardware, protocol.ProfileCloudCognition)
+	if err != nil {
+		t.Fatalf("planner.Plan (hardware target): %v", err)
+	}
+	for _, act := range planHW.Actions {
+		if act.RecipeID == "recipe.manual.reauthenticate" {
+			t.Fatal("TargetHardware must not generate a reauthenticate action")
+		}
+	}
+}
+
+// TestPlannerSkipsReauthenticateActionWithoutCredentialBinding is the
+// independent-review follow-up on WP-M3B-5, round-4 finding 1: an expired
+// endpoint with no known CredentialRef binding must not get a reauth action
+// containing an endpoint_authenticated condition that can never be
+// verified. This mirrors the existing NoCodingEndpoint asymmetry
+// (TestPlannerDoesNotActionNoCodingEndpointFinding) — the AuthExpired
+// finding is still expected to surface via Doctor's own diagnostics; only
+// the plan-level machine-actionable remediation is withheld.
+func TestPlannerSkipsReauthenticateActionWithoutCredentialBinding(t *testing.T) {
+	clk := clock.NewFake(time.Date(2026, 9, 22, 12, 0, 0, 0, time.UTC), 0)
+	seq := ids.NewSequential()
+
+	planner, err := NewPlanner(PlannerOptions{Clock: clk, IDs: seq})
+	if err != nil {
+		t.Fatalf("NewPlanner: %v", err)
+	}
+
+	profile := protocol.ProfileCloudCognition
+	report := &protocol.DoctorReport{
+		SchemaVersion:      protocol.SchemaVersion1,
+		ReportID:           "doc_000000000000000000000010",
+		MachineFingerprint: "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+		ObservedAt:         protocol.NewTimestamp(clk.Now()),
+		Readiness:          protocol.ReadinessActionRequired,
+		EvaluationScope: protocol.ReadinessEvaluationScope{
+			TargetProfile:  &profile,
+			RequiredRoles:  []string{"implementation"},
+			EvidenceStatus: "live",
+		},
+		Findings: []protocol.DiagnosticFinding{
+			{
+				Category: "auth",
+				Severity: SeverityWarning,
+				Code:     FindingCodeAuthExpired,
+				Title:    "Authentication expired: claude-cli",
+				Detail:   "Endpoint claude-cli auth status is expired",
+			},
+		},
+		DiscoveredEndpoints: []protocol.CognitionEndpointSummary{
+			{
+				ID:                     "claude-cli",
+				Kind:                   protocol.EndpointAuthenticatedCLI,
+				Locality:               protocol.LocalityRemote,
+				Health:                 protocol.EndpointHealthUnhealthy,
+				Auth:                   protocol.AuthExpired,
+				CostClass:              protocol.CostSubscriptionIncluded,
+				RequiredSourceExposure: protocol.ExposureFocusedSnippets,
+				// No CredentialRef configured — the common case for a
+				// discovered CLI when no explicit operator binding exists.
+			},
+		},
+	}
+
+	plan, err := planner.Plan(report, protocol.TargetAll, protocol.ProfileCloudCognition)
+	if err != nil {
+		t.Fatalf("planner.Plan: %v", err)
+	}
+	if err := plan.Validate(); err != nil {
+		t.Fatalf("plan.Validate: %v", err)
+	}
+	for _, act := range plan.Actions {
+		if act.RecipeID == "recipe.manual.reauthenticate" {
+			t.Fatalf("expected no reauthenticate action for an endpoint with no configured credential binding, got: %+v", act)
+		}
+	}
+}
+
+// TestPlannerDoesNotActionNoCodingEndpointFinding proves
+// FindingCodeNoCodingEndpoint never produces a SetupAction — there is no
+// endpoint to name in a remediation, and inventing a generic
+// "install/authenticate some coding CLI" action would mean recommending a
+// specific provider (WP-M3B-5 §3/§5.3's MUST-constraint boundary).
+func TestPlannerDoesNotActionNoCodingEndpointFinding(t *testing.T) {
+	clk := clock.NewFake(time.Date(2026, 9, 22, 12, 0, 0, 0, time.UTC), 0)
+	seq := ids.NewSequential()
+
+	planner, err := NewPlanner(PlannerOptions{Clock: clk, IDs: seq})
+	if err != nil {
+		t.Fatalf("NewPlanner: %v", err)
+	}
+
+	profile := protocol.ProfileCustom
+	report := &protocol.DoctorReport{
+		SchemaVersion:      protocol.SchemaVersion1,
+		ReportID:           "doc_000000000000000000000010",
+		MachineFingerprint: "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+		ObservedAt:         protocol.NewTimestamp(clk.Now()),
+		Readiness:          protocol.ReadinessActionRequired,
+		EvaluationScope: protocol.ReadinessEvaluationScope{
+			TargetProfile:  &profile,
+			RequiredRoles:  []string{"implementation"},
+			EvidenceStatus: "live",
+		},
+		Findings: []protocol.DiagnosticFinding{
+			{
+				Category: "cognition",
+				Severity: SeverityWarning,
+				Code:     FindingCodeNoCodingEndpoint,
+				Title:    "No healthy coding endpoint found",
+				Detail:   "DevCadence requires at least one healthy cognition endpoint for code execution",
+			},
+		},
+	}
+
+	plan, err := planner.Plan(report, protocol.TargetAll, protocol.ProfileCustom)
+	if err != nil {
+		t.Fatalf("planner.Plan: %v", err)
+	}
+	if err := plan.Validate(); err != nil {
+		t.Fatalf("plan.Validate: %v", err)
+	}
+	for _, act := range plan.Actions {
+		if act.RecipeID == "recipe.manual.reauthenticate" {
+			t.Fatalf("a NoCodingEndpoint finding must never produce a reauthenticate (or any coding-endpoint-specific) action, got: %+v", act)
+		}
 	}
 }

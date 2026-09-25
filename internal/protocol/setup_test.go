@@ -1,11 +1,14 @@
 package protocol_test
 
 import (
+	"encoding/json"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/olostan/DevCadence/internal/protocol"
+	"github.com/olostan/DevCadence/internal/schema"
 )
 
 func validTestTimestamp() protocol.Timestamp {
@@ -35,11 +38,12 @@ func validExecutableAction() protocol.SetupAction {
 		},
 		Postconditions: []protocol.Condition{
 			{
-				Kind: protocol.CondKindModelDigestPresent,
-				ModelDigestPresent: &protocol.ModelDigestOperand{
-					Runtime:  "ollama",
-					ModelTag: "smollm:135m",
-					Digest:   "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+				Kind: protocol.CondKindModelPresent,
+				ModelPresent: &protocol.ModelPresentOperand{
+					Runtime:           "ollama",
+					ModelRef:          "smollm:135m",
+					ResolvedRevision:  "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+					ExpectedSizeBytes: 145000000,
 				},
 			},
 		},
@@ -52,13 +56,14 @@ func validExecutableAction() protocol.SetupAction {
 		},
 		IdempotencyKey: "pull-smollm:135m",
 		Operation: &protocol.TypedOperation{
-			Kind: protocol.OpKindOllamaPullModel,
-			OllamaPullModel: &protocol.OllamaPullModelParams{
-				ModelTag:            "smollm:135m",
-				ResolvedDigest:      "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-				ExpectedSizeBytes:   145000000,
-				AllowedRegistryHost: "registry.ollama.ai",
-				LicenseReference:    "apache-2.0",
+			Kind: protocol.OpKindEnsureLocalModel,
+			EnsureLocalModel: &protocol.EnsureLocalModelParams{
+				Runtime:           "ollama",
+				ModelRef:          "smollm:135m",
+				ResolvedRevision:  "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+				ExpectedSizeBytes: 145000000,
+				AllowedSource:     "registry.ollama.ai",
+				LicenseReference:  "apache-2.0",
 			},
 		},
 	}
@@ -159,6 +164,91 @@ func TestSetupActionIntrinsicPolicyEnforcement(t *testing.T) {
 	act2.Effects = []protocol.EffectCategory{protocol.EffectFilesystemWrite} // Missing NetworkAccess and ModelDownload
 	if err := act2.Validate(); err == nil {
 		t.Fatal("action with missing intrinsic effects was accepted; expected error")
+	}
+}
+
+func TestConditionExecutableVerifiedRejectsArbitraryVersionProbe(t *testing.T) {
+	// version_probe is a closed enum, not a free-form argv field — a plan
+	// must not be able to smuggle arbitrary command arguments into a
+	// supposedly read-only executable_verified condition (ADR-0014's
+	// closed-typed-protocol property).
+	cond := protocol.Condition{
+		Kind: protocol.CondKindExecutableVerified,
+		ExecutableVerified: &protocol.ExecutableVerifiedOperand{
+			CanonicalPath:   "/usr/local/bin/hf",
+			ExpectedVersion: "1.0.0",
+			VersionProbe:    protocol.VersionProbeKind("-c; rm -rf /"),
+		},
+	}
+	if err := cond.Validate(); err == nil {
+		t.Fatal("Condition.Validate accepted an arbitrary version_probe value; expected rejection of anything outside the closed enum")
+	}
+
+	// Both recognized enum values, and the empty default, must validate.
+	for _, kind := range []protocol.VersionProbeKind{"", protocol.VersionProbeDoubleDashVersion, protocol.VersionProbeVersionSubcommand} {
+		ok := protocol.Condition{
+			Kind: protocol.CondKindExecutableVerified,
+			ExecutableVerified: &protocol.ExecutableVerifiedOperand{
+				CanonicalPath:   "/usr/local/bin/hf",
+				ExpectedVersion: "1.0.0",
+				VersionProbe:    kind,
+			},
+		}
+		if err := ok.Validate(); err != nil {
+			t.Errorf("Condition.Validate rejected version_probe %q: %v", kind, err)
+		}
+	}
+}
+
+func TestSetupActionEnsureLocalModelRequiresMatchingPostcondition(t *testing.T) {
+	// A valid action's operation and postcondition already agree (baseline).
+	act := validExecutableAction()
+	if err := act.Validate(); err != nil {
+		t.Fatalf("baseline action failed validation: %v", err)
+	}
+
+	// Mismatched model_ref between the operation and its postcondition must
+	// be rejected — a plan must not be able to approve pulling model A
+	// while declaring success against model B's presence.
+	mismatched := validExecutableAction()
+	mismatched.Postconditions = []protocol.Condition{
+		{
+			Kind: protocol.CondKindModelPresent,
+			ModelPresent: &protocol.ModelPresentOperand{
+				Runtime:          "ollama",
+				ModelRef:         "a-completely-different-model:latest",
+				ResolvedRevision: mismatched.Operation.EnsureLocalModel.ResolvedRevision,
+			},
+		},
+	}
+	if err := mismatched.Validate(); err == nil {
+		t.Fatal("action with mismatched ensure_local_model/model_present identity was accepted; expected error")
+	}
+
+	// No model_present postcondition at all must also be rejected.
+	missing := validExecutableAction()
+	missing.Postconditions = nil
+	if err := missing.Validate(); err == nil {
+		t.Fatal("ensure_local_model action with no model_present postcondition was accepted; expected error")
+	}
+
+	// Mismatched expected_size_bytes must also be rejected — a plan must
+	// not be able to approve one size while asking the postcondition (and
+	// therefore crash recovery) to accept a different one.
+	sizeMismatch := validExecutableAction()
+	sizeMismatch.Postconditions = []protocol.Condition{
+		{
+			Kind: protocol.CondKindModelPresent,
+			ModelPresent: &protocol.ModelPresentOperand{
+				Runtime:           sizeMismatch.Operation.EnsureLocalModel.Runtime,
+				ModelRef:          sizeMismatch.Operation.EnsureLocalModel.ModelRef,
+				ResolvedRevision:  sizeMismatch.Operation.EnsureLocalModel.ResolvedRevision,
+				ExpectedSizeBytes: sizeMismatch.Operation.EnsureLocalModel.ExpectedSizeBytes + 1,
+			},
+		},
+	}
+	if err := sizeMismatch.Validate(); err == nil {
+		t.Fatal("action with mismatched ensure_local_model/model_present expected_size_bytes was accepted; expected error")
 	}
 }
 
@@ -275,10 +365,10 @@ func TestLoopbackOnlyPortCondition(t *testing.T) {
 func TestCredentialRefValidation(t *testing.T) {
 	// Valid env_var
 	credEnv := protocol.CredentialRef{
-		RefID:    "cred-001",
-		Kind:     protocol.CredRefEnvVar,
-		Provider: "anthropic",
-		Locator:  "ANTHROPIC_API_KEY",
+		SchemaVersion: protocol.SchemaVersion1,
+		RefID:         "cred-001",
+		Kind:          protocol.CredRefEnvVar,
+		Locator:       "ANTHROPIC_API_KEY",
 	}
 	if err := credEnv.Validate(); err != nil {
 		t.Fatalf("valid env_var cred failed: %v", err)
@@ -293,10 +383,10 @@ func TestCredentialRefValidation(t *testing.T) {
 
 	// Valid cli_session
 	credCLI := protocol.CredentialRef{
-		RefID:    "cred-002",
-		Kind:     protocol.CredRefCLISession,
-		Provider: "anthropic",
-		Locator:  "claude-code:session-1",
+		SchemaVersion: protocol.SchemaVersion1,
+		RefID:         "cred-002",
+		Kind:          protocol.CredRefCLISession,
+		Locator:       "claude-code:session-1",
 	}
 	if err := credCLI.Validate(); err != nil {
 		t.Fatalf("valid cli_session cred failed: %v", err)
@@ -333,7 +423,7 @@ func TestSetupLedgerEventValidationAndChain(t *testing.T) {
 	}
 
 	// Event 2 linking to Event 1
-	opKind := protocol.OpKindOllamaPullModel
+	opKind := protocol.OpKindEnsureLocalModel
 	ev2 := protocol.SetupLedgerEvent{
 		SchemaVersion:       protocol.SchemaVersion1,
 		Sequence:            2,
@@ -421,11 +511,16 @@ func TestDoctorReportValidation(t *testing.T) {
 		t.Fatalf("valid doctor report failed: %v", err)
 	}
 
-	// Claiming READY without target profile must fail
+	// READY no longer requires an evaluated target_profile: canonical
+	// readiness is evidence-driven (ScopeReadiness / a viable cognition
+	// path), never gated by whether the informational DeploymentProfile
+	// label happened to be set (independent-review follow-up on
+	// WP-M3B-5, finding 1 — an earlier revision of this test asserted
+	// the opposite, now-removed, rule).
 	repNoProfile := rep
 	repNoProfile.EvaluationScope.TargetProfile = nil
-	if err := repNoProfile.Validate(); err == nil {
-		t.Fatal("claiming READY without evaluated target_profile was accepted; expected error")
+	if err := repNoProfile.Validate(); err != nil {
+		t.Fatalf("READY with no target_profile should be accepted, got: %v", err)
 	}
 }
 
@@ -459,4 +554,92 @@ func TestComputeDigestForFixtures(t *testing.T) {
 		t.Fatalf("compute event digest: %v", err)
 	}
 	t.Logf("Computed event digest: %s", evDigest)
+}
+
+// TestSetupPlanEndpointAuthenticatedCredentialRefIDSchemaParity is the
+// independent-review follow-up on WP-M3B-5, round-5 finding 1's required
+// regression: EndpointOperand.CredentialRefID is semantically a WP-M3B-4
+// CredentialRef.RefID, so it must be validated with that same bounded
+// opaque-identifier / never-secret-looking contract in both Go and the
+// setup-plan JSON Schema, not merely required to be non-empty.
+func TestSetupPlanEndpointAuthenticatedCredentialRefIDSchemaParity(t *testing.T) {
+	schemas, err := schema.Default()
+	if err != nil {
+		t.Fatalf("failed to compile schemas: %v", err)
+	}
+
+	buildPlan := func(credentialRefID string) protocol.SetupPlan {
+		act1 := validExecutableAction()
+		act2 := validManualAction()
+		act2.DependsOn = []string{act1.ActionID}
+		act2.ManualInstructions.VerificationCheck = []protocol.Condition{
+			{
+				Kind: protocol.CondKindEndpointAuthenticated,
+				EndpointAuthenticated: &protocol.EndpointOperand{
+					EndpointID:      "cli:claude-code",
+					CredentialRefID: credentialRefID,
+				},
+			},
+		}
+		act2.Postconditions = []protocol.Condition{
+			{
+				Kind: protocol.CondKindEndpointAuthenticated,
+				EndpointAuthenticated: &protocol.EndpointOperand{
+					EndpointID:      "cli:claude-code",
+					CredentialRefID: credentialRefID,
+				},
+			},
+		}
+		return protocol.SetupPlan{
+			SchemaVersion:      protocol.SchemaVersion1,
+			PlanID:             "plan-001",
+			RecipeSetVersion:   "1.0",
+			MachineFingerprint: "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+			CreatedAt:          validTestTimestamp(),
+			Target:             protocol.TargetAll,
+			Actions:            []protocol.SetupAction{act1, act2},
+			RequiredAuthority:  protocol.AuthorityHighImpactManual,
+			TotalEffects: []protocol.EffectCategory{
+				protocol.EffectDevicePermissionChange,
+				protocol.EffectFilesystemWrite,
+				protocol.EffectModelDownload,
+				protocol.EffectNetworkAccess,
+				protocol.EffectPrivilegeElevation,
+			},
+		}
+	}
+
+	cases := []struct {
+		name            string
+		credentialRefID string
+	}{
+		{"valid", "claude-cli-ref"},
+		{"empty", ""},
+		{"secret-shaped", "sk-ant-api03-abcdefghijklmnop"},
+		{"token= keyword", "token=abcdef123456"},
+		{"invalid character", "claude cli ref"},
+		{"at 128-byte limit", strings.Repeat("a", 128)},
+		{"over 128-byte limit", strings.Repeat("a", 129)},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			plan := buildPlan(tc.credentialRefID)
+			digest, err := protocol.ComputePlanDigest(&plan)
+			if err != nil {
+				t.Fatalf("compute plan digest: %v", err)
+			}
+			plan.PlanDigest = digest
+
+			goErr := plan.Validate()
+			data, err := json.Marshal(plan)
+			if err != nil {
+				t.Fatalf("marshal: %v", err)
+			}
+			schemaErr := schemas.ValidateBytes(schema.NameSetupPlan, data)
+			if (goErr == nil) != (schemaErr == nil) {
+				t.Fatalf("parity mismatch: go accepted=%v (err=%v), schema accepted=%v (err=%v)",
+					goErr == nil, goErr, schemaErr == nil, schemaErr)
+			}
+		})
+	}
 }

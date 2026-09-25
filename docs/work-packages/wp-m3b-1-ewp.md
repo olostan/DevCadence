@@ -1,0 +1,213 @@
+# Engineering Work Package: WP-M3B-1 — Setup domain types and plan digest
+
+- **Milestone:** M3B — Guided bootstrap and onboarding
+- **Scope card:** [docs/WORK_PACKAGES.md#wp-m3b-1--setup-domain-types-and-plan-digest](../WORK_PACKAGES.md#wp-m3b-1--setup-domain-types-and-plan-digest)
+- **Base commit:** `a38b293` (origin/main, merge of PR #9 — `AGENT_HANDOFF_PROTOCOL.md` and M3B work-package breakdown)
+- **Branch:** `feat/m3b-guided-bootstrap`
+- **Status:** Accepted. Implementation already present on `main` prior to this EWP's authorship — see "Provenance" below. This EWP documents, verifies, and formally accepts that existing implementation as WP-M3B-1's deliverable under `AGENT_HANDOFF_PROTOCOL.md`'s Principal/Implementer sequence, rather than re-deriving the same design from a blank slate. Independent review: [PR #10 review comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5805285148) (owner, 2026-09-24) found three checkpoint issues, all addressed in this revision — see §12.
+
+## Provenance (read before anything else)
+
+This is not a forward-looking design document for code that doesn't exist yet. `docs/WORK_PACKAGES.md` describes the M3B branch as something to "create when WP-M3B-1 starts," and `docs/IMPLEMENTATION_PLAN.md` describes M3B as "not implemented." Both were accurate when written, but the repository's actual `main` branch already contained a full implementation of this WP's scope, committed directly by the project owner (`olostan@gmail.com`) on 2026-09-22 — one to two days *before* `AGENT_HANDOFF_PROTOCOL.md` and the WP-M3B-1 scope card were merged (PR #9, `a38b293`, 2026-09-24):
+
+- `deae362` — "feat(setup): add M3B protocol types, schemas, and ADR-0014 (Phase 1)"
+- `2e945e4` — "feat(setup): add Doctor, profile recommender, cache, and planner (Phase 2)"
+- `f9ffcc3`, `c6bec0a`, `216bad2`, `42617ab` — four follow-up fix commits addressing review findings against that code (digests, readiness, profiles, cache, Ollama identity trust, MLX gating).
+
+That code was never routed through this protocol's EWP process and never lived on a `feat/m3b-*` branch — it landed straight on `main` as the human owner's own direct work, before the handoff protocol existed. `docs/WORK_PACKAGES.md`'s WP-M3B-1 scope card was written independently but turns out to describe — almost field-for-field — exactly what `internal/protocol/setup.go` already implements: the same five `TypedOperation` kinds, the same six `Condition` kinds, the same `ManagedDirectoryLocation`/`CacheTarget`/`ManagedConfigKey` allowlists, the same `PlanDigest` rule, the same mutual-exclusion and `IntrinsicPolicy` semantics. ADR-0014 (`Accepted`, 2026-09-22) is the settled design document both the scope card and the existing code trace back to.
+
+Per the resolution the project owner gave when this discrepancy was surfaced: **the existing code on `main` is treated as the real implementation of WP-M3B-1.** This EWP's job is to state that design formally per `AGENTS.md` §6 (so a future session has a real frozen artifact to work against, not just a scope card and an untraceable pile of commits), verify it against WP-M3B-1's acceptance criteria with fresh evidence, and identify what — if anything — is missing before the checkpoint can be marked accepted.
+
+`internal/setup/{doctor,planner,profiles,cache}.go` (from the same Phase 1/2 commits) go considerably further than WP-M3B-1's scope — into WP-M3B-3/5/6 territory (executor semantics, doctor readiness, profile recommendation, bounded recipes). This EWP does **not** cover, verify, or accept that code. It is out of scope for WP-M3B-1 and is left for whichever session expands WP-M3B-3/5/6's EWPs to assess against — noted here, and in `HANDOFF.md`, so it isn't lost.
+
+## 1. Objective and rationale
+
+Establish the closed, typed data model that every later M3B WP (executor, ledger, doctor, recipes, CLI, TUI) builds on: a discriminated-union `TypedOperation`, a discriminated-union `Condition`, an immutable `SetupPlan` envelope with a canonical, tamper-evident `PlanDigest`, and executor-defined `IntrinsicPolicy` enforcement. No process execution, no CLI, no ledger — pure types, validation functions, and JSON Schemas, matching ADR-0014 §1–2.
+
+The rationale (per ADR-0014's Context) is that free-form shell scripts or `map[string]string` parameter bags turn `devcadence setup` into an unverified script runner (violates ADR-0008, DCI-033), and an un-hashed or silently-adaptable plan lets approval drift from what actually executes (violates DCI-108). Closing the union and hashing the exact approved envelope is what makes the two-step approval workflow (WP-M3B-3) meaningful.
+
+## 2. Architectural intent
+
+- Lives in `internal/protocol` (package `protocol`), alongside every other typed protocol record (`ProjectState`, `EngineeringWorkPackage`, etc.) — not a separate package. This keeps `SetupPlan` a first-class protocol record with the same `Record` interface (`RecordKind`/`RecordID`/`SchemaVer`/`Validate`), the same canonical-JSON marshal/unmarshal discipline (`protocol.Marshal`/`protocol.Unmarshal`), and the same schema-pairing test (`tests/schema_fixtures_test.go`'s `TestEveryRecordKindHasASchema`) as every other domain type — not a bespoke setup-specific serialization path.
+- `TypedOperation` and `Condition` are Go structs with a `Kind` discriminator field plus one `*Params`/`*Operand` pointer per kind, exactly one of which may be non-nil (`count != 1` check in `Validate()`). This is the project's established discriminated-union pattern in Go (no `interface{}`/`any`, no open maps) — see `SetupAction.Operation *TypedOperation` / `SetupAction.ManualInstructions *ManualGuide` for the same pattern one level up.
+- `IntrinsicPolicy(op TypedOperation) ([]EffectCategory, Authority)` is a pure function keyed on `OperationKind`, owned by the executor's contract (this package), not by whatever recipe later constructs the operation (WP-M3B-6). A recipe cannot self-declare a weaker authority than the operation kind intrinsically requires; `SetupAction.Validate()` enforces this at the type level so no downstream caller can bypass it by skipping a policy-check step.
+- `PlanDigest` is computed over a shadow struct (`setupPlanDigestView`) that mirrors every `SetupPlan` field except `PlanDigest` itself, marshaled through the same canonical encoder as every other record. This avoids the two-pass "hash with digest field zeroed, but the zero value and an explicit omission must canonicalize identically" trap: the view type simply never has the field.
+- Mutual exclusion (`AuthorityHighImpactManual` ⟺ `ManualInstructions` set, `Operation == nil` — anything else ⟺ `Operation` set, `ManualInstructions == nil`) is enforced once, centrally, in `SetupAction.Validate()`, not duplicated per-caller.
+
+## 3. Verified assumptions and evidence
+
+- **Assumption:** ADR-0014 is `Accepted` and normative for this milestone, not open for relitigation. Verified: `docs/adr/0014-guided-bootstrap-and-remediation.md` line 3, `Status: Accepted`, dated 2026-09-22.
+- **Assumption:** the existing `internal/protocol/setup.go` implementation matches ADR-0014 §1–2 and the WP-M3B-1 scope card's deliverable list field-for-field. Verified by direct reading: operation kinds (`OpKindOllamaPullModel`, `OpKindCreateDirectory`, `OpKindWriteManagedConfig`, `OpKindRemoveStaleCache`, `OpKindRunDiagnosticCheck`) match the scope card exactly; condition kinds (`CondKindCommandAvailable`, `CondKindExecutableVerified`, `CondKindManagedDirExists`, `CondKindPortListening`, `CondKindEndpointHealthy`, `CondKindModelDigestPresent`) match exactly; `ManagedDirectoryLocation`, `CacheTarget`, `ManagedConfigKey` allowlists present (`internal/protocol/setup.go:101-139`).
+- **Assumption:** the JSON Schemas and fixtures required by the scope card already exist and pass round-trip validation. Verified: `schemas/setup-plan.schema.json`, `schemas/setup-execution-report.schema.json`, `schemas/setup-ledger-event.schema.json` exist and are wired into `schema.RecordKindToSchema`; `fixtures/protocol/setup-plan.valid.json` and `setup-plan.invalid-target.json` exist and are exercised by `tests/schema_fixtures_test.go`'s `TestValidFixturesValidate`, `TestInvalidFixturesAreRejected`, and `TestFixturesRoundTripWithoutSemanticLoss` (the last one decodes, re-encodes, and re-validates `SetupPlan`, `SetupExecutionReport`, and `SetupLedgerEvent` against their schemas and asserts byte-stable double round-tripping).
+- **Assumption:** the acceptance criteria in the scope card are met by existing tests, not just existing code. Verified by running the suite fresh (see §8 below) rather than trusting prior commit messages — this session did not assume "tests pass" from history; it re-ran them.
+
+No assumption in this list was found false. No escalation is needed.
+
+## 4. Constraints
+
+**MUST** (already satisfied by the existing implementation; binding on any future change to this code):
+- `TypedOperation` and `Condition` remain closed discriminated unions. No open `map[string]string` parameter bag is ever added to either (ADR-0014 §1, DCI-033).
+- No operation defined here executes anything. This package is data/validation only; process execution is WP-M3B-3's `internal/setup.CommandRunner` boundary.
+- `IntrinsicPolicy` stays executor-owned: a `SetupAction`'s declared `Authority`/`Effects` can never validate successfully below what `IntrinsicPolicy(op)` requires for that operation kind.
+- Manual and executable actions remain mutually exclusive at the type level (`SetupAction.Validate()`), enforced for every action, not opt-in per caller.
+- `PlanDigest` is SHA-256 over the canonical JSON encoding of the complete `SetupPlan` with only `plan_digest` omitted — never a partial-field hash, never recomputed with a different field set without a new ADR.
+- `port_listening` conditions probe loopback addresses only (`localhost`, `127.0.0.1`, `::1`) — already enforced in `Condition.Validate()`.
+
+**SHOULD:**
+- New operation/condition kinds added in later WPs (e.g. WP-M3B-6's recipes) extend the existing `OperationKind`/`ConditionKind` enums and `IntrinsicPolicy` switch rather than introducing a parallel mechanism.
+- Any future field added to `SetupPlan` is added to both `SetupPlan` and `setupPlanDigestView` together — a mismatch between the two would silently exclude a field from the digest.
+
+**SUGGESTED:**
+- If a sixth+ operation or condition kind is added later, consider whether `IntrinsicPolicy`'s `switch` should grow a table-driven form instead of a growing switch — not needed at five/six cases, worth revisiting past ten.
+
+**LOCAL_DISCRETION:**
+- Internal helper naming, test table structure, and fixture file layout within `fixtures/protocol/`.
+
+## 5. Interface sketch (as implemented)
+
+```go
+// internal/protocol/setup.go
+
+type OperationKind string // ollama_pull_model | create_directory | write_managed_config | remove_stale_cache | run_diagnostic_check
+
+type TypedOperation struct {
+    Kind               OperationKind
+    OllamaPullModel    *OllamaPullModelParams    `json:"ollama_pull_model,omitempty"`
+    CreateDirectory    *CreateDirectoryParams    `json:"create_directory,omitempty"`
+    WriteManagedConfig *WriteManagedConfigParams `json:"write_managed_config,omitempty"`
+    RemoveStaleCache   *RemoveStaleCacheParams   `json:"remove_stale_cache,omitempty"`
+    RunDiagnosticCheck *RunDiagnosticCheckParams `json:"run_diagnostic_check,omitempty"`
+}
+func (o TypedOperation) Validate() error
+func IntrinsicPolicy(op TypedOperation) ([]EffectCategory, Authority)
+
+type ConditionKind string // command_available | executable_verified | managed_dir_exists | port_listening | endpoint_healthy | model_digest_present
+
+type Condition struct {
+    Kind ConditionKind
+    CommandAvailable   *CommandAvailableOperand
+    ExecutableVerified *ExecutableVerifiedOperand
+    ManagedDirExists   *ManagedDirOperand
+    PortListening      *PortOperand
+    EndpointHealthy    *EndpointOperand
+    ModelDigestPresent *ModelDigestOperand
+}
+func (c Condition) Validate() error
+
+type SetupAction struct {
+    ActionID, RecipeID, RecipeVersion, Title, Description string
+    Authority          Authority
+    Effects            []EffectCategory
+    Preconditions      []Condition
+    Postconditions     []Condition
+    ExpectedMutations  []ExpectedMutation
+    IdempotencyKey     string
+    DependsOn          []string
+    Operation          *TypedOperation // mutually exclusive with ManualInstructions
+    ManualInstructions *ManualGuide
+}
+func (a SetupAction) Validate() error // enforces mutual exclusion + IntrinsicPolicy
+
+type SetupPlan struct {
+    SchemaVersion, PlanID, PlanDigest, RecipeSetVersion, MachineFingerprint string
+    CreatedAt         Timestamp
+    Target            SetupTarget
+    Actions           []SetupAction
+    RequiredAuthority Authority
+    TotalEffects      []EffectCategory
+}
+func ComputePlanDigest(p *SetupPlan) (string, error)
+func (p *SetupPlan) Validate() error // includes digest match, dup action/idempotency-key, dependency-order checks
+```
+
+No changes to this interface are proposed by this EWP.
+
+## 6. Edge cases and failure modes (already covered)
+
+- Weaker declared authority than `IntrinsicPolicy` demands → rejected (`TestSetupActionIntrinsicPolicyEnforcement`).
+- Missing a required intrinsic effect category → rejected (same test).
+- Manual action carrying a non-nil `Operation`, or executable action carrying non-nil `ManualInstructions` → rejected both directions (`TestSetupActionMutualExclusion`).
+- Tampered plan (any field changed after digest computed) → digest mismatch, rejected (`TestSetupPlanValidationAndDigest`).
+- Empty `PlanDigest` → rejected.
+- Duplicate `action_id` within a plan → rejected.
+- Duplicate `idempotency_key` within a plan → rejected.
+- Forward/cyclic `depends_on` reference → rejected.
+- Missing `depends_on` target → rejected.
+- Non-loopback `port_listening` host → rejected (`TestLoopbackOnlyPortCondition`).
+
+## 7. Acceptance criteria — verification against this session's fresh run
+
+Scope card's stated criteria, each checked against a fresh test run (not trusted from prior commit messages):
+
+| Criterion | Evidence |
+|---|---|
+| Schema round-trip tests | `tests/schema_fixtures_test.go::TestValidFixturesValidate`, `TestInvalidFixturesAreRejected`, `TestFixturesRoundTripWithoutSemanticLoss` — PASS (see §8) |
+| Weaker-than-`IntrinsicPolicy` authority rejected | `internal/protocol/setup_test.go::TestSetupActionIntrinsicPolicyEnforcement` — PASS |
+| `PlanDigest` stable/reproducible for identical input, changes for any other field change | `TestSetupPlanValidationAndDigest`, `TestComputeDigestForFixtures`, plus the structural contract added in review (`internal/protocol/setup_digest_contract_test.go::TestPlanDigestViewFieldParity`, `TestPlanDigestChangesForEveryField`, `TestPlanDigestUnaffectedByPlanDigestField` — see §12) — PASS |
+| Fixtures cover manual and executable action shapes | `fixtures/protocol/setup-plan.valid.json` (executable) and `setup-plan.valid-manual-action.json` (manual, added in review — see §12), both validated by `TestValidFixturesValidate`/`TestFixturesRoundTripWithoutSemanticLoss`; plus the pre-existing Go-level `validManualAction()`/`validExecutableAction()` coverage in `setup_test.go` — PASS |
+| Mixing manual + executable on one action rejected | `TestSetupActionMutualExclusion` (Go-level, both directions) and `fixtures/protocol/setup-plan.invalid-mixed-manual-and-executable-action.json` (JSON-schema level, added in review — see §12) via `TestInvalidFixturesAreRejected` — PASS |
+
+## 8. Deterministic evidence (this session, base commit `a38b293`, Go toolchain `go1.25.0`, linux/amd64)
+
+```
+$ go build ./...
+(clean, exit 0)
+
+$ go vet ./...
+(clean, exit 0)
+
+$ go test -count=1 ./...
+ok  	github.com/olostan/DevCadence/internal/protocol	0.005s
+ok  	github.com/olostan/DevCadence/internal/schema	0.038s
+ok  	github.com/olostan/DevCadence/internal/setup	0.026s
+ok  	github.com/olostan/DevCadence/tests	0.821s
+... (all 21 other packages ok, 0 failures)
+```
+
+Full per-relevant-test breakdown (`go test ./internal/protocol/... ./internal/schema/... -run "Setup|Plan|Digest|Operation|Condition" -v`):
+`TestDigestIsAlgorithmPrefixedAndContentAddressed`, `TestSetupActionMutualExclusion`, `TestSetupActionIntrinsicPolicyEnforcement`, `TestSetupPlanValidationAndDigest`, `TestLoopbackOnlyPortCondition`, `TestSetupLedgerEventValidationAndChain`, `TestComputeDigestForFixtures`, `TestPlanDigestViewFieldParity`, `TestPlanDigestChangesForEveryField` (11 sub-cases), `TestPlanDigestUnaffectedByPlanDigestField` — all PASS (the last three added in review; see §12).
+
+Re-run after the review-driven additions in §12: `go build ./...` clean; `go vet ./...` clean; `go test -count=1 ./...` — all 26 packages pass, 0 failures, including `TestValidFixturesValidate/setup-plan.valid-manual-action.json` and `TestInvalidFixturesAreRejected/setup-plan.invalid-mixed-manual-and-executable-action.json`.
+
+## 9. Non-goals / forbidden changes for this WP
+
+- No CLI (`devcadence setup plan/apply`) — WP-M3B-7.
+- No process execution, no `CommandRunner` — WP-M3B-3.
+- No ledger — WP-M3B-2.
+- No recipe content beyond the operation *kinds* already defined — concrete recipe instances are WP-M3B-6.
+- No assessment, acceptance, or re-verification of `internal/setup/{doctor,planner,profiles,cache}.go` — out of scope for this WP; left for WP-M3B-3/5/6's own EWPs.
+- No change to `docs/IMPLEMENTATION_PLAN.md`'s M3B status line — that flip is explicitly WP-M3B-9's deliverable per its scope card, not this checkpoint's.
+
+## 10. Escalation conditions
+
+None triggered. If a future session finds a WP-M3B-1-level type actually contradicts ADR-0014 (not just something this EWP under-specifies), it amends this EWP as a new committed revision per `AGENT_HANDOFF_PROTOCOL.md`'s Principal/Implementer sequence — it does not silently redesign `internal/protocol/setup.go`.
+
+## 11. Disposition
+
+**WP-M3B-1 is accepted at this checkpoint**, as of the revision incorporating §12 below. The core typed-operation/condition/plan design required no implementation code changes — the existing `internal/protocol/setup.go` already satisfied it, verified fresh in §8. Three checkpoint gaps identified by independent review (§12) — status wording that claimed acceptance before review had happened, an under-specified digest-coverage test, and a literal fixture-coverage shortfall — were closed with new tests and fixtures, not a design change.
+
+## 12. Independent review disposition
+
+[PR #10 review comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5805285148) (project owner, 2026-09-24) is this WP's required independent per-WP checkpoint review (`AGENT_HANDOFF_PROTOCOL.md`'s "Per-WP checkpoints and review"). It found no defect in the underlying type/policy design, and three blocking checkpoint issues, all addressed in this revision:
+
+1. **Premature "accepted" wording.** The original revision of this EWP, `HANDOFF.md`, and the PR body all said "accepted" while stating in the same breath that independent review hadn't happened — directly contradicting `AGENT_HANDOFF_PROTOCOL.md`'s "later WPs... start from that accepted checkpoint, not from an unreviewed one." Fixed: this review comment *is* the independent review; the checkpoint is only marked `accepted` in this revision, which incorporates its findings. `HANDOFF.md` and the PR description are updated to match.
+2. **Digest field-coverage was asserted, not proven.** `TestSetupPlanValidationAndDigest` tampered only `Target`; nothing made "the digest covers every field" a structural guarantee against a future field added to `SetupPlan` but not to the internal `setupPlanDigestView` mirror. Fixed: `internal/protocol/setup_digest_contract_test.go` adds `TestPlanDigestViewFieldParity` (reflection-based: the two structs' JSON field sets must match exactly except for `plan_digest`), `TestPlanDigestChangesForEveryField` (table-driven mutation of every top-level `SetupPlan` field plus two nested `SetupAction` fields, each asserted to change the digest from a common baseline), and `TestPlanDigestUnaffectedByPlanDigestField` (explicitly proves the current value of `plan_digest` never feeds back into `ComputePlanDigest`).
+3. **Fixture corpus didn't literally cover the manual-action shape or the mixed-shape rejection.** Only `setup-plan.valid.json` (executable-only) and `setup-plan.invalid-target.json` existed; the original EWP substituted Go-level test coverage and declared it equivalent, which the review correctly identified as quietly weakening an explicit scope-card criterion rather than satisfying it. Fixed: added `fixtures/protocol/setup-plan.valid-manual-action.json` (a schema-valid plan whose only action is `high_impact_manual`/`manual_instructions`, digest computed via `protocol.ComputePlanDigest` and wired into `tests/schema_fixtures_test.go`'s round-trip table) and `fixtures/protocol/setup-plan.invalid-mixed-manual-and-executable-action.json` (a plan whose one action sets both `operation` and `manual_instructions`, rejected by `schemas/setup-plan.schema.json`'s existing `oneOf` — confirmed via `TestInvalidFixturesAreRejected`).
+
+The review's "other observations" (no PR-attached CI, so `go build`/`go vet`/`go test` evidence in §8 is session-reported rather than CI-recorded) is accurate and not a defect to fix — this repository has no PR-triggered CI configured; the EWP already described the evidence as this session's own run, not as CI-confirmed.
+
+## 13. Amendment: runtime-agnostic model-operation types (2026-09-24, same session/branch)
+
+This WP's §11 "accepted" checkpoint is reopened by explicit project-owner instruction, on this same unmerged branch: "I believe that M3B-1 drifted from the original view of having [an] agnostic mode where we treat ollama, mlx-ml, or any other provider that can provide local inference equally... I wouldn't consider that as frozen as we are working on the same branch... it is very important to be able to run on mlx-ml as well as on ollama in absolutely equal way." This is the decision owner (AGENTS.md §7/§15) giving a direct, current answer — it supersedes the default "must not silently reinterpret a MUST-level architectural requirement" caution for exactly these types, on exactly this branch. It does not reopen anything else this WP accepted (the closed-discriminated-union pattern, `SetupPlan`/`PlanDigest` two-step workflow, `IntrinsicPolicy` mechanism, managed allowlists — all unchanged).
+
+**What changed, `internal/protocol/setup.go`:**
+
+- `OpKindOllamaPullModel` ("ollama_pull_model") → `OpKindEnsureLocalModel` ("ensure_local_model"). `OllamaPullModelParams{ModelTag, ResolvedDigest, ExpectedSizeBytes, AllowedRegistryHost, LicenseReference}` → `EnsureLocalModelParams{Runtime, ModelRef, ResolvedRevision, ExpectedSizeBytes, AllowedSource, LicenseReference}`. `IntrinsicPolicy`'s effects/authority for this kind (`EffectNetworkAccess, EffectModelDownload, EffectFilesystemWrite`; `AuthorityUserConfirmation`) are unchanged — this is a rename plus a runtime-identity field, not a policy change.
+- `CondKindModelDigestPresent` ("model_digest_present") → `CondKindModelPresent` ("model_present"). `ModelDigestOperand{Runtime, ModelTag, Digest}` → `ModelPresentOperand{Runtime, ModelRef, ResolvedRevision}`.
+- **Validation relaxation, deliberate:** the old `ResolvedDigest`/`Digest` fields required `^sha256:[a-f0-9]{64}$`. The new `ResolvedRevision` field has no format constraint beyond non-empty. This is not a weakening for its own sake — the sha256 constraint itself was the Ollama-specific assumption the owner's instruction corrects: Ollama identifies a pulled model by content digest, but MLX-LM/Hugging Face identify a model revision by ref (`"main"`) or commit hash, neither of which is a sha256 digest. Ollama's own adapter (`internal/setup/ollama_adapter.go`) still performs exact digest-string comparison at its own layer (`normalizeDigest`) — the protocol type just no longer bakes one runtime's identity format into a field every runtime must share.
+
+**Why this belongs in `internal/protocol` rather than only `internal/setup`:** `TypedOperation`/`Condition` are the closed-union protocol types every WP after this one builds against (§2's architectural intent: typed, verifiable operations, not ad hoc scripts). Keeping an Ollama-specific operation kind in that shared union — with any other runtime relegated to a separate, differently-shaped path — is exactly the "special one provider" pattern `INVARIANTS.md` DCI-055 and `docs/MODEL_RUNTIME.md` forbid. The adapter boundary that actually implements runtime-specific behavior (`internal/setup/modelruntime.go`, `ollama_adapter.go`, `mlx_adapter.go`) is documented in WP-M3B-3's EWP §16 amendment, which is where the executor-level design lives; this section records only the protocol-type change, since that's this WP's own scope.
+
+**Verification:** see WP-M3B-3 EWP §16 amendment for the full cross-package verification run (`go build`/`go vet`/`gofmt`/`go test -count=1 ./...`/`go test -race`/`GOOS=windows`), which covers this change together with its `internal/setup` consumers, since the two cannot be verified independently (the setup package doesn't compile against the old types once this change lands).
+
+**Disposition:** amended and re-accepted at this revision. The rename ripples into every `internal/setup` file and every fixture/schema that referenced the old names — all updated in the same change (WP-M3B-3 EWP §16 amendment has the full file list).

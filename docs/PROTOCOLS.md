@@ -654,3 +654,45 @@ flowchart LR
 ~~~
 
 See [REVIEW_AND_CONVERGENCE.md](REVIEW_AND_CONVERGENCE.md) and schemas/review-campaign.schema.json, finding-disposition.schema.json, closure-decision.schema.json.
+
+## 20. Credential references and authentication evidence
+
+DevCadence isolates authorization handles from secret material and keeps credentials orthogonal to cognition routing, access channels, accounts, and economic regimes (ADR-0014 §6, ADR-0018 §1, DCI-081):
+
+```text
+CredentialRef
+!= CognitionEndpoint
+!= AccessChannel
+!= Session
+!= Account
+!= EconomicRegime
+!= CognitionPortfolio
+```
+
+### CredentialRef
+An opaque reference to an authorization mechanism. It is provider-neutral, holds no secret custody, and is a durable record (`schema_version`, `Validate()`, registered in `protocol.NewRecord`):
+- `schema_version`: durable contract version;
+- `ref_id`: stable identifier for the reference, bounded and rejected if secret-shaped (the same opaque-ID check `AuthEvidence.ref_id`/`adapter_id` share);
+- `kind`: `env_var | cli_session | keychain_ref`;
+- `locator`: non-secret locator (e.g. uppercase environment variable identifier, CLI session handle, or keychain service locator). Raw secret values are rejected at boundary validation.
+
+### AuthEvidence
+A structured, bounded durable record of authentication readiness resulting from an evaluation:
+- `schema_version`: durable contract version;
+- `ref_id`: reference identifier matching the CredentialRef, same opaque-ID contract;
+- `kind`: credential reference kind — structurally bound to `probe_kind` (`env_var`→`env_presence`, `keychain_ref`→`keychain_presence`, `cli_session`→`cli_auth_call`|`cli_version_only`; any other pairing is rejected);
+- `status`: `authenticated | unauthenticated | unavailable | indeterminate`;
+- `probe_kind`: `env_presence | cli_auth_call | cli_version_only | keychain_presence`;
+- `observed_at`: timestamp of the probe;
+- `probe_target`: optional locator or CLI tool name;
+- `adapter_id`: optional adapter identifier, same opaque-ID contract;
+- `detail`: bounded, non-secret diagnostic description.
+
+Crucial invariant: only `cli_auth_call` (an authoritative probe that actually exercises the credential against its provider) may produce `authenticated`. `cli_version_only` (e.g. `claude --version`), `env_presence`, and `keychain_presence` probes prove installation or mere presence only, NEVER authentication — a record claiming `authenticated` from any of the three is structurally refused by `AuthEvidence.Validate()`. Presence therefore reports `indeterminate` (not `authenticated`); absence reports `unauthenticated`; a check that could not be completed at all (e.g. no keychain backend on this platform) reports `unavailable`, never `unauthenticated` — an incomplete check is not evidence of absence.
+
+The `cli_auth_call` guarantee is enforced structurally, not merely by adapter configuration. `BoundedCLIAuthAdapter`'s probe argv can only be set through `Probe AuthProbeDefinition` — a closed type whose one field is unexported, so it can only be produced by `credentials.NewAuthProbeDefinition`/`MustAuthProbeDefinition`, which themselves refuse an empty or version/help-shaped argv (`--version`, `-v`, `--help`, …). A `BoundedCLIAuthAdapter` built without going through that constructor (e.g. a bare struct literal) is left with the zero `AuthProbeDefinition` and reports `unavailable` without ever running a command. This closes both halves of "an arbitrary command must not acquire `cli_auth_call`/`authenticated` authority": the shape a declared probe may take, and the fact that a probe must be declared at all before it can run.
+
+CLI adapters (`VersionOnlyAdapter`, `BoundedCLIAuthAdapter`) separate two identities that must never collapse into one field: `Handle` is the opaque logical CLI identifier matched against `CredentialRef.locator` (the `cli_session` locator contract forbids `/`), while `ExecutablePath` is what is actually started — a bare name resolved via the adapter's `Env` (`PATH`), or a discovered/verified absolute path. `Env` defaults to `process.BaseEnv()` when unset; `process.Runner` resolves a bare executable only from `Spec.Env`'s `PATH` and fails closed (`unavailable`) otherwise, by design (docs/SECURITY.md §5).
+
+`protocol.LooksLikeSecret` is prefix/keyword-based only and carries no length threshold of its own: `ref_id`/`locator`/`adapter_id` are bounded to 128 bytes, `probe_target` to 256, and `detail` to 512, each by its own field-specific check (mirrored exactly in the JSON Schema twins' `maxLength`), so a field's own declared contract — not a shared heuristic — decides what counts as "too long." Callers elsewhere in the codebase that want a shorter opaque-handle-length bound (e.g. `internal/cognition`'s and `internal/cognition/remoteapi`'s `CredentialRef`/`AccountRef` declaration fields) apply that bound locally alongside `protocol.LooksLikeSecret`, rather than the shared helper enforcing it for every caller. `ref_id`/`locator`/`adapter_id` are ASCII-regex-constrained, so byte length and Unicode character count coincide; `probe_target`/`detail` are free text, so their Go-side length checks use `utf8.RuneCountInString`, not `len()`, to agree with JSON Schema's `maxLength` (which counts Unicode characters, not UTF-8 bytes).
+See schemas/credential-ref.schema.json and schemas/auth-evidence.schema.json.

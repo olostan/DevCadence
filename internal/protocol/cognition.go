@@ -836,10 +836,20 @@ func (e CognitionEndpoint) Validate() error {
 				"%s: endpoints[%s] is %s but carries local acceleration evidence", kind, e.ID, e.Locality)
 		}
 	}
+	if e.Kind == EndpointLocalRuntime && e.Locality != LocalityLocal {
+		return errs.New(errs.CategoryInvalidArgument,
+			"%s: endpoints[%s] is local_runtime but has locality %q; local runtimes must be local",
+			kind, e.ID, e.Locality)
+	}
 	if e.Kind == EndpointLocalRuntime && e.Auth != AuthNotApplicable && e.Auth != AuthUnknown {
 		return errs.New(errs.CategoryInvalidArgument,
 			"%s: endpoints[%s] is a local runtime with auth_status %s; local runtimes have no account",
 			kind, e.ID, e.Auth)
+	}
+	if e.Kind == EndpointRemoteAPI && e.Locality == LocalityLocal {
+		return errs.New(errs.CategoryInvalidArgument,
+			"%s: endpoints[%s] is remote_api but has locality local; remote APIs cannot be local",
+			kind, e.ID)
 	}
 	// An unset observation instant would serialise as year 1 and still satisfy
 	// the schema's date-time format, so a record whose producer forgot to stamp

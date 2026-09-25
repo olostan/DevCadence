@@ -452,7 +452,7 @@ Implementation notes that qualify the prose above:
 - Everything is **read-only**. Contracts are settled in
   [adr/0013-environment-intelligence-and-cognition-contracts.md](adr/0013-environment-intelligence-and-cognition-contracts.md).
 
-### M3B — Guided deterministic bootstrap — **in progress**
+### M3B — Guided deterministic bootstrap — **complete**
 
 - `setup` / `doctor`;
 - dry-run remediation plans;

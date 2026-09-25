@@ -62,7 +62,11 @@ const (
 	NameDoctorReport         Name = "doctor-report"
 	NameSetupPlan            Name = "setup-plan"
 	NameSetupExecutionReport Name = "setup-execution-report"
+	NameSetupRecoveryReport  Name = "setup-recovery-report"
 	NameSetupLedgerEvent     Name = "setup-ledger-event"
+	NameCredentialRef        Name = "credential-ref"
+	NameAuthEvidence         Name = "auth-evidence"
+	NameResourceInventory    Name = "resource-inventory"
 )
 
 // Names of the review-convergence schemas published ahead of their M6 Go
@@ -95,7 +99,11 @@ var RecordKindToSchema = map[string]Name{
 	"DoctorReport":              NameDoctorReport,
 	"SetupPlan":                 NameSetupPlan,
 	"SetupExecutionReport":      NameSetupExecutionReport,
+	"SetupRecoveryReport":       NameSetupRecoveryReport,
 	"SetupLedgerEvent":          NameSetupLedgerEvent,
+	"CredentialRef":             NameCredentialRef,
+	"AuthEvidence":              NameAuthEvidence,
+	"ResourceInventory":         NameResourceInventory,
 }
 
 // Set is a compiled collection of schemas.
@@ -239,7 +247,8 @@ func AllNames() []Name {
 		NameProductDecision, NameRequirement, NameDiscoveryExperiment,
 		NameSpecificationReadiness, NameReviewCampaign, NameFindingDisposition,
 		NameClosureDecision, NameMachineCapabilityProfile,
-		NameDoctorReport, NameSetupPlan, NameSetupExecutionReport, NameSetupLedgerEvent,
+		NameDoctorReport, NameSetupPlan, NameSetupExecutionReport, NameSetupRecoveryReport, NameSetupLedgerEvent,
+		NameCredentialRef, NameAuthEvidence, NameResourceInventory,
 	}
 	sort.Slice(names, func(i, j int) bool {
 		if len(names[i]) != len(names[j]) {

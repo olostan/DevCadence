@@ -1,0 +1,69 @@
+{
+  "schema_version": "1.0",
+  "plan_id": "plan_000000000000000000000002",
+  "plan_digest": "sha256:7e5528834339fc9452ae1430fd02f0848e3fad68a6c42a4410aca6963e8d1006",
+  "recipe_set_version": "1.0",
+  "machine_fingerprint": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "created_at": "2026-09-22T12:00:00.000000Z",
+  "target": "hardware",
+  "required_authority": "high_impact_manual",
+  "total_effects": [
+    "device_permission_change",
+    "privilege_elevation"
+  ],
+  "actions": [
+    {
+      "action_id": "act-002",
+      "recipe_id": "recipe-install-cuda",
+      "recipe_version": "1.0",
+      "title": "Install NVIDIA CUDA Drivers",
+      "description": "Manual installation of system GPU drivers",
+      "authority": "high_impact_manual",
+      "effects": [
+        "privilege_elevation",
+        "device_permission_change"
+      ],
+      "preconditions": [
+        {
+          "kind": "managed_dir_exists",
+          "managed_dir_exists": {
+            "location": "state",
+            "file_mode_oct": "0700"
+          }
+        }
+      ],
+      "postconditions": [
+        {
+          "kind": "command_available",
+          "command_available": {
+            "command_name": "nvidia-smi"
+          }
+        }
+      ],
+      "expected_mutations": [
+        {
+          "kind": "config_key_set",
+          "target": "driver",
+          "detail": "NVIDIA driver installed"
+        }
+      ],
+      "idempotency_key": "install-cuda-drivers",
+      "manual_instructions": {
+        "summary": "Install NVIDIA proprietary drivers from official vendor packages",
+        "steps": [
+          "Download driver from NVIDIA official repository",
+          "Install driver package via system package manager",
+          "Reboot system"
+        ],
+        "verification_check": [
+          {
+            "kind": "command_available",
+            "command_available": {
+              "command_name": "nvidia-smi"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

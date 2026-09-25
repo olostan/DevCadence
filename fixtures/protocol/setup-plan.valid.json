@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0",
   "plan_id": "plan_000000000000000000000001",
-  "plan_digest": "sha256:8a6c8dae5633e077b4782ff4b1eda143dda77ad4d6646b6ec90745c10a6c8fca",
+  "plan_digest": "sha256:57fcefe1363c9580ee4817bbcbd246db02873261049bd915d51d34000edeeac4",
   "recipe_set_version": "1.0",
   "machine_fingerprint": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
   "created_at": "2026-09-22T12:00:00.000000Z",
@@ -35,11 +35,12 @@
       ],
       "postconditions": [
         {
-          "kind": "model_digest_present",
-          "model_digest_present": {
+          "kind": "model_present",
+          "model_present": {
             "runtime": "ollama",
-            "model_tag": "smollm:135m",
-            "digest": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+            "model_ref": "smollm:135m",
+            "resolved_revision": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            "expected_size_bytes": 145000000
           }
         }
       ],
@@ -52,12 +53,13 @@
       ],
       "idempotency_key": "pull-smollm:135m",
       "operation": {
-        "kind": "ollama_pull_model",
-        "ollama_pull_model": {
-          "model_tag": "smollm:135m",
-          "resolved_digest": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "kind": "ensure_local_model",
+        "ensure_local_model": {
+          "runtime": "ollama",
+          "model_ref": "smollm:135m",
+          "resolved_revision": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
           "expected_size_bytes": 145000000,
-          "allowed_registry_host": "registry.ollama.ai",
+          "allowed_source": "registry.ollama.ai",
           "license_reference": "apache-2.0"
         }
       }

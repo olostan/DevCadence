@@ -1,0 +1,260 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/olostan/DevCadence/schemas/resource-inventory.schema.json",
+  "title": "DevCadence ResourceInventory",
+  "description": "Deterministic, point-in-time snapshot of hardware, cognition endpoints, principal hosts, credential references and policy metadata (ADR-0014 §92, ADR-0018). Never a decision or recommendation itself.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "inventory_id",
+    "machine_fingerprint",
+    "observed_at",
+    "hardware"
+  ],
+  "$defs": {
+    "credential_inventory_entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ref", "evidence"],
+      "properties": {
+        "ref": { "$ref": "devcadence:///credential-ref.schema.json" },
+        "evidence": { "$ref": "devcadence:///auth-evidence.schema.json" }
+      }
+    },
+    "cognition_endpoint_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "kind",
+        "locality",
+        "health",
+        "auth_status",
+        "cost_class",
+        "required_source_exposure"
+      ],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "kind": { "enum": ["local_runtime", "authenticated_cli", "remote_api"] },
+        "locality": { "enum": ["local", "remote_inference_local_tools", "remote"] },
+        "health": {
+          "enum": [
+            "not_installed", "installed", "not_configured", "unhealthy",
+            "unverified", "ready", "unsupported", "unknown"
+          ]
+        },
+        "auth_status": {
+          "enum": ["not_applicable", "authenticated", "unauthenticated", "expired", "unknown", "error"]
+        },
+        "cost_class": {
+          "enum": ["local_compute", "subscription_included", "remote_economy", "remote_strong", "frontier_expensive", "unknown"]
+        },
+        "required_source_exposure": {
+          "enum": ["local_only", "semantic_evidence_only", "focused_snippets", "selected_files", "tool_mediated_worktree", "unrestricted_authorized"]
+        },
+        "acceleration_verified": { "type": "boolean" },
+        "acceleration_backend": {
+          "type": ["string", "null"],
+          "enum": ["cpu", "metal", "cuda", "rocm", "vulkan", "unknown", null]
+        },
+        "credential_ref": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-:]+$",
+          "description": "A WP-M3B-4 CredentialRef.RefID (the same bounded opaque-identifier contract, not an arbitrary/secret-shaped string), when this endpoint's credential binding is known."
+        }
+      },
+      "allOf": [
+        {
+          "description": "Verified local acceleration is impossible for an endpoint whose inference is not local.",
+          "if": {
+            "properties": {
+              "acceleration_verified": {
+                "const": true
+              }
+            },
+            "required": [
+              "acceleration_verified"
+            ]
+          },
+          "then": {
+            "properties": {
+              "locality": {
+                "const": "local"
+              }
+            }
+          }
+        },
+        {
+          "description": "Local runtimes must have locality local.",
+          "if": {
+            "properties": {
+              "kind": { "const": "local_runtime" }
+            }
+          },
+          "then": {
+            "properties": {
+              "locality": { "const": "local" }
+            }
+          }
+        },
+        {
+          "description": "Remote APIs cannot be local (mirrors CognitionEndpointSummary.Validate's kind=remote_api rule; independent-review follow-up on WP-M3B-5, round-3 finding 3b).",
+          "if": {
+            "properties": {
+              "kind": { "const": "remote_api" }
+            }
+          },
+          "then": {
+            "properties": {
+              "locality": { "not": { "const": "local" } }
+            }
+          }
+        },
+        {
+          "description": "Local runtimes have no account, so their auth_status must be not_applicable or unknown (mirrors CognitionEndpointSummary.Validate's kind=local_runtime rule; independent-review follow-up on WP-M3B-5, round-3 finding 3b).",
+          "if": {
+            "properties": {
+              "kind": { "const": "local_runtime" }
+            }
+          },
+          "then": {
+            "properties": {
+              "auth_status": { "enum": ["not_applicable", "unknown"] }
+            }
+          }
+        }
+      ]
+    },
+    "principal_host_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["host_id", "installed"],
+      "properties": {
+        "host_id": { "enum": ["antigravity", "cursor", "vscode"] },
+        "installed": { "type": "boolean" },
+        "path": { "type": "string" },
+        "version": { "type": "string" }
+      }
+    },
+    "scope_readiness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scope", "status", "reason"],
+      "properties": {
+        "scope": {
+          "enum": [
+            "can_execute_setup_plan",
+            "has_any_viable_cognition_path",
+            "can_run_local_inference",
+            "local_model_available",
+            "can_use_existing_authenticated_cli",
+            "principal_host_available"
+          ]
+        },
+        "status": {
+          "enum": ["ready", "not_ready", "unavailable", "unknown"]
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "machine_profile_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["profile_id", "machine_fingerprint", "observed_at", "probe_depth"],
+      "properties": {
+        "profile_id": { "type": "string", "minLength": 1 },
+        "machine_fingerprint": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+        "observed_at": { "type": "string", "format": "date-time" },
+        "probe_depth": { "enum": ["inventory", "health", "inference"] }
+      }
+    }
+  },
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "inventory_id": { "type": "string", "minLength": 1 },
+    "machine_fingerprint": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "observed_at": { "type": "string", "format": "date-time" },
+    "hardware": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["os_family", "arch", "logical_cores"],
+      "properties": {
+        "os_family": { "enum": ["linux", "darwin", "windows", "unknown"] },
+        "arch": { "type": "string", "minLength": 1 },
+        "logical_cores": { "type": "integer", "minimum": 0 },
+        "total_memory_bytes": { "type": "integer", "minimum": 0 },
+        "accelerator_backends": {
+          "type": "array",
+          "items": { "enum": ["cpu", "metal", "cuda", "rocm", "vulkan", "unknown"] }
+        }
+      }
+    },
+    "profile": { "$ref": "#/$defs/machine_profile_ref" },
+    "cognition_endpoints": {
+      "description": "uniqueItems rejects byte-identical duplicate entries only. Rejecting two entries that share an id but differ in content is a stricter, Go-only invariant (ResourceInventory.Validate), because JSON Schema cannot express 'unique keyed by id, equal on the rest' without restructuring this array into a keyed object.",
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/cognition_endpoint_summary" }
+    },
+    "principal_hosts": {
+      "description": "uniqueItems rejects byte-identical duplicate entries only; duplicate host_id with differing content is a Go-only invariant (ResourceInventory.Validate), same rationale as cognition_endpoints.",
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/principal_host_summary" }
+    },
+    "credentials": {
+      "description": "uniqueItems rejects byte-identical duplicate entries only; duplicate ref.ref_id with differing content is a Go-only invariant (ResourceInventory.Validate), same rationale as cognition_endpoints.",
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/credential_inventory_entry" }
+    },
+    "readiness": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/scope_readiness" },
+      "allOf": [
+        { "contains": { "properties": { "scope": { "const": "can_execute_setup_plan" } } }, "minContains": 0, "maxContains": 1 },
+        { "contains": { "properties": { "scope": { "const": "has_any_viable_cognition_path" } } }, "minContains": 0, "maxContains": 1 },
+        { "contains": { "properties": { "scope": { "const": "can_run_local_inference" } } }, "minContains": 0, "maxContains": 1 },
+        { "contains": { "properties": { "scope": { "const": "local_model_available" } } }, "minContains": 0, "maxContains": 1 },
+        { "contains": { "properties": { "scope": { "const": "can_use_existing_authenticated_cli" } } }, "minContains": 0, "maxContains": 1 },
+        { "contains": { "properties": { "scope": { "const": "principal_host_available" } } }, "minContains": 0, "maxContains": 1 }
+      ]
+    },
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max_source_exposure", "max_cost_class"],
+      "properties": {
+        "max_source_exposure": {
+          "enum": ["local_only", "semantic_evidence_only", "focused_snippets", "selected_files", "tool_mediated_worktree", "unrestricted_authorized"]
+        },
+        "max_cost_class": {
+          "enum": ["local_compute", "subscription_included", "remote_economy", "remote_strong", "frontier_expensive", "unknown"]
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "description": "profile reference is required when cognition endpoints are present to preserve runtime/model and capability provenance",
+      "if": {
+        "properties": {
+          "cognition_endpoints": {
+            "type": "array",
+            "minItems": 1
+          }
+        },
+        "required": ["cognition_endpoints"]
+      },
+      "then": {
+        "required": ["profile"]
+      }
+    }
+  ]
+}

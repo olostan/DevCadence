@@ -450,9 +450,9 @@ runtime, no Python, no credentials and no network. The read-only proof surface i
 
 ### M3B — Guided deterministic bootstrap and onboarding
 
-**Status: in progress.** M3B owns safe discovery/cache/readiness, setup
+**Status: complete.** M3B owns safe discovery/cache/readiness, setup
 mutation, credential references, bounded runtime/model/tool recipes and the
-minimal CLI interaction needed to use those capabilities safely. It MUST NOT
+minimal CLI interaction needed to use those capabilities safely. It does not
 hard-code a final cognition-organization strategy.
 
 M3B's canonical output for later recommendation is deterministic
@@ -462,16 +462,29 @@ setup UI is intentionally deferred until M3D, when the portfolio semantics it
 must explain are known.
 
 #### Deliverables
-- `devcadence doctor` and `devcadence setup`;
-- safe SetupPlan / approval / ledger semantics;
+- `devcadence doctor` and `devcadence setup` CLI surfaces (`plan`, `apply`, `recover`);
+- safe `SetupPlan` / approval / append-only ledger semantics (`internal/protocol/setup.go`, `setup-plan.schema.json`, `internal/setup/ledger.go`);
 - modular discovery/remediation for hardware, local inference, cognition
   interfaces, principal hosts and auth;
 - runtime-agnostic local-model setup boundary with MLX-LM and Ollama as peer
-  implementations;
-- credential references and reuse of existing authenticated sessions;
-- deterministic ResourceInventory + readiness projection;
+  implementations (`internal/setup/ollama_adapter.go`, `internal/setup/mlx_adapter.go`);
+- opaque secret-safe credential references and reuse of existing authenticated sessions (`internal/credentials/`, `credential-ref.schema.json`, `auth-evidence.schema.json`);
+- deterministic ResourceInventory + readiness projection (`doctor-report.schema.json`, `resource-inventory.schema.json`);
 - plain / `--json` / basic-terminal operation with minimal confirmations and
   SSH-safe fallbacks; no rich TUI is required for M3B completion.
+
+#### Verification
+- 8-dimension milestone closure suite in `tests/m3b_milestone_closure_test.go`:
+  1. Blank machine fixture producing valid DoctorReport and ResourceInventory without panic (DCI-104, DCI-105);
+  2. Dry-run mutation visibility with explicit filesystem mutations (DCI-108);
+  3. Privileged/high-impact actions failing closed without explicit authority (DCI-108);
+  4. Interrupted setup recovery via real CLI (`setup recover`) reconciling ledger conflicts (ADR-0014 §6);
+  5. Preference for existing usable tools requiring 0 actions for satisfied environments (DCI-105, ADR-0014 §7);
+  6. Plain/non-interactive operation emitting zero ANSI escape sequences and failing closed without approval;
+  7. SSH/basic-terminal `--no-tui` deterministic compatibility (ADR-0018);
+  8. Honest degradation of readiness and ResourceInventory when optional endpoints/hardware are degraded.
+- Credential evidence integrity and schema-to-Go twin parity across all 8 M3B record schemas (`tests/twin_fields_test.go`);
+- Comprehensive 23-dimension matrix tests in `internal/setup/matrix_test.go` and full CLI tests in `cmd/devcadence/cli_doctor_test.go` and `cmd/devcadence/cli_setup_test.go`.
 
 #### Exit criterion
 A user can safely discover/configure at least one viable cognition path when
@@ -479,6 +492,8 @@ possible and obtain an auditable ResourceInventory/readiness state without
 needing to understand accelerator/runtime/provider details. The workflow is
 usable from plain terminals and automation; rich adaptive onboarding is not an
 M3B gate.
+
+**Met.** Verified across unit, matrix, CLI end-to-end, and milestone closure suites without requiring GPU, cloud credentials, or interactive TUI. All 8 M3B schemas pass `TestSchemaTopLevelFieldsMatchTheGoTwin` (top-level schema properties matched against their canonical Go structs — not a deep/nested field-by-field check).
 
 ### M3C — Cognition resource and session substrate
 

@@ -1,0 +1,146 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/olostan/DevCadence/schemas/auth-evidence.schema.json",
+  "title": "DevCadence AuthEvidence",
+  "description": "Structured, bounded durable record of authentication readiness without raw secrets.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "ref_id",
+    "kind",
+    "status",
+    "probe_kind",
+    "observed_at"
+  ],
+  "$defs": {
+    "noSecretLike": {
+      "description": "Mirrors internal/protocol.LooksLikeSecret's prefix/keyword checks exactly (see that function's doc comment) — kept in sync by TestSchemaSecretPatternParity.",
+      "not": {
+        "anyOf": [
+          { "pattern": "(?i)^sk-" },
+          { "pattern": "(?i)^sk_" },
+          { "pattern": "(?i)^pat_" },
+          { "pattern": "(?i)^ghp_" },
+          { "pattern": "(?i)^gho_" },
+          { "pattern": "(?i)^ghu_" },
+          { "pattern": "(?i)^ghs_" },
+          { "pattern": "(?i)^ghr_" },
+          { "pattern": "(?i)^github_pat_" },
+          { "pattern": "(?i)^bearer " },
+          { "pattern": "(?i)^xoxb-" },
+          { "pattern": "(?i)^xoxp-" },
+          { "pattern": "(?i)^glpat-" },
+          { "pattern": "(?i)^npm_" },
+          { "pattern": "(?i)^aiza" },
+          { "pattern": "^AKIA" },
+          { "pattern": "^ASIA" },
+          { "pattern": "(?i)secret=" },
+          { "pattern": "(?i)token=" },
+          { "pattern": "(?i)password=" },
+          { "pattern": "(?i)api_key=" },
+          { "pattern": "(?i)apikey=" }
+        ]
+      }
+    }
+  },
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "ref_id": {
+      "allOf": [
+        { "$ref": "#/$defs/noSecretLike" },
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-:]+$"
+        }
+      ]
+    },
+    "kind": {
+      "enum": [
+        "env_var",
+        "cli_session",
+        "keychain_ref"
+      ]
+    },
+    "status": {
+      "enum": [
+        "authenticated",
+        "unauthenticated",
+        "unavailable",
+        "indeterminate"
+      ]
+    },
+    "probe_kind": {
+      "enum": [
+        "env_presence",
+        "cli_auth_call",
+        "cli_version_only",
+        "keychain_presence"
+      ]
+    },
+    "observed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "probe_target": {
+      "allOf": [
+        { "$ref": "#/$defs/noSecretLike" },
+        { "type": "string", "maxLength": 256 }
+      ]
+    },
+    "adapter_id": {
+      "allOf": [
+        { "$ref": "#/$defs/noSecretLike" },
+        {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-:]+$"
+        }
+      ]
+    },
+    "detail": {
+      "allOf": [
+        { "$ref": "#/$defs/noSecretLike" },
+        { "type": "string", "maxLength": 512 }
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "kind": { "const": "env_var" } } },
+      "then": { "properties": { "probe_kind": { "const": "env_presence" } } }
+    },
+    {
+      "if": { "properties": { "kind": { "const": "keychain_ref" } } },
+      "then": { "properties": { "probe_kind": { "const": "keychain_presence" } } }
+    },
+    {
+      "if": { "properties": { "kind": { "const": "cli_session" } } },
+      "then": {
+        "properties": {
+          "probe_kind": { "enum": ["cli_auth_call", "cli_version_only"] }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "probe_kind": { "enum": ["cli_version_only", "env_presence", "keychain_presence"] }
+        }
+      },
+      "then": {
+        "properties": {
+          "status": {
+            "enum": [
+              "unauthenticated",
+              "unavailable",
+              "indeterminate"
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

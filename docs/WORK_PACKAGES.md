@@ -62,11 +62,17 @@ validation. No process execution, no CLI, no ledger yet — pure types,
 validation functions, and JSON Schemas.
 
 **Deliverables:**
-- Go types for `TypedOperation` (`ollama_pull_model`, `create_directory`,
+- Go types for `TypedOperation` (`ensure_local_model`, `create_directory`,
   `write_managed_config`, `remove_stale_cache`, `run_diagnostic_check`) and
   `Condition` (`command_available`, `executable_verified`,
   `managed_dir_exists`, `port_listening`, `endpoint_healthy`,
-  `model_digest_present`) per ADR-0014 §1.
+  `model_present`) per ADR-0014 §1. `ensure_local_model`/`model_present`
+  are the accepted runtime-agnostic amendment to this WP (see
+  `docs/work-packages/wp-m3b-1-ewp.md` §13): a generic `Runtime`-scoped
+  model identity dispatched through a `LocalModelRuntimeAdapter` registry,
+  not an Ollama-specific operation kind — `ensure_local_model` originally
+  shipped as `ollama_pull_model`/`model_digest_present`, corrected during
+  WP-M3B-3 per explicit project-owner direction and INVARIANTS.md DCI-055.
 - `ManagedDirectoryLocation`, `CacheTarget`, `ManagedConfigKey` allowlists.
 - `SetupPlan`/`SetupAction` types and canonical `PlanDigest` (SHA-256 over
   canonical JSON with only `plan_digest` omitted) per ADR-0014 §2.
@@ -208,7 +214,7 @@ signal).
 - profile labels MAY be emitted for UX, but are not a closed SelectedProfile routing decision;
 - `doctor --fix` generates SetupPlan from concrete missing/remediable facts and never AI-selects a cognition portfolio.
 
-**MUST:** no provider/model role doctrine or static weighted "optimal" portfolio logic. AI-assisted synthesis belongs to M3C/ADR-0018.
+**MUST:** no provider/model role doctrine or static weighted "optimal" portfolio logic. AI-assisted synthesis belongs to M3D/ADR-0018.
 
 **Acceptance criteria:** fixtures produce stable readiness + ResourceInventory without GPU/runtime/network; optional resource absence degrades gracefully; stale evidence is reported; provider/model renaming does not create built-in role preference; no cognition endpoint remains a valid deterministic state.
 

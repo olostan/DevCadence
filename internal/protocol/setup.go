@@ -82,11 +82,11 @@ func (e EffectCategory) Valid() bool {
 type SetupTarget string
 
 const (
-	TargetAll        SetupTarget = "all"
-	TargetHardware   SetupTarget = "hardware"
-	TargetInference  SetupTarget = "inference"
-	TargetCognition  SetupTarget = "cognition"
-	TargetAuth       SetupTarget = "auth"
+	TargetAll       SetupTarget = "all"
+	TargetHardware  SetupTarget = "hardware"
+	TargetInference SetupTarget = "inference"
+	TargetCognition SetupTarget = "cognition"
+	TargetAuth      SetupTarget = "auth"
 )
 
 func (t SetupTarget) Valid() bool {
@@ -195,7 +195,15 @@ func (d DiagnosticCheckName) Valid() bool {
 type OperationKind string
 
 const (
-	OpKindOllamaPullModel    OperationKind = "ollama_pull_model"
+	// OpKindEnsureLocalModel is a runtime-agnostic "acquire this immutable
+	// model for this local runtime" operation. Runtime is an opaque,
+	// adapter-scoped identifier (e.g. "ollama", "mlx") — every local model
+	// runtime is a peer behind this one operation kind; no runtime is the
+	// default or the core-domain dependency (INVARIANTS.md DCI-055,
+	// docs/MODEL_RUNTIME.md). Runtime-specific mechanics (pull command,
+	// identity/revision scheme, presence verification) live entirely in
+	// the executor-layer adapter for that Runtime value, never here.
+	OpKindEnsureLocalModel   OperationKind = "ensure_local_model"
 	OpKindCreateDirectory    OperationKind = "create_directory"
 	OpKindWriteManagedConfig OperationKind = "write_managed_config"
 	OpKindRemoveStaleCache   OperationKind = "remove_stale_cache"
@@ -204,27 +212,52 @@ const (
 
 func (k OperationKind) Valid() bool {
 	switch k {
-	case OpKindOllamaPullModel, OpKindCreateDirectory, OpKindWriteManagedConfig, OpKindRemoveStaleCache, OpKindRunDiagnosticCheck:
+	case OpKindEnsureLocalModel, OpKindCreateDirectory, OpKindWriteManagedConfig, OpKindRemoveStaleCache, OpKindRunDiagnosticCheck:
 		return true
 	}
 	return false
 }
 
 type TypedOperation struct {
-	Kind               OperationKind              `json:"kind"`
-	OllamaPullModel    *OllamaPullModelParams    `json:"ollama_pull_model,omitempty"`
+	Kind               OperationKind             `json:"kind"`
+	EnsureLocalModel   *EnsureLocalModelParams   `json:"ensure_local_model,omitempty"`
 	CreateDirectory    *CreateDirectoryParams    `json:"create_directory,omitempty"`
 	WriteManagedConfig *WriteManagedConfigParams `json:"write_managed_config,omitempty"`
 	RemoveStaleCache   *RemoveStaleCacheParams   `json:"remove_stale_cache,omitempty"`
 	RunDiagnosticCheck *RunDiagnosticCheckParams `json:"run_diagnostic_check,omitempty"`
 }
 
-type OllamaPullModelParams struct {
-	ModelTag            string `json:"model_tag"`
-	ResolvedDigest      string `json:"resolved_digest"`
-	ExpectedSizeBytes   int64  `json:"expected_size_bytes"`
-	AllowedRegistryHost string `json:"allowed_registry_host"`
-	LicenseReference    string `json:"license_reference"`
+// EnsureLocalModelParams identifies an immutable model to acquire for a
+// named local runtime. Fields are deliberately runtime-agnostic:
+//   - ModelRef is the runtime-scoped model identity (an Ollama tag, an
+//     MLX/Hugging Face repo id, or whatever the next runtime adapter uses)
+//     — opaque to everything except that runtime's adapter.
+//   - ResolvedRevision is the immutable pin within that identity (Ollama's
+//     manifest digest, an HF commit SHA, etc.) — also adapter-interpreted,
+//     which is why it is not constrained to sha256-hex here the way other
+//     protocol digests are: the whole point of a runtime-agnostic type is
+//     that this package does not get to assume every runtime's immutable
+//     pin looks like Ollama's.
+//   - ExpectedSizeBytes/AllowedSource are bounded supply-chain metadata
+//     ADR-0014 §7 requires, and each runtime adapter enforces them against
+//     what it actually fetches (e.g. OllamaAdapter checks the pulled
+//     manifest's exact digest/size against the live registry; MLXAdapter
+//     checks the downloaded snapshot's measured size and rejects any
+//     AllowedSource other than "huggingface.co").
+//   - LicenseReference is approval/provenance metadata only — it records
+//     what license the plan was approved under, for audit purposes. No
+//     current adapter verifies it against the runtime's own fetched
+//     metadata (neither Ollama's registry API nor Hugging Face's model API
+//     response is treated as an authoritative license source here), so it
+//     must not be read as a runtime-enforced field the way
+//     ExpectedSizeBytes/AllowedSource are.
+type EnsureLocalModelParams struct {
+	Runtime           string `json:"runtime"`
+	ModelRef          string `json:"model_ref"`
+	ResolvedRevision  string `json:"resolved_revision"`
+	ExpectedSizeBytes int64  `json:"expected_size_bytes"`
+	AllowedSource     string `json:"allowed_source"`
+	LicenseReference  string `json:"license_reference"`
 }
 
 type CreateDirectoryParams struct {
@@ -254,7 +287,7 @@ func (o TypedOperation) Validate() error {
 		return errs.New(errs.CategoryInvalidArgument, "%s: invalid kind %q", kind, string(o.Kind))
 	}
 	count := 0
-	if o.OllamaPullModel != nil {
+	if o.EnsureLocalModel != nil {
 		count++
 	}
 	if o.CreateDirectory != nil {
@@ -274,22 +307,25 @@ func (o TypedOperation) Validate() error {
 	}
 
 	switch o.Kind {
-	case OpKindOllamaPullModel:
-		p := o.OllamaPullModel
+	case OpKindEnsureLocalModel:
+		p := o.EnsureLocalModel
 		if p == nil {
-			return errs.New(errs.CategoryInvalidArgument, "%s: ollama_pull_model payload is required for kind %q", kind, o.Kind)
+			return errs.New(errs.CategoryInvalidArgument, "%s: ensure_local_model payload is required for kind %q", kind, o.Kind)
 		}
-		if p.ModelTag == "" {
-			return errs.New(errs.CategoryInvalidArgument, "%s: model_tag is required", kind)
+		if p.Runtime == "" {
+			return errs.New(errs.CategoryInvalidArgument, "%s: runtime is required", kind)
 		}
-		if !hexSha256Regex.MatchString(p.ResolvedDigest) {
-			return errs.New(errs.CategoryInvalidArgument, "%s: resolved_digest must be sha256 hex, got %q", kind, p.ResolvedDigest)
+		if p.ModelRef == "" {
+			return errs.New(errs.CategoryInvalidArgument, "%s: model_ref is required", kind)
+		}
+		if p.ResolvedRevision == "" {
+			return errs.New(errs.CategoryInvalidArgument, "%s: resolved_revision is required", kind)
 		}
 		if p.ExpectedSizeBytes <= 0 {
 			return errs.New(errs.CategoryInvalidArgument, "%s: expected_size_bytes must be positive, got %d", kind, p.ExpectedSizeBytes)
 		}
-		if p.AllowedRegistryHost == "" {
-			return errs.New(errs.CategoryInvalidArgument, "%s: allowed_registry_host is required", kind)
+		if p.AllowedSource == "" {
+			return errs.New(errs.CategoryInvalidArgument, "%s: allowed_source is required", kind)
 		}
 		if p.LicenseReference == "" {
 			return errs.New(errs.CategoryInvalidArgument, "%s: license_reference is required", kind)
@@ -339,7 +375,7 @@ func (o TypedOperation) Validate() error {
 // IntrinsicPolicy defines the intrinsic minimum authority and required effect categories for an operation.
 func IntrinsicPolicy(op TypedOperation) ([]EffectCategory, Authority) {
 	switch op.Kind {
-	case OpKindOllamaPullModel:
+	case OpKindEnsureLocalModel:
 		return []EffectCategory{EffectNetworkAccess, EffectModelDownload, EffectFilesystemWrite}, AuthorityUserConfirmation
 	case OpKindCreateDirectory:
 		return []EffectCategory{EffectFilesystemWrite}, AuthorityUserConfirmation
@@ -363,35 +399,103 @@ const (
 	CondKindManagedDirExists   ConditionKind = "managed_dir_exists"
 	CondKindPortListening      ConditionKind = "port_listening"
 	CondKindEndpointHealthy    ConditionKind = "endpoint_healthy"
-	CondKindModelDigestPresent ConditionKind = "model_digest_present"
+	// CondKindEndpointAuthenticated checks that a credential/auth-backed
+	// endpoint has been verified authenticated — never satisfied by mere
+	// health (WP-M3B-4's "healthy != authenticated != usable" invariant;
+	// independent-review follow-up on WP-M3B-5, finding 6). A remediation
+	// action whose success means "this endpoint is authenticated" must
+	// use this condition, not endpoint_healthy, which says nothing about
+	// credential validity.
+	CondKindEndpointAuthenticated ConditionKind = "endpoint_authenticated"
+	// CondKindModelPresent is the runtime-agnostic counterpart to
+	// OpKindEnsureLocalModel: "this runtime has this immutable model
+	// revision available." Presence/revision semantics are entirely
+	// adapter-interpreted (see ModelPresentOperand and
+	// EnsureLocalModelParams's doc comment) — this package never assumes
+	// every runtime represents model identity the way Ollama's manifest
+	// digest does.
+	CondKindModelPresent ConditionKind = "model_present"
+	// CondKindDeviceNodeAccessible checks a device special file's actual
+	// remediation state: that it exists as a device special file (mode & os.ModeDevice != 0),
+	// and, when required, that the current user can open it for read/write
+	// (a separate, narrower fact than mere existence — a device node can exist
+	// while still being root-only).
+	CondKindDeviceNodeAccessible ConditionKind = "device_node_accessible"
+	// CondKindKernelDriverBound verifies that a specific kernel driver is bound
+	// to the intended accelerator device (e.g. via sysfs uevent on Linux).
+	CondKindKernelDriverBound ConditionKind = "kernel_driver_bound"
 )
 
 func (k ConditionKind) Valid() bool {
 	switch k {
-	case CondKindCommandAvailable, CondKindExecutableVerified, CondKindManagedDirExists, CondKindPortListening, CondKindEndpointHealthy, CondKindModelDigestPresent:
+	case CondKindCommandAvailable, CondKindExecutableVerified, CondKindManagedDirExists, CondKindPortListening, CondKindEndpointHealthy, CondKindEndpointAuthenticated, CondKindModelPresent, CondKindDeviceNodeAccessible, CondKindKernelDriverBound:
 		return true
 	}
 	return false
 }
 
 type Condition struct {
-	Kind               ConditionKind              `json:"kind"`
-	CommandAvailable   *CommandAvailableOperand    `json:"command_available,omitempty"`
-	ExecutableVerified *ExecutableVerifiedOperand  `json:"executable_verified,omitempty"`
-	ManagedDirExists   *ManagedDirOperand          `json:"managed_dir_exists,omitempty"`
-	PortListening      *PortOperand                `json:"port_listening,omitempty"`
-	EndpointHealthy    *EndpointOperand            `json:"endpoint_healthy,omitempty"`
-	ModelDigestPresent *ModelDigestOperand         `json:"model_digest_present,omitempty"`
+	Kind                  ConditionKind              `json:"kind"`
+	CommandAvailable      *CommandAvailableOperand   `json:"command_available,omitempty"`
+	ExecutableVerified    *ExecutableVerifiedOperand `json:"executable_verified,omitempty"`
+	ManagedDirExists      *ManagedDirOperand         `json:"managed_dir_exists,omitempty"`
+	PortListening         *PortOperand               `json:"port_listening,omitempty"`
+	EndpointHealthy       *EndpointOperand           `json:"endpoint_healthy,omitempty"`
+	EndpointAuthenticated *EndpointOperand           `json:"endpoint_authenticated,omitempty"`
+	ModelPresent          *ModelPresentOperand       `json:"model_present,omitempty"`
+	DeviceNodeAccessible  *DeviceNodeOperand         `json:"device_node_accessible,omitempty"`
+	KernelDriverBound     *KernelDriverBoundOperand  `json:"kernel_driver_bound,omitempty"`
 }
 
 type CommandAvailableOperand struct {
 	CommandName string `json:"command_name"`
 }
 
+// VersionProbeKind names one of a closed set of ways to make an executable
+// print its version. This is deliberately a typed enum, not a free-form
+// argv field: executable_verified is supposed to be a read-only
+// verification condition, and an arbitrary-argv field on it would let a
+// generated (or malicious) plan turn "verify this binary's version" into
+// "run this binary with any argv I choose" — the exact open-ended-bag
+// shape ADR-0014's closed typed-protocol design exists to prevent. Adding
+// a new probe convention means adding a new enum value and its
+// executor-owned argv mapping (versionProbeArgs in
+// internal/setup/conditions.go), never a plan-supplied argv list.
+type VersionProbeKind string
+
+const (
+	// VersionProbeDoubleDashVersion runs the executable with a single
+	// "--version" argument — the common case (git, ollama, docker, ...).
+	VersionProbeDoubleDashVersion VersionProbeKind = "double_dash_version"
+	// VersionProbeVersionSubcommand runs the executable with a single
+	// "version" argument — e.g. the current Hugging Face Hub CLI, which
+	// exposes a "version" subcommand rather than a "--version" flag
+	// (https://huggingface.co/docs/huggingface_hub/main/package_reference/cli).
+	VersionProbeVersionSubcommand VersionProbeKind = "version_subcommand"
+)
+
+func (k VersionProbeKind) Valid() bool {
+	switch k {
+	case "", VersionProbeDoubleDashVersion, VersionProbeVersionSubcommand:
+		return true
+	}
+	return false
+}
+
 type ExecutableVerifiedOperand struct {
 	CanonicalPath   string `json:"canonical_path"`
 	ExpectedVersion string `json:"expected_version"`
 	ExpectedDigest  string `json:"expected_digest,omitempty"`
+	// VersionProbe selects, from the closed VersionProbeKind set, how
+	// CanonicalPath is asked for its version before comparing the output
+	// against ExpectedVersion. Empty means VersionProbeDoubleDashVersion —
+	// the common case, but not universal (see that constant's doc
+	// comment). This mirrors internal/environment.SoftwareDescriptor's own
+	// per-tool version-probe variation, which discovery already needed for
+	// the same reason — this field lets a setup plan's own
+	// executable_verified precondition agree with however that tool was
+	// actually discovered, without accepting arbitrary argv to do it.
+	VersionProbe VersionProbeKind `json:"version_probe,omitempty"`
 }
 
 type ManagedDirOperand struct {
@@ -404,14 +508,65 @@ type PortOperand struct {
 	Port int    `json:"port"`
 }
 
-type EndpointOperand struct {
-	EndpointID string `json:"endpoint_id"`
+// DeviceNodeOperand names a filesystem device special file and how strictly
+// its accessibility must be verified. Path must be absolute — a relative
+// path invites the same PATH-substitution class of issue
+// ExecutableVerified's CanonicalPath already guards against.
+type DeviceNodeOperand struct {
+	Path string `json:"path"`
+	// RequireAccessible additionally requires the current process can open
+	// Path for read/write, not merely that it exists. false means "exists"
+	// alone is the remediation state being verified (e.g. a driver having
+	// bound and created the node at all); true means the narrower
+	// current-user read/write permission fact (e.g. a device-permission
+	// remediation).
+	RequireAccessible bool `json:"require_accessible,omitempty"`
 }
 
-type ModelDigestOperand struct {
-	Runtime  string `json:"runtime"`
-	ModelTag string `json:"model_tag"`
-	Digest   string `json:"digest"`
+// KernelDriverBoundOperand specifies a device identifier and expected kernel driver name.
+// This proves that the intended device actually has the required kernel driver bound
+// in the operating system (e.g. sysfs on Linux), rather than checking path existence alone.
+type KernelDriverBoundOperand struct {
+	DeviceID string `json:"device_id"`
+	Driver   string `json:"driver"`
+}
+
+type EndpointOperand struct {
+	EndpointID string `json:"endpoint_id"`
+	// CredentialRefID is the explicit, non-secret WP-M3B-4 CredentialRef.RefID
+	// this condition's endpoint is bound to. It is meaningful only for
+	// CondKindEndpointAuthenticated (CondKindEndpointHealthy ignores it).
+	//
+	// CognitionEndpoint != CredentialRef (WP-M3B-4's own identity boundary):
+	// an endpoint ID is not a credential locator, and a checker that guesses
+	// one from the other (e.g. assuming a cli_session credential whose
+	// locator equals the endpoint ID) silently misbinds for any endpoint
+	// whose credential kind isn't cli_session, or whose locator differs from
+	// its endpoint ID. This field makes the binding explicit instead: empty
+	// means "no configured credential binding is known for this endpoint,"
+	// which a checker must treat as evidence it cannot verify (fail closed),
+	// never as license to guess (independent-review follow-up on WP-M3B-5,
+	// round-3 finding 2).
+	CredentialRefID string `json:"credential_ref_id,omitempty"`
+}
+
+// ModelPresentOperand mirrors EnsureLocalModelParams's identity and size
+// fields — see that type's doc comment for why Runtime/ModelRef/
+// ResolvedRevision are opaque, adapter-interpreted strings rather than a
+// fixed sha256-hex digest. ExpectedSizeBytes matters here specifically
+// because this condition is also what Executor.Recover uses to decide
+// whether an interrupted ensure_local_model action actually succeeded: for
+// a runtime whose ResolvedRevision alone does not cryptographically prove
+// content completeness (e.g. MLX's snapshot-directory existence, unlike
+// Ollama's content-addressed manifest digest), the adapter needs the
+// approved size to distinguish a complete download from a partial or
+// corrupted one during recovery. 0 means "not checked" for adapters that
+// don't need it (e.g. Ollama, whose digest already proves completeness).
+type ModelPresentOperand struct {
+	Runtime           string `json:"runtime"`
+	ModelRef          string `json:"model_ref"`
+	ResolvedRevision  string `json:"resolved_revision"`
+	ExpectedSizeBytes int64  `json:"expected_size_bytes,omitempty"`
 }
 
 func (c Condition) Validate() error {
@@ -435,7 +590,16 @@ func (c Condition) Validate() error {
 	if c.EndpointHealthy != nil {
 		count++
 	}
-	if c.ModelDigestPresent != nil {
+	if c.EndpointAuthenticated != nil {
+		count++
+	}
+	if c.ModelPresent != nil {
+		count++
+	}
+	if c.DeviceNodeAccessible != nil {
+		count++
+	}
+	if c.KernelDriverBound != nil {
 		count++
 	}
 	if count != 1 {
@@ -459,6 +623,9 @@ func (c Condition) Validate() error {
 		}
 		if c.ExecutableVerified.ExpectedDigest != "" && !hexSha256Regex.MatchString(c.ExecutableVerified.ExpectedDigest) {
 			return errs.New(errs.CategoryInvalidArgument, "%s: expected_digest must be sha256 hex, got %q", kind, c.ExecutableVerified.ExpectedDigest)
+		}
+		if !c.ExecutableVerified.VersionProbe.Valid() {
+			return errs.New(errs.CategoryInvalidArgument, "%s: invalid version_probe %q", kind, string(c.ExecutableVerified.VersionProbe))
 		}
 	case CondKindManagedDirExists:
 		if c.ManagedDirExists == nil {
@@ -487,15 +654,42 @@ func (c Condition) Validate() error {
 		if c.EndpointHealthy == nil || c.EndpointHealthy.EndpointID == "" {
 			return errs.New(errs.CategoryInvalidArgument, "%s: endpoint_id is required", kind)
 		}
-	case CondKindModelDigestPresent:
-		if c.ModelDigestPresent == nil {
-			return errs.New(errs.CategoryInvalidArgument, "%s: model_digest_present operand is required", kind)
+	case CondKindEndpointAuthenticated:
+		if c.EndpointAuthenticated == nil || c.EndpointAuthenticated.EndpointID == "" {
+			return errs.New(errs.CategoryInvalidArgument, "%s: endpoint_id is required", kind)
 		}
-		if c.ModelDigestPresent.Runtime == "" || c.ModelDigestPresent.ModelTag == "" {
-			return errs.New(errs.CategoryInvalidArgument, "%s: runtime and model_tag are required", kind)
+		// A machine-evaluable authentication condition with no configured
+		// credential binding is not evidence, it's a condition that can
+		// never be verified — a plan must not claim it has one when it
+		// does not (independent-review follow-up on WP-M3B-5, round-4
+		// finding 1). CredentialRefID is semantically a WP-M3B-4
+		// CredentialRef.RefID and SetupPlan is a durable record, so it
+		// gets the same bounded opaque-identifier/never-secret-looking
+		// contract RefID itself uses, not just a non-empty check
+		// (independent-review follow-up on WP-M3B-5, round-5 finding 1).
+		if err := validateOpaqueID(kind, "credential_ref_id", c.EndpointAuthenticated.CredentialRefID, 128, true); err != nil {
+			return err
 		}
-		if !hexSha256Regex.MatchString(c.ModelDigestPresent.Digest) {
-			return errs.New(errs.CategoryInvalidArgument, "%s: digest must be sha256 hex, got %q", kind, c.ModelDigestPresent.Digest)
+	case CondKindModelPresent:
+		if c.ModelPresent == nil {
+			return errs.New(errs.CategoryInvalidArgument, "%s: model_present operand is required", kind)
+		}
+		if c.ModelPresent.Runtime == "" || c.ModelPresent.ModelRef == "" {
+			return errs.New(errs.CategoryInvalidArgument, "%s: runtime and model_ref are required", kind)
+		}
+		if c.ModelPresent.ResolvedRevision == "" {
+			return errs.New(errs.CategoryInvalidArgument, "%s: resolved_revision is required", kind)
+		}
+		if c.ModelPresent.ExpectedSizeBytes < 0 {
+			return errs.New(errs.CategoryInvalidArgument, "%s: expected_size_bytes must not be negative", kind)
+		}
+	case CondKindDeviceNodeAccessible:
+		if c.DeviceNodeAccessible == nil || !strings.HasPrefix(c.DeviceNodeAccessible.Path, "/") {
+			return errs.New(errs.CategoryInvalidArgument, "%s: device_node_accessible.path must be absolute", kind)
+		}
+	case CondKindKernelDriverBound:
+		if c.KernelDriverBound == nil || c.KernelDriverBound.DeviceID == "" || c.KernelDriverBound.Driver == "" {
+			return errs.New(errs.CategoryInvalidArgument, "%s: kernel_driver_bound device_id and driver are required", kind)
 		}
 	}
 	return nil
@@ -654,6 +848,45 @@ func (a SetupAction) Validate() error {
 			return err
 		}
 
+		// Structural identity binding: an ensure_local_model action's
+		// approved model identity — and approved size — must be exactly
+		// what its own model_present postcondition asks for. Without this,
+		// a plan could approve pulling model A (or a given size) in the
+		// operation while declaring success against model B's (or an
+		// unbounded) postcondition — the postcondition would then either
+		// never hold (masking the real failure behind a generic
+		// "postcondition failed" error) or, worse, a future adapter could
+		// satisfy it by coincidence. ExpectedSizeBytes is included in the
+		// match (not just identity) because model_present's ExpectedSizeBytes
+		// is also what Executor.Recover relies on to tell a complete
+		// download from a partial/corrupted one during crash recovery for a
+		// runtime whose revision alone doesn't cryptographically prove
+		// completeness (see ModelPresentOperand's doc comment) — a plan
+		// approving one size but asking recovery to accept any size would
+		// silently weaken that recovery check. Requiring at least one
+		// matching model_present postcondition makes the binding structural
+		// rather than dependent on the adapter's own internal checks (which
+		// do still independently verify the pulled model, per-adapter).
+		if a.Operation.Kind == OpKindEnsureLocalModel && a.Operation.EnsureLocalModel != nil {
+			op := a.Operation.EnsureLocalModel
+			found := false
+			for _, c := range a.Postconditions {
+				if c.Kind != CondKindModelPresent || c.ModelPresent == nil {
+					continue
+				}
+				if c.ModelPresent.Runtime == op.Runtime && c.ModelPresent.ModelRef == op.ModelRef &&
+					c.ModelPresent.ResolvedRevision == op.ResolvedRevision && c.ModelPresent.ExpectedSizeBytes == op.ExpectedSizeBytes {
+					found = true
+					break
+				}
+			}
+			if !found {
+				return errs.New(errs.CategoryInvalidArgument,
+					"%s: ensure_local_model action requires a model_present postcondition with the identical identity and expected_size_bytes (runtime=%q, model_ref=%q, resolved_revision=%q, expected_size_bytes=%d)",
+					kind, op.Runtime, op.ModelRef, op.ResolvedRevision, op.ExpectedSizeBytes)
+			}
+		}
+
 		// Intrinsic policy check:
 		intrinsicEffects, minAuth := IntrinsicPolicy(*a.Operation)
 		if !a.Authority.AtLeast(minAuth) {
@@ -674,33 +907,33 @@ func (a SetupAction) Validate() error {
 }
 
 type SetupPlan struct {
-	SchemaVersion      SchemaVersion      `json:"schema_version"`
-	PlanID             string             `json:"plan_id"`
-	PlanDigest         string             `json:"plan_digest"`
-	RecipeSetVersion   string             `json:"recipe_set_version"`
-	MachineFingerprint string             `json:"machine_fingerprint"`
-	CreatedAt          Timestamp          `json:"created_at"`
-	Target             SetupTarget        `json:"target"`
-	Actions            []SetupAction      `json:"actions"`
-	RequiredAuthority  Authority          `json:"required_authority"`
-	TotalEffects       []EffectCategory   `json:"total_effects"`
+	SchemaVersion      SchemaVersion    `json:"schema_version"`
+	PlanID             string           `json:"plan_id"`
+	PlanDigest         string           `json:"plan_digest"`
+	RecipeSetVersion   string           `json:"recipe_set_version"`
+	MachineFingerprint string           `json:"machine_fingerprint"`
+	CreatedAt          Timestamp        `json:"created_at"`
+	Target             SetupTarget      `json:"target"`
+	Actions            []SetupAction    `json:"actions"`
+	RequiredAuthority  Authority        `json:"required_authority"`
+	TotalEffects       []EffectCategory `json:"total_effects"`
 }
 
 type setupPlanDigestView struct {
-	SchemaVersion      SchemaVersion      `json:"schema_version"`
-	PlanID             string             `json:"plan_id"`
-	RecipeSetVersion   string             `json:"recipe_set_version"`
-	MachineFingerprint string             `json:"machine_fingerprint"`
-	CreatedAt          Timestamp          `json:"created_at"`
-	Target             SetupTarget        `json:"target"`
-	Actions            []SetupAction      `json:"actions"`
-	RequiredAuthority  Authority          `json:"required_authority"`
-	TotalEffects       []EffectCategory   `json:"total_effects"`
+	SchemaVersion      SchemaVersion    `json:"schema_version"`
+	PlanID             string           `json:"plan_id"`
+	RecipeSetVersion   string           `json:"recipe_set_version"`
+	MachineFingerprint string           `json:"machine_fingerprint"`
+	CreatedAt          Timestamp        `json:"created_at"`
+	Target             SetupTarget      `json:"target"`
+	Actions            []SetupAction    `json:"actions"`
+	RequiredAuthority  Authority        `json:"required_authority"`
+	TotalEffects       []EffectCategory `json:"total_effects"`
 }
 
-func (p *SetupPlan) RecordKind() string         { return "SetupPlan" }
-func (p *SetupPlan) RecordID() string           { return p.PlanID }
-func (p *SetupPlan) SchemaVer() SchemaVersion   { return p.SchemaVersion }
+func (p *SetupPlan) RecordKind() string       { return "SetupPlan" }
+func (p *SetupPlan) RecordID() string         { return p.PlanID }
+func (p *SetupPlan) SchemaVer() SchemaVersion { return p.SchemaVersion }
 
 func (p *SetupPlan) Validate() error {
 	const kind = "SetupPlan"
@@ -836,64 +1069,6 @@ func (p *SetupPlan) ComputePlanDigest() (string, error) {
 	return ComputePlanDigest(p)
 }
 
-// CredentialRefKind specifies the storage/resolution mechanism for an opaque credential reference.
-type CredentialRefKind string
-
-const (
-	CredRefEnvVar      CredentialRefKind = "env_var"
-	CredRefCLISession  CredentialRefKind = "cli_session"
-	CredRefKeychainRef CredentialRefKind = "keychain_ref"
-)
-
-func (k CredentialRefKind) Valid() bool {
-	switch k {
-	case CredRefEnvVar, CredRefCLISession, CredRefKeychainRef:
-		return true
-	}
-	return false
-}
-
-type CredentialRef struct {
-	RefID    string            `json:"ref_id"`
-	Kind     CredentialRefKind `json:"kind"`
-	Provider string            `json:"provider"`
-	Locator  string            `json:"locator"`
-}
-
-var envVarIdentifierRegex = regexp.MustCompile(`^[A-Z_][A-Z0-9_]*$`)
-var cliSessionHandleRegex = regexp.MustCompile(`^[a-zA-Z0-9_\-:]+$`)
-
-func (c CredentialRef) Validate() error {
-	const kind = "CredentialRef"
-	if c.RefID == "" {
-		return errs.New(errs.CategoryInvalidArgument, "%s: ref_id is required", kind)
-	}
-	if !c.Kind.Valid() {
-		return errs.New(errs.CategoryInvalidArgument, "%s: invalid kind %q", kind, string(c.Kind))
-	}
-	if c.Provider == "" {
-		return errs.New(errs.CategoryInvalidArgument, "%s: provider is required", kind)
-	}
-	if c.Locator == "" {
-		return errs.New(errs.CategoryInvalidArgument, "%s: locator is required", kind)
-	}
-	switch c.Kind {
-	case CredRefEnvVar:
-		if !envVarIdentifierRegex.MatchString(c.Locator) {
-			return errs.New(errs.CategoryInvalidArgument, "%s: env_var locator must be valid uppercase env identifier, got %q", kind, c.Locator)
-		}
-	case CredRefCLISession:
-		if !cliSessionHandleRegex.MatchString(c.Locator) {
-			return errs.New(errs.CategoryInvalidArgument, "%s: cli_session locator must be alphanumeric handle, got %q", kind, c.Locator)
-		}
-	case CredRefKeychainRef:
-		if len(c.Locator) > 256 {
-			return errs.New(errs.CategoryInvalidArgument, "%s: keychain_ref locator too long", kind)
-		}
-	}
-	return nil
-}
-
 // ActionStatus tracks individual action lifecycle.
 type ActionStatus string
 
@@ -978,9 +1153,9 @@ type SetupExecutionReport struct {
 	Results            []ActionResult  `json:"results"`
 }
 
-func (r *SetupExecutionReport) RecordKind() string         { return "SetupExecutionReport" }
-func (r *SetupExecutionReport) RecordID() string           { return r.ExecutionID }
-func (r *SetupExecutionReport) SchemaVer() SchemaVersion   { return r.SchemaVersion }
+func (r *SetupExecutionReport) RecordKind() string       { return "SetupExecutionReport" }
+func (r *SetupExecutionReport) RecordID() string         { return r.ExecutionID }
+func (r *SetupExecutionReport) SchemaVer() SchemaVersion { return r.SchemaVersion }
 
 func (r *SetupExecutionReport) Validate() error {
 	const kind = "SetupExecutionReport"
@@ -1004,6 +1179,74 @@ func (r *SetupExecutionReport) Validate() error {
 	}
 	if !r.Status.Valid() {
 		return errs.New(errs.CategoryInvalidArgument, "%s: invalid status %q", kind, string(r.Status))
+	}
+	seen := make(map[string]bool, len(r.Results))
+	for _, res := range r.Results {
+		if err := res.Validate(); err != nil {
+			return err
+		}
+		if seen[res.ActionID] {
+			return errs.New(errs.CategoryInvalidArgument, "%s: duplicate action_id %q in results", kind, res.ActionID)
+		}
+		seen[res.ActionID] = true
+	}
+	return nil
+}
+
+// RecoveryActionResult records one action's outcome from a crash-recovery
+// pass: the resolution Ledger.ReconcileInterrupted determined by checking
+// the action's own Postconditions live against current system state, never
+// by re-executing it.
+type RecoveryActionResult struct {
+	ActionID string       `json:"action_id"`
+	Status   ActionStatus `json:"status"`
+}
+
+func (r RecoveryActionResult) Validate() error {
+	const kind = "RecoveryActionResult"
+	if r.ActionID == "" {
+		return errs.New(errs.CategoryInvalidArgument, "%s: action_id is required", kind)
+	}
+	if !r.Status.Valid() {
+		return errs.New(errs.CategoryInvalidArgument, "%s: invalid status %q", kind, string(r.Status))
+	}
+	return nil
+}
+
+// SetupRecoveryReport is the versioned, schema-governed public shape of
+// `devcadence setup recover`'s JSON output. It exists because the CLI's
+// public JSON boundary must always be a validated, versioned protocol
+// record (ADR-0014) — an ad hoc map, however well-intentioned, is neither
+// (independent-review follow-up on WP-M3B-7, FIX_NOW-2).
+type SetupRecoveryReport struct {
+	SchemaVersion SchemaVersion          `json:"schema_version"`
+	RecoveryID    string                 `json:"recovery_id"`
+	PlanID        string                 `json:"plan_id"`
+	PlanDigest    string                 `json:"plan_digest"`
+	RecoveredAt   Timestamp              `json:"recovered_at"`
+	Results       []RecoveryActionResult `json:"results"`
+}
+
+func (r *SetupRecoveryReport) RecordKind() string       { return "SetupRecoveryReport" }
+func (r *SetupRecoveryReport) RecordID() string         { return r.RecoveryID }
+func (r *SetupRecoveryReport) SchemaVer() SchemaVersion { return r.SchemaVersion }
+
+func (r *SetupRecoveryReport) Validate() error {
+	const kind = "SetupRecoveryReport"
+	if err := r.SchemaVersion.Validate(kind); err != nil {
+		return err
+	}
+	if err := requireNonEmpty(kind, "recovery_id", r.RecoveryID); err != nil {
+		return err
+	}
+	if err := requireNonEmpty(kind, "plan_id", r.PlanID); err != nil {
+		return err
+	}
+	if !hexSha256Regex.MatchString(r.PlanDigest) {
+		return errs.New(errs.CategoryInvalidArgument, "%s: plan_digest must be sha256 hex, got %q", kind, r.PlanDigest)
+	}
+	if r.RecoveredAt.Time().IsZero() {
+		return errs.New(errs.CategoryInvalidArgument, "%s: recovered_at is required", kind)
 	}
 	seen := make(map[string]bool, len(r.Results))
 	for _, res := range r.Results {
