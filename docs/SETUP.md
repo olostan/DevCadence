@@ -2,19 +2,18 @@
 
 ## Status
 
-The control-plane core (M1), the repository/worktree/process substrate (M2) and
-environment intelligence with cognition routing (M3A) are implemented and merged.
+The control-plane core (M1), the repository/worktree/process substrate (M2),
+environment intelligence with cognition routing (M3A), and guided deterministic
+bootstrap with onboarding (M3B) are implemented.
 
 Sections below describing hardware, runtime, coding-CLI and principal-host
-**discovery** are therefore implemented behaviour, observable through
-`devcadence environment inspect` and `devcadence cognition list`.
+**discovery** and **guided setup** (`devcadence doctor`, `devcadence setup`,
+`setup apply`, `setup recover`) are implemented behaviour.
 
-Sections describing guided **setup, remediation, installation and credential
-references** remain intended M3B behaviour. M3B requires safe plain/JSON/basic-
-terminal operation; the richer adaptive setup/explanation UX belongs to M3D
-after portfolio semantics exist. Principal-host **integration** belongs to M5. No model integration is required
-to build or test the control plane, and none of the implemented commands mutates
-the machine.
+The richer adaptive setup/explanation UX belongs to M3D after portfolio
+semantics exist. Principal-host **integration** belongs to M5. No model
+integration is required to build or test the control plane, and non-approved
+commands never mutate the machine.
 
 ## 1. Target environment
 
@@ -146,17 +145,18 @@ an enterprise account is being billed, and DevCadence will not read credentials
 to guess. Routing treats `unknown` as dearer than every known class, so an
 operator who wants a CLI preferred on cost declares its class explicitly.
 
-### Intended in M3B: guided mutation
+### Implemented in M3B: guided bootstrap and doctor
 
-The remaining commands plan and apply changes, and do not exist yet.
-
-Conceptual commands:
+DevCadence provides factual diagnosis and safe, auditable remediation planning:
 
 ```bash
-devcadence doctor
-devcadence setup
-devcadence setup --dry-run
-devcadence setup verify
+devcadence doctor                                          # evaluates readiness and diagnostic findings
+devcadence doctor --json                                   # machine-readable DoctorReport
+devcadence doctor --target hardware                        # scoped evaluation (hardware, cognition, auth, state)
+devcadence setup plan                                      # dry-run setup plan with expected mutations
+devcadence setup plan --target hardware --json             # output canonical SetupPlan JSON
+devcadence setup apply --plan <file> --approve-plan <dig>  # execute approved plan (requires explicit approval)
+devcadence setup recover --plan <file>                     # reconcile interrupted actions from ledger
 ```
 
 The setup engine starts by discovering the machine and existing software.
@@ -166,10 +166,10 @@ It then:
 2. discovers supported cognition CLIs/providers and authentication readiness;
 3. discovers supported principal hosts;
 4. produces deterministic ResourceInventory/readiness evidence;
-5. presents a structured remediation/install plan for concrete missing facts;
-6. requests approval for mutating or privileged actions;
-7. verifies actual inference acceleration/endpoint health;
-8. performs lightweight capability benchmarks where useful.
+5. presents a structured remediation/install plan for concrete missing facts with explicit dry-run mutation visibility;
+6. requests approval for mutating or privileged actions, failing closed without explicit authority matching;
+7. records lifecycle events in an append-only JSONL ledger (`setup-ledger.jsonl`);
+8. reconciles interrupted executions deterministically via `setup recover`.
 
 M3B does not choose an "optimal" provider/model/role organization. That
 multidimensional recommendation problem is intentionally deferred to M3D over
@@ -181,10 +181,10 @@ See [ENVIRONMENT_INTELLIGENCE_AND_ONBOARDING.md](ENVIRONMENT_INTELLIGENCE_AND_ON
 
 ### M3B terminal contract
 
-M3B should remain usable from local terminals, SSH and automation:
+M3B operates safely from local terminals, SSH and automation:
 - plain text status and explicit confirmations where approval is required;
 - `--json` for machine-readable output;
-- basic-terminal/SSH fallbacks;
+- basic-terminal/SSH fallbacks with `--no-tui` support;
 - no control sequences in non-interactive mode.
 
 A richer Huh/Bubble Tea/Lip Gloss experience is deliberately deferred to M3D,

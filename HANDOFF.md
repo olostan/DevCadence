@@ -446,13 +446,51 @@ Full detail in `docs/work-packages/wp-m3b-7-ewp.md` §8 and §9.
 
 **Known blockers / open questions:** none.
 
+## WP-M3B-8 — Verification suite and docs sync (Milestone Closure)
+
+- **EWP status:** authored, frozen, and committed at `docs/work-packages/wp-m3b-8-ewp.md`.
+- **Base commit this WP started from:** `b1a12f1d8b1662752faa31aa8cc0543023e5db6f`
+- **Implementation deliverables:**
+  1. `tests/twin_fields_test.go`:
+     - Expanded schema-to-Go twin verification across all 8 M3B record schemas: `doctor-report`, `setup-plan`, `setup-execution-report`, `setup-recovery-report`, `setup-ledger-event`, `credential-ref`, `auth-evidence`, and `resource-inventory`.
+     - All 8 M3B record schemas achieve 100% field parity between JSON schema definitions and canonical Go structs in `internal/protocol/`.
+  2. `tests/m3b_milestone_closure_test.go`:
+     - Comprehensive milestone closure integration test suite verifying all 8 operational closure dimensions:
+       - **Scenario 1: Blank Machine Verification** (DCI-104, DCI-105): verifies a machine with no runtimes or accelerators safely produces valid `DoctorReport` and `ResourceInventory` without panic, gracefully degrading to `ACTION_REQUIRED` / `PARTIALLY_READY`.
+       - **Scenario 2: Dry-Run Mutation Visibility** (DCI-108): verifies that every planned action explicitly declares expected filesystem mutations and effects before execution.
+       - **Scenario 3: Privileged Approval Governance** (DCI-108): verifies that high-impact manual actions fail closed without explicit matching authority.
+       - **Scenario 4: Interrupted Setup Recovery via Real CLI** (ADR-0014 §6): verifies simulated crash / interrupted action in ledger is detected by the real CLI binary, exits with code 4 (drift/conflict), and is cleanly reconciled by `setup recover` emitting a valid `SetupRecoveryReport`.
+       - **Scenario 5: Preference for Existing Usable Tools** (DCI-105, ADR-0014 §7): verifies an already-satisfied environment generates 0 setup actions, avoiding redundant downloads or configuration changes.
+       - **Scenario 6: Plain / Non-Interactive Operation** (ADR-0014 §2): verifies CLI output contains zero ANSI escape sequences in non-interactive mode and fails closed with exit code 2 when required approval flags are omitted.
+       - **Scenario 7: SSH / Basic-Terminal Behavior** (ADR-0018): verifies `--no-tui` executes deterministically without terminal escape codes or interactive dependencies.
+       - **Scenario 8: Graceful Capability Degradation** (DCI-104): verifies degraded endpoint auth is honestly reflected in `ResourceInventory` and `DoctorReport` without fatal errors.
+       - **Evidence Check: Credential Evidence Integrity**: verifies `CredentialRef` and `AuthEvidence` validation and resolution contracts.
+  3. Canonical documentation synchronization:
+     - `docs/IMPLEMENTATION_PLAN.md`: Marked M3B as complete, documented deliverables, cited the 8-dimension verification suite, and noted exit criterion met.
+     - `docs/SETUP.md`: Updated Status to complete across M1, M2, M3A, M3B; documented real `devcadence doctor` and `devcadence setup` commands; reiterated that rich adaptive onboarding is deferred to M3D.
+     - `README.md`: Updated running control plane section with `doctor` and `setup`; updated status and active roadmap to M3C.
+     - `INVARIANTS.md`: Checked and verified that all relevant invariants (DCI-104 through DCI-109) are respected.
+
+- **Verification evidence:**
+  - `go build ./...`: PASS, no diagnostics.
+  - `go vet ./...`: PASS, no diagnostics.
+  - `gofmt -l tests/`: PASS, all touched test files clean.
+  - `go test -count=1 ./...`: PASS across all 30 packages.
+  - `go test -race -count=1 ./cmd/devcadence/... ./internal/setup/... ./internal/protocol/... ./internal/credentials/... ./internal/schema/... ./internal/environment/... ./tests/...`: PASS, zero race reports.
+  - `GOOS=windows GOARCH=amd64 go build ./...`: PASS, clean cross-compilation.
+  - `GOOS=linux GOARCH=amd64 go build ./...`: PASS, clean cross-compilation.
+  - `git diff --check`: PASS, no whitespace or formatting issues.
+
+**Known blockers / open questions:** none.
+
 ## Next concrete action
 
-WP-M3B-7 is accepted. Proceed to WP-M3B-8 (Milestone Closure & Verification, formerly WP9) per the handoff protocol: read its scope card in `docs/WORK_PACKAGES.md`, author its EWP before any implementation code (AGENTS.md §6), and synchronize milestone status and affected documentation without reopening closed WP-M3B-1 through WP-M3B-7 decisions absent materially new evidence.
+WP-M3B-8 implementation and verification are complete. Request independent review for WP-M3B-8 milestone closure on PR #10. Retain `HANDOFF.md` through review/repair per the handoff protocol; remove it only before final merge freeze.
 
 ## Resume checklist for the next agent
 
 1. `git fetch origin feat/m3b-guided-bootstrap` and verify remote HEAD.
 2. Verify test suite with `go test -count=1 ./...`.
-3. Read `docs/work-packages/wp-m3b-7-ewp.md` §8–§9 and this WP's acceptance record above for context.
-4. Continue from "Next concrete action" above.
+3. Check PR #10 comments for independent review feedback.
+4. If review requests changes, execute targeted repair and update `HANDOFF.md`.
+5. If review accepts WP-M3B-8, proceed to final milestone merge freeze and cleanup per `AGENT_HANDOFF_PROTOCOL.md`.
