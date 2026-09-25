@@ -148,7 +148,7 @@ implementing on top of it or rewriting it.
 | WP-M3B-4 | **accepted** (§16) | `75e65a7` | `go build ./...`, `go vet ./...`, `go test -count=1 ./...`, `go test -race ./internal/credentials/... ./internal/protocol/... ./internal/cognition/...`, `GOOS=windows GOARCH=amd64 go build ./...` all PASS | 3 independent review rounds, 6+3+2 findings total, all resolved — see EWP §13–§16. Final acceptance: [comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5819033678) |
 | WP-M3B-6 | **ACCEPTED** at `62f5254` — round 1 (4 FIX_NOW findings, EWP §10) and round 2 (4 required repairs, EWP §11) fixed; round 3 confirmed GREEN | `62f5254` | `go build ./...`, `go vet ./...`, `go test -count=1 ./...`, `go test -race ./internal/setup/... ./internal/protocol/... ./internal/credentials/... ./internal/schema/... ./internal/environment/... ./tests/...`, `GOOS=windows/linux GOARCH=amd64 go build ./...` all PASS; `gofmt -l` clean on every file the round-2 repair touched (the broad `internal/setup/ internal/protocol/` check reports pre-existing, unrelated `ledger.go`) | round 1 — [comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5834040833), fixed EWP §10. round 2 — [comment id `5836314553`](https://github.com/olostan/DevCadence/pull/10#issuecomment-5836314553), fixed EWP §11. round 3 (acceptance) — [comment](https://github.com/olostan/DevCadence/pull/10#issuecomment-5836690733), "GREEN for WP-M3B-6... accepted at this checkpoint" |
 | WP-M3B-7 | **ACCEPTED** at `3b85607` — round 1 (4 FIX_NOW findings, EWP §8) and round 2 (1 residual, EWP §9) fixed; round 3 confirmed GREEN | `3b85607` | `go build ./...`, `go vet ./...`, `gofmt -l` clean, `go test -count=1 ./...`, `go test -race ./cmd/devcadence/... ./internal/setup/... ./internal/protocol/... ./internal/credentials/... ./internal/schema/... ./internal/environment/... ./tests/...`, `GOOS=windows/linux GOARCH=amd64`/`GOOS=darwin GOARCH=arm64 go build ./...` all PASS | round 1 — [comment id `5837092761`](https://github.com/olostan/DevCadence/pull/10#issuecomment-5837092761), fixed EWP §8. round 2 — [comment id `5837723410`](https://github.com/olostan/DevCadence/pull/10#issuecomment-5837723410), fixed EWP §9. round 3 (acceptance) — [comment id `5837819872`](https://github.com/olostan/DevCadence/pull/10#issuecomment-5837819872), "GREEN... WP-M3B-7 is accepted at `3b85607`" |
-| WP-M3B-8 | implemented, NOT accepted — round 1 (4 FIX_NOW groups, EWP §8) and round 2 (1 residual, EWP §9) fixed, awaiting round-3 review | current branch HEAD (see "Expected remote HEAD" above) | `go build ./...`, `go vet ./...`, `go test -count=1 ./...`, exact `go test -race -count=1 ./...`, `GOOS=windows/linux GOARCH=amd64`/`GOOS=darwin GOARCH=arm64 go build ./...`, `git diff --check` all PASS; `gofmt -l .` reports 12 pre-existing unrelated files (see EWP §8) | round 1 — [comment id `5838125371`](https://github.com/olostan/DevCadence/pull/10#issuecomment-5838125371), fixed EWP §8. round 2 — [comment id `5838315761`](https://github.com/olostan/DevCadence/pull/10#issuecomment-5838315761), scenario 8 never asserted auth-driven finding/readiness semantics — fixed EWP §9, not yet re-reviewed |
+| WP-M3B-8 | **ACCEPTED** at `e1cadc1` — round 1 (4 FIX_NOW groups, EWP §8) and round 2 (1 residual, EWP §9) fixed; round 3 confirmed GREEN via independent mutation testing | `e1cadc1` | `go build ./...`, `go vet ./...`, `go test -count=1 ./...`, exact `go test -race -count=1 ./...`, `GOOS=windows/linux GOARCH=amd64`/`GOOS=darwin GOARCH=arm64 go build ./...`, `git diff --check` all PASS; `gofmt -l .` reports 12 pre-existing unrelated files (see EWP §8) | round 1 — [comment id `5838125371`](https://github.com/olostan/DevCadence/pull/10#issuecomment-5838125371), fixed EWP §8. round 2 — [comment id `5838315761`](https://github.com/olostan/DevCadence/pull/10#issuecomment-5838315761), fixed EWP §9. round 3 (acceptance) — [review id `5322036949`](https://github.com/olostan/DevCadence/pull/10#pullrequestreview-5322036949), "GREEN... WP-M3B-8 is accepted... M3B milestone closure is accepted" |
 
 (Never write "merged" for a WP checkpoint — nothing is merged to `main`
 until the whole milestone closes.)
@@ -446,7 +446,7 @@ Full detail in `docs/work-packages/wp-m3b-7-ewp.md` §8 and §9.
 
 **Known blockers / open questions:** none.
 
-## WP-M3B-8 — Verification suite and docs sync (Milestone Closure) (round 2 fixed, awaiting round-3 review)
+## WP-M3B-8 — Verification suite and docs sync (Milestone Closure) (ACCEPTED — M3B COMPLETE)
 
 - **EWP status:** as-built, not frozen before implementation — a process deviation named honestly, not fixed by rewriting history. `docs/work-packages/wp-m3b-8-ewp.md` was committed in the same commit (`c18d2f6`) as its implementation, tests, and doc sync, and was originally pushed marked `DRAFT (authoring prior to ...)`, which was factually wrong at push time. The round-1 independent review caught this and required it be named accurately; it now is, in the EWP's own status line and §7 ("Process Deviation and Compensating Control"). The review itself is the compensating control.
 - **Base commit this WP started from:** `b1a12f1d8b1662752faa31aa8cc0543023e5db6f`
@@ -494,16 +494,21 @@ Full detail in `docs/work-packages/wp-m3b-8-ewp.md` §6–§8.
 
 **Verification (round-2 revision):** `go build ./...`, `go vet ./...` (clean); `gofmt -l tests/` clean (only `tests/m3b_milestone_closure_test.go` touched); `go test -count=1 ./...` (all 30 packages `ok`); `go test -race -count=1 ./...` (clean, exact command, all packages); `GOOS=windows GOARCH=amd64`/`GOOS=linux GOARCH=amd64`/`GOOS=darwin GOARCH=arm64 go build ./...` (clean); `git diff --check` (clean).
 
-**Known blockers / open questions:** none — awaiting round-3 review to confirm the §9 fix.
+**Independent review round 3 — ACCEPTANCE** ([review id `5322036949`](https://github.com/olostan/DevCadence/pull/10#pullrequestreview-5322036949), owner, 2026-09-25, head `e1cadc1`): independently re-verified the round-2 fix against a fresh clone, including a **mutation test** — temporarily suppressing the `AuthExpired` → `FindingCodeAuthExpired` diagnostic in `internal/setup/doctor.go` made the scenario fail as expected, restoring it made it pass — proving the new assertions are load-bearing, and traced the two scope statuses through `protocol.EvaluateScopeReadiness` to confirm neither is a vacuous default. **"The round-2 residual finding is genuinely resolved... GREEN — WP-M3B-8 is accepted at `e1cadc1`. M3B milestone closure is accepted."**
+
+The review also raised a non-blocking process/documentation-integrity note: `AGENTS.md`/`README.md`/`docs/IMPLEMENTATION_PLAN.md`/`docs/ENVIRONMENT_INTELLIGENCE_AND_ONBOARDING.md` were updated to say M3B is complete and all 8 WPs accepted in the round-1 fix commit (`d42de51`), before WP-M3B-8's own round-2 finding was closed — the doc language became true only with this round-3 acceptance, not when written. No repair requested (retroactively accurate now); recorded as guidance to avoid repeating the pattern in M3C's own closure WP.
+
+**WP-M3B-8 is accepted as of `e1cadc1`. M3B milestone closure is accepted — all 8 M3B work packages are now accepted through independent review.**
+
+**Known blockers / open questions:** none.
 
 ## Next concrete action
 
-Post a PR comment on #10 summarizing the round-2 fix and continue watching for the owner's response. Do not flip WP-M3B-8 or M3B closure to `accepted` unilaterally. Retain `HANDOFF.md` through review/repair per the handoff protocol; remove it only before final merge freeze, once accepted.
+M3B is complete and closed. Proceed to M3C (cognition resource and session substrate) per `docs/IMPLEMENTATION_PLAN.md`, `docs/WORK_PACKAGES.md`, and AGENTS.md §16: provider-neutral session drivers, access-channel capability contracts, `EconomicRegime`/`BudgetPool`, portfolio protocol shapes, and the deterministic portfolio validator/activation boundary. Per the round-3 review's own process guidance, land any "complete"/"accepted" milestone-status doc language in the same commit as, or after, the review comment that actually grants it — never preemptively.
 
 ## Resume checklist for the next agent
 
 1. `git fetch origin feat/m3b-guided-bootstrap` and verify remote HEAD.
 2. Verify test suite with `go test -count=1 ./...`.
-3. Read `docs/work-packages/wp-m3b-8-ewp.md` §6–§8 and PR #10 comments for review disposition.
-4. If review requests changes, execute targeted repair and update `HANDOFF.md`.
-5. If review accepts WP-M3B-8, proceed to final milestone merge freeze and cleanup per `AGENT_HANDOFF_PROTOCOL.md`.
+3. Read `docs/WORK_PACKAGES.md`'s M3C scope cards and `docs/work-packages/wp-m3b-8-ewp.md` §10 for the M3B closure record.
+4. Continue from "Next concrete action" above: author the WP-M3C-1 EWP before any implementation code (AGENTS.md §6).
