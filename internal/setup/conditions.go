@@ -78,6 +78,30 @@ type CredentialsEndpointAuthChecker struct {
 	refsByID map[string]protocol.CredentialRef
 }
 
+// buildCredentialRefIndex validates every ref structurally and indexes it by
+// RefID, rejecting a duplicate RefID outright: RefID is meant to be an
+// identity (the whole endpoint->CredentialRef binding model depends on
+// "CredentialRef.RefID -> exactly one configured CredentialRef"), not a
+// multimap key a later "last write wins" map build could silently resolve
+// differently depending on iteration order. Both NewDoctor and
+// NewCredentialsEndpointAuthChecker call this one helper so they can never
+// drift on what counts as a valid, unambiguous configured set
+// (independent-review follow-up on WP-M3B-5, round-6 finding).
+func buildCredentialRefIndex(refs []protocol.CredentialRef) (map[string]protocol.CredentialRef, error) {
+	byID := make(map[string]protocol.CredentialRef, len(refs))
+	for _, ref := range refs {
+		if err := ref.Validate(); err != nil {
+			return nil, errs.Wrap(errs.CategoryInvalidArgument, err, "configured CredentialRefs contains an invalid entry")
+		}
+		if _, dup := byID[ref.RefID]; dup {
+			return nil, errs.New(errs.CategoryInvalidArgument,
+				"configured CredentialRefs contains duplicate ref_id %q; RefID must be a unique identity, not a multimap key", ref.RefID)
+		}
+		byID[ref.RefID] = ref
+	}
+	return byID, nil
+}
+
 // NewCredentialsEndpointAuthChecker constructs an EndpointAuthChecker backed
 // by the WP-M3B-4 credential manager and an explicit set of configured
 // CredentialRef values (e.g. DoctorOptions.CredentialRefs) it may resolve a
@@ -86,12 +110,12 @@ type CredentialsEndpointAuthChecker struct {
 // anything authenticated, and wiring one anyway would misleadingly claim
 // "production auth verification" where none exists — independent-review
 // follow-up on WP-M3B-5, round-3 finding 2's "Runner-only fallback" point).
-func NewCredentialsEndpointAuthChecker(mgr *credentials.Manager, refs []protocol.CredentialRef) *CredentialsEndpointAuthChecker {
-	byID := make(map[string]protocol.CredentialRef, len(refs))
-	for _, ref := range refs {
-		byID[ref.RefID] = ref
+func NewCredentialsEndpointAuthChecker(mgr *credentials.Manager, refs []protocol.CredentialRef) (*CredentialsEndpointAuthChecker, error) {
+	byID, err := buildCredentialRefIndex(refs)
+	if err != nil {
+		return nil, err
 	}
-	return &CredentialsEndpointAuthChecker{manager: mgr, refsByID: byID}
+	return &CredentialsEndpointAuthChecker{manager: mgr, refsByID: byID}, nil
 }
 
 // CheckEndpointAuthenticated evaluates authentication for the CredentialRef

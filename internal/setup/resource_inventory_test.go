@@ -196,6 +196,88 @@ func TestNewDoctorRejectsEndpointCredentialRefBindingToUnknownRefID(t *testing.T
 	}
 }
 
+// TestNewDoctorRejectsDuplicateCredentialRefID is the independent-review
+// follow-up on WP-M3B-5, round-6 finding: CredentialRef.RefID is meant to
+// be a unique identity ("CredentialRef.RefID -> exactly one configured
+// CredentialRef"), not a multimap key. Two configured CredentialRefs
+// sharing a RefID — whether identical or different content — must be
+// rejected at NewDoctor's configuration boundary, both with and without a
+// CredentialManager configured (the no-manager path is exactly where
+// ResourceInventory's own duplicate-credential-entry check never runs,
+// since ObserveCredentials returns no entries without a manager).
+func TestNewDoctorRejectsDuplicateCredentialRefID(t *testing.T) {
+	clk := clock.NewFake(time.Date(2026, 9, 24, 10, 0, 0, 0, time.UTC), 0)
+	seq := ids.NewSequential()
+
+	cases := []struct {
+		name string
+		refs []protocol.CredentialRef
+	}{
+		{"duplicate RefID, identical content", []protocol.CredentialRef{
+			{SchemaVersion: protocol.SchemaVersion1, RefID: "shared", Kind: protocol.CredRefCLISession, Locator: "claude"},
+			{SchemaVersion: protocol.SchemaVersion1, RefID: "shared", Kind: protocol.CredRefCLISession, Locator: "claude"},
+		}},
+		{"duplicate RefID, different content", []protocol.CredentialRef{
+			{SchemaVersion: protocol.SchemaVersion1, RefID: "shared", Kind: protocol.CredRefCLISession, Locator: "claude"},
+			{SchemaVersion: protocol.SchemaVersion1, RefID: "shared", Kind: protocol.CredRefEnvVar, Locator: "OPENAI_API_KEY"},
+		}},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name+"/no CredentialManager", func(t *testing.T) {
+			_, err := NewDoctor(DoctorOptions{
+				Clock:          clk,
+				IDs:            seq,
+				HomeDir:        t.TempDir(),
+				CredentialRefs: tc.refs,
+				// No CredentialManager: proves this is caught at Doctor
+				// configuration time, not accidentally by
+				// ResourceInventory's later duplicate-credential-entry
+				// check, which never runs without a manager.
+			})
+			if err == nil {
+				t.Fatal("expected NewDoctor to reject duplicate configured CredentialRef.RefID values")
+			}
+		})
+
+		t.Run(tc.name+"/with CredentialManager", func(t *testing.T) {
+			mgr, mgrErr := credentials.NewManager(credentials.Options{Clock: clk})
+			if mgrErr != nil {
+				t.Fatalf("credentials.NewManager: %v", mgrErr)
+			}
+			_, err := NewDoctor(DoctorOptions{
+				Clock:             clk,
+				IDs:               seq,
+				HomeDir:           t.TempDir(),
+				CredentialManager: mgr,
+				CredentialRefs:    tc.refs,
+			})
+			if err == nil {
+				t.Fatal("expected NewDoctor to reject duplicate configured CredentialRef.RefID values")
+			}
+		})
+	}
+}
+
+// TestNewCredentialsEndpointAuthChecker_RejectsDuplicateCredentialRefID
+// covers the Executor-side half of the round-6 finding: the checker must
+// not silently build a "last write wins" index over an ambiguous
+// configured set either.
+func TestNewCredentialsEndpointAuthChecker_RejectsDuplicateCredentialRefID(t *testing.T) {
+	clk := clock.NewFake(time.Date(2026, 9, 24, 10, 0, 0, 0, time.UTC), 0)
+	mgr, err := credentials.NewManager(credentials.Options{Clock: clk})
+	if err != nil {
+		t.Fatalf("credentials.NewManager: %v", err)
+	}
+	refs := []protocol.CredentialRef{
+		{SchemaVersion: protocol.SchemaVersion1, RefID: "shared", Kind: protocol.CredRefCLISession, Locator: "claude"},
+		{SchemaVersion: protocol.SchemaVersion1, RefID: "shared", Kind: protocol.CredRefEnvVar, Locator: "OPENAI_API_KEY"},
+	}
+	if _, err := NewCredentialsEndpointAuthChecker(mgr, refs); err == nil {
+		t.Fatal("expected NewCredentialsEndpointAuthChecker to reject duplicate configured CredentialRef.RefID values")
+	}
+}
+
 // TestDoctorDiscoverEndpoints_IgnoresUnrecognizedAdapterCredentialRef is
 // the independent-review follow-up on WP-M3B-5, round-5 finding 1: an
 // adapter-declared CognitionEndpoint.CredentialRef that does not resolve

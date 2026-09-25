@@ -90,12 +90,13 @@ type Doctor struct {
 	credManager      *credentials.Manager
 	credRefs         []protocol.CredentialRef
 	endpointCredRefs map[string]string
-	// credRefIndex is the set of RefIDs among credRefs, computed once in
-	// NewDoctor (which already validated every entry structurally and every
+	// credRefIndex indexes credRefs by RefID, computed once in NewDoctor via
+	// buildCredentialRefIndex (which already validated every entry
+	// structurally, rejected duplicate RefIDs, and validated every
 	// endpointCredRefs value against it). discoverEndpoints uses it to
 	// decide whether an adapter-declared CognitionEndpoint.CredentialRef is
 	// safe to treat as machine-verifiable.
-	credRefIndex map[string]bool
+	credRefIndex map[string]protocol.CredentialRef
 }
 
 // NewDoctor returns a Doctor engine.
@@ -134,15 +135,18 @@ func NewDoctor(opts DoctorOptions) (*Doctor, error) {
 	// "impossible plan" shape earlier rounds eliminated for the guessed-
 	// locator case, reintroduced here via a typo'd binding instead
 	// (independent-review follow-up on WP-M3B-5, round-5 finding 1).
-	refIndex := make(map[string]bool, len(opts.CredentialRefs))
-	for _, ref := range opts.CredentialRefs {
-		if err := ref.Validate(); err != nil {
-			return nil, errs.Wrap(errs.CategoryInvalidArgument, err, "NewDoctor: DoctorOptions.CredentialRefs contains an invalid entry")
-		}
-		refIndex[ref.RefID] = true
+	// buildCredentialRefIndex also rejects a duplicate configured RefID
+	// outright — CredentialRef.RefID is meant to be a unique identity, and
+	// Doctor/Executor sharing this one helper is what keeps them from
+	// independently building two different "last write wins" indexes over
+	// the same ambiguous input (independent-review follow-up on
+	// WP-M3B-5, round-6 finding).
+	refIndex, err := buildCredentialRefIndex(opts.CredentialRefs)
+	if err != nil {
+		return nil, errs.Wrap(errs.CategoryInvalidArgument, err, "NewDoctor: DoctorOptions.CredentialRefs")
 	}
 	for endpointID, refID := range opts.EndpointCredentialRefs {
-		if !refIndex[refID] {
+		if _, ok := refIndex[refID]; !ok {
 			return nil, errs.New(errs.CategoryInvalidArgument,
 				"NewDoctor: EndpointCredentialRefs[%q] names credential_ref_id %q, which is not among the configured CredentialRefs", endpointID, refID)
 		}
@@ -779,7 +783,7 @@ func (d *Doctor) discoverEndpoints(ctx context.Context, facts protocol.Environme
 		// endpoint_authenticated condition (independent-review follow-up on
 		// WP-M3B-5, round-5 finding 1).
 		credRef := ""
-		if d.credRefIndex[ep.CredentialRef] {
+		if _, ok := d.credRefIndex[ep.CredentialRef]; ok {
 			credRef = ep.CredentialRef
 		}
 		if bound, ok := d.endpointCredRefs[ep.ID]; ok && bound != "" {

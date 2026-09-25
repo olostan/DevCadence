@@ -102,7 +102,11 @@ func NewExecutor(opts ExecutorOptions) (*Executor, error) {
 	// (independent-review follow-up on WP-M3B-5, round-3 finding 2).
 	endpointAuth := opts.EndpointAuth
 	if endpointAuth == nil && opts.CredentialManager != nil {
-		endpointAuth = NewCredentialsEndpointAuthChecker(opts.CredentialManager, opts.CredentialRefs)
+		checker, checkerErr := NewCredentialsEndpointAuthChecker(opts.CredentialManager, opts.CredentialRefs)
+		if checkerErr != nil {
+			return nil, errs.Wrap(errs.CategoryInvalidArgument, checkerErr, "NewExecutor: ExecutorOptions.CredentialRefs")
+		}
+		endpointAuth = checker
 	}
 
 	return &Executor{

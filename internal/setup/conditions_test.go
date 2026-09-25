@@ -321,7 +321,10 @@ func TestCredentialsEndpointAuthChecker_EvaluatesAuthViaCredentialManager(t *tes
 		},
 	}
 
-	checker := NewCredentialsEndpointAuthChecker(mgr, refs)
+	checker, err := NewCredentialsEndpointAuthChecker(mgr, refs)
+	if err != nil {
+		t.Fatalf("NewCredentialsEndpointAuthChecker: %v", err)
+	}
 
 	t.Run("endpoint ID differs from credential locator", func(t *testing.T) {
 		authed, detail, err := checker.CheckEndpointAuthenticated(ctx, "cli:claude-code", "claude-cli-ref")
