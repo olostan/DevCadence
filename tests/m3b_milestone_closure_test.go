@@ -750,6 +750,28 @@ func TestM3BMilestoneClosure_Scenario08_GracefulCapabilityDegradation(t *testing
 		t.Error("report readiness should not be READY when the only endpoint's auth is expired")
 	}
 
+	// Independent-review follow-up (round-2 residual): endpoint discovery
+	// carrying AuthExpired is not itself proof that Doctor translated it
+	// into diagnostic/readiness semantics — this fixture could independently
+	// be non-ready/reduced for unrelated reasons (state-root/hardware
+	// findings). Assert the auth-driven finding and scope statuses
+	// specifically, not just the coarse overall readiness.
+	authExpiredFinding := false
+	for _, f := range report.Findings {
+		if f.Code == setup.FindingCodeAuthExpired {
+			authExpiredFinding = true
+		}
+	}
+	if !authExpiredFinding {
+		t.Errorf("expected finding %s for the expired-auth endpoint; findings = %+v", setup.FindingCodeAuthExpired, report.Findings)
+	}
+	if status := findScopeStatus(t, report.ScopeReadiness, protocol.ScopeCanUseAuthenticatedCLI); status != protocol.ScopeStatusNotReady {
+		t.Errorf("ScopeCanUseAuthenticatedCLI = %s, want not_ready (the only endpoint's auth is expired)", status)
+	}
+	if status := findScopeStatus(t, report.ScopeReadiness, protocol.ScopeHasAnyViableCognitionPath); status != protocol.ScopeStatusNotReady {
+		t.Errorf("ScopeHasAnyViableCognitionPath = %s, want not_ready (the only endpoint's auth is expired)", status)
+	}
+
 	// ResourceInventory is built from the report's own DiscoveredEndpoints —
 	// the same evidence Doctor.Run itself produced, not a hand-built list.
 	// A profile reference is required whenever cognition endpoints are
@@ -774,6 +796,15 @@ func TestM3BMilestoneClosure_Scenario08_GracefulCapabilityDegradation(t *testing
 	}
 	if len(inv.CognitionEndpoints) != 1 || inv.CognitionEndpoints[0].Auth != protocol.AuthExpired {
 		t.Errorf("inventory did not preserve degraded auth state: %+v", inv.CognitionEndpoints)
+	}
+	// The same auth-driven scope statuses asserted on the report above must
+	// also survive into the validated ResourceInventory (independent-review
+	// follow-up, round-2 residual).
+	if status := findScopeStatus(t, inv.Readiness, protocol.ScopeCanUseAuthenticatedCLI); status != protocol.ScopeStatusNotReady {
+		t.Errorf("inventory ScopeCanUseAuthenticatedCLI = %s, want not_ready", status)
+	}
+	if status := findScopeStatus(t, inv.Readiness, protocol.ScopeHasAnyViableCognitionPath); status != protocol.ScopeStatusNotReady {
+		t.Errorf("inventory ScopeHasAnyViableCognitionPath = %s, want not_ready", status)
 	}
 }
 
