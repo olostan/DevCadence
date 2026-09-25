@@ -52,63 +52,70 @@ type EndpointHealthChecker interface {
 // internal/setup does not and should not duplicate. With none configured,
 // EvaluateCondition fails closed for endpoint_authenticated rather than
 // assuming true (independent-review follow-up on WP-M3B-5, finding 6).
+//
+// credentialRefID is the explicit protocol.EndpointOperand.CredentialRefID
+// binding the condition itself carries — never derived by guessing a
+// credential locator from endpointID. CognitionEndpoint != CredentialRef is
+// a WP-M3B-4 identity boundary a checker must not collapse (independent-
+// review follow-up on WP-M3B-5, round-3 finding 2): an endpoint ID is not a
+// credential locator, and an endpoint's credential can be any configured
+// CredentialRefKind (cli_session, env_var, keychain_ref), not only a CLI
+// session whose locator happens to equal the endpoint ID.
 type EndpointAuthChecker interface {
-	CheckEndpointAuthenticated(ctx context.Context, endpointID string) (authenticated bool, detail string, err error)
+	CheckEndpointAuthenticated(ctx context.Context, endpointID, credentialRefID string) (authenticated bool, detail string, err error)
 }
 
-// CredentialsEndpointAuthChecker verifies endpoint authentication by delegating to a
-// credentials.Manager (the WP-M3B-4 credential and auth-evidence authority).
+// CredentialsEndpointAuthChecker verifies endpoint authentication by
+// resolving a condition's explicit CredentialRefID against an index of the
+// actual configured protocol.CredentialRef values (keyed by RefID) and
+// delegating to a credentials.Manager (the WP-M3B-4 credential and
+// auth-evidence authority). It never fabricates a CredentialRef from an
+// endpoint ID: a credentialRefID with no entry in the index is treated as
+// "no configured binding for this endpoint" and fails closed, rather than
+// guessing.
 type CredentialsEndpointAuthChecker struct {
-	manager *credentials.Manager
+	manager  *credentials.Manager
+	refsByID map[string]protocol.CredentialRef
 }
 
-// NewCredentialsEndpointAuthChecker constructs an EndpointAuthChecker backed by the
-// WP-M3B-4 credential manager.
-func NewCredentialsEndpointAuthChecker(mgr *credentials.Manager) *CredentialsEndpointAuthChecker {
-	return &CredentialsEndpointAuthChecker{manager: mgr}
+// NewCredentialsEndpointAuthChecker constructs an EndpointAuthChecker backed
+// by the WP-M3B-4 credential manager and an explicit set of configured
+// CredentialRef values (e.g. DoctorOptions.CredentialRefs) it may resolve a
+// condition's CredentialRefID against. mgr must have real, authoritative
+// auth adapters configured (a Manager with no adapters can never prove
+// anything authenticated, and wiring one anyway would misleadingly claim
+// "production auth verification" where none exists — independent-review
+// follow-up on WP-M3B-5, round-3 finding 2's "Runner-only fallback" point).
+func NewCredentialsEndpointAuthChecker(mgr *credentials.Manager, refs []protocol.CredentialRef) *CredentialsEndpointAuthChecker {
+	byID := make(map[string]protocol.CredentialRef, len(refs))
+	for _, ref := range refs {
+		byID[ref.RefID] = ref
+	}
+	return &CredentialsEndpointAuthChecker{manager: mgr, refsByID: byID}
 }
 
-// CheckEndpointAuthenticated evaluates authentication for endpointID using the configured credentials.Manager.
-func (c *CredentialsEndpointAuthChecker) CheckEndpointAuthenticated(ctx context.Context, endpointID string) (bool, string, error) {
+// CheckEndpointAuthenticated evaluates authentication for the CredentialRef
+// explicitly bound to endpointID via credentialRefID. An empty or unresolved
+// credentialRefID means no configured credential binding is known for this
+// endpoint — this is evidence the checker cannot verify authentication, so
+// it fails closed (authenticated=false with a clear detail), never a license
+// to guess a locator from endpointID.
+func (c *CredentialsEndpointAuthChecker) CheckEndpointAuthenticated(ctx context.Context, endpointID, credentialRefID string) (bool, string, error) {
 	if c == nil || c.manager == nil {
 		return false, "no credential manager configured", nil
 	}
-	locators := []string{endpointID}
-	if trimmed := strings.TrimPrefix(endpointID, "cli:"); trimmed != endpointID {
-		locators = append(locators, trimmed)
+	if credentialRefID == "" {
+		return false, fmt.Sprintf("no configured credential binding for endpoint %q", endpointID), nil
 	}
-
-	var lastDetail string
-	for _, loc := range locators {
-		refID := "check-auth-" + loc
-		if len(refID) > 128 {
-			refID = refID[:128]
-		}
-		ref := protocol.CredentialRef{
-			SchemaVersion: protocol.SchemaVersion1,
-			RefID:         refID,
-			Kind:          protocol.CredRefCLISession,
-			Locator:       loc,
-		}
-		if err := ref.Validate(); err != nil {
-			continue
-		}
-		evidence, err := c.manager.CheckCredential(ctx, ref)
-		if err != nil {
-			return false, "", err
-		}
-		if evidence.Status == protocol.AuthStatusAuthenticated {
-			return true, evidence.Detail, nil
-		}
-		lastDetail = evidence.Detail
-		if evidence.Status != protocol.AuthStatusIndeterminate || evidence.Detail != "no auth probe adapter available for CLI locator" {
-			return false, evidence.Detail, nil
-		}
+	ref, ok := c.refsByID[credentialRefID]
+	if !ok {
+		return false, fmt.Sprintf("credential_ref_id %q is not among the configured CredentialRefs", credentialRefID), nil
 	}
-	if lastDetail != "" {
-		return false, lastDetail, nil
+	evidence, err := c.manager.CheckCredential(ctx, ref)
+	if err != nil {
+		return false, "", err
 	}
-	return false, "no auth probe adapter available for endpoint", nil
+	return evidence.Status == protocol.AuthStatusAuthenticated, evidence.Detail, nil
 }
 
 // EvaluatorDeps supplies EvaluateCondition's live dependencies.
@@ -302,7 +309,7 @@ func evaluateEndpointAuthenticated(ctx context.Context, deps EvaluatorDeps, op *
 		return false, "", errs.New(errs.CategoryInvalidArgument,
 			"evaluateEndpointAuthenticated: no EndpointAuthChecker configured for endpoint %q", op.EndpointID)
 	}
-	return deps.EndpointAuth.CheckEndpointAuthenticated(ctx, op.EndpointID)
+	return deps.EndpointAuth.CheckEndpointAuthenticated(ctx, op.EndpointID, op.CredentialRefID)
 }
 
 // processSpecFor builds a minimal, bounded process.Spec for a live

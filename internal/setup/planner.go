@@ -269,15 +269,24 @@ func (p *Planner) Plan(report *protocol.DoctorReport, target protocol.SetupTarge
 					// WP-M3B-5, finding 6).
 					VerificationCheck: []protocol.Condition{
 						{
-							Kind:                  protocol.CondKindEndpointAuthenticated,
-							EndpointAuthenticated: &protocol.EndpointOperand{EndpointID: ep.ID},
+							Kind: protocol.CondKindEndpointAuthenticated,
+							// CredentialRefID carries this endpoint's own
+							// explicit, non-secret credential binding
+							// (ep.CredentialRef), never a locator guessed
+							// from ep.ID. Empty means no configured binding
+							// is known for this endpoint, which the
+							// checker must treat as unverifiable evidence
+							// rather than license to guess (independent-
+							// review follow-up on WP-M3B-5, round-3
+							// finding 2).
+							EndpointAuthenticated: &protocol.EndpointOperand{EndpointID: ep.ID, CredentialRefID: ep.CredentialRef},
 						},
 					},
 				},
 				Postconditions: []protocol.Condition{
 					{
 						Kind:                  protocol.CondKindEndpointAuthenticated,
-						EndpointAuthenticated: &protocol.EndpointOperand{EndpointID: ep.ID},
+						EndpointAuthenticated: &protocol.EndpointOperand{EndpointID: ep.ID, CredentialRefID: ep.CredentialRef},
 					},
 				},
 				IdempotencyKey: fmt.Sprintf("reauthenticate_%s", ep.ID),

@@ -286,9 +286,27 @@ func WriteProfile(ctx context.Context, c *CacheManager, profile protocol.Machine
 	return WriteProfileWithExpiresAt(ctx, c, profile, expiresAt)
 }
 
-// WriteProfileWithExpiresAt atomically serializes an immutable MachineCapabilityProfile indexed
-// by its ProfileID with an explicit expiration time.
+// WriteProfileWithExpiresAt atomically archives an immutable MachineCapabilityProfile
+// indexed by its ProfileID, and additionally updates the latest machine-profile
+// target cache with the same expiration. Callers that must archive the exact
+// active profile without refreshing the latest-cache TTL (e.g. a Doctor run
+// deliberately retaining stale cached inference) should call archiveProfile
+// directly instead.
 func WriteProfileWithExpiresAt(ctx context.Context, c *CacheManager, profile protocol.MachineCapabilityProfile, expiresAt time.Time) error {
+	if err := archiveProfile(ctx, c, profile, expiresAt); err != nil {
+		return err
+	}
+	// Also update the latest machine-profile target cache for quick unkeyed lookup.
+	return WriteWithExpiresAt(ctx, c, protocol.CacheTargetMachineProfile, profile.MachineFingerprint, profile, expiresAt)
+}
+
+// archiveProfile atomically writes profile into the immutable profiles/<profile_id>.json
+// store only; it never touches the mutable "latest" machine-profile cache slot.
+// A write for a ProfileID that is already archived with identical content is a
+// no-op; a write with different content for the same ProfileID fails closed
+// with CategoryConflict, since ProfileID is meant to be a stable content
+// identity that every ResourceInventory.Profile reference can rely on.
+func archiveProfile(ctx context.Context, c *CacheManager, profile protocol.MachineCapabilityProfile, expiresAt time.Time) error {
 	if err := profile.Validate(); err != nil {
 		return err
 	}
@@ -315,6 +333,29 @@ func WriteProfileWithExpiresAt(ctx context.Context, c *CacheManager, profile pro
 		return errs.Wrap(errs.CategoryInternal, err, "lock profile cache lock file %s", lockPath)
 	}
 	defer unlock(lockFile)
+
+	// The profiles/ store is immutable by ProfileID: once a ProfileID has been
+	// archived, a later write for the same ID must be a no-op if the content
+	// is identical (idempotent retry) and must fail closed if the content
+	// differs (the durable ResourceInventory.Profile reference would
+	// otherwise silently change meaning for every past inventory that cites
+	// this ProfileID — independent-review follow-up on WP-M3B-5, finding 1c).
+	if existingBytes, readErr := os.ReadFile(path); readErr == nil {
+		var existingEnv CacheEnvelope[protocol.MachineCapabilityProfile]
+		if jsonErr := json.Unmarshal(existingBytes, &existingEnv); jsonErr == nil {
+			existingCanonical, existingCanonErr := protocol.CanonicalJSON(existingEnv.Data)
+			newCanonical, newCanonErr := protocol.CanonicalJSON(profile)
+			if existingCanonErr == nil && newCanonErr == nil {
+				if string(existingCanonical) == string(newCanonical) {
+					return nil
+				}
+				return errs.New(errs.CategoryConflict,
+					"setup cache: profile_id %q already archived with different content; ProfileID must be a stable content identity", profile.ProfileID)
+			}
+		}
+	} else if !errors.Is(readErr, fs.ErrNotExist) {
+		return errs.Wrap(errs.CategoryInternal, readErr, "read existing profile cache file %s", path)
+	}
 
 	env := CacheEnvelope[protocol.MachineCapabilityProfile]{
 		SchemaVersion:      protocol.SchemaVersion1,
@@ -362,8 +403,7 @@ func WriteProfileWithExpiresAt(ctx context.Context, c *CacheManager, profile pro
 		_ = dirFile.Close()
 	}
 
-	// Also update the latest machine-profile target cache for quick unkeyed lookup.
-	return WriteWithExpiresAt(ctx, c, protocol.CacheTargetMachineProfile, profile.MachineFingerprint, profile, expiresAt)
+	return nil
 }
 
 // ReadProfileByID loads an immutable MachineCapabilityProfile by its unique ProfileID.
@@ -412,6 +452,17 @@ func ReadProfileByID(ctx context.Context, c *CacheManager, profileID string) (pr
 	}
 
 	if err := env.Data.Validate(); err != nil {
+		_ = os.Remove(path)
+		return zero, false, nil
+	}
+
+	// The file is keyed by ProfileID in its path, but the path alone is not
+	// proof the stored payload actually is that profile (e.g. a corrupted
+	// rename, a manually edited file, or a future bug in profilePath). Cross
+	// check the loaded content's own ProfileID before returning it as "the"
+	// profile for that ID (independent-review follow-up on WP-M3B-5,
+	// finding 1c's resolver-validation ask).
+	if env.Data.ProfileID != profileID {
 		_ = os.Remove(path)
 		return zero, false, nil
 	}

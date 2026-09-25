@@ -853,6 +853,7 @@ func TestPlannerGeneratesReauthenticateActionForExpiredEndpoint(t *testing.T) {
 				Auth:                   protocol.AuthExpired,
 				CostClass:              protocol.CostSubscriptionIncluded,
 				RequiredSourceExposure: protocol.ExposureFocusedSnippets,
+				CredentialRef:          "claude-cli-ref",
 			},
 			{
 				ID:                     "still-fine-endpoint",
@@ -894,6 +895,17 @@ func TestPlannerGeneratesReauthenticateActionForExpiredEndpoint(t *testing.T) {
 	// authentication (independent-review follow-up on WP-M3B-5, finding 6).
 	if act.Postconditions[0].Kind != protocol.CondKindEndpointAuthenticated || act.Postconditions[0].EndpointAuthenticated.EndpointID != "claude-cli" {
 		t.Errorf("postcondition does not target the expired endpoint's authentication: %+v", act.Postconditions)
+	}
+	// The condition must carry the endpoint's own explicit credential
+	// binding, not merely its ID — a checker resolving auth by guessing a
+	// locator from the endpoint ID string would misbind for any endpoint
+	// whose credential locator differs from its ID (independent-review
+	// follow-up on WP-M3B-5, round-3 finding 2).
+	if got := act.Postconditions[0].EndpointAuthenticated.CredentialRefID; got != "claude-cli-ref" {
+		t.Errorf("postcondition CredentialRefID = %q, want %q (propagated from the endpoint's own CredentialRef, not guessed)", got, "claude-cli-ref")
+	}
+	if got := act.ManualInstructions.VerificationCheck[0].EndpointAuthenticated.CredentialRefID; got != "claude-cli-ref" {
+		t.Errorf("VerificationCheck CredentialRefID = %q, want %q", got, "claude-cli-ref")
 	}
 
 	// Targeting only TargetHardware must not produce the auth action.

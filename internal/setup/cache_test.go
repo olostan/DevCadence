@@ -2,10 +2,13 @@ package setup
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/olostan/DevCadence/internal/clock"
+	"github.com/olostan/DevCadence/internal/errs"
 	"github.com/olostan/DevCadence/internal/protocol"
 )
 
@@ -431,5 +434,116 @@ func TestCacheManager_WriteProfileAndReadByIDRegression(t *testing.T) {
 	}
 	if latestProfile.ProfileID != "mcp-obs-2" {
 		t.Errorf("latest cached profile ID = %q, want mcp-obs-2", latestProfile.ProfileID)
+	}
+}
+
+// TestWriteProfile_SameIDIdempotent_DifferentContentConflict is the
+// independent-review follow-up on WP-M3B-5 finding 1c: ProfileID must be a
+// stable content identity, so a second write for the same ProfileID must be
+// a no-op when the content is identical and must fail closed (not silently
+// overwrite) when it differs.
+func TestWriteProfile_SameIDIdempotent_DifferentContentConflict(t *testing.T) {
+	ctx := context.Background()
+	tmpDir := t.TempDir()
+	now := time.Date(2026, 9, 25, 10, 0, 0, 0, time.UTC)
+	clk := clock.NewFake(now, 0)
+	cm, err := NewCacheManager(tmpDir, clk, 24*time.Hour)
+	if err != nil {
+		t.Fatalf("NewCacheManager: %v", err)
+	}
+
+	facts := protocol.EnvironmentFacts{
+		Host:           protocol.HostFacts{Family: protocol.OSLinux, Arch: "amd64"},
+		Virtualization: protocol.VirtualizationFacts{Container: protocol.ContainerNone},
+	}
+	base := protocol.MachineCapabilityProfile{
+		SchemaVersion:         protocol.SchemaVersion1,
+		ProfileID:             "mcp-fixed-id",
+		MachineFingerprint:    "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+		ObservedAt:            protocol.NewTimestamp(now),
+		KnowledgeRevision:     "2026-09-22",
+		ProbeDepth:            protocol.DepthHealth,
+		Assessment:            protocol.AssessmentReady,
+		Environment:           facts,
+		AcceleratorCandidates: []protocol.AcceleratorCandidate{},
+	}
+
+	if err := WriteProfile(ctx, cm, base, 24*time.Hour); err != nil {
+		t.Fatalf("first WriteProfile: %v", err)
+	}
+
+	// Identical content, same ProfileID: must be a silent idempotent no-op.
+	if err := WriteProfile(ctx, cm, base, 24*time.Hour); err != nil {
+		t.Fatalf("idempotent re-write of identical content should succeed, got: %v", err)
+	}
+
+	// Different content, same ProfileID: must fail closed with a conflict.
+	mutated := base
+	mutated.Assessment = protocol.AssessmentPartiallyReady
+	err = WriteProfile(ctx, cm, mutated, 24*time.Hour)
+	if err == nil {
+		t.Fatalf("expected conflict error writing different content under the same ProfileID, got nil")
+	}
+	if errs.CategoryOf(err) != errs.CategoryConflict {
+		t.Errorf("expected CategoryConflict, got: %v", err)
+	}
+
+	// The originally archived content must be unchanged.
+	resolved, found, err := ReadProfileByID(ctx, cm, base.ProfileID)
+	if err != nil || !found {
+		t.Fatalf("expected original profile still readable: found=%v, err=%v", found, err)
+	}
+	if resolved.Assessment != protocol.AssessmentReady {
+		t.Errorf("archived profile was overwritten: Assessment = %q, want %q (unchanged)", resolved.Assessment, protocol.AssessmentReady)
+	}
+}
+
+// TestReadProfileByID_RejectsContentIDMismatch is the independent-review
+// follow-up on WP-M3B-5 finding 1c's resolver-validation ask: a resolver
+// must not merely trust the filename it looked up by, but must cross-check
+// the loaded content's own ProfileID.
+func TestReadProfileByID_RejectsContentIDMismatch(t *testing.T) {
+	ctx := context.Background()
+	tmpDir := t.TempDir()
+	now := time.Date(2026, 9, 25, 10, 0, 0, 0, time.UTC)
+	clk := clock.NewFake(now, 0)
+	cm, err := NewCacheManager(tmpDir, clk, 24*time.Hour)
+	if err != nil {
+		t.Fatalf("NewCacheManager: %v", err)
+	}
+
+	facts := protocol.EnvironmentFacts{
+		Host:           protocol.HostFacts{Family: protocol.OSLinux, Arch: "amd64"},
+		Virtualization: protocol.VirtualizationFacts{Container: protocol.ContainerNone},
+	}
+	profile := protocol.MachineCapabilityProfile{
+		SchemaVersion:         protocol.SchemaVersion1,
+		ProfileID:             "mcp-real-id",
+		MachineFingerprint:    "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+		ObservedAt:            protocol.NewTimestamp(now),
+		KnowledgeRevision:     "2026-09-22",
+		ProbeDepth:            protocol.DepthHealth,
+		Assessment:            protocol.AssessmentReady,
+		Environment:           facts,
+		AcceleratorCandidates: []protocol.AcceleratorCandidate{},
+	}
+	if err := WriteProfile(ctx, cm, profile, 24*time.Hour); err != nil {
+		t.Fatalf("WriteProfile: %v", err)
+	}
+
+	// Corrupt the on-disk mapping: rename the archived file to a different
+	// ProfileID's path, simulating a mismatch between the lookup key and the
+	// stored content (e.g. a bad rename or a manually placed file).
+	root := filepath.Join(tmpDir, "profiles")
+	if err := os.Rename(filepath.Join(root, "mcp-real-id.json"), filepath.Join(root, "mcp-spoofed-id.json")); err != nil {
+		t.Fatalf("simulate ID mismatch: %v", err)
+	}
+
+	_, found, err := ReadProfileByID(ctx, cm, "mcp-spoofed-id")
+	if err != nil {
+		t.Fatalf("ReadProfileByID: %v", err)
+	}
+	if found {
+		t.Errorf("expected ReadProfileByID to reject content whose own ProfileID (%q) does not match the requested ID (%q)", profile.ProfileID, "mcp-spoofed-id")
 	}
 }

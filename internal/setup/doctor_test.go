@@ -586,12 +586,29 @@ func TestDoctorCachedInferenceEvidenceMergedAndPreserved(t *testing.T) {
 		t.Fatalf("NewDoctor with expired cache: %v", err)
 	}
 
-	_, _, _, statusExpired, err := docExpired.discoverEndpoints(ctx, facts, fingerprint)
+	_, _, expiredProfile, statusExpired, err := docExpired.discoverEndpoints(ctx, facts, fingerprint)
 	if err != nil {
 		t.Fatalf("discoverEndpoints with expired cache: %v", err)
 	}
 	if statusExpired != "stale_inference_retained" {
 		t.Fatalf("expected evidenceStatus stale_inference_retained, got %q", statusExpired)
+	}
+
+	// Independent-review follow-up on WP-M3B-5, finding 1b: the
+	// stale-inference-retained path deliberately skips refreshing the
+	// mutable "latest" cache slot's TTL, but it must still archive the
+	// exact active profile it returns — a ResourceInventory built from this
+	// Doctor.Run would otherwise embed a Profile reference that can never
+	// resolve.
+	archivedExpiredProfile, foundArchived, err := ReadProfileByID(ctx, expiredCM, expiredProfile.ProfileID)
+	if err != nil {
+		t.Fatalf("ReadProfileByID for stale-inference-retained profile: %v", err)
+	}
+	if !foundArchived {
+		t.Fatalf("expected the stale-inference-retained active profile %q to be archived and resolvable, but it was not found", expiredProfile.ProfileID)
+	}
+	if archivedExpiredProfile.ProfileID != expiredProfile.ProfileID {
+		t.Fatalf("archived profile ID = %q, want %q", archivedExpiredProfile.ProfileID, expiredProfile.ProfileID)
 	}
 
 	// Calling discoverEndpoints a second time with the expired cache must also return "stale_inference_retained"
@@ -602,6 +619,80 @@ func TestDoctorCachedInferenceEvidenceMergedAndPreserved(t *testing.T) {
 	}
 	if statusExpired2 != "stale_inference_retained" {
 		t.Fatalf("expected evidenceStatus stale_inference_retained on second run, got %q", statusExpired2)
+	}
+}
+
+// TestDoctorDiscoverEndpoints_PropagatesProfileArchiveFailure is the
+// independent-review follow-up on WP-M3B-5 finding 1a: a failed immutable
+// profile-archive write must fail discoverEndpoints closed, not be silently
+// ignored (which would let Doctor.Run go on to embed a ResourceInventory
+// Profile reference that can never resolve).
+func TestDoctorDiscoverEndpoints_PropagatesProfileArchiveFailure(t *testing.T) {
+	ctx := context.Background()
+	tmpDir := t.TempDir()
+	now := time.Date(2026, 9, 25, 12, 0, 0, 0, time.UTC)
+	clk := clock.NewFake(now, 0)
+	idSrc := ids.NewSequential()
+
+	cm, err := NewCacheManager(tmpDir, clk, 24*time.Hour)
+	if err != nil {
+		t.Fatalf("NewCacheManager: %v", err)
+	}
+
+	// Make the archive write fail deterministically: pre-create "profiles" as
+	// a regular file so CacheManager's MkdirAll(profiles/, ...) fails with
+	// ENOTDIR rather than silently succeeding.
+	if err := os.WriteFile(filepath.Join(tmpDir, "profiles"), []byte("not a directory"), 0600); err != nil {
+		t.Fatalf("pre-create profiles as a file: %v", err)
+	}
+
+	facts := protocol.EnvironmentFacts{
+		Host:           protocol.HostFacts{Family: protocol.OSLinux, Arch: "amd64"},
+		Virtualization: protocol.VirtualizationFacts{Container: protocol.ContainerNone},
+	}
+	fingerprint, err := environment.Fingerprint(facts)
+	if err != nil {
+		t.Fatalf("Fingerprint: %v", err)
+	}
+
+	stub := &stubCognitionAdapter{
+		endpoints: []protocol.CognitionEndpoint{
+			{
+				ID:                     "ollama_local",
+				Kind:                   protocol.EndpointLocalRuntime,
+				Locality:               protocol.LocalityLocal,
+				Health:                 protocol.EndpointHealthReady,
+				Auth:                   protocol.AuthNotApplicable,
+				CostClass:              protocol.CostLocalCompute,
+				RequiredSourceExposure: protocol.ExposureLocalOnly,
+				StructuredOutput:       protocol.FeatureUnsupported,
+				ToolUse:                protocol.FeatureUnsupported,
+				ObservedAt:             protocol.NewTimestamp(now),
+			},
+		},
+	}
+	service, err := cognition.NewService(cognition.Options{
+		Adapters: []cognition.Adapter{stub},
+		Clock:    clk,
+		IDs:      idSrc,
+	})
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
+	}
+
+	doc, err := NewDoctor(DoctorOptions{
+		Clock:            clk,
+		IDs:              idSrc,
+		Cache:            cm,
+		CognitionService: service,
+	})
+	if err != nil {
+		t.Fatalf("NewDoctor: %v", err)
+	}
+
+	_, _, _, _, err = doc.discoverEndpoints(ctx, facts, fingerprint)
+	if err == nil {
+		t.Fatalf("expected discoverEndpoints to fail closed when the profile archive write fails, got nil error")
 	}
 }
 

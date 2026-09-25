@@ -318,7 +318,8 @@ func cognitionEndpointsEqual(a, b []CognitionEndpointSummary) bool {
 			other.Auth != ep.Auth ||
 			other.CostClass != ep.CostClass ||
 			other.RequiredSourceExposure != ep.RequiredSourceExposure ||
-			other.AccelerationVerified != ep.AccelerationVerified {
+			other.AccelerationVerified != ep.AccelerationVerified ||
+			other.CredentialRef != ep.CredentialRef {
 			return false
 		}
 		if (other.AccelerationBackend == nil) != (ep.AccelerationBackend == nil) {
@@ -341,7 +342,7 @@ func principalHostsEqual(a, b []PrincipalHostSummary) bool {
 	}
 	for _, h := range b {
 		other, ok := byID[h.HostID]
-		if !ok || other.Installed != h.Installed || other.Path != h.Path {
+		if !ok || other.Installed != h.Installed || other.Path != h.Path || other.Version != h.Version {
 			return false
 		}
 	}

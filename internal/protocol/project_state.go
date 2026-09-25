@@ -385,6 +385,14 @@ type CognitionEndpointSummary struct {
 	// AccelerationBackend names the backend the state refers to, so
 	// "verified: false" can be distinguished from "no backend considered".
 	AccelerationBackend *BackendKind `json:"acceleration_backend,omitempty"`
+	// CredentialRef mirrors CognitionEndpoint.CredentialRef: an opaque,
+	// non-secret WP-M3B-4 CredentialRef.RefID this endpoint is explicitly
+	// configured to authenticate against, when known. Empty means no
+	// configured binding is known — a consumer (e.g. a generated
+	// endpoint_authenticated SetupAction) must not guess one from the
+	// endpoint ID (independent-review follow-up on WP-M3B-5, round-3
+	// finding 2).
+	CredentialRef string `json:"credential_ref,omitempty"`
 }
 
 // Validate checks the projection's enumerations.

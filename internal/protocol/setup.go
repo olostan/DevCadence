@@ -499,6 +499,21 @@ type PortOperand struct {
 
 type EndpointOperand struct {
 	EndpointID string `json:"endpoint_id"`
+	// CredentialRefID is the explicit, non-secret WP-M3B-4 CredentialRef.RefID
+	// this condition's endpoint is bound to. It is meaningful only for
+	// CondKindEndpointAuthenticated (CondKindEndpointHealthy ignores it).
+	//
+	// CognitionEndpoint != CredentialRef (WP-M3B-4's own identity boundary):
+	// an endpoint ID is not a credential locator, and a checker that guesses
+	// one from the other (e.g. assuming a cli_session credential whose
+	// locator equals the endpoint ID) silently misbinds for any endpoint
+	// whose credential kind isn't cli_session, or whose locator differs from
+	// its endpoint ID. This field makes the binding explicit instead: empty
+	// means "no configured credential binding is known for this endpoint,"
+	// which a checker must treat as evidence it cannot verify (fail closed),
+	// never as license to guess (independent-review follow-up on WP-M3B-5,
+	// round-3 finding 2).
+	CredentialRefID string `json:"credential_ref_id,omitempty"`
 }
 
 // ModelPresentOperand mirrors EnsureLocalModelParams's identity and size

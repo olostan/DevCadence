@@ -678,17 +678,38 @@ func (d *Doctor) discoverEndpoints(ctx context.Context, facts protocol.Environme
 	// Durably cache the discovered machine profile according to probe depth:
 	// - Full inference probes write fresh cache with DefaultCacheTTL.
 	// - Health probes with unexpired cached inference write back preserving the original inference expiration.
-	// - Health probes with expired cached inference DO NOT write to cache (never refresh stale inference).
+	// - Health probes with expired cached inference DO NOT refresh the mutable "latest" cache slot (never refresh stale inference).
 	// - Shallow probes without cached inference write fresh health profile with DefaultCacheTTL.
+	//
+	// The immutable profiles/<profile_id> archive is written unconditionally,
+	// separately from that "latest" TTL policy: every ResourceInventory.Profile
+	// this Doctor run may go on to embed cites activeProfile.ProfileID, so that
+	// exact observation must always be archived and recoverable — including on
+	// the stale-inference-retained path, which deliberately skips the latest
+	// cache refresh but must not also skip archival (independent-review
+	// follow-up on WP-M3B-5, finding 1b). A failed archive write is fatal
+	// rather than silently ignored (finding 1a): a ResourceInventory whose
+	// Profile reference cannot resolve would violate the provenance guarantee
+	// the reference exists to provide.
 	if d.cache != nil {
+		archiveTTL := DefaultCacheTTL
+		archiveExpiresAt := d.clock.Now().Add(archiveTTL)
+		if usedCachedInference && !cachedExpired {
+			archiveExpiresAt = cachedEnv.ExpiresAt.Time()
+		}
+		if err := archiveProfile(ctx, d.cache, *activeProfile, archiveExpiresAt); err != nil {
+			return nil, nil, nil, "", errs.Wrap(errs.CategoryInternal, err,
+				"archive machine capability profile %s so its ResourceInventory reference remains resolvable", activeProfile.ProfileID)
+		}
+
 		if d.verifyEndpointID != "" {
-			_ = WriteProfile(ctx, d.cache, *activeProfile, DefaultCacheTTL)
+			_ = Write(ctx, d.cache, protocol.CacheTargetMachineProfile, fingerprint, *activeProfile, DefaultCacheTTL)
 		} else if usedCachedInference {
 			if !cachedExpired {
-				_ = WriteProfileWithExpiresAt(ctx, d.cache, *activeProfile, cachedEnv.ExpiresAt.Time())
+				_ = WriteWithExpiresAt(ctx, d.cache, protocol.CacheTargetMachineProfile, fingerprint, *activeProfile, cachedEnv.ExpiresAt.Time())
 			}
 		} else {
-			_ = WriteProfile(ctx, d.cache, *activeProfile, DefaultCacheTTL)
+			_ = Write(ctx, d.cache, protocol.CacheTargetMachineProfile, fingerprint, *activeProfile, DefaultCacheTTL)
 		}
 	}
 
@@ -710,6 +731,7 @@ func (d *Doctor) discoverEndpoints(ctx context.Context, facts protocol.Environme
 			RequiredSourceExposure: ep.RequiredSourceExposure,
 			AccelerationVerified:   isVerified,
 			AccelerationBackend:    backend,
+			CredentialRef:          ep.CredentialRef,
 		}
 		summaries = append(summaries, summary)
 

@@ -355,6 +355,40 @@ func TestResourceInventorySchemaParity(t *testing.T) {
 			}
 			return i
 		}()},
+		// Independent-review follow-up on WP-M3B-5, round-3 finding 3b: two
+		// Go-only CognitionEndpointSummary.Validate rules (remote_api cannot
+		// be local; local_runtime's auth_status must be not_applicable or
+		// unknown) previously had no schema mirror.
+		{"remote_api endpoint claiming local locality", func() protocol.ResourceInventory {
+			i := validResourceInventory()
+			i.Profile = &protocol.MachineProfileRef{
+				ProfileID: "mcp-001", MachineFingerprint: i.MachineFingerprint,
+				ObservedAt: validTestTimestamp(), ProbeDepth: protocol.DepthHealth,
+			}
+			i.CognitionEndpoints = []protocol.CognitionEndpointSummary{
+				{
+					ID: "remote-api-local", Kind: protocol.EndpointRemoteAPI, Locality: protocol.LocalityLocal,
+					Health: protocol.EndpointHealthReady, Auth: protocol.AuthAuthenticated,
+					CostClass: protocol.CostRemoteEconomy, RequiredSourceExposure: protocol.ExposureFocusedSnippets,
+				},
+			}
+			return i
+		}()},
+		{"local_runtime endpoint with expired auth", func() protocol.ResourceInventory {
+			i := validResourceInventory()
+			i.Profile = &protocol.MachineProfileRef{
+				ProfileID: "mcp-001", MachineFingerprint: i.MachineFingerprint,
+				ObservedAt: validTestTimestamp(), ProbeDepth: protocol.DepthHealth,
+			}
+			i.CognitionEndpoints = []protocol.CognitionEndpointSummary{
+				{
+					ID: "ollama:small", Kind: protocol.EndpointLocalRuntime, Locality: protocol.LocalityLocal,
+					Health: protocol.EndpointHealthReady, Auth: protocol.AuthExpired,
+					CostClass: protocol.CostLocalCompute, RequiredSourceExposure: protocol.ExposureLocalOnly,
+				},
+			}
+			return i
+		}()},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -369,6 +403,57 @@ func TestResourceInventorySchemaParity(t *testing.T) {
 					goErr == nil, goErr, schemaErr == nil, schemaErr)
 			}
 		})
+	}
+}
+
+// TestResourceInventorySchemaParity_DocumentedGoOnlyIdentityUniqueness is
+// the independent-review follow-up on WP-M3B-5, round-3 finding 3a: it
+// proves, rather than merely asserts in a comment, that two
+// CognitionEndpointSummary entries sharing an ID but differing in content
+// are a genuine Go/schema parity gap — Go rejects, schema's uniqueItems
+// (byte/value-identity only) accepts — and that this is the intentional,
+// documented Go-only invariant the resource-inventory.schema.json
+// "credential_ref"-adjacent field descriptions now call out, not an
+// oversight the previous round's exact-duplicate-only test cases hid.
+func TestResourceInventorySchemaParity_DocumentedGoOnlyIdentityUniqueness(t *testing.T) {
+	schemas, err := schema.Default()
+	if err != nil {
+		t.Fatalf("failed to compile schemas: %v", err)
+	}
+
+	i := validResourceInventory()
+	i.Profile = &protocol.MachineProfileRef{
+		ProfileID: "mcp-001", MachineFingerprint: i.MachineFingerprint,
+		ObservedAt: validTestTimestamp(), ProbeDepth: protocol.DepthHealth,
+	}
+	i.CognitionEndpoints = []protocol.CognitionEndpointSummary{
+		{
+			ID: "dup", Kind: protocol.EndpointLocalRuntime, Locality: protocol.LocalityLocal,
+			Health: protocol.EndpointHealthReady, Auth: protocol.AuthNotApplicable,
+			CostClass: protocol.CostLocalCompute, RequiredSourceExposure: protocol.ExposureLocalOnly,
+		},
+		{
+			// Same ID, different Health — Go's duplicate-ID check rejects
+			// this regardless of content; uniqueItems does not, since the
+			// two objects are not byte-identical.
+			ID: "dup", Kind: protocol.EndpointLocalRuntime, Locality: protocol.LocalityLocal,
+			Health: protocol.EndpointHealthUnhealthy, Auth: protocol.AuthNotApplicable,
+			CostClass: protocol.CostLocalCompute, RequiredSourceExposure: protocol.ExposureLocalOnly,
+		},
+	}
+
+	goErr := i.Validate()
+	if goErr == nil {
+		t.Fatalf("expected Go to reject a duplicate endpoint ID with differing content")
+	}
+
+	data, err := json.Marshal(i)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	schemaErr := schemas.ValidateBytes(schema.NameResourceInventory, data)
+	if schemaErr != nil {
+		t.Fatalf("expected schema to still accept this (the documented Go-only gap), but schema rejected it: %v", schemaErr)
 	}
 }
 
@@ -618,6 +703,20 @@ func TestDoctorReportValidation_DuplicatesAndInventoryParity(t *testing.T) {
 			t.Fatal("expected error when PrincipalHosts contradicts ResourceInventory.PrincipalHosts")
 		}
 	})
+
+	// Independent-review follow-up on WP-M3B-5, round-3 finding 3c:
+	// principalHostsEqual previously compared only HostID/Installed/Path,
+	// so a report and its embedded inventory could disagree on Version and
+	// both still validate.
+	t.Run("hosts differing only in Version between report and inventory rejected", func(t *testing.T) {
+		r := validReport()
+		h2 := r.PrincipalHosts[0]
+		h2.Version = "9.9.9"
+		r.ResourceInventory.PrincipalHosts = []protocol.PrincipalHostSummary{h2}
+		if err := r.Validate(); err == nil {
+			t.Fatal("expected error when PrincipalHosts.Version contradicts ResourceInventory.PrincipalHosts.Version")
+		}
+	})
 }
 
 func TestDoctorReportSchemaParity(t *testing.T) {
@@ -723,6 +822,32 @@ func TestDoctorReportSchemaParity(t *testing.T) {
 			r.PrincipalHosts = append(r.PrincipalHosts, r.PrincipalHosts[0])
 			return r
 		}},
+		// Independent-review follow-up on WP-M3B-5, round-3 finding 3b: the
+		// same two Go-only endpoint rules as
+		// TestResourceInventorySchemaParity must also hold for
+		// DoctorReport's own (structurally duplicated) discovered_endpoints.
+		{"remote_api endpoint claiming local locality", func() protocol.DoctorReport {
+			r := validReport()
+			ep := protocol.CognitionEndpointSummary{
+				ID: "remote-api-local", Kind: protocol.EndpointRemoteAPI, Locality: protocol.LocalityLocal,
+				Health: protocol.EndpointHealthReady, Auth: protocol.AuthAuthenticated,
+				CostClass: protocol.CostRemoteEconomy, RequiredSourceExposure: protocol.ExposureFocusedSnippets,
+			}
+			r.DiscoveredEndpoints = []protocol.CognitionEndpointSummary{ep}
+			r.ResourceInventory.CognitionEndpoints = []protocol.CognitionEndpointSummary{ep}
+			return r
+		}},
+		{"local_runtime endpoint with expired auth", func() protocol.DoctorReport {
+			r := validReport()
+			ep := protocol.CognitionEndpointSummary{
+				ID: "ollama:small", Kind: protocol.EndpointLocalRuntime, Locality: protocol.LocalityLocal,
+				Health: protocol.EndpointHealthReady, Auth: protocol.AuthExpired,
+				CostClass: protocol.CostLocalCompute, RequiredSourceExposure: protocol.ExposureLocalOnly,
+			}
+			r.DiscoveredEndpoints = []protocol.CognitionEndpointSummary{ep}
+			r.ResourceInventory.CognitionEndpoints = []protocol.CognitionEndpointSummary{ep}
+			return r
+		}},
 	}
 
 	for _, tc := range cases {
@@ -740,4 +865,31 @@ func TestDoctorReportSchemaParity(t *testing.T) {
 			}
 		})
 	}
+
+	// TestDoctorReportSchemaParity_DocumentedGoOnlyIdentityUniqueness's
+	// report-level counterpart (independent-review follow-up on WP-M3B-5,
+	// round-3 finding 3a): two discovered_endpoints entries sharing an ID
+	// but differing in content are rejected by Go, accepted by schema's
+	// value-identity-only uniqueItems — the same intentional, documented gap
+	// as ResourceInventory's, not an oversight.
+	t.Run("documented Go-only identity uniqueness for discovered_endpoints", func(t *testing.T) {
+		r := validReport()
+		dup := r.DiscoveredEndpoints[0]
+		dup.Health = protocol.EndpointHealthUnhealthy
+		r.DiscoveredEndpoints = append(r.DiscoveredEndpoints, dup)
+		r.ResourceInventory.CognitionEndpoints = r.DiscoveredEndpoints
+
+		goErr := r.Validate()
+		if goErr == nil {
+			t.Fatalf("expected Go to reject a duplicate endpoint ID with differing content")
+		}
+		data, err := json.Marshal(r)
+		if err != nil {
+			t.Fatalf("marshal: %v", err)
+		}
+		schemaErr := schemas.ValidateBytes(schema.NameDoctorReport, data)
+		if schemaErr != nil {
+			t.Fatalf("expected schema to still accept this (the documented Go-only gap), but schema rejected it: %v", schemaErr)
+		}
+	})
 }

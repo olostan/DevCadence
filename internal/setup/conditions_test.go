@@ -211,7 +211,7 @@ type stubEndpointAuthChecker struct {
 	err           error
 }
 
-func (s stubEndpointAuthChecker) CheckEndpointAuthenticated(ctx context.Context, endpointID string) (bool, string, error) {
+func (s stubEndpointAuthChecker) CheckEndpointAuthenticated(ctx context.Context, endpointID, credentialRefID string) (bool, string, error) {
 	return s.authenticated, s.detail, s.err
 }
 
@@ -241,7 +241,7 @@ func TestEndpointHealthyAndEndpointAuthenticatedAreIndependent(t *testing.T) {
 
 	authPassed, detail, err := EvaluateCondition(context.Background(), deps, protocol.Condition{
 		Kind:                  protocol.CondKindEndpointAuthenticated,
-		EndpointAuthenticated: &protocol.EndpointOperand{EndpointID: "ep-001"},
+		EndpointAuthenticated: &protocol.EndpointOperand{EndpointID: "ep-001", CredentialRefID: "claude-cli-ref"},
 	})
 	if err != nil {
 		t.Fatalf("EvaluateCondition(endpoint_authenticated): %v", err)
@@ -255,7 +255,7 @@ func TestEvaluateConditionEndpointAuthenticatedUsesConfiguredChecker(t *testing.
 	deps := EvaluatorDeps{EndpointAuth: stubEndpointAuthChecker{authenticated: true, detail: "logged in"}}
 	passed, detail, err := EvaluateCondition(context.Background(), deps, protocol.Condition{
 		Kind:                  protocol.CondKindEndpointAuthenticated,
-		EndpointAuthenticated: &protocol.EndpointOperand{EndpointID: "ep-001"},
+		EndpointAuthenticated: &protocol.EndpointOperand{EndpointID: "ep-001", CredentialRefID: "claude-cli-ref"},
 	})
 	if err != nil {
 		t.Fatalf("EvaluateCondition: %v", err)
@@ -265,12 +265,19 @@ func TestEvaluateConditionEndpointAuthenticatedUsesConfiguredChecker(t *testing.
 	}
 }
 
+// TestCredentialsEndpointAuthChecker_EvaluatesAuthViaCredentialManager is the
+// independent-review follow-up on WP-M3B-5, round-3 finding 2: the checker
+// must resolve a condition's explicit CredentialRefID against the actual
+// configured CredentialRef index, never guess a cli_session locator from the
+// endpoint ID. Regressions specifically cover an endpoint ID that differs
+// from its credential's locator, and a non-CLI (env_var) CredentialRef kind
+// for a remote API endpoint.
 func TestCredentialsEndpointAuthChecker_EvaluatesAuthViaCredentialManager(t *testing.T) {
 	ctx := context.Background()
 	clk := clock.NewFake(time.Date(2026, 9, 25, 12, 0, 0, 0, time.UTC), 0)
 	adapterClaude := &credentials.StaticCLIAuthAdapter{
 		ID:     "adapter-claude",
-		Target: "claude",
+		Target: "claude-handle",
 		Status: protocol.AuthStatusAuthenticated,
 		Detail: "claude session active",
 	}
@@ -282,16 +289,42 @@ func TestCredentialsEndpointAuthChecker_EvaluatesAuthViaCredentialManager(t *tes
 	}
 	mgr, err := credentials.NewManager(credentials.Options{
 		Clock:       clk,
+		Env:         credentials.NewMapEnvReader(map[string]string{"REMOTE_API_KEY": "present"}),
 		CLIAdapters: []credentials.CLISessionAuthAdapter{adapterClaude, adapterCodex},
 	})
 	if err != nil {
 		t.Fatalf("credentials.NewManager: %v", err)
 	}
 
-	checker := NewCredentialsEndpointAuthChecker(mgr)
+	refs := []protocol.CredentialRef{
+		{
+			SchemaVersion: protocol.SchemaVersion1,
+			// RefID deliberately differs from both the endpoint ID below
+			// and the CLI adapter's own Locator/Target, proving the
+			// checker resolves by the explicit binding rather than
+			// assuming any of those strings are interchangeable.
+			RefID:   "claude-cli-ref",
+			Kind:    protocol.CredRefCLISession,
+			Locator: "claude-handle",
+		},
+		{
+			SchemaVersion: protocol.SchemaVersion1,
+			RefID:         "codex-cli-ref",
+			Kind:          protocol.CredRefCLISession,
+			Locator:       "codex",
+		},
+		{
+			SchemaVersion: protocol.SchemaVersion1,
+			RefID:         "remote-api-ref",
+			Kind:          protocol.CredRefEnvVar,
+			Locator:       "REMOTE_API_KEY",
+		},
+	}
 
-	t.Run("authenticated endpoint with cli: prefix", func(t *testing.T) {
-		authed, detail, err := checker.CheckEndpointAuthenticated(ctx, "cli:claude")
+	checker := NewCredentialsEndpointAuthChecker(mgr, refs)
+
+	t.Run("endpoint ID differs from credential locator", func(t *testing.T) {
+		authed, detail, err := checker.CheckEndpointAuthenticated(ctx, "cli:claude-code", "claude-cli-ref")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -300,18 +333,8 @@ func TestCredentialsEndpointAuthChecker_EvaluatesAuthViaCredentialManager(t *tes
 		}
 	})
 
-	t.Run("authenticated endpoint bare handle", func(t *testing.T) {
-		authed, detail, err := checker.CheckEndpointAuthenticated(ctx, "claude")
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if !authed || detail != "claude session active" {
-			t.Errorf("authed=%v detail=%q, want true/\"claude session active\"", authed, detail)
-		}
-	})
-
-	t.Run("unauthenticated endpoint", func(t *testing.T) {
-		authed, detail, err := checker.CheckEndpointAuthenticated(ctx, "cli:codex")
+	t.Run("unauthenticated CLI endpoint", func(t *testing.T) {
+		authed, detail, err := checker.CheckEndpointAuthenticated(ctx, "cli:codex", "codex-cli-ref")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -320,13 +343,41 @@ func TestCredentialsEndpointAuthChecker_EvaluatesAuthViaCredentialManager(t *tes
 		}
 	})
 
-	t.Run("unrecognized endpoint", func(t *testing.T) {
-		authed, _, err := checker.CheckEndpointAuthenticated(ctx, "cli:unknown-cli")
+	t.Run("expired remote API endpoint bound to a non-CLI env_var CredentialRef", func(t *testing.T) {
+		// env_var presence is only ever indeterminate evidence (never
+		// AuthStatusAuthenticated — Manager.CheckCredential's own
+		// documented rule), so this proves the checker supports a
+		// CredentialRefKind other than cli_session at all, rather than
+		// forcing CLI semantics onto a remote API endpoint.
+		authed, _, err := checker.CheckEndpointAuthenticated(ctx, "remote:some-provider", "remote-api-ref")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if authed {
-			t.Errorf("authed=%v, want false for unknown endpoint", authed)
+			t.Errorf("authed=%v, want false: env_var presence is indeterminate, never authenticated", authed)
+		}
+	})
+
+	t.Run("empty CredentialRefID fails closed without guessing", func(t *testing.T) {
+		authed, detail, err := checker.CheckEndpointAuthenticated(ctx, "cli:claude-code", "")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if authed {
+			t.Errorf("authed=%v, want false for an endpoint with no configured credential binding", authed)
+		}
+		if detail == "" {
+			t.Errorf("expected a non-empty detail explaining no binding is configured")
+		}
+	})
+
+	t.Run("unresolved CredentialRefID fails closed without guessing", func(t *testing.T) {
+		authed, _, err := checker.CheckEndpointAuthenticated(ctx, "cli:claude-code", "no-such-ref")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if authed {
+			t.Errorf("authed=%v, want false for a CredentialRefID absent from the configured index", authed)
 		}
 	})
 }
@@ -357,6 +408,9 @@ func TestExecutor_ProductionWiredEndpointAuthEvaluatesCondition(t *testing.T) {
 		Clock:             clk,
 		IDs:               seq,
 		CredentialManager: mgr,
+		CredentialRefs: []protocol.CredentialRef{
+			{SchemaVersion: protocol.SchemaVersion1, RefID: "claude-cli-ref", Kind: protocol.CredRefCLISession, Locator: "claude"},
+		},
 		// EndpointAuth is intentionally nil to prove NewExecutor wires it via CredentialManager
 	})
 	if err != nil {
@@ -366,7 +420,7 @@ func TestExecutor_ProductionWiredEndpointAuthEvaluatesCondition(t *testing.T) {
 	conds := []protocol.Condition{
 		{
 			Kind:                  protocol.CondKindEndpointAuthenticated,
-			EndpointAuthenticated: &protocol.EndpointOperand{EndpointID: "cli:claude"},
+			EndpointAuthenticated: &protocol.EndpointOperand{EndpointID: "cli:claude", CredentialRefID: "claude-cli-ref"},
 		},
 	}
 	passed, detail, err := exec.CheckPostconditions(ctx, conds)

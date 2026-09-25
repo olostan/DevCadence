@@ -54,6 +54,7 @@ func Project(profile protocol.MachineCapabilityProfile, profileRef string) proto
 			Auth:                   endpoint.Auth,
 			CostClass:              endpoint.CostClass,
 			RequiredSourceExposure: endpoint.RequiredSourceExposure,
+			CredentialRef:          endpoint.CredentialRef,
 		}
 		if endpoint.Acceleration != nil && endpoint.Locality == protocol.LocalityLocal {
 			backend := endpoint.Acceleration.Backend

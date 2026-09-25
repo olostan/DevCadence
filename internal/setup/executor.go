@@ -21,13 +21,23 @@ import (
 // than $DEVCADENCE_HOME (ADR-0014 §4) by construction, not by caller
 // discipline.
 type ExecutorOptions struct {
-	Runner            CommandRunner
-	Home              string
-	Clock             clock.Clock
-	IDs               ids.Source
-	CredentialManager *credentials.Manager  // optional; provides default EndpointAuth via CredentialsEndpointAuthChecker
-	EndpointHealth    EndpointHealthChecker // optional; see conditions.go
-	EndpointAuth      EndpointAuthChecker   // optional; see conditions.go
+	Runner CommandRunner
+	Home   string
+	Clock  clock.Clock
+	IDs    ids.Source
+	// CredentialManager, when set together with CredentialRefs, provides the
+	// default EndpointAuth via CredentialsEndpointAuthChecker. A
+	// CredentialManager with no real auth adapters configured cannot prove
+	// anything authenticated; NewExecutor does not fabricate one (see that
+	// function's doc comment — independent-review follow-up on WP-M3B-5,
+	// round-3 finding 2).
+	CredentialManager *credentials.Manager
+	// CredentialRefs is the explicit set of configured protocol.CredentialRef
+	// values (e.g. DoctorOptions.CredentialRefs) the default EndpointAuth
+	// resolves a condition's CredentialRefID against.
+	CredentialRefs []protocol.CredentialRef
+	EndpointHealth EndpointHealthChecker // optional; see conditions.go
+	EndpointAuth   EndpointAuthChecker   // optional; see conditions.go
 	// ModelRuntimes overrides the local model runtime adapter set; nil
 	// means DefaultModelRuntimeAdapters() (Ollama and MLX as equal
 	// peers). Tests set this to register a fake adapter, or to configure
@@ -83,19 +93,16 @@ func NewExecutor(opts ExecutorOptions) (*Executor, error) {
 		return nil, err
 	}
 
+	// A CredentialManager is only wired as a real EndpointAuth default when
+	// the caller actually supplies one (with real auth adapters already
+	// configured on it) — never constructed here from just a Runner. A
+	// credentials.Manager built with a Runner but no CLIAdapters can never
+	// prove anything authenticated, so treating that as "production wiring"
+	// would be misleading rather than a genuine fail-closed default
+	// (independent-review follow-up on WP-M3B-5, round-3 finding 2).
 	endpointAuth := opts.EndpointAuth
-	if endpointAuth == nil {
-		if opts.CredentialManager != nil {
-			endpointAuth = NewCredentialsEndpointAuthChecker(opts.CredentialManager)
-		} else if opts.Runner != nil {
-			mgr, err := credentials.NewManager(credentials.Options{
-				Clock:  opts.Clock,
-				Runner: opts.Runner,
-			})
-			if err == nil {
-				endpointAuth = NewCredentialsEndpointAuthChecker(mgr)
-			}
-		}
+	if endpointAuth == nil && opts.CredentialManager != nil {
+		endpointAuth = NewCredentialsEndpointAuthChecker(opts.CredentialManager, opts.CredentialRefs)
 	}
 
 	return &Executor{
