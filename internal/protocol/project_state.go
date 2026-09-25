@@ -460,6 +460,16 @@ func (e CognitionEndpointSummary) Validate() error {
 		return enumError(kind, "acceleration_backend",
 			string(*e.AccelerationBackend), "cpu", "metal", "cuda", "rocm", "vulkan", "unknown")
 	}
+	// CredentialRef claims to be a WP-M3B-4 CredentialRef.RefID, not an
+	// arbitrary opaque string, so it must satisfy the same bounded
+	// identifier contract every other RefID-shaped field does — otherwise
+	// this durable projection could carry an arbitrary or secret-shaped
+	// value while claiming to be a safe RefID (independent-review
+	// follow-up on WP-M3B-5, round-4 finding 1's "smaller validation
+	// issue").
+	if err := validateOpaqueID(kind, "credential_ref", e.CredentialRef, 128, false); err != nil {
+		return err
+	}
 	// A remote endpoint cannot have verified local acceleration; the
 	// inference is not happening here.
 	if e.AccelerationVerified && e.Locality != LocalityLocal {

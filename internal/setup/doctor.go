@@ -62,6 +62,18 @@ type DoctorOptions struct {
 	// CredentialRefs are the operator-configured references to check.
 	// Doctor never invents credential references of its own.
 	CredentialRefs []protocol.CredentialRef
+	// EndpointCredentialRefs is an explicit, operator-configured binding
+	// from a discovered CognitionEndpoint's ID to the CredentialRef.RefID
+	// (among CredentialRefs above) that verifies its authentication. Doctor
+	// applies this when constructing CognitionEndpointSummary.CredentialRef
+	// instead of ever guessing a binding from the endpoint ID itself — the
+	// coding-CLI adapter deliberately never invents a CredentialRef, so
+	// without an explicit binding here (or one a cognition adapter itself
+	// declared), a discovered CLI endpoint's CredentialRef stays empty and
+	// Planner will not generate a machine-verifiable endpoint_authenticated
+	// remediation for it (independent-review follow-up on WP-M3B-5,
+	// round-4 finding 1).
+	EndpointCredentialRefs map[string]string
 }
 
 // Doctor executes non-invasive diagnostic checks across the environment, state root,
@@ -77,6 +89,7 @@ type Doctor struct {
 	policy           *cognition.Policy
 	credManager      *credentials.Manager
 	credRefs         []protocol.CredentialRef
+	endpointCredRefs map[string]string
 }
 
 // NewDoctor returns a Doctor engine.
@@ -117,6 +130,7 @@ func NewDoctor(opts DoctorOptions) (*Doctor, error) {
 		policy:           policy,
 		credManager:      opts.CredentialManager,
 		credRefs:         opts.CredentialRefs,
+		endpointCredRefs: opts.EndpointCredentialRefs,
 	}, nil
 }
 
@@ -721,6 +735,15 @@ func (d *Doctor) discoverEndpoints(ctx context.Context, facts protocol.Environme
 			backend = &ep.Acceleration.Backend
 			isVerified = ep.AccelerationVerified()
 		}
+		// An explicit operator-configured binding (EndpointCredentialRefs)
+		// takes precedence over whatever a cognition adapter opportunistically
+		// declared on the endpoint itself: it is the deliberate, reviewed
+		// source of truth, not a best-effort discovery byproduct
+		// (independent-review follow-up on WP-M3B-5, round-4 finding 1).
+		credRef := ep.CredentialRef
+		if bound, ok := d.endpointCredRefs[ep.ID]; ok && bound != "" {
+			credRef = bound
+		}
 		summary := protocol.CognitionEndpointSummary{
 			ID:                     ep.ID,
 			Kind:                   ep.Kind,
@@ -731,7 +754,7 @@ func (d *Doctor) discoverEndpoints(ctx context.Context, facts protocol.Environme
 			RequiredSourceExposure: ep.RequiredSourceExposure,
 			AccelerationVerified:   isVerified,
 			AccelerationBackend:    backend,
-			CredentialRef:          ep.CredentialRef,
+			CredentialRef:          credRef,
 		}
 		summaries = append(summaries, summary)
 

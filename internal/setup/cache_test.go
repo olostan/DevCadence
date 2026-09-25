@@ -2,6 +2,7 @@ package setup
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -546,4 +547,208 @@ func TestReadProfileByID_RejectsContentIDMismatch(t *testing.T) {
 	if found {
 		t.Errorf("expected ReadProfileByID to reject content whose own ProfileID (%q) does not match the requested ID (%q)", profile.ProfileID, "mcp-spoofed-id")
 	}
+}
+
+// TestArchiveProfile_RefusesToOverwriteUnprovableExistingEntry is the
+// independent-review follow-up on WP-M3B-5, round-4 finding 3: the
+// "immutable by ProfileID" archive must fail closed rather than overwrite
+// whenever it cannot prove the existing entry equals the new write —
+// malformed JSON, an invalid envelope/profile, or a decoded ProfileID that
+// doesn't match the path are all "cannot prove identical," never license
+// to replace.
+func TestArchiveProfile_RefusesToOverwriteUnprovableExistingEntry(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 9, 25, 10, 0, 0, 0, time.UTC)
+	clk := clock.NewFake(now, 0)
+
+	facts := protocol.EnvironmentFacts{
+		Host:           protocol.HostFacts{Family: protocol.OSLinux, Arch: "amd64"},
+		Virtualization: protocol.VirtualizationFacts{Container: protocol.ContainerNone},
+	}
+	newProfile := protocol.MachineCapabilityProfile{
+		SchemaVersion:         protocol.SchemaVersion1,
+		ProfileID:             "mcp-target-id",
+		MachineFingerprint:    "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+		ObservedAt:            protocol.NewTimestamp(now),
+		KnowledgeRevision:     "2026-09-22",
+		ProbeDepth:            protocol.DepthHealth,
+		Assessment:            protocol.AssessmentReady,
+		Environment:           facts,
+		AcceleratorCandidates: []protocol.AcceleratorCandidate{},
+	}
+
+	cases := []struct {
+		name          string
+		writeExisting func(t *testing.T, profilesDir string)
+	}{
+		{"malformed JSON", func(t *testing.T, profilesDir string) {
+			t.Helper()
+			path := filepath.Join(profilesDir, "mcp-target-id.json")
+			if err := os.WriteFile(path, []byte("{not valid json"), 0600); err != nil {
+				t.Fatalf("write malformed file: %v", err)
+			}
+		}},
+		{"valid envelope, invalid profile content", func(t *testing.T, profilesDir string) {
+			t.Helper()
+			env := CacheEnvelope[protocol.MachineCapabilityProfile]{
+				SchemaVersion:      protocol.SchemaVersion1,
+				CreatedAt:          protocol.NewTimestamp(now),
+				ExpiresAt:          protocol.NewTimestamp(now.Add(time.Hour)),
+				MachineFingerprint: newProfile.MachineFingerprint,
+				// Missing required fields (e.g. ProfileID, KnowledgeRevision)
+				// makes this fail MachineCapabilityProfile.Validate.
+				Data: protocol.MachineCapabilityProfile{SchemaVersion: protocol.SchemaVersion1},
+			}
+			bytes, err := json.Marshal(env)
+			if err != nil {
+				t.Fatalf("marshal: %v", err)
+			}
+			path := filepath.Join(profilesDir, "mcp-target-id.json")
+			if err := os.WriteFile(path, bytes, 0600); err != nil {
+				t.Fatalf("write invalid-content file: %v", err)
+			}
+		}},
+		{"valid profile, mismatched ProfileID", func(t *testing.T, profilesDir string) {
+			t.Helper()
+			other := newProfile
+			other.ProfileID = "mcp-different-id"
+			env := CacheEnvelope[protocol.MachineCapabilityProfile]{
+				SchemaVersion:      protocol.SchemaVersion1,
+				CreatedAt:          protocol.NewTimestamp(now),
+				ExpiresAt:          protocol.NewTimestamp(now.Add(time.Hour)),
+				MachineFingerprint: other.MachineFingerprint,
+				Data:               other,
+			}
+			bytes, err := json.Marshal(env)
+			if err != nil {
+				t.Fatalf("marshal: %v", err)
+			}
+			// Filed under mcp-target-id.json even though its own decoded
+			// ProfileID says mcp-different-id.
+			path := filepath.Join(profilesDir, "mcp-target-id.json")
+			if err := os.WriteFile(path, bytes, 0600); err != nil {
+				t.Fatalf("write mismatched-id file: %v", err)
+			}
+		}},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			cm, err := NewCacheManager(tmpDir, clk, 24*time.Hour)
+			if err != nil {
+				t.Fatalf("NewCacheManager: %v", err)
+			}
+			profilesDir := filepath.Join(tmpDir, "profiles")
+			if err := os.MkdirAll(profilesDir, 0700); err != nil {
+				t.Fatalf("mkdir profiles: %v", err)
+			}
+			tc.writeExisting(t, profilesDir)
+
+			before, readErr := os.ReadFile(filepath.Join(profilesDir, "mcp-target-id.json"))
+			if readErr != nil {
+				t.Fatalf("read existing fixture: %v", readErr)
+			}
+
+			err = WriteProfile(ctx, cm, newProfile, 24*time.Hour)
+			if err == nil {
+				t.Fatalf("expected archiveProfile to refuse to overwrite an unprovable existing entry")
+			}
+			if errs.CategoryOf(err) != errs.CategoryConflict {
+				t.Errorf("expected CategoryConflict, got: %v", err)
+			}
+
+			after, readErr := os.ReadFile(filepath.Join(profilesDir, "mcp-target-id.json"))
+			if readErr != nil {
+				t.Fatalf("read fixture after refused write: %v", readErr)
+			}
+			if string(before) != string(after) {
+				t.Errorf("existing archive bytes changed despite the write being refused")
+			}
+		})
+	}
+}
+
+// TestReadProfileByRef_CrossChecksFullReference is the independent-review
+// follow-up on WP-M3B-5, round-4 finding 3's ask that a resolver not
+// silently ignore most of MachineProfileRef: it must cross-check
+// MachineFingerprint, ObservedAt, and ProbeDepth, not only ProfileID.
+func TestReadProfileByRef_CrossChecksFullReference(t *testing.T) {
+	ctx := context.Background()
+	tmpDir := t.TempDir()
+	now := time.Date(2026, 9, 25, 10, 0, 0, 0, time.UTC)
+	clk := clock.NewFake(now, 0)
+	cm, err := NewCacheManager(tmpDir, clk, 24*time.Hour)
+	if err != nil {
+		t.Fatalf("NewCacheManager: %v", err)
+	}
+
+	facts := protocol.EnvironmentFacts{
+		Host:           protocol.HostFacts{Family: protocol.OSLinux, Arch: "amd64"},
+		Virtualization: protocol.VirtualizationFacts{Container: protocol.ContainerNone},
+	}
+	profile := protocol.MachineCapabilityProfile{
+		SchemaVersion:         protocol.SchemaVersion1,
+		ProfileID:             "mcp-ref-001",
+		MachineFingerprint:    "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+		ObservedAt:            protocol.NewTimestamp(now),
+		KnowledgeRevision:     "2026-09-22",
+		ProbeDepth:            protocol.DepthHealth,
+		Assessment:            protocol.AssessmentReady,
+		Environment:           facts,
+		AcceleratorCandidates: []protocol.AcceleratorCandidate{},
+	}
+	if err := WriteProfile(ctx, cm, profile, 24*time.Hour); err != nil {
+		t.Fatalf("WriteProfile: %v", err)
+	}
+
+	validRef := protocol.MachineProfileRef{
+		ProfileID:          profile.ProfileID,
+		MachineFingerprint: profile.MachineFingerprint,
+		ObservedAt:         profile.ObservedAt,
+		ProbeDepth:         profile.ProbeDepth,
+	}
+	got, found, err := ReadProfileByRef(ctx, cm, validRef)
+	if err != nil || !found {
+		t.Fatalf("expected valid ref to resolve: found=%v, err=%v", found, err)
+	}
+	if got.ProfileID != profile.ProfileID {
+		t.Errorf("resolved ProfileID = %q, want %q", got.ProfileID, profile.ProfileID)
+	}
+
+	t.Run("fingerprint mismatch", func(t *testing.T) {
+		ref := validRef
+		ref.MachineFingerprint = "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+		_, found, err := ReadProfileByRef(ctx, cm, ref)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if found {
+			t.Errorf("expected mismatched MachineFingerprint to fail resolution")
+		}
+	})
+
+	t.Run("observed_at mismatch", func(t *testing.T) {
+		ref := validRef
+		ref.ObservedAt = protocol.NewTimestamp(now.Add(time.Hour))
+		_, found, err := ReadProfileByRef(ctx, cm, ref)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if found {
+			t.Errorf("expected mismatched ObservedAt to fail resolution")
+		}
+	})
+
+	t.Run("probe_depth mismatch", func(t *testing.T) {
+		ref := validRef
+		ref.ProbeDepth = protocol.DepthInference
+		_, found, err := ReadProfileByRef(ctx, cm, ref)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if found {
+			t.Errorf("expected mismatched ProbeDepth to fail resolution")
+		}
+	})
 }

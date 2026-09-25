@@ -334,26 +334,48 @@ func archiveProfile(ctx context.Context, c *CacheManager, profile protocol.Machi
 	}
 	defer unlock(lockFile)
 
-	// The profiles/ store is immutable by ProfileID: once a ProfileID has been
-	// archived, a later write for the same ID must be a no-op if the content
-	// is identical (idempotent retry) and must fail closed if the content
-	// differs (the durable ResourceInventory.Profile reference would
-	// otherwise silently change meaning for every past inventory that cites
-	// this ProfileID — independent-review follow-up on WP-M3B-5, finding 1c).
-	if existingBytes, readErr := os.ReadFile(path); readErr == nil {
+	// The profiles/ store is immutable by ProfileID: once a path for a
+	// ProfileID exists, this function may EITHER prove the new write is
+	// identical (idempotent no-op) OR refuse to touch it — it must never
+	// fall through to overwriting merely because the existing entry could
+	// not be proven identical (a malformed file, an unparseable envelope,
+	// content that fails MachineCapabilityProfile.Validate, or a decoded
+	// ProfileID that doesn't match this path are all "cannot prove
+	// identical," not "safe to replace" — independent-review follow-up on
+	// WP-M3B-5, round-3 finding 1c and round-4 finding 3's tightening of
+	// it).
+	existingBytes, readErr := os.ReadFile(path)
+	switch {
+	case readErr == nil:
 		var existingEnv CacheEnvelope[protocol.MachineCapabilityProfile]
-		if jsonErr := json.Unmarshal(existingBytes, &existingEnv); jsonErr == nil {
-			existingCanonical, existingCanonErr := protocol.CanonicalJSON(existingEnv.Data)
-			newCanonical, newCanonErr := protocol.CanonicalJSON(profile)
-			if existingCanonErr == nil && newCanonErr == nil {
-				if string(existingCanonical) == string(newCanonical) {
-					return nil
-				}
-				return errs.New(errs.CategoryConflict,
-					"setup cache: profile_id %q already archived with different content; ProfileID must be a stable content identity", profile.ProfileID)
-			}
+		if jsonErr := json.Unmarshal(existingBytes, &existingEnv); jsonErr != nil {
+			return errs.New(errs.CategoryConflict,
+				"setup cache: profile_id %q already has an unparseable archive entry at %s; refusing to overwrite", profile.ProfileID, path)
 		}
-	} else if !errors.Is(readErr, fs.ErrNotExist) {
+		if valErr := existingEnv.Data.Validate(); valErr != nil {
+			return errs.New(errs.CategoryConflict,
+				"setup cache: profile_id %q already has an invalid archived profile at %s (%v); refusing to overwrite", profile.ProfileID, path, valErr)
+		}
+		if existingEnv.Data.ProfileID != profile.ProfileID {
+			return errs.New(errs.CategoryConflict,
+				"setup cache: profile_id %q's archive file contains profile_id %q instead; refusing to overwrite", profile.ProfileID, existingEnv.Data.ProfileID)
+		}
+		existingCanonical, existingCanonErr := protocol.CanonicalJSON(existingEnv.Data)
+		if existingCanonErr != nil {
+			return errs.Wrap(errs.CategoryInternal, existingCanonErr, "canonicalize existing archived profile %s", profile.ProfileID)
+		}
+		newCanonical, newCanonErr := protocol.CanonicalJSON(profile)
+		if newCanonErr != nil {
+			return errs.Wrap(errs.CategoryInternal, newCanonErr, "canonicalize profile %s", profile.ProfileID)
+		}
+		if string(existingCanonical) == string(newCanonical) {
+			return nil
+		}
+		return errs.New(errs.CategoryConflict,
+			"setup cache: profile_id %q already archived with different content; ProfileID must be a stable content identity", profile.ProfileID)
+	case errors.Is(readErr, fs.ErrNotExist):
+		// No existing entry: proceed to create it below.
+	default:
 		return errs.Wrap(errs.CategoryInternal, readErr, "read existing profile cache file %s", path)
 	}
 
@@ -468,4 +490,31 @@ func ReadProfileByID(ctx context.Context, c *CacheManager, profileID string) (pr
 	}
 
 	return env.Data, true, nil
+}
+
+// ReadProfileByRef resolves a protocol.MachineProfileRef to its full archived
+// MachineCapabilityProfile, cross-checking every field the reference
+// carries (ProfileID, MachineFingerprint, ObservedAt, ProbeDepth) against
+// the loaded content — not only the ProfileID ReadProfileByID alone checks.
+// A consumer resolving a durable ResourceInventory.Profile reference should
+// prefer this over ReadProfileByID so a future drift between the reference
+// and the archive (e.g. two different observations that happened to share
+// a ProfileID, or a reference that predates an archive schema change) is
+// caught rather than silently ignored (independent-review follow-up on
+// WP-M3B-5, round-4 finding 3).
+func ReadProfileByRef(ctx context.Context, c *CacheManager, ref protocol.MachineProfileRef) (protocol.MachineCapabilityProfile, bool, error) {
+	profile, found, err := ReadProfileByID(ctx, c, ref.ProfileID)
+	if err != nil || !found {
+		return protocol.MachineCapabilityProfile{}, found, err
+	}
+	if profile.MachineFingerprint != ref.MachineFingerprint {
+		return protocol.MachineCapabilityProfile{}, false, nil
+	}
+	if !profile.ObservedAt.Time().Equal(ref.ObservedAt.Time()) {
+		return protocol.MachineCapabilityProfile{}, false, nil
+	}
+	if profile.ProbeDepth != ref.ProbeDepth {
+		return protocol.MachineCapabilityProfile{}, false, nil
+	}
+	return profile, true, nil
 }

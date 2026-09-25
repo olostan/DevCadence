@@ -618,6 +618,14 @@ func (c Condition) Validate() error {
 		if c.EndpointAuthenticated == nil || c.EndpointAuthenticated.EndpointID == "" {
 			return errs.New(errs.CategoryInvalidArgument, "%s: endpoint_id is required", kind)
 		}
+		// A machine-evaluable authentication condition with no configured
+		// credential binding is not evidence, it's a condition that can
+		// never be verified — a plan must not claim it has one when it
+		// does not (independent-review follow-up on WP-M3B-5, round-4
+		// finding 1).
+		if c.EndpointAuthenticated.CredentialRefID == "" {
+			return errs.New(errs.CategoryInvalidArgument, "%s: credential_ref_id is required for endpoint_authenticated", kind)
+		}
 	case CondKindModelPresent:
 		if c.ModelPresent == nil {
 			return errs.New(errs.CategoryInvalidArgument, "%s: model_present operand is required", kind)

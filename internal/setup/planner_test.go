@@ -920,6 +920,73 @@ func TestPlannerGeneratesReauthenticateActionForExpiredEndpoint(t *testing.T) {
 	}
 }
 
+// TestPlannerSkipsReauthenticateActionWithoutCredentialBinding is the
+// independent-review follow-up on WP-M3B-5, round-4 finding 1: an expired
+// endpoint with no known CredentialRef binding must not get a reauth action
+// containing an endpoint_authenticated condition that can never be
+// verified. This mirrors the existing NoCodingEndpoint asymmetry
+// (TestPlannerDoesNotActionNoCodingEndpointFinding) — the AuthExpired
+// finding is still expected to surface via Doctor's own diagnostics; only
+// the plan-level machine-actionable remediation is withheld.
+func TestPlannerSkipsReauthenticateActionWithoutCredentialBinding(t *testing.T) {
+	clk := clock.NewFake(time.Date(2026, 9, 22, 12, 0, 0, 0, time.UTC), 0)
+	seq := ids.NewSequential()
+
+	planner, err := NewPlanner(PlannerOptions{Clock: clk, IDs: seq})
+	if err != nil {
+		t.Fatalf("NewPlanner: %v", err)
+	}
+
+	profile := protocol.ProfileCloudCognition
+	report := &protocol.DoctorReport{
+		SchemaVersion:      protocol.SchemaVersion1,
+		ReportID:           "doc_000000000000000000000010",
+		MachineFingerprint: "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+		ObservedAt:         protocol.NewTimestamp(clk.Now()),
+		Readiness:          protocol.ReadinessActionRequired,
+		EvaluationScope: protocol.ReadinessEvaluationScope{
+			TargetProfile:  &profile,
+			RequiredRoles:  []string{"implementation"},
+			EvidenceStatus: "live",
+		},
+		Findings: []protocol.DiagnosticFinding{
+			{
+				Category: "auth",
+				Severity: SeverityWarning,
+				Code:     FindingCodeAuthExpired,
+				Title:    "Authentication expired: claude-cli",
+				Detail:   "Endpoint claude-cli auth status is expired",
+			},
+		},
+		DiscoveredEndpoints: []protocol.CognitionEndpointSummary{
+			{
+				ID:                     "claude-cli",
+				Kind:                   protocol.EndpointAuthenticatedCLI,
+				Locality:               protocol.LocalityRemote,
+				Health:                 protocol.EndpointHealthUnhealthy,
+				Auth:                   protocol.AuthExpired,
+				CostClass:              protocol.CostSubscriptionIncluded,
+				RequiredSourceExposure: protocol.ExposureFocusedSnippets,
+				// No CredentialRef configured — the common case for a
+				// discovered CLI when no explicit operator binding exists.
+			},
+		},
+	}
+
+	plan, err := planner.Plan(report, protocol.TargetAll, protocol.ProfileCloudCognition)
+	if err != nil {
+		t.Fatalf("planner.Plan: %v", err)
+	}
+	if err := plan.Validate(); err != nil {
+		t.Fatalf("plan.Validate: %v", err)
+	}
+	for _, act := range plan.Actions {
+		if act.RecipeID == "recipe.manual.reauthenticate" {
+			t.Fatalf("expected no reauthenticate action for an endpoint with no configured credential binding, got: %+v", act)
+		}
+	}
+}
+
 // TestPlannerDoesNotActionNoCodingEndpointFinding proves
 // FindingCodeNoCodingEndpoint never produces a SetupAction — there is no
 // endpoint to name in a remediation, and inventing a generic

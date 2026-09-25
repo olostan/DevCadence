@@ -141,12 +141,13 @@
             "endpoint_authenticated": {
               "type": "object",
               "additionalProperties": false,
-              "required": ["endpoint_id"],
+              "required": ["endpoint_id", "credential_ref_id"],
               "properties": {
                 "endpoint_id": { "type": "string" },
                 "credential_ref_id": {
                   "type": "string",
-                  "description": "Explicit, non-secret CredentialRef.RefID this endpoint is bound to. Empty/absent means no configured binding is known; a checker must treat that as unverifiable evidence, never guess a binding from endpoint_id (independent-review follow-up on WP-M3B-5, round-3 finding 2)."
+                  "minLength": 1,
+                  "description": "Explicit, non-secret CredentialRef.RefID this endpoint is bound to. Required: a machine-evaluable authentication condition with no configured binding can never be verified, so a plan must not claim to have one when it does not — never a locator guessed from endpoint_id (independent-review follow-up on WP-M3B-5, round-3 finding 2 and round-4 finding 1)."
                 }
               }
             }

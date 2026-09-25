@@ -239,9 +239,22 @@ func (p *Planner) Plan(report *protocol.DoctorReport, target protocol.SetupTarge
 	// on, and inventing a generic "install and authenticate some coding
 	// CLI" action would mean recommending a specific provider, which the
 	// WP-M3B-5 MUST constraint forbids (see that EWP's §3).
+	//
+	// Same asymmetry now also applies per-endpoint: an expired endpoint
+	// with no known ep.CredentialRef (Doctor's DoctorOptions.
+	// EndpointCredentialRefs binding, or one a cognition adapter itself
+	// declared) gets no reauth action at all, rather than one carrying an
+	// endpoint_authenticated condition that can never be verified. The
+	// AuthExpired finding still surfaces from discoverEndpoints either
+	// way — only the machine-actionable remediation is withheld when it
+	// cannot be made truthful (independent-review follow-up on WP-M3B-5,
+	// round-4 finding 1).
 	if target == protocol.TargetAll || target == protocol.TargetAuth {
 		for _, ep := range report.DiscoveredEndpoints {
 			if ep.Auth != protocol.AuthExpired {
+				continue
+			}
+			if ep.CredentialRef == "" {
 				continue
 			}
 			actID := fmt.Sprintf("act_auth_%04d", actionIndex)

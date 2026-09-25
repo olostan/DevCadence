@@ -58,7 +58,12 @@
           "type": ["string", "null"],
           "enum": ["cpu", "metal", "cuda", "rocm", "vulkan", "unknown", null]
         },
-        "credential_ref": { "type": "string" }
+        "credential_ref": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-:]+$",
+          "description": "A WP-M3B-4 CredentialRef.RefID (the same bounded opaque-identifier contract, not an arbitrary/secret-shaped string), when this endpoint's credential binding is known."
+        }
       },
       "allOf": [
         {
