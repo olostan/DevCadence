@@ -323,7 +323,9 @@ flowchart TB
 - observability requirements;
 - migration/rollback details.
 
-### 7.4 RefactoringProposal (Bottom-Up Challenge Protocol)
+### 7.4 RefactoringProposal (Bottom-Up Challenge Protocol) [Proposed - M3C]
+
+*Status:* Proposed for Milestone M3C. Protocol Go types and JSON Schemas will be formalized under `internal/protocol/` and `schemas/` during M3C implementation.
 
 An accepted Work Package is a stable baseline, not an immutable dogma (ADR-0019 §3). When an implementer or reviewer discovers that an upstream interface, dependency, or contract is flawed, clunky, or missing essential parameters, it is forbidden from writing hacky workarounds or local shims.
 
@@ -436,15 +438,21 @@ Under ADR-0016:
 - **Response Yield Threshold:** Commands taking longer than 10 seconds yield `status: "running"` with an `OperationID`. The operation proceeds uninterrupted; upon completion, hosts receive event-driven wakeups without token-wasting busy-loops.
 - **Universal Pagination (`fetch_content`):** Process outputs are decoupled via injected output sinks. Models page through immutable content-addressed artifacts with strict byte limits and contiguous offsets using `fetch_content(content_ref, offset, limit, unit)`. Full daemon-level live streaming into artifact storage with 4 KiB inline previews is scheduled with the background runner milestone.
 
-## 10B. Working Memory and Snippet Pool Protocol (`WorkingMemoryUpdate`)
+## 10B. Adaptive Context Architecture and Evidence Working Set [Proposed - M3C]
 
-Conversational chat histories are explicitly discarded for model cognition (ADR-0019 §1). Ingesting raw multi-turn transcripts causes monotonic prompt inflation, quadratic token costs, and anchored confirmation bias.
+*Status:* Proposed for Milestone M3C. Provider-neutral context control capabilities (`ContextControl = ExactStateless | AppendOnly | OpaqueSession`) and Evidence Working Set lease mediation land in M3C.
 
-Instead, cognition operates over a **Prefix-Cached Static Baseline + Active Snippet Pool**:
+Rather than treating cognition as monolithic conversational loops that cause context bloat, token waste, and attention dilution, DevCadence structures cognition across four adaptive layers (ADR-0019 §1):
 
-1. **Static Baseline**: System instructions, task EWP, candidate diff, and deterministic validation outputs are placed at the beginning of the prompt. Because this block is immutable across turns, it achieves a ~90% KV-cache hit rate.
-2. **Active Snippet Pool**: Models manage their own working memory dynamically. Code snippets are verbatim (exact types, error signatures, comments, and boundary checks preserved), avoiding the lossy inaccuracies of summarization.
-3. **Memory Protocol (`WorkingMemoryUpdate`)**: On each inference turn, the model outputs either a final action/verdict or a working-memory update:
+1. **Protected Core (Static Prefix)**: System instructions, task EWP, candidate diff, and deterministic validation outputs are placed at the prompt head. Because this block is immutable across an attempt or review, it maximizes provider prefix KV-cache reuse.
+2. **Cognitive State Capsule**: A compact, typed data structure maintaining derived hypotheses, active TODOs, intermediate decisions, and unresolved questions across turns. Explicitly categorized as derived cognition (not ground fact), preserving continuity without dragging raw conversational debris.
+3. **Evidence Working Set (Leased Snippet Pool)**: Models manage their active evidence dynamically through verbatim code snippets, diffs, and log excerpts:
+   - **Content-Addressed Leases**: Snippets reference `(file_path, content_digest, start_line, end_line)`;
+   - **Freshness Invalidation**: If underlying files are modified in a worktree during implementation, dependent snippet leases are automatically marked stale;
+   - **Server-Side Authorization**: The control plane enforces path authorization and bounds to prevent leaking out-of-scope files or secrets.
+4. **Short Ephemeral Tail**: Immediate prior tool call/result exchange for drivers that benefit from local conversational continuity, discarded across task boundaries and never treated as canonical project state.
+
+Example working-memory lease update:
 
 ```json
 {
@@ -457,7 +465,7 @@ Instead, cognition operates over a **Prefix-Cached Static Baseline + Active Snip
 }
 ```
 
-The control plane deterministically drops the released snippets, fetches and appends the requested verbatim lines, and re-presents the lean working memory (typically bounded between 6k and 12k tokens).
+The control plane runtime deterministically drops released leases, verifies and fetches requested lines, and maintains a lean working memory envelope.
 
 ## 11. ReviewResult
 
@@ -491,17 +499,24 @@ Fields:
 - whether principal escalation is recommended.
 
 Possible dimensions:
-- `correctness`: algorithmic accuracy, nil safety, concurrency, boundary conditions;
+- `correctness`: algorithmic accuracy, nil safety, boundary conditions;
 - `architecture`: layer boundaries, dependency inversion, public contract adherence;
 - `invariants`: durable system invariants (DCI compliance);
 - `security`: auth bypass, injection, secret exposure, command safety;
 - `test_adequacy`: assertion validity, edge-case coverage, negative-path and mutation testing;
-- `anti_rabbit_hole`: pruning YAGNI, defensive bloat, and speculative over-engineering (ADR-0019 §4);
-- `anti_drift`: verifying strict scope discipline, catching drive-by edits and unauthorized files (ADR-0019 §4);
-- `anti_hallucination`: grounding checks verifying cited symbols, flags, and test executions actually exist (ADR-0019 §4);
+- `concurrency`: synchronization, race safety, cancellation lifetimes;
 - `performance`: algorithmic complexity, allocation profiles, concurrency overhead;
-- `api_compatibility`: backward compatibility, breaking public surface changes;
-- `maintainability`: code clarity, idiomatic style, comment accuracy.
+- `maintainability`: code clarity, idiomatic style, comment accuracy;
+- `other`: explicitly scoped reviews outside the primary taxonomy.
+
+### 11.1 Dynamic Review Lenses and Active Falsification
+
+Review invocations may attach targeted **Review Lenses / Strategies** (ADR-0019 §4) that guide reviewer focus across the dimensions above, avoiding churn in the durable `ReviewDimension` enum:
+- `anti_rabbit_hole`: scrutinizes code for YAGNI, defensive bloat, and speculative over-engineering;
+- `anti_drift`: verifies strict scope discipline, checking that touched files match the declared work package and catching drive-by edits;
+- `anti_hallucination`: grounds claims by verifying cited symbols, CLI flags, and test executions exist.
+
+Additionally, reviewers can formulate **Active Falsification Probes** (`FalsificationProbe` / mutation testing): targeted requests asking deterministic validation machinery to temporarily mutate or invert a condition to verify that tests fail as expected. This converts subjective reviewer suspicion into empirical verification evidence.
 
 ## 11a. SpecificationReviewResult
 
@@ -525,22 +540,15 @@ gap is routed to whoever can settle it (DCI-008), plus `blocks_readiness`. A
 `pass` verdict over a finding that blocks readiness is refused: the Design
 Readiness Gate must be passed by evidence, not by a summary.
 
-## 11b. DualReviewAggregation
+## 11b. Dual Independent Review and Aggregator Synthesis [Planned - M7]
 
 For systemic or high-risk candidates, DevCadence invokes dual independent reviews in parallel (ADR-0019 §5).
-A `DualReviewAggregation` represents the synthesized outcome produced by the Aggregator/Adjudicator model:
-- `aggregation_id`: unique stable ID;
-- `candidate_commit`: immutable commit under review;
-- `primary_review_ref`: ReviewResult reference from Reviewer 1 (e.g. Model Family A);
-- `secondary_review_ref`: ReviewResult reference from Reviewer 2 (e.g. Model Family B);
-- `verdict`:
-  - `FAST_TRACK_ACCEPT`: both independent reviewers returned PASS with zero blocking findings ("Double-Green" fast track);
-  - `REPAIR_REQUIRED`: one or more blocking findings were identified and adjudicated;
-  - `DISAGREEMENT`: material unresolvable tension requiring human escalation.
-- `consolidated_findings`: deduplicated findings across both reviews with opportunistic nits filtered out;
-- `repair_work_package_id`: reference to the single generated repair package (when repair is required).
 
-Implementers never negotiate directly with multiple reviewers; the `DualReviewAggregation` ensures only one consolidated repair package is delivered.
+Aggregation is an orchestration phase within `ReviewCampaign`, not a separate durable protocol table or SQLite schema:
+- **Parallel Independent Review**: Two independent reviewer models evaluate the candidate commit in parallel, each starting from a clean context.
+- **Double-Green Adjudication Fast-Path**: If both independent reviewers return `PASS` with zero blocking findings AND all deterministic validation checks pass, the Principal receives an instant green card allowing immediate, frictionless closure. Double-Green is an **adjudication fast-path**, not an unmoderated bypass of human/principal authority (DCI-009) or deterministic closure prerequisites (`closure-decision.schema.json`).
+- **Asymmetric Veto**: If any reviewer raises a `BLOCKING` finding in `security` or `invariants`, an Aggregator model **cannot** discard or override it. It can only be dismissed by explicit human disposition or deterministic falsification proof.
+- **Consolidated Repair Synthesis**: If findings exist or reviewers disagree, the Aggregator synthesizes the findings into standard `FindingDisposition` records and compiles at most one consolidated `RepairWorkPackage`. Implementers never negotiate directly with multiple reviewers.
 
 ## 12. DisagreementReport
 
@@ -766,12 +774,19 @@ CLI adapters (`VersionOnlyAdapter`, `BoundedCLIAuthAdapter`) separate two identi
 `protocol.LooksLikeSecret` is prefix/keyword-based only and carries no length threshold of its own: `ref_id`/`locator`/`adapter_id` are bounded to 128 bytes, `probe_target` to 256, and `detail` to 512, each by its own field-specific check (mirrored exactly in the JSON Schema twins' `maxLength`), so a field's own declared contract — not a shared heuristic — decides what counts as "too long." Callers elsewhere in the codebase that want a shorter opaque-handle-length bound (e.g. `internal/cognition`'s and `internal/cognition/remoteapi`'s `CredentialRef`/`AccountRef` declaration fields) apply that bound locally alongside `protocol.LooksLikeSecret`, rather than the shared helper enforcing it for every caller. `ref_id`/`locator`/`adapter_id` are ASCII-regex-constrained, so byte length and Unicode character count coincide; `probe_target`/`detail` are free text, so their Go-side length checks use `utf8.RuneCountInString`, not `len()`, to agree with JSON Schema's `maxLength` (which counts Unicode characters, not UTF-8 bytes).
 See schemas/credential-ref.schema.json and schemas/auth-evidence.schema.json.
 
-## 21. MilestoneRetrospective (Inter-Milestone "What Learned" Protocol)
+## 21. Milestone Retrospective Artifact (Inter-Milestone "What Learned" Phase)
 
-At every milestone boundary, before the control plane transitions to planning or executing the next milestone, an explicit `MilestoneRetrospective` record is produced (ADR-0019 §6):
+At every milestone boundary, before the control plane transitions to planning or executing the next milestone, an explicit **Milestone Retrospective** is produced (ADR-0019 §6).
+
+The retrospective is a **structured, versioned Markdown engineering artifact** (stored under `docs/retrospectives/<milestone>.md`), not a premature canonical database table or separate wire schema. It serves as an auditable bridge between milestones, synthesizing:
+1. **Succeeded Patterns**: Architectural designs, EWP structures, and verification patterns to promote;
+2. **Failed Patterns & Anti-Patterns**: Process friction, tautological tests, premature status claims, or role boundary blurring;
+3. **Repository Reconciliation**: Pruning ephemeral session handoff files (e.g. removing temporary `HANDOFF.md` from tracking) and verifying canonical docs match as-built reality;
+4. **Governed Promotions**: Emits standard durable `LessonCandidate` records (`schemas/lesson-candidate.schema.json`) and `DecisionRecord` / ADR amendments for formal adoption.
+
+Example retrospective artifact structure (`docs/retrospectives/M3B.md`):
 
 ```yaml
-schema_version: "1.0"
 retrospective_id: "RETRO-M3B"
 milestone_id: "M3B"
 completion_commit: "9b2166f"
@@ -800,5 +815,5 @@ promoted_lessons:
     description: "Require mutation check verification on negative-path test assertions"
   - lesson_id: "LESSON-M3B-02"
     target: "REVIEW_AND_CONVERGENCE.md"
-    description: "Adopt Dual Independent Review and Double-Green fast track"
+    description: "Adopt Dual Independent Review and Double-Green adjudication fast-path"
 ```

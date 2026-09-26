@@ -73,18 +73,24 @@ Once the principal records a disposition with rationale and evidence, equivalent
 
 Reopening requires materially new evidence, changed requirements, a failed deterministic check, a newly discovered invariant conflict, or demonstrated correctness/security/integrity failure.
 
-### 1.5 Dual independent review and the "Double-Green" fast track
+### 1.5 Dual independent review and the "Double-Green" adjudication fast-path
 
 For systemic or high-risk candidates, DevCadence supports an optional **Dual Independent Review** ("2nd Point of View"):
 - Two independent reviewer models (ideally from different model families, e.g. Claude and Gemini/OpenAI) evaluate the candidate commit in parallel, each starting from a clean context.
-- **The "Double-Green" Fast Track**: If both independent reviewers return `PASS` with zero blocking findings, the candidate is accepted immediately without delay or human arbitration.
-- **Aggregator / Adjudicator Synthesis**: If findings exist or reviewers disagree, an Aggregator model (or Principal) deduplicates the findings, filters opportunistic nits, adjudicates tensions, and produces **one single consolidated `RepairWorkPackage`**. Implementers never argue directly with reviewers.
+- **The "Double-Green" Adjudication Fast-Path**: If both independent reviewers return `PASS` with zero blocking findings AND all deterministic validation checks pass, the Principal receives an instant green card allowing immediate, frictionless closure. Double-Green is an **adjudication fast-path**, not an unmoderated bypass of human/principal authority (DCI-009) or deterministic closure prerequisites (`closure-decision.schema.json`).
+- **Asymmetric Veto**: If any reviewer raises a `BLOCKING` finding in `security` or `invariants`, an Aggregator model **cannot** discard or override it. It can only be dismissed by explicit human disposition or deterministic falsification proof.
+- **Aggregator Synthesis**: If findings exist or reviewers disagree, an Aggregator model (or Principal) deduplicates the findings, filters opportunistic nits, adjudicates tensions into standard `FindingDisposition` records, and compiles at most **one single consolidated `RepairWorkPackage`** per round. Implementers never argue directly with reviewers.
 
-### 1.6 Cognitive freedom over artificial turn budgets
+### 1.6 Cognitive freedom with silent multi-dimensional metering
 
 Review prompts must **never** impose artificial turn limits (e.g. "you have 5 turns") on reviewer models. Turn countdowns induce "budget anxiety," causing models to rush, skip crucial caller verification, and hallucinate conclusions when running low on turns.
-- Reviewer models are granted full cognitive freedom to inspect whatever files, conventions, or tests they need to be certain.
-- Context runaway is bounded structurally at the architecture level (clean starting context, zero chat history) and protected by a silent outer circuit breaker in the control plane runtime, rather than by an anxiety-inducing countdown in the model's prompt.
+- Reviewer models are granted full cognitive freedom to inspect whatever files, conventions, or tests they need to reach certainty.
+- Context runaway and resource exhaustion are bounded structurally at the runtime level via **Silent Multi-Dimensional Metering**:
+  - Cumulative token caps (input, cached, output);
+  - Wall-clock execution limits per operation;
+  - Cumulative tool-call limits;
+  - Semantic loop detection (identifying oscillating edits or repeating identical failed tool calls).
+- When an outer budget is exhausted, the control plane does not rush the model; it pauses execution with `PAUSED_BUDGET_EXCEEDED`, checkpoints state, and escalates to the Principal/Human for disposition (DCI-045, DCI-049).
 
 ## 2. Review Campaign
 
@@ -106,31 +112,34 @@ It records:
 
 A campaign is not an open-ended conversation.
 
-## 2A. Dynamic cognitive review vectors
+## 2A. Dynamic cognitive review lenses and active falsification
 
-Code review is a multi-dimensional cognitive process, not a mechanical syntax linter. DevCadence routes candidates through targeted cognitive review vectors:
+Code review is a multi-dimensional cognitive process, not a mechanical syntax linter. DevCadence guides reviewers through targeted **Review Lenses / Strategies** (ADR-0019 §4) applied across the stable `ReviewDimension` taxonomy (`correctness`, `architecture`, `invariants`, `security`, `test_adequacy`, `concurrency`, `performance`, `maintainability`, `other`):
 
-1. **Anti-Rabbit Hole Vector (YAGNI & Simplicity)**:
+1. **Anti-Rabbit Hole Lens (YAGNI & Simplicity)**:
    - Scrutinizes code for defensive bloat, speculative future-proofing, and over-engineering.
-   - Replaces 80 lines of paranoid error-handling cascades with simple, clean assertions or fail-fast checks.
-2. **Anti-Drift Vector (Scope Discipline)**:
+   - Replaces paranoid error-handling cascades with simple, clean assertions or fail-fast checks.
+2. **Anti-Drift Lens (Scope Discipline)**:
    - Verifies that only authorized files and packages were modified.
    - Flags drive-by refactorings, unsolicited style tweaks in untouched code, and unapproved dependency additions.
-3. **Anti-Hallucination Vector (Fact & Grounding Verification)**:
+3. **Anti-Hallucination Lens (Fact & Grounding Verification)**:
    - Verifies that cited symbols, functions, and CLI flags genuinely exist in the repository.
    - Checks that tests drive real execution paths rather than passing vacuously through tautological mocks.
-4. **Architecture & Invariant Vector**:
-   - Evaluates cross-layer coupling, security boundaries, and persistence semantics against project invariants.
+4. **Architecture & Invariant Lens**:
+   - Evaluates cross-layer coupling, security boundaries, and persistence semantics against durable project invariants (DCI compliance).
+5. **Active Falsification (`FalsificationProbe` / Bounded Mutation Testing)**:
+   - Reviewers can formulate targeted falsification probes (e.g. "temporarily disable this error check, invert this condition, or mutate this return value; verify tests fail").
+   - The control plane's deterministic validation machinery executes the probe in an isolated worktree and returns hard evidence, converting reviewer suspicion into empirical proof.
 
-Vectors are selected dynamically based on task risk (e.g. bug fixes emphasize Anti-Drift and Anti-Rabbit Hole; major features invoke Architecture and Anti-Hallucination).
+Lenses are selected dynamically based on task risk (e.g. bug fixes emphasize Anti-Drift and Anti-Rabbit Hole; major features invoke Architecture and Anti-Hallucination).
 
-## 2B. Bidirectional Work Package evolution (Living baselines)
+## 2B. Bidirectional Work Package evolution (Living baselines) [Proposed - M3C]
 
 An accepted Work Package is a **stable baseline, not an immutable dogma**.
 
 If a local implementer or reviewer discovers that an upstream interface (e.g. from an earlier Work Package) is clunky, incomplete, or missing a parameter, the implementer is forbidden from building hacky workarounds or shims.
 
-Instead, the worker emits a typed **`RefactoringProposal`**:
+Instead, the worker emits a typed **`RefactoringProposal`** (ADR-0019 §3):
 - Cites the upstream package and the specific architectural tension;
 - Provides concrete compiler or test evidence;
 - Outlines the proposed upstream interface refactor and affected callers.

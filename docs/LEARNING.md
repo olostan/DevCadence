@@ -235,7 +235,9 @@ Do not default to blaming the implementer.
 
 ## 11A. Inter-Milestone "What Learned" Retrospectives
 
-At every milestone boundary, before the system transitions to planning or executing the next milestone, an explicit **Milestone Retrospective** is conducted (ADR-0019 §6):
+At every milestone boundary, before the system transitions to planning or executing the next milestone, an explicit **Milestone Retrospective** is conducted (ADR-0019 §6).
+
+The retrospective is a structured, versioned Markdown engineering artifact (stored under `docs/retrospectives/<milestone>.md`), serving as an auditable bridge between milestones rather than a premature database schema:
 
 1. **Success Patterns Inventory**:
    - What architectural decisions, EWP formats, or verification patterns accelerated delivery?
@@ -247,7 +249,7 @@ At every milestone boundary, before the system transitions to planning or execut
    - Reconcile and prune temporary development/session artifacts (e.g. deleting temporary handoff trackers like `HANDOFF.md` before final closure).
    - Verify that all EWPs, ADRs, and canonical documentation reflect final as-built reality.
 4. **Governed Promotion**:
-   - Promote verified lessons into durable repository state: updating `INVARIANTS.md`, publishing ADRs (such as `ADR-0019`), or updating verification profiles.
+   - Emits standard `LessonCandidate` records (`schemas/lesson-candidate.schema.json`) and `DecisionRecord` / ADR amendments for formal promotion into project invariants, standards, or verification profiles.
 
 
 ## 12. Cross-project vs project-specific learning

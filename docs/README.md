@@ -160,7 +160,7 @@ hierarchy below.
 | [0016](adr/0016-validation-services-bounded-tools-and-context-compaction.md) | Supervised validation services, bounded execution tools, asynchronous operations, and multi-tier context compaction |
 | [0017](adr/0017-external-research-evidence-acquisition.md) | External research as a bounded evidence-acquisition service |
 | [0018](adr/0018-adaptive-cognition-portfolio-and-workflow-synthesis.md) | Adaptive cognition portfolios, economics/budget pools, AI-assisted recommendation and adaptive workflow topology |
-| [0019](adr/0019-non-conversational-cognition-and-adaptive-review.md) | Non-conversational cognition flows, active snippet pool, living work packages, and adaptive dual review |
+| [0019](adr/0019-non-conversational-cognition-and-adaptive-review.md) | Adaptive context architecture, dynamic review lenses, living work packages, and dual independent review |
 
 ## Normative hierarchy
 
