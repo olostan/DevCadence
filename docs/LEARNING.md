@@ -233,6 +233,23 @@ Possible causes:
 
 Do not default to blaming the implementer.
 
+## 11A. Inter-Milestone "What Learned" Retrospectives
+
+At every milestone boundary, before the system transitions to planning or executing the next milestone, an explicit **Milestone Retrospective** is conducted (ADR-0019 §6):
+
+1. **Success Patterns Inventory**:
+   - What architectural decisions, EWP formats, or verification patterns accelerated delivery?
+   - Examples from M3B: explicit keep/adapt/deprecate/delete pre-checks prevented duplicate logic; deterministic CLI exit codes (0–6) eliminated ambiguous test assertions; dual independent review caught subtle blind spots.
+2. **Friction & Anti-Pattern Analysis**:
+   - What process deviations or execution traps occurred?
+   - Examples from M3B: committing EWPs in the same commit as implementation collapsed the Principal/Implementer boundary; writing decorative/tautological tests with synthetic mocks bypassed real discovery; declaring docs "accepted" preemptively before review completion.
+3. **Repository & Artifact Reconciliation**:
+   - Reconcile and prune temporary development/session artifacts (e.g. deleting temporary handoff trackers like `HANDOFF.md` before final closure).
+   - Verify that all EWPs, ADRs, and canonical documentation reflect final as-built reality.
+4. **Governed Promotion**:
+   - Promote verified lessons into durable repository state: updating `INVARIANTS.md`, publishing ADRs (such as `ADR-0019`), or updating verification profiles.
+
+
 ## 12. Cross-project vs project-specific learning
 
 A project-specific lesson should not automatically become global.

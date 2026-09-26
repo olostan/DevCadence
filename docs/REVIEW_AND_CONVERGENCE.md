@@ -73,6 +73,19 @@ Once the principal records a disposition with rationale and evidence, equivalent
 
 Reopening requires materially new evidence, changed requirements, a failed deterministic check, a newly discovered invariant conflict, or demonstrated correctness/security/integrity failure.
 
+### 1.5 Dual independent review and the "Double-Green" fast track
+
+For systemic or high-risk candidates, DevCadence supports an optional **Dual Independent Review** ("2nd Point of View"):
+- Two independent reviewer models (ideally from different model families, e.g. Claude and Gemini/OpenAI) evaluate the candidate commit in parallel, each starting from a clean context.
+- **The "Double-Green" Fast Track**: If both independent reviewers return `PASS` with zero blocking findings, the candidate is accepted immediately without delay or human arbitration.
+- **Aggregator / Adjudicator Synthesis**: If findings exist or reviewers disagree, an Aggregator model (or Principal) deduplicates the findings, filters opportunistic nits, adjudicates tensions, and produces **one single consolidated `RepairWorkPackage`**. Implementers never argue directly with reviewers.
+
+### 1.6 Cognitive freedom over artificial turn budgets
+
+Review prompts must **never** impose artificial turn limits (e.g. "you have 5 turns") on reviewer models. Turn countdowns induce "budget anxiety," causing models to rush, skip crucial caller verification, and hallucinate conclusions when running low on turns.
+- Reviewer models are granted full cognitive freedom to inspect whatever files, conventions, or tests they need to be certain.
+- Context runaway is bounded structurally at the architecture level (clean starting context, zero chat history) and protected by a silent outer circuit breaker in the control plane runtime, rather than by an anxiety-inducing countdown in the model's prompt.
+
 ## 2. Review Campaign
 
 A **ReviewCampaign** is the bounded lifecycle around one immutable candidate lineage.
@@ -92,6 +105,37 @@ It records:
 - outcome.
 
 A campaign is not an open-ended conversation.
+
+## 2A. Dynamic cognitive review vectors
+
+Code review is a multi-dimensional cognitive process, not a mechanical syntax linter. DevCadence routes candidates through targeted cognitive review vectors:
+
+1. **Anti-Rabbit Hole Vector (YAGNI & Simplicity)**:
+   - Scrutinizes code for defensive bloat, speculative future-proofing, and over-engineering.
+   - Replaces 80 lines of paranoid error-handling cascades with simple, clean assertions or fail-fast checks.
+2. **Anti-Drift Vector (Scope Discipline)**:
+   - Verifies that only authorized files and packages were modified.
+   - Flags drive-by refactorings, unsolicited style tweaks in untouched code, and unapproved dependency additions.
+3. **Anti-Hallucination Vector (Fact & Grounding Verification)**:
+   - Verifies that cited symbols, functions, and CLI flags genuinely exist in the repository.
+   - Checks that tests drive real execution paths rather than passing vacuously through tautological mocks.
+4. **Architecture & Invariant Vector**:
+   - Evaluates cross-layer coupling, security boundaries, and persistence semantics against project invariants.
+
+Vectors are selected dynamically based on task risk (e.g. bug fixes emphasize Anti-Drift and Anti-Rabbit Hole; major features invoke Architecture and Anti-Hallucination).
+
+## 2B. Bidirectional Work Package evolution (Living baselines)
+
+An accepted Work Package is a **stable baseline, not an immutable dogma**.
+
+If a local implementer or reviewer discovers that an upstream interface (e.g. from an earlier Work Package) is clunky, incomplete, or missing a parameter, the implementer is forbidden from building hacky workarounds or shims.
+
+Instead, the worker emits a typed **`RefactoringProposal`**:
+- Cites the upstream package and the specific architectural tension;
+- Provides concrete compiler or test evidence;
+- Outlines the proposed upstream interface refactor and affected callers.
+
+The Principal adjudicates the proposal. When accepted, an atomic upstream refactor is applied cleanly, regression tests verify all callers, and the codebase stays unified and elegant.
 
 ## 3. Finding classes
 
