@@ -279,7 +279,7 @@ Stores durable engineering transitions. The current state is a materialized view
 Represents milestones, tasks, dependencies, readiness, attempts, blockers and integration order.
 
 ### 6.5 Engineering Work Package service
-Stores versioned frontier-authored implementation blueprints.
+Stores versioned frontier-authored implementation blueprints. Work Packages serve as stable baselines rather than immutable dogmas: local implementers have direct contact with reality and may challenge upstream designs via typed `RefactoringProposal` records, enabling atomic refactoring and preventing hacky shims (ADR-0019).
 
 ### 6.6 Evidence service
 Stores structured claims and references to raw artifacts without forcing raw artifacts into every model context.
@@ -341,9 +341,11 @@ Provides controlled repository reads, isolated mutations, commits, diffs and int
 Executes deterministic commands and normalizes their evidence.
 
 ### 6.10 Review coordinator
-Runs bounded ReviewCampaigns. It schedules clean-context review vectors against an immutable candidate, normalizes findings, applies reporting/reopen thresholds, coordinates focused revalidation, and records campaign/closure state.
-
-The principal—not individual reviewers—adjudicates findings and creates the consolidated Repair Work Package. The coordinator must not default to serial unrestricted re-review after every repair.
+Runs bounded ReviewCampaigns without conversational chat inflation (ADR-0019). It coordinates:
+- **Non-conversational working memory**: Reviewers operate with a prefix-cached static baseline (EWP, diff, invariants) and an Active Snippet Pool managed via `WorkingMemoryUpdate` (`request_facts` / `release_facts`), preventing token explosion while inspecting verbatim code.
+- **Dynamic review vectors**: Dispatches specialized cognitive lenses based on risk: Anti-Rabbit Hole (pruning defensive bloat), Anti-Drift (enforcing scope discipline), Anti-Hallucination (verifying cited symbols/tests exist), and Architecture & Invariants.
+- **Dual Independent Review ("2nd Point of View")**: Dispatches parallel reviews across distinct model families for high-risk work; accepts candidates via the "Double-Green" fast track when both independent models approve.
+- **Adjudication and repair**: The Principal—not individual reviewers—adjudicates findings into a single consolidated Repair Work Package or durable DecisionRecord. The coordinator never permits unmoderated conversational debate between implementers and reviewers.
 
 ### 6.11 Consultant service
 Normalizes frontier consultant requests and results.

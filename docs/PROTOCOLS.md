@@ -323,6 +323,33 @@ flowchart TB
 - observability requirements;
 - migration/rollback details.
 
+### 7.4 RefactoringProposal (Bottom-Up Challenge Protocol)
+
+An accepted Work Package is a stable baseline, not an immutable dogma (ADR-0019 §3). When an implementer or reviewer discovers that an upstream interface, dependency, or contract is flawed, clunky, or missing essential parameters, it is forbidden from writing hacky workarounds or local shims.
+
+Instead, the worker emits a typed `RefactoringProposal`:
+
+```yaml
+schema_version: "1.0"
+proposal_id: "REF-001"
+source_work_package_id: "WP-M3B-5"
+target_work_package_id: "WP-M3B-2"
+architectural_tension: >
+  Doctor.Run requires context.Context for cancellation and timeouts,
+  but WP-2 defined the interface with only facts and scope.
+contradiction_evidence:
+  - "internal/setup/doctor.go:210"
+  - "compiler error on timeout handler implementation"
+proposed_interface: >
+  Run(ctx context.Context, scope ReadinessEvaluationScope, facts EnvironmentFacts) (*DoctorReport, error)
+affected_callers:
+  - "cmd/devcadence/cmd_doctor.go"
+  - "tests/m3b_milestone_closure_test.go"
+reversibility_assessment: "Low risk; atomic signature update across 3 callers."
+```
+
+The Principal adjudicates the proposal. If accepted, an atomic upstream refactor is applied cleanly, regression tests run, and the codebase remains free of architectural rot.
+
 ## 8. Guidance strength
 
 ```mermaid
@@ -409,6 +436,29 @@ Under ADR-0016:
 - **Response Yield Threshold:** Commands taking longer than 10 seconds yield `status: "running"` with an `OperationID`. The operation proceeds uninterrupted; upon completion, hosts receive event-driven wakeups without token-wasting busy-loops.
 - **Universal Pagination (`fetch_content`):** Process outputs are decoupled via injected output sinks. Models page through immutable content-addressed artifacts with strict byte limits and contiguous offsets using `fetch_content(content_ref, offset, limit, unit)`. Full daemon-level live streaming into artifact storage with 4 KiB inline previews is scheduled with the background runner milestone.
 
+## 10B. Working Memory and Snippet Pool Protocol (`WorkingMemoryUpdate`)
+
+Conversational chat histories are explicitly discarded for model cognition (ADR-0019 §1). Ingesting raw multi-turn transcripts causes monotonic prompt inflation, quadratic token costs, and anchored confirmation bias.
+
+Instead, cognition operates over a **Prefix-Cached Static Baseline + Active Snippet Pool**:
+
+1. **Static Baseline**: System instructions, task EWP, candidate diff, and deterministic validation outputs are placed at the beginning of the prompt. Because this block is immutable across turns, it achieves a ~90% KV-cache hit rate.
+2. **Active Snippet Pool**: Models manage their own working memory dynamically. Code snippets are verbatim (exact types, error signatures, comments, and boundary checks preserved), avoiding the lossy inaccuracies of summarization.
+3. **Memory Protocol (`WorkingMemoryUpdate`)**: On each inference turn, the model outputs either a final action/verdict or a working-memory update:
+
+```json
+{
+  "request_facts": [
+    { "path": "internal/setup/doctor.go", "start_line": 815, "end_line": 835 }
+  ],
+  "release_facts": [
+    "snippet_1"
+  ]
+}
+```
+
+The control plane deterministically drops the released snippets, fetches and appends the requested verbatim lines, and re-presents the lean working memory (typically bounded between 6k and 12k tokens).
+
 ## 11. ReviewResult
 
 ReviewResult is model-assisted evidence **about an implementation candidate**,
@@ -441,15 +491,17 @@ Fields:
 - whether principal escalation is recommended.
 
 Possible dimensions:
-- correctness;
-- architecture;
-- invariants;
-- security;
-- test adequacy;
-- performance;
-- concurrency;
-- API compatibility;
-- complexity/maintainability.
+- `correctness`: algorithmic accuracy, nil safety, concurrency, boundary conditions;
+- `architecture`: layer boundaries, dependency inversion, public contract adherence;
+- `invariants`: durable system invariants (DCI compliance);
+- `security`: auth bypass, injection, secret exposure, command safety;
+- `test_adequacy`: assertion validity, edge-case coverage, negative-path and mutation testing;
+- `anti_rabbit_hole`: pruning YAGNI, defensive bloat, and speculative over-engineering (ADR-0019 §4);
+- `anti_drift`: verifying strict scope discipline, catching drive-by edits and unauthorized files (ADR-0019 §4);
+- `anti_hallucination`: grounding checks verifying cited symbols, flags, and test executions actually exist (ADR-0019 §4);
+- `performance`: algorithmic complexity, allocation profiles, concurrency overhead;
+- `api_compatibility`: backward compatibility, breaking public surface changes;
+- `maintainability`: code clarity, idiomatic style, comment accuracy.
 
 ## 11a. SpecificationReviewResult
 
@@ -472,6 +524,23 @@ Each finding carries a resolution authority and a recommended question, so a
 gap is routed to whoever can settle it (DCI-008), plus `blocks_readiness`. A
 `pass` verdict over a finding that blocks readiness is refused: the Design
 Readiness Gate must be passed by evidence, not by a summary.
+
+## 11b. DualReviewAggregation
+
+For systemic or high-risk candidates, DevCadence invokes dual independent reviews in parallel (ADR-0019 §5).
+A `DualReviewAggregation` represents the synthesized outcome produced by the Aggregator/Adjudicator model:
+- `aggregation_id`: unique stable ID;
+- `candidate_commit`: immutable commit under review;
+- `primary_review_ref`: ReviewResult reference from Reviewer 1 (e.g. Model Family A);
+- `secondary_review_ref`: ReviewResult reference from Reviewer 2 (e.g. Model Family B);
+- `verdict`:
+  - `FAST_TRACK_ACCEPT`: both independent reviewers returned PASS with zero blocking findings ("Double-Green" fast track);
+  - `REPAIR_REQUIRED`: one or more blocking findings were identified and adjudicated;
+  - `DISAGREEMENT`: material unresolvable tension requiring human escalation.
+- `consolidated_findings`: deduplicated findings across both reviews with opportunistic nits filtered out;
+- `repair_work_package_id`: reference to the single generated repair package (when repair is required).
+
+Implementers never negotiate directly with multiple reviewers; the `DualReviewAggregation` ensures only one consolidated repair package is delivered.
 
 ## 12. DisagreementReport
 
@@ -696,3 +765,40 @@ CLI adapters (`VersionOnlyAdapter`, `BoundedCLIAuthAdapter`) separate two identi
 
 `protocol.LooksLikeSecret` is prefix/keyword-based only and carries no length threshold of its own: `ref_id`/`locator`/`adapter_id` are bounded to 128 bytes, `probe_target` to 256, and `detail` to 512, each by its own field-specific check (mirrored exactly in the JSON Schema twins' `maxLength`), so a field's own declared contract — not a shared heuristic — decides what counts as "too long." Callers elsewhere in the codebase that want a shorter opaque-handle-length bound (e.g. `internal/cognition`'s and `internal/cognition/remoteapi`'s `CredentialRef`/`AccountRef` declaration fields) apply that bound locally alongside `protocol.LooksLikeSecret`, rather than the shared helper enforcing it for every caller. `ref_id`/`locator`/`adapter_id` are ASCII-regex-constrained, so byte length and Unicode character count coincide; `probe_target`/`detail` are free text, so their Go-side length checks use `utf8.RuneCountInString`, not `len()`, to agree with JSON Schema's `maxLength` (which counts Unicode characters, not UTF-8 bytes).
 See schemas/credential-ref.schema.json and schemas/auth-evidence.schema.json.
+
+## 21. MilestoneRetrospective (Inter-Milestone "What Learned" Protocol)
+
+At every milestone boundary, before the control plane transitions to planning or executing the next milestone, an explicit `MilestoneRetrospective` record is produced (ADR-0019 §6):
+
+```yaml
+schema_version: "1.0"
+retrospective_id: "RETRO-M3B"
+milestone_id: "M3B"
+completion_commit: "9b2166f"
+evaluated_work_packages:
+  - "WP-M3B-1"
+  - "WP-M3B-2"
+  - "WP-M3B-3"
+  - "WP-M3B-4"
+  - "WP-M3B-5"
+  - "WP-M3B-6"
+  - "WP-M3B-7"
+  - "WP-M3B-8"
+patterns_succeeded:
+  - "Explicit keep/adapt/deprecate/delete pre-checks prevented duplicate logic"
+  - "Deterministic CLI exit codes (0-6) prevented vague test suites"
+  - "Dual independent review caught blind spots single models missed"
+patterns_failed:
+  - "EWP written in the same commit as implementation violated role separation"
+  - "Preemptive doc claims stating milestone complete before review accepted it"
+  - "Decorative/tautological tests passing without exercising real discovery"
+reconciled_artifacts:
+  - "Removed temporary HANDOFF.md from tracking"
+promoted_lessons:
+  - lesson_id: "LESSON-M3B-01"
+    target: "INVARIANTS.md"
+    description: "Require mutation check verification on negative-path test assertions"
+  - lesson_id: "LESSON-M3B-02"
+    target: "REVIEW_AND_CONVERGENCE.md"
+    description: "Adopt Dual Independent Review and Double-Green fast track"
+```
