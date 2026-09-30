@@ -425,6 +425,9 @@ type ContextPack struct {
 }
 ```
 
+> [!NOTE]
+> **Compilation Boundary & Resident Ceiling Invariant:** In WP-M3C-1, `ContextPack` records are validated for structural integrity, layer accounting sums, and content-addressed SHA-256 digests. Cross-record verification between a compiled `ContextPack` with `status: ready` and its parent `ContextProfile.HardResidentCeilingTokens` is an operational invariant of the M3C Context Compiler / Session Driver (WP-M3C-2/3), where both records are loaded in-context during compilation before setting `status: ready`.
+
 ### 3.3 Living Work Packages & Refactoring Proposals (`internal/protocol/refactoring_proposal.go`)
 
 ```go

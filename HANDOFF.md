@@ -2,8 +2,8 @@
 
 Last updated: 2026-09-30T03:15:00Z by Principal Engineer Session
 
-Session takeover HEAD: `58869d99635ee0d05b5fe30e3b152dacddc12445`
-PR #16 Base: `08751435e553359b54284600e73563d689ad44c2`
+PR #16 Base: `58869d99635ee0d05b5fe30e3b152dacddc12445`
+PR #16 Head: `feat/m3c-cognition-substrate`
 Active PR: https://github.com/olostan/DevCadence/pull/16
 
 ## Milestone
@@ -14,7 +14,7 @@ See docs/WORK_PACKAGES.md#m3c--cognition-resource-and-session-substrate for the 
 
 | WP | Status | Checkpoint | Validation | Review |
 |----|--------|------------|------------|--------|
-| WP-M3C-1 | review repairs completed | PR #16 repair commit pending | `go test -count=1 ./...` PASS | Round-1 findings from owner and inline review fully addressed |
+| WP-M3C-1 | review repairs completed | PR #16 repair commit pending | `go test -count=1 ./...` PASS | Round-1, Round-2, and portfolio/workflow review findings addressed |
 | WP-M3C-2 | not started | — | — | blocked on WP-M3C-1 acceptance |
 | WP-M3C-3 | not started | — | — | blocked on WP-M3C-1, WP-M3C-2 |
 | WP-M3C-4 | not started | — | — | blocked on WP-M3C-1..3 |
@@ -51,6 +51,13 @@ See docs/WORK_PACKAGES.md#m3c--cognition-resource-and-session-substrate for the 
    7. Addressed PR #16 Round 2 review comments:
       - Validated `BudgetState.UnknownFields` and `ResourceState.UnknownMetrics` against allowed property names, enforced mutual exclusivity against populated pointer fields, and added consistency rules (`status: exhausted` requires zero/nil balance; `period_end` >= `period_start`). Documented observation versioning conventions in `Tx.PutRecord` and `soft_limit_exceeded`.
       - Enforced SHA-256 digest validation and non-empty key checks for `ContextPack.AdmittedObjectDigests`, validated non-empty `admission_provenance` on `ContextManifest`, and enforced non-empty `calibration_evidence_ref` on `WorkloadEnvelope`.
+   8. Addressed PR #16 Round 3 review comments:
+      - Enforced channel resolution and pool coverage for `RoleBinding.FallbackEndpointIDs`, prohibiting fallback to metered endpoints from pools that do not permit it (ADR-0018 §9, DCI-104).
+      - Enforced role priority uniqueness in `CognitionPortfolio.Validate()`, preventing priority ties across role bindings.
+      - Enforced `BudgetReservations` upper bound against `pool.HardLimit`.
+      - Introduced explicit `StageKind` (`"cognition" | "deterministic"`) and `is_review: bool` on `WorkflowStage` (and `schemas/workflow-plan.schema.json`), replacing all free-text role substring heuristics for topology validation.
+      - Documented in EWP that `ContextPack` resident ceiling check against `ContextProfile` belongs to the Context Compiler / Session Driver (WP-M3C-2/3).
+      - Corrected `HANDOFF.md` Base label and refreshed Head reference.
 - **What's verified:**
   - `go build ./...` clean (exit 0)
   - `go vet ./...` clean (exit 0)

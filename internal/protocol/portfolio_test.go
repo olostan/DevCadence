@@ -8,13 +8,16 @@ import (
 
 func validPortfolio() *protocol.CognitionPortfolio {
 	ch := *validAccessChannel()
+	chFallback := *validAccessChannel()
+	chFallback.ChannelID = "chan_fallback_01"
+	chFallback.EndpointID = "ep_fallback_01"
 	bp := *validBudgetPool()
 	return &protocol.CognitionPortfolio{
 		SchemaVersion: protocol.SchemaVersion1,
 		PortfolioID:   "port_1",
 		Revision:      1,
 		CreatedAt:     "2026-09-30T00:00:00Z",
-		Channels:      []protocol.AccessChannel{ch},
+		Channels:      []protocol.AccessChannel{ch, chFallback},
 		RoleBindings: []protocol.RoleBinding{
 			{
 				Role:                "principal",
@@ -24,6 +27,14 @@ func validPortfolio() *protocol.CognitionPortfolio {
 				ContextProfileID:    "prof_1",
 				Priority:            1,
 				FallbackEndpointIDs: []string{"ep_fallback_01"},
+			},
+			{
+				Role:             "secondary",
+				EndpointID:       "ep_fallback_01",
+				ChannelID:        "chan_fallback_01",
+				BudgetPoolID:     "pool_1",
+				ContextProfileID: "prof_1",
+				Priority:         1,
 			},
 		},
 		BudgetPools:       []protocol.BudgetPool{bp},
@@ -99,6 +110,78 @@ func TestPortfolioValidation(t *testing.T) {
 		}
 	})
 
+	t.Run("fallback endpoint without channel in portfolio rejected", func(t *testing.T) {
+		p := validPortfolio()
+		// Remove chFallback so ep_fallback_01 has no channel
+		p.Channels = []protocol.AccessChannel{p.Channels[0]}
+		if err := p.Validate(); err == nil {
+			t.Fatal("expected error when fallback endpoint has no channel, got nil")
+		}
+	})
+
+	t.Run("fallback endpoint not covered by any budget pool rejected", func(t *testing.T) {
+		p := validPortfolio()
+		// Remove the secondary role binding so ep_fallback_01 is not covered by any pool
+		p.RoleBindings = []protocol.RoleBinding{p.RoleBindings[0]}
+		if err := p.Validate(); err == nil {
+			t.Fatal("expected error when fallback endpoint is not covered by any pool, got nil")
+		}
+	})
+
+	t.Run("fallback endpoint using metered pool when primary forbids metered rejected", func(t *testing.T) {
+		p := validPortfolio()
+		// Add a metered pool for the fallback endpoint
+		meteredPool := protocol.BudgetPool{
+			SchemaVersion:            protocol.SchemaVersion1,
+			PoolID:                   "pool_metered",
+			Name:                     "Metered Pool",
+			Regime:                   protocol.RegimeMeteredAPI,
+			Unit:                     protocol.UnitUSDCents,
+			HardLimit:                1000,
+			SoftAlertLimit:           800,
+			Period:                   protocol.PeriodBillingCycle,
+			AllowOverage:             true,
+			FallbackAllowedToMetered: true,
+		}
+		p.BudgetPools = append(p.BudgetPools, meteredPool)
+		// Point the secondary role binding to the metered pool
+		p.RoleBindings[1].BudgetPoolID = "pool_metered"
+		// Primary pool (pool_1) is subscription quota with FallbackAllowedToMetered == false
+		if err := p.Validate(); err == nil {
+			t.Fatal("expected error when fallback uses metered pool but primary forbids metered fallback, got nil")
+		}
+	})
+
+	t.Run("role binding duplicate priority per role rejected", func(t *testing.T) {
+		p := validPortfolio()
+		p.RoleBindings = append(p.RoleBindings, protocol.RoleBinding{
+			Role:             "principal", // same role as RoleBindings[0]
+			EndpointID:       "ep_fallback_01",
+			ChannelID:        "chan_fallback_01",
+			BudgetPoolID:     "pool_1",
+			ContextProfileID: "prof_1",
+			Priority:         1, // same priority -> tie!
+		})
+		if err := p.Validate(); err == nil {
+			t.Fatal("expected error on duplicate priority for same role, got nil")
+		}
+	})
+
+	t.Run("role binding distinct priority per role accepted", func(t *testing.T) {
+		p := validPortfolio()
+		p.RoleBindings = append(p.RoleBindings, protocol.RoleBinding{
+			Role:             "principal", // same role as RoleBindings[0]
+			EndpointID:       "ep_fallback_01",
+			ChannelID:        "chan_fallback_01",
+			BudgetPoolID:     "pool_1",
+			ContextProfileID: "prof_1",
+			Priority:         2, // distinct priority
+		})
+		if err := p.Validate(); err != nil {
+			t.Fatalf("expected valid when priorities are distinct for same role, got: %v", err)
+		}
+	})
+
 	t.Run("budget reservations integrity", func(t *testing.T) {
 		p := validPortfolio()
 		p.BudgetReservations = map[string]int64{"non_existent_pool": 50}
@@ -110,6 +193,12 @@ func TestPortfolioValidation(t *testing.T) {
 		p.BudgetReservations = map[string]int64{"pool_1": -10}
 		if err := p.Validate(); err == nil {
 			t.Fatal("expected error on negative reservation amount, got nil")
+		}
+
+		p = validPortfolio()
+		p.BudgetReservations = map[string]int64{"pool_1": 600} // HardLimit is 500
+		if err := p.Validate(); err == nil {
+			t.Fatal("expected error when reservation exceeds pool hard limit, got nil")
 		}
 	})
 
@@ -162,6 +251,7 @@ func TestWorkflowPlanValidation(t *testing.T) {
 				{
 					StageID:        "stage_1",
 					Role:           "implementer",
+					Kind:           protocol.StageKindCognition,
 					Order:          1,
 					BudgetPoolID:   "pool_1",
 					TimeoutSeconds: 600,
@@ -169,6 +259,8 @@ func TestWorkflowPlanValidation(t *testing.T) {
 				{
 					StageID:        "stage_2",
 					Role:           "reviewer",
+					Kind:           protocol.StageKindCognition,
+					IsReview:       true,
 					Order:          2,
 					DependsOn:      []string{"stage_1"},
 					BudgetPoolID:   "pool_1",
@@ -206,8 +298,8 @@ func TestWorkflowPlanValidation(t *testing.T) {
 			WorkPackageID: "WP-M3C-1",
 			Topology:      protocol.TopologySinglePass,
 			Stages: []protocol.WorkflowStage{
-				{StageID: "s1", Role: "implementer", Order: 1, BudgetPoolID: "p1", TimeoutSeconds: 100},
-				{StageID: "s1", Role: "reviewer", Order: 2, BudgetPoolID: "p1", TimeoutSeconds: 100},
+				{StageID: "s1", Role: "implementer", Kind: protocol.StageKindCognition, Order: 1, BudgetPoolID: "p1", TimeoutSeconds: 100},
+				{StageID: "s1", Role: "reviewer", Kind: protocol.StageKindCognition, IsReview: true, Order: 2, BudgetPoolID: "p1", TimeoutSeconds: 100},
 			},
 		}
 		if err := plan.Validate(); err == nil {
@@ -229,7 +321,7 @@ func TestWorkflowPlanValidation(t *testing.T) {
 			WorkPackageID: "WP-M3C-1",
 			Topology:      protocol.TopologySinglePass,
 			Stages: []protocol.WorkflowStage{
-				{StageID: "s1", Role: "implementer", Order: 1, DependsOn: []string{"s1"}, BudgetPoolID: "p1", TimeoutSeconds: 100},
+				{StageID: "s1", Role: "implementer", Kind: protocol.StageKindCognition, Order: 1, DependsOn: []string{"s1"}, BudgetPoolID: "p1", TimeoutSeconds: 100},
 			},
 		}
 		if err := plan.Validate(); err == nil {
@@ -245,7 +337,7 @@ func TestWorkflowPlanValidation(t *testing.T) {
 			WorkPackageID: "WP-M3C-1",
 			Topology:      protocol.TopologySinglePass,
 			Stages: []protocol.WorkflowStage{
-				{StageID: "s1", Role: "implementer", Order: 1, DependsOn: []string{"ghost_stage"}, BudgetPoolID: "p1", TimeoutSeconds: 100},
+				{StageID: "s1", Role: "implementer", Kind: protocol.StageKindCognition, Order: 1, DependsOn: []string{"ghost_stage"}, BudgetPoolID: "p1", TimeoutSeconds: 100},
 			},
 		}
 		if err := plan.Validate(); err == nil {
@@ -261,8 +353,8 @@ func TestWorkflowPlanValidation(t *testing.T) {
 			WorkPackageID: "WP-M3C-1",
 			Topology:      protocol.TopologyIterativeEscalation,
 			Stages: []protocol.WorkflowStage{
-				{StageID: "s1", Role: "implementer", Order: 1, DependsOn: []string{"s2"}, BudgetPoolID: "p1", TimeoutSeconds: 100},
-				{StageID: "s2", Role: "reviewer", Order: 2, BudgetPoolID: "p1", TimeoutSeconds: 100},
+				{StageID: "s1", Role: "implementer", Kind: protocol.StageKindCognition, Order: 1, DependsOn: []string{"s2"}, BudgetPoolID: "p1", TimeoutSeconds: 100},
+				{StageID: "s2", Role: "reviewer", Kind: protocol.StageKindCognition, IsReview: true, Order: 2, BudgetPoolID: "p1", TimeoutSeconds: 100},
 			},
 		}
 		if err := plan.Validate(); err == nil {
@@ -278,8 +370,8 @@ func TestWorkflowPlanValidation(t *testing.T) {
 			WorkPackageID: "WP-M3C-1",
 			Topology:      protocol.TopologyDualIndependentReview,
 			Stages: []protocol.WorkflowStage{
-				{StageID: "s1", Role: "implementer", Order: 1, BudgetPoolID: "p1", TimeoutSeconds: 100},
-				{StageID: "s2", Role: "reviewer_alpha", Order: 2, DependsOn: []string{"s1"}, BudgetPoolID: "p1", TimeoutSeconds: 100},
+				{StageID: "s1", Role: "implementer", Kind: protocol.StageKindCognition, Order: 1, BudgetPoolID: "p1", TimeoutSeconds: 100},
+				{StageID: "s2", Role: "reviewer_alpha", Kind: protocol.StageKindCognition, IsReview: true, Order: 2, DependsOn: []string{"s1"}, BudgetPoolID: "p1", TimeoutSeconds: 100},
 			},
 		}
 		if err := plan.Validate(); err == nil {
@@ -290,6 +382,8 @@ func TestWorkflowPlanValidation(t *testing.T) {
 		plan.Stages = append(plan.Stages, protocol.WorkflowStage{
 			StageID:        "s3",
 			Role:           "reviewer_beta",
+			Kind:           protocol.StageKindCognition,
+			IsReview:       true,
 			Order:          3,
 			DependsOn:      []string{"s1"},
 			BudgetPoolID:   "p1",
@@ -301,6 +395,7 @@ func TestWorkflowPlanValidation(t *testing.T) {
 	})
 
 	t.Run("topology compatibility: TopologyDeterministicOnly permits only deterministic stages", func(t *testing.T) {
+		// LLM stage named "tester" or "test_author" with kind: cognition is NOT deterministic
 		plan := &protocol.WorkflowPlan{
 			SchemaVersion: protocol.SchemaVersion1,
 			PlanID:        "plan_1",
@@ -308,16 +403,17 @@ func TestWorkflowPlanValidation(t *testing.T) {
 			WorkPackageID: "WP-M3C-1",
 			Topology:      protocol.TopologyDeterministicOnly,
 			Stages: []protocol.WorkflowStage{
-				{StageID: "s1", Role: "principal_engineer", Order: 1, BudgetPoolID: "p1", TimeoutSeconds: 100},
+				{StageID: "s1", Role: "test_author", Kind: protocol.StageKindCognition, Order: 1, BudgetPoolID: "p1", TimeoutSeconds: 100},
 			},
 		}
 		if err := plan.Validate(); err == nil {
-			t.Fatal("expected error when DeterministicOnly has generative role, got nil")
+			t.Fatal("expected error when DeterministicOnly has stage with kind: cognition, got nil")
 		}
 
-		plan.Stages[0].Role = "verifier"
+		// Update to Kind: deterministic
+		plan.Stages[0].Kind = protocol.StageKindDeterministic
 		if err := plan.Validate(); err != nil {
-			t.Fatalf("expected valid DeterministicOnly with verifier role, got: %v", err)
+			t.Fatalf("expected valid DeterministicOnly with kind: deterministic, got: %v", err)
 		}
 	})
 }

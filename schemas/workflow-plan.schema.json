@@ -44,6 +44,7 @@
         "required": [
           "stage_id",
           "role",
+          "kind",
           "order",
           "budget_pool_id",
           "timeout_seconds"
@@ -51,6 +52,13 @@
         "properties": {
           "stage_id": { "type": "string", "minLength": 1 },
           "role": { "type": "string", "minLength": 1 },
+          "kind": {
+            "enum": [
+              "cognition",
+              "deterministic"
+            ]
+          },
+          "is_review": { "type": "boolean" },
           "order": { "type": "integer", "minimum": 1 },
           "depends_on": {
             "type": "array",

@@ -1,10 +1,6 @@
 package protocol
 
-import (
-	"strings"
-
-	"github.com/olostan/DevCadence/internal/errs"
-)
+import "github.com/olostan/DevCadence/internal/errs"
 
 // RoleBinding maps an engineering role to an endpoint, channel, and budget pool (ADR-0018 §1, FR-062).
 type RoleBinding struct {
@@ -121,6 +117,24 @@ func (c *CognitionPortfolio) Validate() error {
 		excludedMap[epID] = true
 	}
 
+	endpointChannels := make(map[string][]AccessChannel)
+	for _, ch := range c.Channels {
+		endpointChannels[ch.EndpointID] = append(endpointChannels[ch.EndpointID], ch)
+	}
+
+	endpointPools := make(map[string][]BudgetPool)
+	for _, b := range c.RoleBindings {
+		if pool, ok := poolMap[b.BudgetPoolID]; ok {
+			endpointPools[b.EndpointID] = append(endpointPools[b.EndpointID], pool)
+		}
+	}
+
+	type rolePriorityKey struct {
+		role     string
+		priority int
+	}
+	seenRolePriority := make(map[rolePriorityKey]int, len(c.RoleBindings))
+
 	for i, rb := range c.RoleBindings {
 		if err := rb.Validate(); err != nil {
 			return errs.New(errs.CategoryInvalidArgument, "%s: role_bindings[%d]: %v", kind, i, err)
@@ -132,25 +146,52 @@ func (c *CognitionPortfolio) Validate() error {
 		if rb.EndpointID != ch.EndpointID {
 			return errs.New(errs.CategoryInvalidArgument, "%s: role_bindings[%d] endpoint_id %q does not match channel endpoint_id %q", kind, i, rb.EndpointID, ch.EndpointID)
 		}
-		if _, ok := poolMap[rb.BudgetPoolID]; !ok {
+		primaryPool, ok := poolMap[rb.BudgetPoolID]
+		if !ok {
 			return errs.New(errs.CategoryInvalidArgument, "%s: role_bindings[%d] references non-existent budget_pool_id %q", kind, i, rb.BudgetPoolID)
 		}
 		if excludedMap[rb.EndpointID] {
 			return errs.New(errs.CategoryInvalidArgument, "%s: role_bindings[%d] uses excluded endpoint_id %q", kind, i, rb.EndpointID)
 		}
+		rpKey := rolePriorityKey{role: rb.Role, priority: rb.Priority}
+		if firstIndex, dup := seenRolePriority[rpKey]; dup {
+			return errs.New(errs.CategoryInvalidArgument,
+				"%s: role_bindings[%d] duplicate priority %d for role %q (already assigned in role_bindings[%d])",
+				kind, i, rb.Priority, rb.Role, firstIndex)
+		}
+		seenRolePriority[rpKey] = i
+
 		for _, fb := range rb.FallbackEndpointIDs {
 			if excludedMap[fb] {
 				return errs.New(errs.CategoryInvalidArgument, "%s: role_bindings[%d] fallback_endpoint_id %q is excluded", kind, i, fb)
+			}
+			if len(endpointChannels[fb]) == 0 {
+				return errs.New(errs.CategoryInvalidArgument, "%s: role_bindings[%d] fallback_endpoint_id %q has no access channel in portfolio channels", kind, i, fb)
+			}
+			fbPools, covered := endpointPools[fb]
+			if !covered || len(fbPools) == 0 {
+				return errs.New(errs.CategoryInvalidArgument, "%s: role_bindings[%d] fallback_endpoint_id %q is not covered by any budget pool in the portfolio", kind, i, fb)
+			}
+			for _, fbPool := range fbPools {
+				if fbPool.Regime == RegimeMeteredAPI && !primaryPool.FallbackAllowedToMetered {
+					return errs.New(errs.CategoryInvalidArgument,
+						"%s: role_bindings[%d] fallback_endpoint_id %q is bound to metered budget pool %q, but primary budget pool %q forbids fallback to metered (ADR-0018 §9, DCI-104)",
+						kind, i, fb, fbPool.PoolID, primaryPool.PoolID)
+				}
 			}
 		}
 	}
 
 	for poolID, amount := range c.BudgetReservations {
-		if _, ok := poolMap[poolID]; !ok {
+		pool, ok := poolMap[poolID]
+		if !ok {
 			return errs.New(errs.CategoryInvalidArgument, "%s: budget_reservations references non-existent budget_pool_id %q", kind, poolID)
 		}
 		if amount < 0 {
 			return errs.New(errs.CategoryInvalidArgument, "%s: budget_reservation for %q cannot be negative (%d)", kind, poolID, amount)
+		}
+		if amount > pool.HardLimit {
+			return errs.New(errs.CategoryInvalidArgument, "%s: budget_reservation for %q (%d) exceeds pool hard_limit (%d)", kind, poolID, amount, pool.HardLimit)
 		}
 	}
 
@@ -221,14 +262,33 @@ func (t WorkflowTopologyKind) Valid() bool {
 	return false
 }
 
-// WorkflowStage defines one cognitive pass in a workflow plan.
+// StageKind distinguishes cognitive from deterministic stages in a workflow (ADR-0018 §8).
+type StageKind string
+
+const (
+	StageKindCognition     StageKind = "cognition"
+	StageKindDeterministic StageKind = "deterministic"
+)
+
+// Valid reports whether the stage kind is known.
+func (k StageKind) Valid() bool {
+	switch k {
+	case StageKindCognition, StageKindDeterministic:
+		return true
+	}
+	return false
+}
+
+// WorkflowStage defines one cognitive or deterministic pass in a workflow plan.
 type WorkflowStage struct {
-	StageID        string   `json:"stage_id"`
-	Role           string   `json:"role"`
-	Order          int      `json:"order"`
-	DependsOn      []string `json:"depends_on,omitempty"`
-	BudgetPoolID   string   `json:"budget_pool_id"`
-	TimeoutSeconds int      `json:"timeout_seconds"`
+	StageID        string    `json:"stage_id"`
+	Role           string    `json:"role"`
+	Kind           StageKind `json:"kind"`
+	IsReview       bool      `json:"is_review,omitempty"`
+	Order          int       `json:"order"`
+	DependsOn      []string  `json:"depends_on,omitempty"`
+	BudgetPoolID   string    `json:"budget_pool_id"`
+	TimeoutSeconds int       `json:"timeout_seconds"`
 }
 
 // Validate checks WorkflowStage fields.
@@ -239,6 +299,10 @@ func (w WorkflowStage) Validate() error {
 	}
 	if err := requireNonEmpty(kind, "role", w.Role); err != nil {
 		return err
+	}
+	if !w.Kind.Valid() {
+		return enumError(kind, "kind", string(w.Kind),
+			string(StageKindCognition), string(StageKindDeterministic))
 	}
 	if w.Order < 1 {
 		return errs.New(errs.CategoryInvalidArgument, "%s: order must be >= 1, got %d", kind, w.Order)
@@ -314,11 +378,10 @@ func (w *WorkflowPlan) Validate() error {
 		}
 		orders[stage.Order] = stage.StageID
 
-		roleLower := strings.ToLower(stage.Role)
-		if strings.Contains(roleLower, "review") {
+		if stage.IsReview {
 			reviewStageCount++
 		}
-		if strings.Contains(roleLower, "verif") || strings.Contains(roleLower, "determinis") || strings.Contains(roleLower, "lint") || strings.Contains(roleLower, "test") {
+		if stage.Kind == StageKindDeterministic {
 			deterministicStageCount++
 		}
 	}
@@ -343,11 +406,11 @@ func (w *WorkflowPlan) Validate() error {
 	switch w.Topology {
 	case TopologyDualIndependentReview:
 		if reviewStageCount < 2 {
-			return errs.New(errs.CategoryInvalidArgument, "%s: topology %q requires at least 2 review stages, got %d", kind, w.Topology, reviewStageCount)
+			return errs.New(errs.CategoryInvalidArgument, "%s: topology %q requires at least 2 review stages (with is_review: true), got %d", kind, w.Topology, reviewStageCount)
 		}
 	case TopologyDeterministicOnly:
 		if deterministicStageCount != len(w.Stages) {
-			return errs.New(errs.CategoryInvalidArgument, "%s: topology %q permits only deterministic/verification stages, but found non-deterministic stages", kind, w.Topology)
+			return errs.New(errs.CategoryInvalidArgument, "%s: topology %q permits only deterministic stages (kind: %q), but found %d non-deterministic stages", kind, w.Topology, StageKindDeterministic, len(w.Stages)-deterministicStageCount)
 		}
 	}
 

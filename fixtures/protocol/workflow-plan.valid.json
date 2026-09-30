@@ -8,6 +8,7 @@
     {
       "stage_id": "stage_1_implement",
       "role": "implementer",
+      "kind": "cognition",
       "order": 1,
       "budget_pool_id": "pool_subscription_anthropic_pro",
       "timeout_seconds": 600
@@ -15,6 +16,8 @@
     {
       "stage_id": "stage_2_review",
       "role": "reviewer",
+      "kind": "cognition",
+      "is_review": true,
       "order": 2,
       "depends_on": [
         "stage_1_implement"
