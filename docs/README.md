@@ -78,6 +78,8 @@ Start with [AGENTS.md](../AGENTS.md), the applicable [role template](../prompts/
 
 Path/domain/risk rules must be resolved conjunctively: for example, a driver changing credential access needs session **and** security clauses. Undeclared paths or unmapped risks require re-resolution, not a guessed empty requirement set. This manual index is not yet the M3C machine mapping.
 
+Open follow-ups from the context-discipline review are tracked in [CONTEXT_FOLLOWUPS.md](CONTEXT_FOLLOWUPS.md).
+
 Generated invariant indexes, role cards and document maps are planned **projections** of owning clauses, not independent sources of authority. A compiled projection records source identifier, revision and digest; drift or unresolved anchors reject admission. Do not create another hand-maintained miniature corpus. Historical EWPs remain available as evidence, outside default reading sets.
 
 ## Accepted ADRs

@@ -243,7 +243,7 @@ Time is cheap relative to implementing the wrong interpretation.
 
 ## Normative references
 
-Read:
+Resolve applicable clauses from these owners (do not preload them whole; see ../../AGENTS.md §2):
 - ../../docs/DISCOVERY_AND_SPECIFICATION.md
 - ../../docs/LIFECYCLE.md
 - ../../docs/PROTOCOLS.md
