@@ -323,6 +323,12 @@ flowchart TB
 - observability requirements;
 - migration/rollback details.
 
+### Execution Contract and Context Manifest (manual now; typed M3C)
+
+An EWP contains the complete bounded Execution Contract described in WORK_PACKAGES.md, plus progressively retrievable design/rationale. The contract and task Context Manifest identify the EWP revision/digest, base/state identity, authorized paths, exact applicable normative clauses, acceptance, validation and escalation. Required clauses must be resolved into verbatim content before action; index lines are navigational only. No execution-critical requirement may exist solely in rationale.
+
+This is a document-authoring contract now, **not** a new field on the current strict EngineeringWorkPackage wire record. M3C must specify a versioned contract/manifest companion, link it through supported artifact/evidence references and migrate schema/type validation with compatibility tests before using new wire fields. Existing accepted records retain their meaning (DCI-090–093).
+
 ### 7.4 RefactoringProposal (Bottom-Up Challenge Protocol) [Proposed - M3C]
 
 *Status:* Proposed for Milestone M3C. Protocol Go types and JSON Schemas will be formalized under `internal/protocol/` and `schemas/` during M3C implementation.
@@ -440,32 +446,61 @@ Under ADR-0016:
 
 ## 10B. Adaptive Context Architecture and Evidence Working Set [Proposed - M3C]
 
-*Status:* Proposed for Milestone M3C. Provider-neutral context control capabilities (`ContextControl = ExactStateless | AppendOnly | OpaqueSession`) and Evidence Working Set lease mediation land in M3C.
+**Status:** planned M3C runtime/types/schemas; manual admission discipline is effective now. Existing `internal/compaction` and bounded tools under ADR-0016 remain implemented mechanisms, not a complete Context Resolver. The following are proposed semantic field sets, not current serialized records. M3C must define exact versions/enums/validation and schema/Go parity before emission. ADR-0019 owns the decision; this section owns protocol semantics.
 
-Rather than treating cognition as monolithic conversational loops that cause context bloat, token waste, and attention dilution, DevCadence structures cognition across four adaptive layers (ADR-0019 §1):
+### ContextProfile
 
-1. **Protected Core (Static Prefix)**: System instructions, task EWP, candidate/base commit SHAs, invariants, deterministic validation summaries, and a **diff manifest** (touched files, line change counts, and semantic hotspots). Full file diffs are included inline only when below a configured token/size threshold; larger diffs or multi-package refactors are leased progressively through the Evidence Working Set, preserving progressive disclosure (DCI-014) and preventing prefix cache bloat.
-2. **Cognitive State Capsule**: A compact, typed data structure maintaining derived hypotheses, active TODOs, intermediate decisions, and unresolved questions across turns. Explicitly categorized as derived cognition (not ground fact), preserving continuity without dragging raw conversational debris.
-3. **Evidence Working Set (Leased Snippet Pool)**: Models manage their active evidence dynamically through verbatim code snippets, diffs, and log excerpts:
-   - **Content-Addressed Leases**: Snippets reference `(file_path, content_digest, start_line, end_line)`;
-   - **Freshness Invalidation**: If underlying files are modified in a worktree during implementation, dependent snippet leases are automatically marked stale;
-   - **Server-Side Authorization**: The control plane enforces path authorization and bounds to prevent leaking out-of-scope files or secrets.
-4. **Short Ephemeral Tail**: Immediate prior tool call/result exchange for drivers that benefit from local conversational continuity, discarded across task boundaries and never treated as canonical project state.
+Endpoint/access-path and workload-specific capability/budget evidence:
+- endpoint identity, runtime/model/quantization/context configuration and profile revision;
+- declared and runtime windows; empirically effective working envelopes **by workload**, calibration task/evidence/date and confidence/unknown status;
+- target/hard resident ceilings, protected-core and contract limits, maximum single lease, output/reasoning and tool-tail reserves, tokenizer/accounting method and estimate uncertainty;
+- `ContextControl = ExactStateless | AppendOnly | OpaqueSession` and `PrefixCache = Explicit | Implicit | SessionKV | None` as adapter-observed capabilities, not inferred from local/remote labels;
+- long-context configuration and cache capabilities where observable; unknown values remain unknown.
 
-Example working-memory lease update:
+Targets are defaults; hard endpoint/policy ceilings are enforced. Model/runtime/configuration changes invalidate calibration applicability. Admission counts all model-visible system/host/tool-schema, contract, normative, state, evidence and tail tokens plus reserves; estimated counts include conservative margin. Hidden tokens in opaque sessions are not reported as exact zero.
+
+### ContextManifest
+
+Compiled task intent and provenance: role, task/EWP revision/digest, base/candidate/state identity; allowed read envelope and distinct allowed write paths; domains/risk tags; mandatory normative clause IDs with revision/digest; initial/deferred evidence refs; mapping/source versions; explicit questions, assumptions and expansion/re-resolution triggers; selected ContextProfile and budget.
+
+The Principal declares intent; the deterministic resolver adds applicable role/path/domain/risk rules. No semantic-search ranking decides whether MUST clauses apply. Unknown applicability blocks the affected action pending resolution. The manifest records why every substantial admitted object is required and how it was selected.
+
+### ContextPack
+
+Ephemeral compiled invocation input, reproducible from a manifest revision: small role core, complete Execution Contract, exact mandatory normative clauses, compact derived Cognitive State, initial/active evidence, evidence handles, candidate/diff manifest, validation summaries and final current question/action. Record admitted object digests, token counts/method, reserves and coverage. The pack is a projection, not new canonical project state or a second owner of normative rules.
+
+Resolve/validate required references and count the **complete** pack before invocation. Reject missing/stale clauses, unmapped required domains, unauthorized content or insufficient reserve. `CONTEXT_UNFIT` means the mandatory contract/pack cannot fit: split work, select an authorized capable endpoint or escalate. Never send a partial contract or silently truncate. Hard ceilings, privacy and spending remain unbypassable.
+
+### EvidenceLease
+
+Lease ID; evidence kind; source revision/worktree identity, path or artifact handle, exact clause/symbol/range locator, content digest; acquisition question/reason; token count/method; freshness/expiry and release state. Code and normative payloads are verbatim. Path, range and digest can be metadata without prefixing every source line with a number. Headers, qualifiers and dependencies needed to interpret a clause are part of its semantic unit.
+
+Evidence is evictable; protected requirements are not. If required evidence changes, invalidate it and derived state claims depending on it. When contract/normative identity changes, rebuild the pack and revalidate affected assumptions. Release removes active residency only where the adapter can enforce it; it never deletes durable evidence. Read authorization is not limited to allowed write paths and never permits secrets outside policy.
+
+### Expansion and state transition
+
+A small request records the explicit question, required IDs/symbols/ranges and reason. The resolver authorizes retrieval, resolves exact references, measures the enlarged pack and atomically either admits it (with optional evidence eviction), rejects with a typed cause or suspends for decomposition/routing/approval under existing policy. Fetching larger sections/full files is legitimate when justified and fit; permission to investigate is not permission to expand authority.
+
+New domains, risk tags or proposed write paths require context re-resolution before modification; write-scope changes also require EWP authorization. Required normative clauses cannot be evicted to accommodate expansion. Request/release evidence through the existing proposed working-memory operation shape; this is not a second durable request table:
 
 ```json
 {
   "request_facts": [
     { "path": "internal/setup/doctor.go", "start_line": 815, "end_line": 835 }
   ],
-  "release_facts": [
-    "snippet_1"
-  ]
+  "release_facts": ["snippet_1"]
 }
 ```
 
-The control plane runtime deterministically drops released leases, verifies and fetches requested lines, and maintains a lean working memory envelope.
+M3C extends that proposed operation with question/reason, stable normative identifiers, lease identity and explicit admission outcomes. Current schemas do not accept these extensions yet.
+
+The Cognitive State Capsule carries derived hypotheses, TODOs, decisions, open questions and evidence dependencies; it does not certify truth. Restart reconstructs state from pinned contract and current evidence, not inherited chat. Outer cumulative resource exhaustion preserves a checkpoint and suspends under `PAUSED_BUDGET_EXCEEDED`; it is distinct from per-invocation `CONTEXT_UNFIT`.
+
+### Driver honesty and telemetry
+
+Exact stateless drivers can rebuild/evict; append-only drivers must rebuild/restart when needed rather than claiming deletion from past turns/KV state. Opaque drivers constrain initial instructions/tool outputs and use scoped sessions/checkpoints, reporting actual visibility and uncertainty. If a mandatory hard bound cannot be demonstrated, that endpoint is ineligible for policies requiring the bound. Cache reuse is opportunistic; never pad the prompt or keep obsolete requirements just for a cache hit.
+
+Attach usage to attempt/session telemetry, not a new canonical context journal: runtime window/profile, initial/peak resident tokens, role core/contract/normative/state/leased-evidence components, reserves, cumulative input/cached-input/output, reloaded tokens, expansions/evictions/restarts, coverage gaps and measurement provenance. Unknown provider counts stay unknown. Derived metrics include Initial/Peak Context Ratio (resident/runtime window), Evidence Yield (resolved material questions or findings per evidence tokens), Repeated Context Tax (reloaded/input tokens), tokens per accepted change and tokens per blocking defect found. Record denominator definitions; undefined/zero denominators remain unavailable, not zero. Ratios require compatible accounting; report input billed and input processed separately where available.
 
 ## 11. ReviewResult
 

@@ -2,6 +2,19 @@
 
 You implement one immutable Engineering Work Package in one isolated worktree.
 
+## Context admission
+
+Use the task Context Manifest and role-scoped pack; load the complete bounded
+Execution Contract/acceptance obligations where applicable and exact required
+normative clauses. Retrieve other evidence for explicit questions with pinned
+provenance. Do not preload reference docs or inherit author reasoning as authority.
+Forensic transcript retrieval is allowed when required by the task. Follow
+[AGENTS.md §2](../AGENTS.md#2-context-admission-not-mandatory-corpus-reading). Before
+acting in a new domain/risk/path, re-resolve context and obtain any required
+scope amendment. If required content cannot fit, report `CONTEXT_UNFIT`; never
+truncate constraints or guess. Automatic packs/eviction are planned M3C; use
+manual manifests until then. Report evidence/coverage gaps honestly.
+
 ## Priority
 
 1. MUST guidance and invariants.
@@ -14,7 +27,7 @@ You implement one immutable Engineering Work Package in one isolated worktree.
 
 ## Before editing
 
-- read the entire Work Package;
+- load the complete approved Execution Contract and exact mandatory clauses; retrieve EWP rationale progressively;
 - inspect the exact repository anchors and nearby patterns;
 - verify material blueprint assumptions observable from source;
 - stop if a MUST requirement conflicts with repository reality.

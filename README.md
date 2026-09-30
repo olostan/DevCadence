@@ -167,7 +167,9 @@ A local coding model should receive more than a task title. For non-trivial work
 - forbidden changes;
 - explicit escalation conditions.
 
-The Work Package is a compiled form of frontier reasoning. It should reduce the amount of architectural invention left to smaller models without over-specifying repository mechanics that local agents can observe more accurately.
+The Work Package is a compiled form of frontier reasoning. It has a small authoritative **Execution Contract** and retrievable design/rationale. Workers initially receive the complete contract plus exact applicable normative clauses; no execution-critical requirement may be hidden in rationale. Context is admitted by role, domain and risk, then expanded with question-driven evidence leases. Durable documentation authority does not imply whole-corpus prompt residency. Small 20–30k endpoints are first-class targets when a complete task contract fits their effective context; larger models remain available under policy.
+
+This process applies now through manual manifests; automatic Context Resolver admission, endpoint profiles and linting are planned for M3C, with quality/cost calibration in M4. See [ADR-0019](docs/adr/0019-non-conversational-cognition-and-adaptive-review.md#context-working-set-contract).
 
 ## Canonical project state
 

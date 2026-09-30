@@ -182,6 +182,12 @@ code is written, so a handoff mid-WP always has a real design document to
 resume against, not just a scope card and whatever the previous session
 happened to be thinking.
 
+## Context transferred across sessions
+
+A handoff transfers the compact derived **Cognitive State Capsule**, Context Manifest, EWP revision/digest and complete Execution Contract reference, base/candidate SHA, outstanding questions, evidence handles with revision/digest, validation state and next action. It does not require reading a prior conversation. Transcripts remain forensic/debug references only.
+
+The receiver verifies freshness and rebuilds applicable context for its role/endpoint; summaries are claims, not proof. Reload exact requirements before affected actions, invalidate evidence/state after source changes and re-resolve on new domains/risks/proposed paths. A takeover does not silently acquire expanded authority. Until M3C, these are Markdown fields in the temporary handoff, not purported runtime records. Existing single-writer, checkpoint, no-force-push and closure-candidate identity rules remain unchanged.
+
 ## The handoff file
 
 A single file, **`HANDOFF.md`, at the repository root of the working
@@ -285,6 +291,16 @@ correct phrasing.)
   or anything the current agent is uncertain about — do not paper over
   uncertainty here>
 
+## Context and evidence capsule
+
+- **Contract:** <EWP ID/revision, commit/digest, Execution Contract anchor>
+- **Context Manifest:** <role, read/write scope, domains/risks, exact normative refs,
+  profile/budget assumptions, re-resolution triggers>
+- **Derived state:** <hypotheses/TODOs/decisions, each with evidence dependencies>
+- **Evidence:** <handles, revision/digests, resolved questions, stale/outstanding refs>
+- **Coverage:** <validated/reviewed requirements, uncovered areas and pending findings>
+- **Expansion needed:** <explicit question, requested reference, reason>
+
 ## Next concrete action
 
 <The single next thing to do. Not "continue implementing WP-M3B-2" —
@@ -304,9 +320,12 @@ literally the next file to open / function to write / test to run.>
    first.
 3. Check whether `Last updated` is recent enough that another session
    might still be active; if in doubt, ask the human before proceeding.
-4. Read this WP's entry in `docs/WORK_PACKAGES.md`, and its committed EWP
-   if one exists, in full before writing code — this handoff file is a
-   status snapshot, not a substitute for either.
+4. Resolve the task Context Manifest and load the complete committed EWP
+   Execution Contract, exact applicable normative clauses and current evidence.
+   The scope card is not implementation authority. Retrieve rationale/ADRs
+   progressively for explicit questions; do not reload whole documents by
+   default. Legacy EWPs require a Principal-approved bounded contract companion
+   before small-context delegation, preserving all existing requirements.
 5. Continue from "Next concrete action" above.
 6. At the next durable checkpoint (not just "before the session ends"),
    update this file again — including advancing "Expected remote HEAD" to

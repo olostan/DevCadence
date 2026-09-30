@@ -284,6 +284,14 @@ Stores versioned frontier-authored implementation blueprints. Work Packages serv
 ### 6.6 Evidence service
 Stores structured claims and references to raw artifacts without forcing raw artifacts into every model context.
 
+### 6.6A Context Resolver and active working set [Planned - M3C]
+
+Durable documentation is machine-addressable external memory, not a mandatory resident corpus (DCI-018). The resolver compiles role + complete EWP Execution Contract + versioned path/domain/risk rules + endpoint ContextProfile into a revision-pinned ContextManifest/ContextPack. Exact mandatory clauses are deterministically admitted; evidence is progressively leased for explicit questions. An invariant index is navigation, not normative payload. Unknown mappings or missing clauses block the affected action; `CONTEXT_UNFIT` requests decomposition/authorized routing/escalation without truncation.
+
+The Principal owns contract completeness; the deterministic resolver owns resolution, freshness, authorization and admission. Evidence leases are evictable, required constraints are not. Derived state tracks evidence dependencies. Domain/scope changes require re-resolution before modification, and admission cannot increase write/spending authority. Profiles reserve output/reasoning/tool capacity and count host/schema overhead. Driver capability determines whether eviction is exact or requires checkpoint/restart; opaque state must remain honestly unknown.
+
+This is planned runtime machinery, beyond ADR-0016's implemented bounded tools and history compaction. New work uses manual manifests/contracts now. PROTOCOLS §10B owns proposed fields; ADR-0019 owns rationale and tradeoffs. M4 calibrates workload-specific envelopes and tests quality against simpler baselines.
+
 ### 6.7 Cognition resource plane
 
 The cognition resource plane exposes replaceable cognition endpoints and invocation/session drivers. Endpoints may be local runtimes, authenticated coding/agent CLIs or SDKs, remote APIs, or future policy-compatible workers. Roles are not endpoint kinds and provider/model identity does not imply role.
@@ -342,7 +350,7 @@ Executes deterministic commands and normalizes their evidence.
 
 ### 6.10 Review coordinator
 Runs bounded ReviewCampaigns without conversational chat inflation (ADR-0019). It coordinates:
-- **Adaptive Context Architecture**: Reviewers operate with a prefix-cached static baseline (EWP, diff, invariants), a compact Cognitive State Capsule, and an Evidence Working Set (leased snippets with content-addressed provenance and freshness checks), preventing token explosion while inspecting verbatim code.
+- **Adaptive Context Architecture**: Reviewers operate with a bounded lens-specific baseline (complete Execution Contract, exact applicable clauses and diff/validation manifests; prefix-cached where supported), a compact Cognitive State Capsule, and an Evidence Working Set (leased snippets with content-addressed provenance and freshness checks), preventing token explosion while inspecting verbatim code.
 - **Dynamic review lenses & active falsification**: Dispatches specialized cognitive lenses based on risk (Anti-Rabbit Hole, Anti-Drift, Anti-Hallucination, Architecture & Invariants) and executes deterministic mutation probes (`FalsificationProbe`) in isolated worktrees to verify assertions fail when code is broken.
 - **Dual Independent Review & Adjudication Fast-Path**: Dispatches parallel reviews across distinct model families for high-risk work; enables the "Double-Green" adjudication fast-path for rapid Principal acceptance when independent reviews and deterministic validation pass, subject to Asymmetric Veto for security and invariant blockers.
 - **Adjudication and repair**: The Principal—not individual reviewers—adjudicates findings into standard `FindingDisposition` records and compiles at most one single consolidated Repair Work Package per round. The coordinator never permits unmoderated conversational debate between implementers and reviewers.

@@ -1,12 +1,12 @@
 # ADR-0019: Adaptive Context Architecture, Dynamic Review Lenses, and Living Work Packages
 
 - **Status:** Accepted
-- **Date:** 2026-09-25 (Amended 2026-09-26)
+- **Date:** 2026-09-25 (Amended 2026-09-26; Context Working-Set amendment 2026-09-30)
 - **Decision owner:** Principal / Human
 - **Supersedes:** none
 - **Superseded by:** none
 - **Related:** ADR-0016 (supervised validation services, bounded execution tools, and multi-tier context compaction). Scope boundary: ADR-0016 owns bounded-tool-output mediation and trajectory/history compaction for in-flight execution; ADR-0019 owns the per-turn prompt architecture (Protected Core, Cognitive State Capsule, Evidence Working Set, Ephemeral Tail) and review/attempt-context layering built on top of it. Both cite DCI-014 (progressive disclosure) from their respective layers and are intended to compose, not compete.
-- **Related invariants:** DCI-001, DCI-005, DCI-008, DCI-009, DCI-020, DCI-021, DCI-040, DCI-045, DCI-049, DCI-050, DCI-055, DCI-060, DCI-070, DCI-074, DCI-090, DCI-091, DCI-108
+- **Related invariants:** DCI-018, DCI-019, DCI-129, DCI-001, DCI-005, DCI-008, DCI-009, DCI-020, DCI-021, DCI-040, DCI-045, DCI-049, DCI-050, DCI-055, DCI-060, DCI-070, DCI-074, DCI-090, DCI-091, DCI-108
 - **Related tasks:** WP-M3B (1–8 empirical review baseline), M3C, M3D, M4, M7
 
 ---
@@ -17,14 +17,11 @@ During the implementation and closure of Milestone M3B (tracked across PR #10, e
 
 This empirical campaign yielded critical findings regarding how frontier and local models behave under work-package delegation, multi-turn tool interaction, and independent review:
 
-1. **The "Chat Trap"**: When engineering agents run in conversational loops, prompt context grows monotonically with every tool call, compiler error, and bash output. By turn 20, a prompt exceeds 100k–150k tokens. Every subsequent turn re-processes this bloated history. This causes:
-   - Severe quadratic token and compute waste;
-   - Prompt fatigue and attention dilution (models miss subtle instructions amidst 100k tokens of dead transcripts);
-   - Sunk-cost confirmation bias (models anchor on their own earlier guesses and defend them rather than checking ground truth).
+1. **The "Chat Trap"**: Without pruning, conversational prompts accumulate tool output and prior decisions. Cumulative submitted input can grow approximately quadratically in turn count when each turn adds a similar amount; actual compute and billed cost depend on KV/prefix reuse and driver behavior. Attention dilution and anchoring are engineering risks to test, not universal model laws.
 2. **The "Frozen" Trap**: Early process rules stated that accepted Work Packages were "frozen". In practice, when implementing WP-5 or WP-8, reality revealed that an interface or decision made in WP-2 was clunky or lacked essential parameters. Under dogmatic freezing, models are forced to write awkward shims, wrappers, and workarounds to avoid touching upstream packages, causing rapid architectural rot.
 3. **The Artificial Turn-Limit Trap**: Attempting to prevent runaway agent loops by telling the model *"You have a budget of N turns"* induces "budget anxiety": models rush, skip essential verifications, and hallucinate conclusions when running low on turns.
 4. **The Lossy Distillation Trap**: Attempting to save tokens by asking models to summarize or distill source code into prose strips away exact types, error contracts, edge-case comments, and off-by-one checks, injecting hallucinations into downstream reasoning.
-5. **The Power of Clean-Context Independent Review**: Conversely, spawning an independent reviewer in a fresh, clean session (containing only the EWP, diff, and deterministic test results) consistently caught deep bugs that the authoring agent was blind to (e.g. tautological test fixtures, character-device TTY quirks, and missing readiness mappings). When a reviewer ran mutation testing (temporarily disabling a diagnostic to verify the test failed), it provided ironclad correctness proof.
+5. **The Power of Clean-Context Independent Review**: Conversely, spawning an independent reviewer in a fresh, clean session (containing only the EWP, diff, and deterministic test results) consistently caught deep bugs that the authoring agent was blind to (e.g. tautological test fixtures, character-device TTY quirks, and missing readiness mappings). When a reviewer ran mutation testing (temporarily disabling a diagnostic to verify the test failed), it provided direct evidence that the selected test detected the selected mutation, not proof of all behavior.
 
 This decision formalizes the mechanisms needed to internalize these empirical discoveries into the native DevCadence control plane while strictly preserving epistemic boundaries, protocol integrity, and human governance.
 
@@ -34,20 +31,19 @@ This decision formalizes the mechanisms needed to internalize these empirical di
 
 DevCadence strictly distinguishes observed facts from empirical hypotheses (AGENTS.md §4, DCI-005):
 
-### Observed Provider Characteristics
+### External evidence and endpoint characteristics
 
-1. **Transformer Statelessness & Caching Mechanics**: In standard autoregressive transformer architectures, prompt tokens must be processed on each forward pass. Modern frontier providers support prefix and context caching with provider- and model-specific eligibility thresholds, pricing discounts, retention semantics, and latency benefits:
-   - **OpenAI** documents cached-input discounts up to 90% and faster prompt processing, with minimum thresholds depending on the model (e.g. 1,024 tokens for GPT-4o / GPT-5.6+);
-   - **Anthropic** prices common cache hits at 0.1× base input price, with model-dependent minimum cache write thresholds;
-   - **Google Gemini** supports implicit and explicit caching with model-dependent minimum thresholds (e.g. 2,048 tokens for Gemini 2.5 and 4,096 tokens for Gemini 3.x models).
-   Prompt caching requires maintaining an identical prefix; modifying tokens within the prefix invalidates the cache downstream of the edit point.
-2. **Endpoint Controllability Differences**: Direct API endpoints (`LocalityRemoteAPI`) and local model runtimes (`LocalityLocal`) permit precise, deterministic control over prompt layout, prefix placement, and cache management. Authenticated coding CLIs (`LocalityAuthenticatedCLI`) operate with proprietary, provider-managed session compaction, caching, and resumption policies that are largely opaque to external callers.
+[Lost in the Middle](https://arxiv.org/abs/2307.03172) reports positional sensitivity on retrieval/QA tasks. [RULER](https://arxiv.org/abs/2404.06654) shows that simple needle retrieval does not establish reliable multi-hop or aggregation capability, and evaluates degradation as context grows. These studies motivate workload calibration; their tested models/tasks do not establish a universal threshold for today's coding endpoints.
+
+[OpenAI prompt caching](https://developers.openai.com/api/docs/guides/prompt-caching) documents reuse of identical prompt prefixes. Our architectural inference is that caching reduces repeated processing/cost but does not remove cached tokens from the model's attention problem. Eligibility, accounting and retention are adapter/provider facts, not fixed constants in this ADR.
+
+Economic cost, prefill/KV/decode resource cost and task accuracy are separate objectives. Runtime configuration, quantization, positional scaling, tool/schema overhead and task complexity can affect the useful envelope. A single declared maximum is insufficient evidence of reliable engineering performance. Driver controllability must be observed per access path; a local endpoint is not automatically controllable and a remote one is not automatically opaque.
 
 ### Working Empirical Hypotheses
 
-1. **Context Length Degradation Boundary**: Monolithic conversational debris exceeding 30k–50k tokens significantly increases reasoning degradation, instruction non-compliance, and hallucination rates in both frontier and local models compared to focused, prefix-cached context.
+1. **Effective Context Is Workload-Specific**: Removing irrelevant resident material may improve instruction compliance and engineering accuracy. Effective envelopes and useful prompt layouts must be measured per endpoint/configuration/workload; no universal 12k or 30k–50k failure boundary is assumed.
 2. **Provider Cognitive Diversity**: Different model families exhibit complementary cognitive blind spots and proficiencies across programming idioms, concurrency, type invariants, and boundary checks.
-3. **End-to-End Token Processing Reduction**: Replacing monotonic conversational transcripts with a 4-layer adaptive context architecture (Protected Core + Cognitive State Capsule + leased Evidence Working Set) is hypothesized to reduce cumulative processed token volume by 70% to 90% on long-horizon engineering tasks compared to full-history baselines.
+3. **End-to-End Token Processing Reduction**: Replacing monotonic conversational transcripts with a 4-layer adaptive context architecture (Protected Core + Cognitive State Capsule + leased Evidence Working Set) may reduce cumulative submitted/processed token volume on long-horizon tasks while preserving quality. Neither a 70–90% saving nor unchanged defect yield is established; M4 must measure both.
 
 ### Milestone M4 Validation Targets
 
@@ -57,9 +53,9 @@ In Milestone M4 (The Early Hypothesis Gate), DevCadence will empirically benchma
 
 ## Assumptions
 
-1. Direct APIs (`LocalityRemoteAPI`) allow fine-grained control over prompt construction and prefix caching.
-2. Local models (`LocalityLocal`) on Apple Silicon or Linux GPUs benefit drastically from tight working-memory bounds (staying under 12k tokens).
-3. Authenticated coding CLIs (`LocalityAuthenticatedCLI`) can be spawned in scoped, ephemeral sessions for specific attempts or reviews, even when exact token layouts cannot be commanded directly.
+1. Some endpoints allow exact prompt construction; the adapter must verify this and any caching capabilities.
+2. A complete task contract can fit a conservative working set for some 20–30k local endpoints. This makes them first-class targets, not a guarantee of capability for every task/model.
+3. CLI/session restart and checkpoint behavior can constrain accumulation where supported; opaque state requires honest unknown accounting and may make an endpoint ineligible for a strict-bound policy.
 
 ---
 
@@ -78,52 +74,86 @@ In Milestone M4 (The Early Hypothesis Gate), DevCadence will empirically benchma
 
 DevCadence adopts the **Adaptive Context Architecture, Dynamic Review Lenses, and Living Work Packages**, structured across six core mechanisms:
 
-### 1. Adaptive Context Architecture (Protected Core, Cognitive State Capsule, and Leased Evidence Working Set)
+### 1. Adaptive Context Architecture: Context Working-Set Architecture
 
-Rather than treating "non-conversational cognition" as an absolute rule that causes reasoning amnesia or ignores endpoint differences, DevCadence structures model context into four explicit architectural layers:
+#### Context Working-Set Contract
 
-```text
-┌────────────────────────────────────────────────────────┐
-│  LAYER 1: PROTECTED CORE (Static Prefix / KV Cache)    │
-│  - System role & durable invariants                    │
-│  - Engineering Work Package (EWP) specification        │
-│  - Diff manifest (and full diff if below threshold)   │
-│  - Deterministic test exit codes & verification bundle  │
-├────────────────────────────────────────────────────────┤
-│  LAYER 2: COGNITIVE STATE CAPSULE                      │
-│  - Derived hypotheses, active TODOs, decisions,        │
-│    unresolved questions, and evidence references       │
-├────────────────────────────────────────────────────────┤
-│  LAYER 3: EVIDENCE WORKING SET (Leased Snippet Pool)   │
-│  - [Snippet #1: internal/setup/doctor.go#L815-L835]    │
-│    (verbatim lines, content-addressed, freshness-check)│
-│  - [Snippet #2: internal/protocol/doctor.go#L165-L185] │
-├────────────────────────────────────────────────────────┤
-│  LAYER 4: SHORT EPHEMERAL TAIL (Driver-local)          │
-│  - Immediate prior tool execution / response exchange  │
-│    (discarded across task boundaries, never canonical) │
-└────────────────────────────────────────────────────────┘
+**Immediate process versus future implementation:** DCI-018/019, bounded Execution Contracts, manual Context Manifests, progressive reads and independent review packets apply to new/amended work now. Typed resolver/profiles/packs, generated projections, automatic admission/linting/eviction and telemetry are **planned M3C**; workload calibration and quality/cost claims are **M4 evidence gates**. ADR-0016's existing tool bounding and history compaction compose with this architecture but do not implement all of it.
+
+Repository docs, ADRs, invariants, source, tests and evidence are **durable model memory**. A prompt contains only its active working set. Normative authority determines conflict resolution, not default residency. Every substantial admitted object is contract-required, deterministically mapped or acquired for an explicit question.
+
+```mermaid
+flowchart TD
+    Corpus["Durable clauses, code and evidence"]
+    Intent["Role, contract, scope and risk"]
+    Profile["Endpoint context profile"]
+    Resolver["Deterministic Context Resolver"]
+    Pack["Bounded active working set"]
+    Question["Explicit evidence question"]
+    Corpus --> Resolver
+    Intent --> Resolver
+    Profile --> Resolver
+    Resolver --> Pack
+    Pack --> Question
+    Question --> Resolver
 ```
 
-1. **Layer 1: Protected Core (Static Prefix)**:
-   - Immutable across an attempt or review. Placed strictly at the prompt head to maximize prefix KV-cache reuse.
-   - Contains verbatim task EWP, candidate/base commit SHAs, invariants, deterministic test outputs, and a **diff manifest** (touched files, line counts, and semantic hotspot summaries).
-   - In accordance with progressive evidence disclosure (DCI-014), full diffs are included inline only when below a configured token/size threshold; large diffs or extensive refactors have their hunks leased progressively through the Evidence Working Set, preventing the immutable prefix from bloating.
-2. **Layer 2: Cognitive State Capsule**:
-   - A compact, typed state structure maintained across turns containing derived hypotheses, TODOs, decisions, and unresolved questions.
-   - Categorized as **derived cognition**, not ground truth. It maintains continuity across iterations without dragging raw conversation transcripts.
-3. **Layer 3: Evidence Working Set (Leased Snippets)**:
-   - Verbatim code snippets requested and released dynamically by the model.
-   - **Content-Addressed Provenance**: Every snippet lease references `(file_path, content_digest, start_line, end_line)`.
-   - **Freshness Invalidation**: If an underlying file is modified during implementation, dependent snippet leases are automatically marked stale and invalidated.
-   - **Server-Side Authorization**: The control plane checks read authorization, blocking access to out-of-scope paths, secrets, or unbounded files.
-4. **Layer 4: Short Ephemeral Tail**:
-   - For execution drivers that benefit from local conversational continuity, the immediately preceding tool call/response may be retained locally in the driver turn and pruned thereafter.
-5. **Endpoint Capability Mapping (M3C)**:
-   Session drivers declare context capabilities:
-   - `ContextControl = ExactStateless | AppendOnly | OpaqueSession`
-   - `PrefixCache = Explicit | Implicit | SessionKV | None`
-   Direct APIs and local models use exact stateless or append-only layouts; authenticated CLIs use scoped, ephemeral sessions.
+1. **Protected requirements:** small role/policy core, complete authoritative Execution Contract, base/candidate identity, exact applicable normative clauses and compact validation/diff manifests. Do not put the full EWP rationale, whole invariant file or raw logs in the protected prefix. Requirements are immutable within the attempt revision; revision changes require a rebuilt pack and affected-assumption revalidation. A large diff is leased, not silently omitted from review coverage.
+2. **Cognitive State Capsule:** compact derived hypotheses, TODOs, decisions, open questions and evidence dependencies. It preserves continuity but cannot certify truth or replace exact code/requirements.
+3. **Evidence Working Set:** verbatim revision/digest-pinned semantic clauses, code, diff hunks or logs with a question and lease lifecycle. Freshness invalidation also affects dependent state claims. Release is active eviction, not loss of durable provenance.
+4. **Ephemeral tail and reserves:** immediate useful tool exchanges, the current question/action and explicit room for output/reasoning and upcoming bounded results. Count host/system/tool-schema overhead too. Admission checks the entire assembled invocation, not merely the visible EWP.
+
+A model-friendly starting layout is a small stable role/core prefix, contract and exact clauses, evidence, derived state, then the current question/action. This is an adapter-tunable hypothesis, not a position law. Cache the stable prefix where supported, without keeping obsolete material or padding to meet a cache threshold.
+
+#### Deterministic admission and adaptive investigation
+
+The Principal compiles the task's architecture into its complete bounded Execution Contract. Every required MUST/MUST-NOT appears there verbatim or in a deterministically admitted exact normative clause. Rationale stays retrievable. Arbitrary EWP paragraph slicing is forbidden; if the complete contract cannot fit, split the task, route to an authorized capable endpoint or escalate.
+
+A Context Resolver combines the manifest with versioned role/path/domain/risk mappings and the endpoint profile. **Normative applicability is deterministic, never embedding-ranked RAG.** Search or models may help propose references but cannot decide to exclude a required clause. Unknown mappings and missing/stale clauses are unresolved context and block the affected action.
+
+Adaptive evidence follows DCI-014: index/search, symbol/signature, exact clause, focused snippet/hunk, larger section, full file and broader exploration where necessary. Semantic units include qualifying headings, dependencies and exceptions, not arbitrary lines stripped of meaning. Full reads are allowed with a specific justified question or systemic reconciliation and successful admission.
+
+An expansion records question, requested references and reason. The resolver authorizes and measures the updated pack, evicts optional evidence if safe, and admits atomically or returns a cause. Default targets permit justified expansion; hard endpoint/policy ceilings and output reserve do not. Expansion never increases read/write/network/credential/spending authority. New domains/risk or proposed paths require re-resolution before modification and EWP amendment when write scope changes.
+
+#### Endpoint-specific envelopes
+
+`ContextProfile` distinguishes declared/runtime windows from empirically effective envelopes by workload: navigation, implementation, review and architectural reasoning need not have equal limits. Profiles include endpoint/runtime/model/quantization/configuration identity, calibration evidence, target/hard resident limits, reserves, accounting method/uncertainty and observed `ContextControl`/`PrefixCache`. Recalibrate after relevant configuration changes; unknown evidence is explicitly provisional.
+
+For an uncalibrated 24–32k endpoint, an illustrative **initial** target is:
+
+| Component | Provisional tokens |
+| --- | ---: |
+| Role/protected rules | 1–2k |
+| Complete Execution Contract | 2–3k |
+| Exact mandatory clauses | about 1k |
+| Derived state | about 1k |
+| Initial evidence | 3–5k |
+| Total starting residency | about 8–12k |
+
+These are tuning ranges, not mutually guaranteed allocations or invariant ceilings. Mandatory content and host/tool overhead may exceed them: decompose or select a capable endpoint rather than dropping constraints. The remaining runtime capacity is reserved explicitly. Larger frontier windows also have context/cost targets; capability is not an excuse for corpus preloading.
+
+`ContextControl = ExactStateless | AppendOnly | OpaqueSession` and `PrefixCache = Explicit | Implicit | SessionKV | None` describe capabilities, not locality. Exact drivers rebuild/evict; append-only drivers checkpoint/restart when true eviction is required; opaque drivers constrain observable inputs and honestly report hidden-state uncertainty. Strict-bound policies reject endpoints whose required bounds cannot be demonstrated. Cumulative metering remains separate from resident admission.
+
+#### Addressability, projections and enforcement
+
+Budget **semantic units and assembled packs**, not total reference-file size. Existing heading anchors plus source revision/digest are valid transitional identifiers; new durable clause IDs need explicit ownership and uniqueness. Generated/linted role cards, invariant indexes and doc maps are compiled source projections. Reject drift, broken refs and missing mandatory context; never treat a one-line digest as the exact operative rule.
+
+M3C linting checks role core, complete contract and assembled pack plus reserves; stable reference resolution; domain/risk mapping completeness; and projection freshness. It cannot prove from prose that no hidden requirement exists. Principal contract preparation and independent review remain necessary. Defer fuzzy duplication linting and automatic historical-document rewrites.
+
+#### Alternatives and tradeoffs
+
+| Approach | Advantage | Reason for rejection or restriction |
+| --- | --- | --- |
+| Full-corpus preload | Simple; broad exposure | Repeated cost, irrelevant attention load and small-model infeasibility; broad reads reserved for justified systemic work |
+| One static mega-digest | Small repeated boot | Nuance loss, drift and no task-specific completeness guarantee |
+| Pure semantic RAG | Flexible evidence retrieval | Probabilistic misses are unacceptable for MUST applicability; use for evidence discovery only |
+| Universal 12k cap or role tiers | Easy enforcement | Effective context depends on endpoint/configuration/workload; use calibrated profiles and provisional defaults |
+| One-turn doc review / three blockers | Low apparent cost | Suppresses investigation/defects rather than irrelevant context; use bounded iterations and coverage instead |
+| Per-file reference limits | Easy lint | Confuses durable storage size with admitted semantic units; cap packs/contracts/projections |
+| Dynamic arbitrary EWP slices | Cheap small inputs | Can drop cross-cutting requirements; use complete atomic contracts |
+| Compiled mandatory admission plus leased evidence | Completeness and flexibility | Requires resolver/mapping/provenance machinery; validate incremental value in M4 |
+
+The selected approach may underfeed models, overcomplicate orchestration or increase refetch/prefill costs. Mitigations are exact mandatory clauses, cheap question-driven expansion, profile calibration, reproducible evidence and a simpler baseline comparison. State capsules can drift; dependencies and revalidation reduce this risk without claiming elimination. Explicit resident and cumulative budgets bound resources while preserving investigation; no fixed count of reasoning turns or blockers establishes completion.
 
 ### 2. Cognitive Freedom with Silent Multi-Dimensional Metering
 
@@ -211,7 +241,7 @@ At every milestone boundary, before transitioning to the next milestone:
 ## Consequences
 
 ### Positive
-- **Substantial Token and Cost Efficiency**: Replacing monotonic chat growth with prefix caching and leased snippets targets a 70% to 90% reduction in cumulative processed tokens, to be empirically measured and validated in Milestone M4.
+- **Substantial Token and Cost Efficiency**: Reduced irrelevant residency and repeated input are hypotheses to measure alongside defect yield in M4, not guaranteed savings.
 - **Cognitive Freedom**: Models reason thoroughly without budget-induced turn anxiety, while outer runtime meters guarantee bounded resource consumption.
 - **Anti-Rot (Living Architecture)**: The `RefactoringProposal` protocol eliminates hacky workarounds and keeps upstream interfaces clean.
 - **Empirical Grounding**: Active falsification probes convert subjective review debates into deterministic test evidence.
@@ -232,11 +262,12 @@ At every milestone boundary, before transitioning to the next milestone:
 
 1. **Milestone M3C (Session Substrate & Context Capabilities)**:
    - Define provider-neutral context capabilities: `ContextControl = ExactStateless | AppendOnly | OpaqueSession` and `PrefixCache = Explicit | Implicit | SessionKV | None`.
+   - Implement deterministic Context Resolver/profiles/packs, clause mappings/projection freshness, complete-contract admission with reserves, typed `CONTEXT_UNFIT` and lease/expansion mediation; do not claim automatic completeness from lint alone.
    - Implement the `Evidence Working Set` lease manager with content-addressed checks and path authorization.
    - Define `RefactoringProposal` in Go and JSON Schema (`internal/protocol/` and `schemas/`) so implementers can challenge baselines during M3C and M3D.
 2. **Milestone M4 (Hypothesis & Benchmark Gate)**:
    - Benchmark the Context Architecture against standard conversational agent baselines across frontier APIs, authenticated CLIs, and local models.
-   - Measure: input/cached/output tokens, defect catch rate, interaction tax, wall-clock time, cost, and stale-evidence rates.
+   - Measure initial/peak resident context and components, cumulative input/cached/output, reloaded evidence, expansions/restarts, defect yield, false positives, accepted quality, latency/cost and unknown/estimated accounting. Record the endpoint/configuration/workload and review coverage.
    - Sweep active working-set budgets empirically (e.g. 6k, 12k, 24k) rather than treating arbitrary limits as dogma.
 3. **Milestone M7 (Multi-Review Campaigns & Aggregator Synthesis)**:
    - Deliver parallel dual-reviewer fan-out with clean starting contexts.

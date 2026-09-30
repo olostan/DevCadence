@@ -56,84 +56,29 @@ flowchart TB
     Plan --> Setup
 ```
 
-## Reading paths
+## Context routing
 
-### New contributor
-1. [../README.md](../README.md)
-2. [VISION.md](VISION.md)
-3. [REQUIREMENTS.md](REQUIREMENTS.md)
-4. [../INVARIANTS.md](../INVARIANTS.md)
-5. [ARCHITECTURE.md](ARCHITECTURE.md)
-6. [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)
-7. [../AGENTS.md](../AGENTS.md)
+**Normative hierarchy does not imply loading hierarchy.** Authority determines which consulted source wins; it does not require every higher-authority document in every prompt. These documents are durable, machine-addressable model memory. Models retrieve exact relevant clauses rather than treating reference files as a boot payload.
 
-### Working on Day-0 discovery/specification
-1. [DISCOVERY_AND_SPECIFICATION.md](DISCOVERY_AND_SPECIFICATION.md)
-2. [../skills/antigravity-discovery/SKILL.md](../skills/antigravity-discovery/SKILL.md)
-3. [CONSULTANTS.md](CONSULTANTS.md)
-4. [PROTOCOLS.md](PROTOCOLS.md)
-5. [../prompts/specification-reviewer.md](../prompts/specification-reviewer.md)
-6. [adr/0001-discovery-specification-subsystem.md](adr/0001-discovery-specification-subsystem.md)
+Start with [AGENTS.md](../AGENTS.md), the applicable [role template](../prompts/), a bounded EWP Execution Contract and task Context Manifest. The following is a **domain routing index**, not a mandatory reading list. Retrieve relevant sections when the trigger applies; full reads require recorded justification. References are relative to this directory.
 
-### Working on brownfield project adoption
-1. [PROJECT_ADOPTION.md](PROJECT_ADOPTION.md)
-2. [DISCOVERY_AND_SPECIFICATION.md](DISCOVERY_AND_SPECIFICATION.md)
-3. [PROJECT_STATE.md](PROJECT_STATE.md)
-4. [ARCHITECTURE.md](ARCHITECTURE.md)
-5. [REQUIREMENTS.md](REQUIREMENTS.md)
-6. [adr/0012-mandatory-brownfield-adoption-baseline.md](adr/0012-mandatory-brownfield-adoption-baseline.md)
+| Trigger | Owning sources to resolve |
+| --- | --- |
+| Goals, product meaning or unresolved requirements | [VISION.md](VISION.md), [REQUIREMENTS.md](REQUIREMENTS.md), [DISCOVERY_AND_SPECIFICATION.md](DISCOVERY_AND_SPECIFICATION.md) |
+| Brownfield readiness or inherited authority | [PROJECT_ADOPTION.md](PROJECT_ADOPTION.md), [ADR-0012](adr/0012-mandatory-brownfield-adoption-baseline.md) |
+| Component boundary or dependency change | [ARCHITECTURE.md](ARCHITECTURE.md), applicable accepted ADR clauses |
+| EWP expansion or delegation | [WORK_PACKAGES.md](WORK_PACKAGES.md#execution-contract-and-context-manifest), [PROTOCOLS.md §7](PROTOCOLS.md#7-engineering-work-package), [PRINCIPAL_ENGINEER.md](PRINCIPAL_ENGINEER.md) |
+| Agent context, evidence or driver capability | [ADR-0019](adr/0019-non-conversational-cognition-and-adaptive-review.md#context-working-set-contract), [PROTOCOLS.md §10B](PROTOCOLS.md#10b-adaptive-context-architecture-and-evidence-working-set-proposed---m3c), [LOCAL_AGENTS.md](LOCAL_AGENTS.md#context-admission-and-endpoint-envelopes) |
+| Tool output/history compaction or supervised process | [ADR-0016](adr/0016-validation-services-bounded-tools-and-context-compaction.md), [SECURITY.md](SECURITY.md) |
+| Machine, setup, credentials, runtime or routing | [ENVIRONMENT_INTELLIGENCE_AND_ONBOARDING.md](ENVIRONMENT_INTELLIGENCE_AND_ONBOARDING.md), [MODEL_RUNTIME.md](MODEL_RUNTIME.md), [SETUP.md](SETUP.md), [COGNITION_PORTFOLIO.md](COGNITION_PORTFOLIO.md), ADRs 0013/0014/0018, [SECURITY.md](SECURITY.md) |
+| State, persistence or wire/schema compatibility | [PROJECT_STATE.md](PROJECT_STATE.md), [PROTOCOLS.md](PROTOCOLS.md), [schemas/README.md](../schemas/README.md), ADRs 0002–0006, affected schema/type |
+| Review, repair, closure or acceptance | [REVIEW_AND_CONVERGENCE.md](REVIEW_AND_CONVERGENCE.md#14-context-and-token-discipline), [VERIFICATION.md](VERIFICATION.md), ADR-0010 and ADR-0019 review clauses |
+| Principal host or semantic MCP boundary | [PRINCIPAL_HOSTS.md](PRINCIPAL_HOSTS.md), [MCP_API.md](MCP_API.md), relevant host integration |
+| Health, lessons, telemetry or milestone status | [REFACTORING_AND_HEALTH.md](REFACTORING_AND_HEALTH.md), [LEARNING.md](LEARNING.md), [OBSERVABILITY.md](OBSERVABILITY.md), [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) |
 
-### Working on environment/setup/cognition portfolio
+Path/domain/risk rules must be resolved conjunctively: for example, a driver changing credential access needs session **and** security clauses. Undeclared paths or unmapped risks require re-resolution, not a guessed empty requirement set. This manual index is not yet the M3C machine mapping.
 
-1. [ENVIRONMENT_INTELLIGENCE_AND_ONBOARDING.md](ENVIRONMENT_INTELLIGENCE_AND_ONBOARDING.md)
-2. [COGNITION_PORTFOLIO.md](COGNITION_PORTFOLIO.md)
-3. [MODEL_RUNTIME.md](MODEL_RUNTIME.md)
-4. [SETUP.md](SETUP.md)
-5. [SECURITY.md](SECURITY.md)
-6. [adr/0011-adaptive-environment-and-host-independent-cognition.md](adr/0011-adaptive-environment-and-host-independent-cognition.md)
-7. [adr/0013-environment-intelligence-and-cognition-contracts.md](adr/0013-environment-intelligence-and-cognition-contracts.md)
-8. [adr/0014-guided-bootstrap-and-remediation.md](adr/0014-guided-bootstrap-and-remediation.md)
-9. [adr/0018-adaptive-cognition-portfolio-and-workflow-synthesis.md](adr/0018-adaptive-cognition-portfolio-and-workflow-synthesis.md)
-
-### Working on frontier/principal behavior
-1. [PRINCIPAL_ENGINEER.md](PRINCIPAL_ENGINEER.md)
-2. [LIFECYCLE.md](LIFECYCLE.md)
-3. [PROTOCOLS.md](PROTOCOLS.md)
-4. [PRINCIPAL_HOSTS.md](PRINCIPAL_HOSTS.md)
-5. [MCP_API.md](MCP_API.md)
-6. [ANTIGRAVITY_INTEGRATION.md](ANTIGRAVITY_INTEGRATION.md)
-7. [CONSULTANTS.md](CONSULTANTS.md)
-8. [../integrations/antigravity/devcadence/skills/devcadence-principal/SKILL.md](../integrations/antigravity/devcadence/skills/devcadence-principal/SKILL.md)
-
-### Working on execution cognition
-1. [LOCAL_AGENTS.md](LOCAL_AGENTS.md)
-2. [MODEL_RUNTIME.md](MODEL_RUNTIME.md)
-3. [VERIFICATION.md](VERIFICATION.md)
-4. [SECURITY.md](SECURITY.md)
-5. [../prompts/scout.md](../prompts/scout.md)
-6. [../prompts/implementer.md](../prompts/implementer.md)
-7. [../prompts/reviewer.md](../prompts/reviewer.md)
-
-### Working on control-plane data/contracts
-1. [PROTOCOLS.md](PROTOCOLS.md)
-2. [PROJECT_STATE.md](PROJECT_STATE.md)
-3. [MCP_API.md](MCP_API.md)
-4. [../schemas/README.md](../schemas/README.md)
-5. [adr/0003-durable-record-compatibility.md](adr/0003-durable-record-compatibility.md)
-6. [adr/0004-canonical-task-state-machine.md](adr/0004-canonical-task-state-machine.md)
-7. [adr/0005-deterministic-project-state-identity.md](adr/0005-deterministic-project-state-identity.md)
-
-### Working on persistence
-1. [ARCHITECTURE.md](ARCHITECTURE.md) §10
-2. [adr/0002-control-plane-persistence.md](adr/0002-control-plane-persistence.md)
-3. [adr/0006-identifiers-and-time.md](adr/0006-identifiers-and-time.md)
-4. [../ENGINEERING_STANDARDS.md](../ENGINEERING_STANDARDS.md) §10–§12
-
-### Working on long-term quality
-1. [REFACTORING_AND_HEALTH.md](REFACTORING_AND_HEALTH.md)
-2. [LEARNING.md](LEARNING.md)
-3. [OBSERVABILITY.md](OBSERVABILITY.md)
-4. [../prompts/postmortem.md](../prompts/postmortem.md)
+Generated invariant indexes, role cards and document maps are planned **projections** of owning clauses, not independent sources of authority. A compiled projection records source identifier, revision and digest; drift or unresolved anchors reject admission. Do not create another hand-maintained miniature corpus. Historical EWPs remain available as evidence, outside default reading sets.
 
 ## Accepted ADRs
 
@@ -160,7 +105,7 @@ hierarchy below.
 | [0016](adr/0016-validation-services-bounded-tools-and-context-compaction.md) | Supervised validation services, bounded execution tools, asynchronous operations, and multi-tier context compaction |
 | [0017](adr/0017-external-research-evidence-acquisition.md) | External research as a bounded evidence-acquisition service |
 | [0018](adr/0018-adaptive-cognition-portfolio-and-workflow-synthesis.md) | Adaptive cognition portfolios, economics/budget pools, AI-assisted recommendation and adaptive workflow topology |
-| [0019](adr/0019-non-conversational-cognition-and-adaptive-review.md) | Adaptive context architecture, dynamic review lenses, living work packages, and dual independent review |
+| [0019](adr/0019-non-conversational-cognition-and-adaptive-review.md) | Context Working-Set Architecture, deterministic admission, dynamic review lenses, living work packages, and dual independent review |
 
 ## Normative hierarchy
 
@@ -175,12 +120,3 @@ If documents appear to conflict, use this order and surface the inconsistency:
 7. implementation suggestion.
 
 A conflict is evidence to resolve, not permission to silently choose whichever text is convenient.
-
-
-### Working on review, repair, or milestone closure
-1. [REVIEW_AND_CONVERGENCE.md](REVIEW_AND_CONVERGENCE.md)
-2. [VERIFICATION.md](VERIFICATION.md)
-3. [PRINCIPAL_ENGINEER.md](PRINCIPAL_ENGINEER.md)
-4. [../prompts/reviewer.md](../prompts/reviewer.md)
-5. [../prompts/review-synthesizer.md](../prompts/review-synthesizer.md)
-6. [../prompts/closure-reviewer.md](../prompts/closure-reviewer.md)
