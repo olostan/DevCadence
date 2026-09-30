@@ -444,7 +444,7 @@ Under ADR-0016:
 
 Rather than treating cognition as monolithic conversational loops that cause context bloat, token waste, and attention dilution, DevCadence structures cognition across four adaptive layers (ADR-0019 §1):
 
-1. **Protected Core (Static Prefix)**: System instructions, task EWP, candidate diff, and deterministic validation outputs are placed at the prompt head. Because this block is immutable across an attempt or review, it maximizes provider prefix KV-cache reuse.
+1. **Protected Core (Static Prefix)**: System instructions, task EWP, candidate/base commit SHAs, invariants, deterministic validation summaries, and a **diff manifest** (touched files, line change counts, and semantic hotspots). Full file diffs are included inline only when below a configured token/size threshold; larger diffs or multi-package refactors are leased progressively through the Evidence Working Set, preserving progressive disclosure (DCI-014) and preventing prefix cache bloat.
 2. **Cognitive State Capsule**: A compact, typed data structure maintaining derived hypotheses, active TODOs, intermediate decisions, and unresolved questions across turns. Explicitly categorized as derived cognition (not ground fact), preserving continuity without dragging raw conversational debris.
 3. **Evidence Working Set (Leased Snippet Pool)**: Models manage their active evidence dynamically through verbatim code snippets, diffs, and log excerpts:
    - **Content-Addressed Leases**: Snippets reference `(file_path, content_digest, start_line, end_line)`;
@@ -509,14 +509,17 @@ Possible dimensions:
 - `maintainability`: code clarity, idiomatic style, comment accuracy;
 - `other`: explicitly scoped reviews outside the primary taxonomy.
 
-### 11.1 Dynamic Review Lenses and Active Falsification
+### 11.1 Dynamic Review Lenses and Active Falsification [Planned - M7]
 
-Review invocations may attach targeted **Review Lenses / Strategies** (ADR-0019 §4) that guide reviewer focus across the dimensions above, avoiding churn in the durable `ReviewDimension` enum:
-- `anti_rabbit_hole`: scrutinizes code for YAGNI, defensive bloat, and speculative over-engineering;
-- `anti_drift`: verifies strict scope discipline, checking that touched files match the declared work package and catching drive-by edits;
-- `anti_hallucination`: grounds claims by verifying cited symbols, CLI flags, and test executions exist.
+*Status:* Dynamic lenses and automated falsification execution are **Planned for Milestone M7**.
 
-Additionally, reviewers can formulate **Active Falsification Probes** (`FalsificationProbe` / mutation testing): targeted requests asking deterministic validation machinery to temporarily mutate or invert a condition to verify that tests fail as expected. This converts subjective reviewer suspicion into empirical verification evidence.
+DevCadence separates **immediate process guidance** from **future machine protocol**:
+- **Effective-Now Process Guidance**: Human and model reviewers may adopt these review lenses today to guide qualitative focus across the standard dimensions, without changing wire schemas:
+  - `anti_rabbit_hole`: scrutinizes code for YAGNI, defensive bloat, and speculative over-engineering;
+  - `anti_drift`: verifies strict scope discipline, checking that touched files match the declared work package and catching drive-by edits;
+  - `anti_hallucination`: grounds claims by verifying cited symbols, CLI flags, and test executions exist.
+  Manual reviewers can also perform manual falsification checks (e.g. verifying a test fails when an assertion is commented out).
+- **Future M7 Machine Protocol**: Milestone M7 will formalize review lens metadata on automated review invocations and introduce automated **Active Falsification Probes** (`FalsificationProbe` / mutation testing) executed by deterministic validation runners in isolated worktrees, converting reviewer suspicion into empirical proof.
 
 ## 11a. SpecificationReviewResult
 
@@ -545,9 +548,9 @@ Readiness Gate must be passed by evidence, not by a summary.
 For systemic or high-risk candidates, DevCadence invokes dual independent reviews in parallel (ADR-0019 §5).
 
 Aggregation is an orchestration phase within `ReviewCampaign`, not a separate durable protocol table or SQLite schema:
-- **Parallel Independent Review**: Two independent reviewer models evaluate the candidate commit in parallel, each starting from a clean context.
+- **Parallel Independent Review**: Two independent reviewer models evaluate the candidate commit in parallel, each starting from a clean context. Independence spans both **endpoint/model diversity** (e.g. distinct provider families) and **review-method diversity** (e.g. invariant/contract tracing vs. failure-first/mutation testing).
 - **Double-Green Adjudication Fast-Path**: If both independent reviewers return `PASS` with zero blocking findings AND all deterministic validation checks pass, the Principal receives an instant green card allowing immediate, frictionless closure. Double-Green is an **adjudication fast-path**, not an unmoderated bypass of human/principal authority (DCI-009) or deterministic closure prerequisites (`closure-decision.schema.json`).
-- **Asymmetric Veto**: If any reviewer raises a `BLOCKING` finding in `security` or `invariants`, an Aggregator model **cannot** discard or override it. It can only be dismissed by explicit human disposition or deterministic falsification proof.
+- **Asymmetric Veto**: If any reviewer raises a `BLOCKING` finding in `security` or `invariants`, an Aggregator model **cannot** discard or override it. Deterministic falsification evidence may prove a finding *false or inapplicable* (e.g. demonstrating that a cited vulnerability path is unreachable or a claimed invariant conflict is refuted by code), but cannot waive or override a genuine invariant requirement. A real invariant conflict requires an explicit human/principal decision record, never an automatic reviewer dismissal.
 - **Consolidated Repair Synthesis**: If findings exist or reviewers disagree, the Aggregator synthesizes the findings into standard `FindingDisposition` records and compiles at most one consolidated `RepairWorkPackage`. Implementers never negotiate directly with multiple reviewers.
 
 ## 12. DisagreementReport

@@ -35,13 +35,18 @@ DevCadence strictly distinguishes observed facts from empirical hypotheses (AGEN
 
 ### Observed Provider Characteristics
 
-1. **Transformer Statelessness & Caching Mechanics**: In standard autoregressive transformer architectures, prompt tokens must be processed on each forward pass. Modern frontier providers (Anthropic, Google Gemini, OpenAI) offer prompt prefix caching that provides 50% to 90% latency and cost discounts when prompts reuse an identical, static prefix exceeding cache thresholds (typically 1,024–2,048 tokens). Modifying tokens within the prefix invalidates the cache downstream of the modification; appending strictly to the end preserves cache hits.
+1. **Transformer Statelessness & Caching Mechanics**: In standard autoregressive transformer architectures, prompt tokens must be processed on each forward pass. Modern frontier providers support prefix and context caching with provider- and model-specific eligibility thresholds, pricing discounts, retention semantics, and latency benefits:
+   - **OpenAI** documents cached-input discounts up to 90% and faster prompt processing, with minimum thresholds depending on the model (e.g. 1,024 tokens for GPT-4o / GPT-5.6+);
+   - **Anthropic** prices common cache hits at 0.1× base input price, with model-dependent minimum cache write thresholds;
+   - **Google Gemini** supports implicit and explicit caching with model-dependent minimum thresholds (e.g. 2,048 tokens for Gemini 2.5 and 4,096 tokens for Gemini 3.x models).
+   Prompt caching requires maintaining an identical prefix; modifying tokens within the prefix invalidates the cache downstream of the edit point.
 2. **Endpoint Controllability Differences**: Direct API endpoints (`LocalityRemoteAPI`) and local model runtimes (`LocalityLocal`) permit precise, deterministic control over prompt layout, prefix placement, and cache management. Authenticated coding CLIs (`LocalityAuthenticatedCLI`) operate with proprietary, provider-managed session compaction, caching, and resumption policies that are largely opaque to external callers.
 
 ### Working Empirical Hypotheses
 
 1. **Context Length Degradation Boundary**: Monolithic conversational debris exceeding 30k–50k tokens significantly increases reasoning degradation, instruction non-compliance, and hallucination rates in both frontier and local models compared to focused, prefix-cached context.
 2. **Provider Cognitive Diversity**: Different model families exhibit complementary cognitive blind spots and proficiencies across programming idioms, concurrency, type invariants, and boundary checks.
+3. **End-to-End Token Processing Reduction**: Replacing monotonic conversational transcripts with a 4-layer adaptive context architecture (Protected Core + Cognitive State Capsule + leased Evidence Working Set) is hypothesized to reduce cumulative processed token volume by 70% to 90% on long-horizon engineering tasks compared to full-history baselines.
 
 ### Milestone M4 Validation Targets
 
@@ -81,7 +86,7 @@ Rather than treating "non-conversational cognition" as an absolute rule that cau
 │  LAYER 1: PROTECTED CORE (Static Prefix / KV Cache)    │
 │  - System role & durable invariants                    │
 │  - Engineering Work Package (EWP) specification        │
-│  - Candidate Git Diff                                  │
+│  - Diff manifest (and full diff if below threshold)   │
 │  - Deterministic test exit codes & verification bundle  │
 ├────────────────────────────────────────────────────────┤
 │  LAYER 2: COGNITIVE STATE CAPSULE                      │
@@ -101,7 +106,8 @@ Rather than treating "non-conversational cognition" as an absolute rule that cau
 
 1. **Layer 1: Protected Core (Static Prefix)**:
    - Immutable across an attempt or review. Placed strictly at the prompt head to maximize prefix KV-cache reuse.
-   - Contains verbatim task EWP, candidate diff, invariants, and deterministic test outputs.
+   - Contains verbatim task EWP, candidate/base commit SHAs, invariants, deterministic test outputs, and a **diff manifest** (touched files, line counts, and semantic hotspot summaries).
+   - In accordance with progressive evidence disclosure (DCI-014), full diffs are included inline only when below a configured token/size threshold; large diffs or extensive refactors have their hunks leased progressively through the Evidence Working Set, preventing the immutable prefix from bloating.
 2. **Layer 2: Cognitive State Capsule**:
    - A compact, typed state structure maintained across turns containing derived hypotheses, TODOs, decisions, and unresolved questions.
    - Categorized as **derived cognition**, not ground truth. It maintains continuity across iterations without dragging raw conversation transcripts.
@@ -135,22 +141,24 @@ Rather than treating "non-conversational cognition" as an absolute rule that cau
 - Instead, the worker emits a typed `RefactoringProposal` (`proposal_id`, `source_work_package_id`, `target_work_package_id`, `architectural_tension`, `contradiction_evidence`, `proposed_interface`, `affected_callers`, `reversibility_assessment`).
 - The Principal (or human) adjudicates the proposal. If accepted, an atomic upstream refactor is applied cleanly, regression tests run, and the codebase remains unified.
 
-### 4. Dynamic Cognitive Review Lenses and Active Falsification
+### 4. Dynamic Cognitive Review Lenses and Active Falsification [Planned - M7]
 
 Review is multi-dimensional cognitive analysis, not a mechanical syntax linter. DevCadence routes candidates through targeted review lenses while preserving a stable, closed `ReviewDimension` taxonomy (`correctness`, `architecture`, `invariants`, `security`, `test_adequacy`, `concurrency`, `performance`, `maintainability`, `other`).
 
-1. **Anti-Rabbit Hole Lens (YAGNI & Simplicity)**:
-   - Scrutinizes code for over-engineering, speculative future-proofing, and paranoid defensive bloat.
-   - Demands the simplest implementation that satisfies the contract.
-2. **Anti-Drift Lens (Scope Discipline)**:
-   - Verifies that no files outside the declared work package were touched without authorization.
-   - Flags unsolicited style tweaks, drive-by refactorings, and unauthorized new dependencies.
-3. **Anti-Hallucination Lens (Grounding & Verification)**:
-   - Mechanically verifies that cited symbols, functions, and CLI flags exist.
-   - Validates that test assertions actually exercise the code paths under review rather than passing via tautological mocks.
-4. **Active Falsification (`FalsificationProbe` / Bounded Mutation Testing)**:
-   - Reviewers can formulate targeted falsification probes (e.g., "temporarily disable this error check or branch; verify the test suite fails").
-   - Deterministic machinery executes the probe in an isolated worktree and returns hard evidence, converting reviewer suspicion into empirical proof.
+DevCadence separates **immediate process guidance** from **future machine protocol**:
+- **Effective-Now Process Guidance**: Human and manual model reviewers can apply these lenses today to guide qualitative focus across standard dimensions:
+  1. **Anti-Rabbit Hole Lens (YAGNI & Simplicity)**:
+     - Scrutinizes code for over-engineering, speculative future-proofing, and paranoid defensive bloat.
+     - Demands the simplest implementation that satisfies the contract.
+  2. **Anti-Drift Lens (Scope Discipline)**:
+     - Verifies that no files outside the declared work package were touched without authorization.
+     - Flags unsolicited style tweaks, drive-by refactorings, and unauthorized new dependencies.
+  3. **Anti-Hallucination Lens (Grounding & Verification)**:
+     - Mechanically verifies that cited symbols, functions, and CLI flags exist.
+     - Validates that test assertions actually exercise the code paths under review rather than passing via tautological mocks.
+  Manual reviewers can also perform manual falsification checks (e.g. verifying tests fail when an assertion is inverted).
+- **Future M7 Machine Protocol**:
+  In Milestone M7, review lens metadata will be attached to automated review invocations, and the control plane's deterministic validation machinery will execute structured **Active Falsification Probes** (`FalsificationProbe` / mutation testing) in isolated worktrees, returning hard evidence to convert reviewer suspicion into empirical proof.
 
 ### 5. Dual Independent Review with Adjudication Fast-Path and Asymmetric Veto
 
@@ -161,8 +169,8 @@ flowchart TD
     Candidate["Candidate Commit + Verification Bundle"]
     
     subgraph DualReview ["Parallel Independent Reviewers (Clean Contexts)"]
-        R1["Reviewer 1 (Model Family A)<br/>e.g. Concurrency, idioms, edge cases"]
-        R2["Reviewer 2 (Model Family B)<br/>e.g. Architecture, invariants, contracts"]
+        R1["Reviewer 1 (Model / Method A)<br/>e.g. Concurrency, idioms, edge cases"]
+        R2["Reviewer 2 (Model / Method B)<br/>e.g. Architecture, invariants, contracts"]
     end
     
     Candidate --> R1
@@ -179,8 +187,9 @@ flowchart TD
     Gate -->|"NO"| Repair["📦 One Consolidated Repair Work Package"]
 ```
 
+- **Parallel Independent Review**: Two independent reviewer models evaluate the candidate commit in parallel, each starting from a clean context. Independence spans both **endpoint/model diversity** (e.g. distinct provider families) and **review-method diversity** (e.g. invariant/contract tracing vs. failure-first/mutation testing).
 - **Adjudication Fast-Path ("Double-Green")**: If both independent reviewers return `PASS` with zero blocking findings, and all deterministic validation checks pass, the Principal receives an instant green card allowing immediate, frictionless closure. Double-Green is an **adjudication fast-path**, not an unmoderated bypass of human/principal authority (DCI-009) or deterministic closure prerequisites (`closure-decision.schema.json`).
-- **Asymmetric Veto**: If any reviewer raises a `BLOCKING` finding in `security` or `invariants`, an Aggregator model **cannot** discard or override it. It can only be dismissed by explicit human disposition or deterministic falsification proof.
+- **Asymmetric Veto**: If any reviewer raises a `BLOCKING` finding in `security` or `invariants`, an Aggregator model **cannot** discard or override it. Deterministic falsification evidence may prove a finding *false or inapplicable* (e.g. demonstrating that a cited vulnerability path is unreachable or a claimed invariant conflict is refuted by code), but cannot waive or override a genuine invariant requirement. A real invariant conflict requires an explicit human/principal decision record, never an automatic reviewer dismissal.
 - **Orchestration Step, Not New Durable Table**: Aggregation is an orchestration phase within `ReviewCampaign`. It synthesizes multiple `ReviewResult`s, produces standard `FindingDisposition`s, and advances the campaign toward closure or one consolidated `RepairWorkPackage`.
 
 ### 6. Milestone Retrospective & Repository Reconciliation
@@ -201,7 +210,7 @@ At every milestone boundary, before transitioning to the next milestone:
 ## Consequences
 
 ### Positive
-- **Drastic Token and Cost Efficiency**: Replacing monotonic chat growth with prefix caching and leased snippets cuts token processing by 70% to 90%.
+- **Substantial Token and Cost Efficiency**: Replacing monotonic chat growth with prefix caching and leased snippets targets a 70% to 90% reduction in cumulative processed tokens, to be empirically measured and validated in Milestone M4.
 - **Cognitive Freedom**: Models reason thoroughly without budget-induced turn anxiety, while outer runtime meters guarantee bounded resource consumption.
 - **Anti-Rot (Living Architecture)**: The `RefactoringProposal` protocol eliminates hacky workarounds and keeps upstream interfaces clean.
 - **Empirical Grounding**: Active falsification probes convert subjective review debates into deterministic test evidence.

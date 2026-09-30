@@ -76,9 +76,9 @@ Reopening requires materially new evidence, changed requirements, a failed deter
 ### 1.5 Dual independent review and the "Double-Green" adjudication fast-path
 
 For systemic or high-risk candidates, DevCadence supports an optional **Dual Independent Review** ("2nd Point of View"):
-- Two independent reviewer models (ideally from different model families, e.g. Claude and Gemini/OpenAI) evaluate the candidate commit in parallel, each starting from a clean context.
+- Two independent reviewer models evaluate the candidate commit in parallel, each starting from a clean context. Independence spans both **endpoint/model diversity** (e.g. distinct provider families) and **review-method diversity** (e.g. invariant/contract tracing vs. failure-first/mutation testing).
 - **The "Double-Green" Adjudication Fast-Path**: If both independent reviewers return `PASS` with zero blocking findings AND all deterministic validation checks pass, the Principal receives an instant green card allowing immediate, frictionless closure. Double-Green is an **adjudication fast-path**, not an unmoderated bypass of human/principal authority (DCI-009) or deterministic closure prerequisites (`closure-decision.schema.json`).
-- **Asymmetric Veto**: If any reviewer raises a `BLOCKING` finding in `security` or `invariants`, an Aggregator model **cannot** discard or override it. It can only be dismissed by explicit human disposition or deterministic falsification proof.
+- **Asymmetric Veto**: If any reviewer raises a `BLOCKING` finding in `security` or `invariants`, an Aggregator model **cannot** discard or override it. Deterministic evidence may prove a finding *false or inapplicable* (e.g. proving a cited vulnerability path is unreachable or a claimed invariant conflict is refuted by code), but cannot waive or override a genuine invariant requirement. A real invariant conflict requires an explicit human/principal decision record, never an automatic reviewer dismissal.
 - **Aggregator Synthesis**: If findings exist or reviewers disagree, an Aggregator model (or Principal) deduplicates the findings, filters opportunistic nits, adjudicates tensions into standard `FindingDisposition` records, and compiles at most **one single consolidated `RepairWorkPackage`** per round. Implementers never argue directly with reviewers.
 
 ### 1.6 Cognitive freedom with silent multi-dimensional metering
@@ -112,24 +112,28 @@ It records:
 
 A campaign is not an open-ended conversation.
 
-## 2A. Dynamic cognitive review lenses and active falsification
+## 2A. Dynamic cognitive review lenses and active falsification [Planned - M7]
 
-Code review is a multi-dimensional cognitive process, not a mechanical syntax linter. DevCadence guides reviewers through targeted **Review Lenses / Strategies** (ADR-0019 §4) applied across the stable `ReviewDimension` taxonomy (`correctness`, `architecture`, `invariants`, `security`, `test_adequacy`, `concurrency`, `performance`, `maintainability`, `other`):
+*Status:* Automated review lens metadata and machine-executed falsification probes are **Planned for Milestone M7**.
 
-1. **Anti-Rabbit Hole Lens (YAGNI & Simplicity)**:
-   - Scrutinizes code for defensive bloat, speculative future-proofing, and over-engineering.
-   - Replaces paranoid error-handling cascades with simple, clean assertions or fail-fast checks.
-2. **Anti-Drift Lens (Scope Discipline)**:
-   - Verifies that only authorized files and packages were modified.
-   - Flags drive-by refactorings, unsolicited style tweaks in untouched code, and unapproved dependency additions.
-3. **Anti-Hallucination Lens (Fact & Grounding Verification)**:
-   - Verifies that cited symbols, functions, and CLI flags genuinely exist in the repository.
-   - Checks that tests drive real execution paths rather than passing vacuously through tautological mocks.
-4. **Architecture & Invariant Lens**:
-   - Evaluates cross-layer coupling, security boundaries, and persistence semantics against durable project invariants (DCI compliance).
-5. **Active Falsification (`FalsificationProbe` / Bounded Mutation Testing)**:
-   - Reviewers can formulate targeted falsification probes (e.g. "temporarily disable this error check, invert this condition, or mutate this return value; verify tests fail").
-   - The control plane's deterministic validation machinery executes the probe in an isolated worktree and returns hard evidence, converting reviewer suspicion into empirical proof.
+DevCadence distinguishes **effective-now process guidance** from **future machine protocol**:
+
+- **Effective-Now Process Guidance**: Human and model reviewers may adopt these lenses today to guide qualitative focus across the stable `ReviewDimension` taxonomy (`correctness`, `architecture`, `invariants`, `security`, `test_adequacy`, `concurrency`, `performance`, `maintainability`, `other`), without changing wire schemas:
+  1. **Anti-Rabbit Hole Lens (YAGNI & Simplicity)**:
+     - Scrutinizes code for defensive bloat, speculative future-proofing, and over-engineering.
+     - Replaces paranoid error-handling cascades with simple, clean assertions or fail-fast checks.
+  2. **Anti-Drift Lens (Scope Discipline)**:
+     - Verifies that only authorized files and packages were modified.
+     - Flags drive-by refactorings, unsolicited style tweaks in untouched code, and unapproved dependency additions.
+  3. **Anti-Hallucination Lens (Fact & Grounding Verification)**:
+     - Verifies that cited symbols, functions, and CLI flags genuinely exist in the repository.
+     - Checks that tests drive real execution paths rather than passing vacuously through tautological mocks.
+  4. **Architecture & Invariant Lens**:
+     - Evaluates cross-layer coupling, security boundaries, and persistence semantics against durable project invariants (DCI compliance).
+  Manual reviewers can also perform manual falsification checks (e.g. verifying a test suite fails when an assertion is commented out).
+
+- **Planned M7 Machine Protocol**:
+  In Milestone M7, review lens metadata will be attached to automated review invocations, and the control plane's deterministic validation machinery will execute structured **Active Falsification Probes** (`FalsificationProbe` / mutation testing) in isolated worktrees, returning hard evidence to convert reviewer suspicion into empirical proof.
 
 Lenses are selected dynamically based on task risk (e.g. bug fixes emphasize Anti-Drift and Anti-Rabbit Hole; major features invoke Architecture and Anti-Hallucination).
 
