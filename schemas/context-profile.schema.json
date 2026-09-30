@@ -114,7 +114,17 @@
               "unknown"
             ]
           }
-        }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": { "confidence_level": { "const": "verified" } }
+            },
+            "then": {
+              "required": ["calibration_evidence_ref"]
+            }
+          }
+        ]
       }
     },
     "target_resident_tokens": {

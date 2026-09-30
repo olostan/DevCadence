@@ -65,8 +65,27 @@
             "items": { "type": "string" }
           },
           "budget_pool_id": { "type": "string", "minLength": 1 },
-          "timeout_seconds": { "type": "integer", "minimum": 1 }
-        }
+          "timeout_seconds": { "type": "integer", "minimum": 1 },
+          "endpoint_id": { "type": "string", "minLength": 1 },
+          "channel_id": { "type": "string", "minLength": 1 },
+          "context_profile_id": { "type": "string", "minLength": 1 },
+          "retry_limit": { "type": "integer", "minimum": 0 },
+          "escalation_target": { "type": "string", "minLength": 1 },
+          "deterministic_gate_id": { "type": "string", "minLength": 1 }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": { "kind": { "const": "deterministic" } }
+            },
+            "then": {
+              "required": ["deterministic_gate_id"]
+            },
+            "else": {
+              "not": { "required": ["deterministic_gate_id"] }
+            }
+          }
+        ]
       }
     }
   }

@@ -2,15 +2,41 @@ package protocol
 
 import "github.com/olostan/DevCadence/internal/errs"
 
+// FallbackBinding defines an explicit, routable fallback path for a role binding (ADR-0018 §1, §9).
+type FallbackBinding struct {
+	EndpointID       string `json:"endpoint_id"`
+	ChannelID        string `json:"channel_id"`
+	BudgetPoolID     string `json:"budget_pool_id"`
+	ContextProfileID string `json:"context_profile_id"`
+}
+
+// Validate checks FallbackBinding fields.
+func (f FallbackBinding) Validate() error {
+	const kind = "FallbackBinding"
+	if err := requireNonEmpty(kind, "endpoint_id", f.EndpointID); err != nil {
+		return err
+	}
+	if err := requireNonEmpty(kind, "channel_id", f.ChannelID); err != nil {
+		return err
+	}
+	if err := requireNonEmpty(kind, "budget_pool_id", f.BudgetPoolID); err != nil {
+		return err
+	}
+	if err := requireNonEmpty(kind, "context_profile_id", f.ContextProfileID); err != nil {
+		return err
+	}
+	return nil
+}
+
 // RoleBinding maps an engineering role to an endpoint, channel, and budget pool (ADR-0018 §1, FR-062).
 type RoleBinding struct {
-	Role                string   `json:"role"`
-	EndpointID          string   `json:"endpoint_id"`
-	ChannelID           string   `json:"channel_id"`
-	BudgetPoolID        string   `json:"budget_pool_id"`
-	ContextProfileID    string   `json:"context_profile_id"`
-	Priority            int      `json:"priority"`
-	FallbackEndpointIDs []string `json:"fallback_endpoint_ids,omitempty"`
+	Role             string            `json:"role"`
+	EndpointID       string            `json:"endpoint_id"`
+	ChannelID        string            `json:"channel_id"`
+	BudgetPoolID     string            `json:"budget_pool_id"`
+	ContextProfileID string            `json:"context_profile_id"`
+	Priority         int               `json:"priority"`
+	Fallbacks        []FallbackBinding `json:"fallbacks,omitempty"`
 }
 
 // Validate checks RoleBinding fields.
@@ -34,29 +60,94 @@ func (r RoleBinding) Validate() error {
 	if r.Priority < 1 {
 		return errs.New(errs.CategoryInvalidArgument, "%s: priority must be >= 1, got %d", kind, r.Priority)
 	}
-	for i, fb := range r.FallbackEndpointIDs {
-		if fb == "" {
-			return errs.New(errs.CategoryInvalidArgument, "%s: fallback_endpoint_ids[%d] cannot be empty", kind, i)
+	for i, fb := range r.Fallbacks {
+		if err := fb.Validate(); err != nil {
+			return errs.New(errs.CategoryInvalidArgument, "%s: fallbacks[%d]: %v", kind, i, err)
 		}
-		if fb == r.EndpointID {
-			return errs.New(errs.CategoryInvalidArgument, "%s: fallback_endpoint_ids[%d] %q matches primary endpoint_id", kind, i, fb)
+		if fb.EndpointID == r.EndpointID {
+			return errs.New(errs.CategoryInvalidArgument, "%s: fallbacks[%d] endpoint_id %q matches primary endpoint_id", kind, i, fb.EndpointID)
 		}
+	}
+	return nil
+}
+
+// DiversityPolicy specifies provider and model diversity constraints (COGNITION_PORTFOLIO §11, PROTOCOLS §10B).
+type DiversityPolicy struct {
+	RequireDistinctModelsForReview    bool `json:"require_distinct_models_for_review,omitempty"`
+	RequireDistinctProvidersForReview bool `json:"require_distinct_providers_for_review,omitempty"`
+	RequireDistinctEndpointsForReview bool `json:"require_distinct_endpoints_for_review,omitempty"`
+}
+
+// Validate checks DiversityPolicy fields.
+func (d DiversityPolicy) Validate() error {
+	return nil
+}
+
+// EscalationRule specifies an explicit escalation transition path between roles/endpoints (COGNITION_PORTFOLIO §11).
+type EscalationRule struct {
+	FromRole         string `json:"from_role"`
+	ToRole           string `json:"to_role"`
+	TriggerCondition string `json:"trigger_condition"`
+	MaxEscalations   int    `json:"max_escalations"`
+}
+
+// Validate checks EscalationRule fields.
+func (e EscalationRule) Validate() error {
+	const kind = "EscalationRule"
+	if err := requireNonEmpty(kind, "from_role", e.FromRole); err != nil {
+		return err
+	}
+	if err := requireNonEmpty(kind, "to_role", e.ToRole); err != nil {
+		return err
+	}
+	if err := requireNonEmpty(kind, "trigger_condition", e.TriggerCondition); err != nil {
+		return err
+	}
+	if e.MaxEscalations < 1 {
+		return errs.New(errs.CategoryInvalidArgument, "%s: max_escalations must be >= 1, got %d", kind, e.MaxEscalations)
+	}
+	return nil
+}
+
+// WorkflowDefaults specifies default execution constraints for synthesized workflows (COGNITION_PORTFOLIO §11).
+type WorkflowDefaults struct {
+	DefaultTopology       WorkflowTopologyKind `json:"default_topology,omitempty"`
+	DefaultTimeoutSeconds int                  `json:"default_timeout_seconds,omitempty"`
+	MaxRetries            int                  `json:"max_retries,omitempty"`
+}
+
+// Validate checks WorkflowDefaults fields.
+func (w WorkflowDefaults) Validate() error {
+	const kind = "WorkflowDefaults"
+	if w.DefaultTopology != "" && !w.DefaultTopology.Valid() {
+		return enumError(kind, "default_topology", string(w.DefaultTopology),
+			string(TopologySinglePass), string(TopologyIterativeEscalation),
+			string(TopologyDualIndependentReview), string(TopologyDeterministicOnly))
+	}
+	if w.DefaultTimeoutSeconds < 0 {
+		return errs.New(errs.CategoryInvalidArgument, "%s: default_timeout_seconds cannot be negative, got %d", kind, w.DefaultTimeoutSeconds)
+	}
+	if w.MaxRetries < 0 {
+		return errs.New(errs.CategoryInvalidArgument, "%s: max_retries cannot be negative, got %d", kind, w.MaxRetries)
 	}
 	return nil
 }
 
 // CognitionPortfolio is the canonical routing configuration (ADR-0018 §7, FR-062).
 type CognitionPortfolio struct {
-	SchemaVersion       SchemaVersion    `json:"schema_version"`
-	PortfolioID         string           `json:"portfolio_id"`
-	Revision            int              `json:"revision"`
-	CreatedAt           string           `json:"created_at"`
-	Channels            []AccessChannel  `json:"channels"`
-	RoleBindings        []RoleBinding    `json:"role_bindings"`
-	BudgetPools         []BudgetPool     `json:"budget_pools"`
-	MaxSourceExposure   SourceExposure   `json:"max_source_exposure"`
-	ExcludedEndpointIDs []string         `json:"excluded_endpoint_ids,omitempty"`
-	BudgetReservations  map[string]int64 `json:"budget_reservations,omitempty"`
+	SchemaVersion         SchemaVersion     `json:"schema_version"`
+	PortfolioID           string            `json:"portfolio_id"`
+	Revision              int               `json:"revision"`
+	CreatedAt             string            `json:"created_at"`
+	Channels              []AccessChannel   `json:"channels"`
+	RoleBindings          []RoleBinding     `json:"role_bindings"`
+	BudgetPools           []BudgetPool      `json:"budget_pools"`
+	MaxSourceExposure     SourceExposure    `json:"max_source_exposure"`
+	ExcludedEndpointIDs   []string          `json:"excluded_endpoint_ids,omitempty"`
+	BudgetReservations    map[string]int64  `json:"budget_reservations,omitempty"`
+	DiversityRequirements *DiversityPolicy  `json:"diversity_requirements,omitempty"`
+	EscalationRules       []EscalationRule  `json:"escalation_rules,omitempty"`
+	WorkflowDefaults      *WorkflowDefaults `json:"workflow_defaults,omitempty"`
 }
 
 // RecordKind implements Record.
@@ -117,18 +208,7 @@ func (c *CognitionPortfolio) Validate() error {
 		excludedMap[epID] = true
 	}
 
-	endpointChannels := make(map[string][]AccessChannel)
-	for _, ch := range c.Channels {
-		endpointChannels[ch.EndpointID] = append(endpointChannels[ch.EndpointID], ch)
-	}
-
-	endpointPools := make(map[string][]BudgetPool)
-	for _, b := range c.RoleBindings {
-		if pool, ok := poolMap[b.BudgetPoolID]; ok {
-			endpointPools[b.EndpointID] = append(endpointPools[b.EndpointID], pool)
-		}
-	}
-
+	roleNames := make(map[string]struct{}, len(c.RoleBindings))
 	type rolePriorityKey struct {
 		role     string
 		priority int
@@ -153,6 +233,7 @@ func (c *CognitionPortfolio) Validate() error {
 		if excludedMap[rb.EndpointID] {
 			return errs.New(errs.CategoryInvalidArgument, "%s: role_bindings[%d] uses excluded endpoint_id %q", kind, i, rb.EndpointID)
 		}
+		roleNames[rb.Role] = struct{}{}
 		rpKey := rolePriorityKey{role: rb.Role, priority: rb.Priority}
 		if firstIndex, dup := seenRolePriority[rpKey]; dup {
 			return errs.New(errs.CategoryInvalidArgument,
@@ -161,23 +242,25 @@ func (c *CognitionPortfolio) Validate() error {
 		}
 		seenRolePriority[rpKey] = i
 
-		for _, fb := range rb.FallbackEndpointIDs {
-			if excludedMap[fb] {
-				return errs.New(errs.CategoryInvalidArgument, "%s: role_bindings[%d] fallback_endpoint_id %q is excluded", kind, i, fb)
+		for j, fb := range rb.Fallbacks {
+			if excludedMap[fb.EndpointID] {
+				return errs.New(errs.CategoryInvalidArgument, "%s: role_bindings[%d].fallbacks[%d] endpoint_id %q is excluded", kind, i, j, fb.EndpointID)
 			}
-			if len(endpointChannels[fb]) == 0 {
-				return errs.New(errs.CategoryInvalidArgument, "%s: role_bindings[%d] fallback_endpoint_id %q has no access channel in portfolio channels", kind, i, fb)
+			fbCh, ok := channelMap[fb.ChannelID]
+			if !ok {
+				return errs.New(errs.CategoryInvalidArgument, "%s: role_bindings[%d].fallbacks[%d] references non-existent channel_id %q", kind, i, j, fb.ChannelID)
 			}
-			fbPools, covered := endpointPools[fb]
-			if !covered || len(fbPools) == 0 {
-				return errs.New(errs.CategoryInvalidArgument, "%s: role_bindings[%d] fallback_endpoint_id %q is not covered by any budget pool in the portfolio", kind, i, fb)
+			if fbCh.EndpointID != fb.EndpointID {
+				return errs.New(errs.CategoryInvalidArgument, "%s: role_bindings[%d].fallbacks[%d] endpoint_id %q does not match channel endpoint_id %q", kind, i, j, fb.EndpointID, fbCh.EndpointID)
 			}
-			for _, fbPool := range fbPools {
-				if fbPool.Regime == RegimeMeteredAPI && !primaryPool.FallbackAllowedToMetered {
-					return errs.New(errs.CategoryInvalidArgument,
-						"%s: role_bindings[%d] fallback_endpoint_id %q is bound to metered budget pool %q, but primary budget pool %q forbids fallback to metered (ADR-0018 §9, DCI-104)",
-						kind, i, fb, fbPool.PoolID, primaryPool.PoolID)
-				}
+			fbPool, ok := poolMap[fb.BudgetPoolID]
+			if !ok {
+				return errs.New(errs.CategoryInvalidArgument, "%s: role_bindings[%d].fallbacks[%d] references non-existent budget_pool_id %q", kind, i, j, fb.BudgetPoolID)
+			}
+			if fbPool.Regime == RegimeMeteredAPI && !primaryPool.FallbackAllowedToMetered {
+				return errs.New(errs.CategoryInvalidArgument,
+					"%s: role_bindings[%d].fallbacks[%d] endpoint_id %q is bound to metered budget pool %q, but primary budget pool %q forbids fallback to metered (ADR-0018 §9, DCI-104)",
+					kind, i, j, fb.EndpointID, fbPool.PoolID, primaryPool.PoolID)
 			}
 		}
 	}
@@ -192,6 +275,30 @@ func (c *CognitionPortfolio) Validate() error {
 		}
 		if amount > pool.HardLimit {
 			return errs.New(errs.CategoryInvalidArgument, "%s: budget_reservation for %q (%d) exceeds pool hard_limit (%d)", kind, poolID, amount, pool.HardLimit)
+		}
+	}
+
+	if c.DiversityRequirements != nil {
+		if err := c.DiversityRequirements.Validate(); err != nil {
+			return errs.New(errs.CategoryInvalidArgument, "%s: diversity_requirements: %v", kind, err)
+		}
+	}
+
+	for i, er := range c.EscalationRules {
+		if err := er.Validate(); err != nil {
+			return errs.New(errs.CategoryInvalidArgument, "%s: escalation_rules[%d]: %v", kind, i, err)
+		}
+		if _, ok := roleNames[er.FromRole]; !ok {
+			return errs.New(errs.CategoryInvalidArgument, "%s: escalation_rules[%d] from_role %q is not defined in role_bindings", kind, i, er.FromRole)
+		}
+		if _, ok := roleNames[er.ToRole]; !ok {
+			return errs.New(errs.CategoryInvalidArgument, "%s: escalation_rules[%d] to_role %q is not defined in role_bindings", kind, i, er.ToRole)
+		}
+	}
+
+	if c.WorkflowDefaults != nil {
+		if err := c.WorkflowDefaults.Validate(); err != nil {
+			return errs.New(errs.CategoryInvalidArgument, "%s: workflow_defaults: %v", kind, err)
 		}
 	}
 
@@ -281,14 +388,20 @@ func (k StageKind) Valid() bool {
 
 // WorkflowStage defines one cognitive or deterministic pass in a workflow plan.
 type WorkflowStage struct {
-	StageID        string    `json:"stage_id"`
-	Role           string    `json:"role"`
-	Kind           StageKind `json:"kind"`
-	IsReview       bool      `json:"is_review,omitempty"`
-	Order          int       `json:"order"`
-	DependsOn      []string  `json:"depends_on,omitempty"`
-	BudgetPoolID   string    `json:"budget_pool_id"`
-	TimeoutSeconds int       `json:"timeout_seconds"`
+	StageID             string    `json:"stage_id"`
+	Role                string    `json:"role"`
+	Kind                StageKind `json:"kind"`
+	IsReview            bool      `json:"is_review,omitempty"`
+	Order               int       `json:"order"`
+	DependsOn           []string  `json:"depends_on,omitempty"`
+	BudgetPoolID        string    `json:"budget_pool_id"`
+	TimeoutSeconds      int       `json:"timeout_seconds"`
+	EndpointID          *string   `json:"endpoint_id,omitempty"`
+	ChannelID           *string   `json:"channel_id,omitempty"`
+	ContextProfileID    *string   `json:"context_profile_id,omitempty"`
+	RetryLimit          int       `json:"retry_limit,omitempty"`
+	EscalationTarget    *string   `json:"escalation_target,omitempty"`
+	DeterministicGateID *string   `json:"deterministic_gate_id,omitempty"`
 }
 
 // Validate checks WorkflowStage fields.
@@ -312,6 +425,28 @@ func (w WorkflowStage) Validate() error {
 	}
 	if w.TimeoutSeconds < 1 {
 		return errs.New(errs.CategoryInvalidArgument, "%s: timeout_seconds must be >= 1, got %d", kind, w.TimeoutSeconds)
+	}
+	if w.Kind == StageKindDeterministic {
+		if w.DeterministicGateID == nil || *w.DeterministicGateID == "" {
+			return errs.New(errs.CategoryInvalidArgument, "%s: deterministic_gate_id is required when kind is %q", kind, StageKindDeterministic)
+		}
+	} else if w.DeterministicGateID != nil && *w.DeterministicGateID != "" {
+		return errs.New(errs.CategoryInvalidArgument, "%s: deterministic_gate_id is forbidden when kind is %q", kind, w.Kind)
+	}
+	if w.RetryLimit < 0 {
+		return errs.New(errs.CategoryInvalidArgument, "%s: retry_limit cannot be negative, got %d", kind, w.RetryLimit)
+	}
+	if w.EndpointID != nil && *w.EndpointID == "" {
+		return errs.New(errs.CategoryInvalidArgument, "%s: endpoint_id cannot be empty if specified", kind)
+	}
+	if w.ChannelID != nil && *w.ChannelID == "" {
+		return errs.New(errs.CategoryInvalidArgument, "%s: channel_id cannot be empty if specified", kind)
+	}
+	if w.ContextProfileID != nil && *w.ContextProfileID == "" {
+		return errs.New(errs.CategoryInvalidArgument, "%s: context_profile_id cannot be empty if specified", kind)
+	}
+	if w.EscalationTarget != nil && *w.EscalationTarget == "" {
+		return errs.New(errs.CategoryInvalidArgument, "%s: escalation_target cannot be empty if specified", kind)
 	}
 	return nil
 }
@@ -407,6 +542,28 @@ func (w *WorkflowPlan) Validate() error {
 	case TopologyDualIndependentReview:
 		if reviewStageCount < 2 {
 			return errs.New(errs.CategoryInvalidArgument, "%s: topology %q requires at least 2 review stages (with is_review: true), got %d", kind, w.Topology, reviewStageCount)
+		}
+		// Enforce independence between review stages (ADR-0019 §2, PROTOCOLS §10B)
+		var reviewStages []WorkflowStage
+		for _, s := range w.Stages {
+			if s.IsReview {
+				reviewStages = append(reviewStages, s)
+			}
+		}
+		for i := 0; i < len(reviewStages); i++ {
+			for j := i + 1; j < len(reviewStages); j++ {
+				s1, s2 := reviewStages[i], reviewStages[j]
+				if s1.EndpointID != nil && s2.EndpointID != nil && *s1.EndpointID == *s2.EndpointID {
+					return errs.New(errs.CategoryInvalidArgument,
+						"%s: topology %q requires independent review stages, but stages %q and %q bind to the same endpoint %q",
+						kind, w.Topology, s1.StageID, s2.StageID, *s1.EndpointID)
+				}
+				if (s1.EndpointID == nil || s2.EndpointID == nil) && s1.Role == s2.Role {
+					return errs.New(errs.CategoryInvalidArgument,
+						"%s: topology %q requires independent review stages, but stages %q and %q share the same role %q without distinct endpoint assignments",
+						kind, w.Topology, s1.StageID, s2.StageID, s1.Role)
+				}
+			}
 		}
 	case TopologyDeterministicOnly:
 		if deterministicStageCount != len(w.Stages) {

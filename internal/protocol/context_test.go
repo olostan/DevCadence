@@ -6,6 +6,10 @@ import (
 	"github.com/olostan/DevCadence/internal/protocol"
 )
 
+func stringPtr(s string) *string {
+	return &s
+}
+
 func validContextProfile() *protocol.ContextProfile {
 	return &protocol.ContextProfile{
 		SchemaVersion:             protocol.SchemaVersion1,
@@ -17,13 +21,14 @@ func validContextProfile() *protocol.ContextProfile {
 		Revision:                  1,
 		DeclaredWindowTokens:      32768,
 		RuntimeWindowTokens:       32768,
-		WorkloadEnvelopes:         []protocol.WorkloadEnvelope{
+		WorkloadEnvelopes: []protocol.WorkloadEnvelope{
 			{
-				Workload:        protocol.WorkloadImplementation,
-				EffectiveTokens: 24000,
-				CalibrationTask: "task_1",
-				CalibrationDate: "2026-09-30T00:00:00Z",
-				ConfidenceLevel: "verified",
+				Workload:               protocol.WorkloadImplementation,
+				EffectiveTokens:        24000,
+				CalibrationTask:        "task_1",
+				CalibrationDate:        "2026-09-30T00:00:00Z",
+				CalibrationEvidenceRef: stringPtr("evidence_cal_001"),
+				ConfidenceLevel:        "verified",
 			},
 		},
 		TargetResidentTokens:      16000,
@@ -188,6 +193,14 @@ func TestContextProfileValidation(t *testing.T) {
 			t.Fatal("expected error on empty calibration evidence ref, got nil")
 		}
 	})
+
+	t.Run("verified confidence level requires calibration evidence ref", func(t *testing.T) {
+		cp := validContextProfile()
+		cp.WorkloadEnvelopes[0].CalibrationEvidenceRef = nil
+		if err := cp.Validate(); err == nil {
+			t.Fatal("expected error when verified envelope has nil calibration evidence ref, got nil")
+		}
+	})
 }
 
 func TestContextManifestValidation(t *testing.T) {
@@ -264,6 +277,15 @@ func TestEvidenceLeaseValidation(t *testing.T) {
 		el.TokenCount = 0
 		if err := el.Validate(); err == nil {
 			t.Fatal("expected error on token count < 1, got nil")
+		}
+	})
+
+	t.Run("expires_at before acquired_at rejected", func(t *testing.T) {
+		el := validEvidenceLease()
+		past := "2026-09-29T23:59:59Z"
+		el.ExpiresAt = &past
+		if err := el.Validate(); err == nil {
+			t.Fatal("expected error when expires_at is before acquired_at, got nil")
 		}
 	})
 }

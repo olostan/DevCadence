@@ -145,12 +145,13 @@ const (
 	BudgetStatusHealthy           BudgetPoolStatus = "healthy"
 	BudgetStatusSoftLimitExceeded BudgetPoolStatus = "soft_limit_exceeded"
 	BudgetStatusExhausted         BudgetPoolStatus = "exhausted"
+	BudgetStatusUnknown           BudgetPoolStatus = "unknown"
 )
 
 // Valid reports whether the budget status is known.
 func (s BudgetPoolStatus) Valid() bool {
 	switch s {
-	case BudgetStatusHealthy, BudgetStatusSoftLimitExceeded, BudgetStatusExhausted:
+	case BudgetStatusHealthy, BudgetStatusSoftLimitExceeded, BudgetStatusExhausted, BudgetStatusUnknown:
 		return true
 	}
 	return false
@@ -207,7 +208,7 @@ func (b *BudgetState) Validate() error {
 	}
 	if !b.Status.Valid() {
 		return enumError(kind, "status", string(b.Status),
-			string(BudgetStatusHealthy), string(BudgetStatusSoftLimitExceeded), string(BudgetStatusExhausted))
+			string(BudgetStatusHealthy), string(BudgetStatusSoftLimitExceeded), string(BudgetStatusExhausted), string(BudgetStatusUnknown))
 	}
 	if b.Status == BudgetStatusExhausted && b.RemainingBalance != nil && *b.RemainingBalance > 0 {
 		return errs.New(errs.CategoryInvalidArgument,
@@ -246,10 +247,10 @@ func (b *BudgetState) Validate() error {
 		seen := make(map[string]struct{}, len(b.UnknownFields))
 		for _, f := range b.UnknownFields {
 			switch f {
-			case "current_usage", "remaining_balance", "period_start", "period_end":
+			case "current_usage", "remaining_balance", "period_start", "period_end", "status":
 			default:
 				return errs.New(errs.CategoryInvalidArgument,
-					"%s: unknown_fields contains invalid field name %q (expected one of: current_usage, remaining_balance, period_start, period_end)",
+					"%s: unknown_fields contains invalid field name %q (expected one of: current_usage, remaining_balance, period_start, period_end, status)",
 					kind, f)
 			}
 			if _, exists := seen[f]; exists {
@@ -268,6 +269,9 @@ func (b *BudgetState) Validate() error {
 		}
 		if _, ok := seen["period_end"]; ok && b.PeriodEnd != nil {
 			return errs.New(errs.CategoryInvalidArgument, "%s: field %q cannot be listed in unknown_fields when populated", kind, "period_end")
+		}
+		if _, ok := seen["status"]; ok && b.Status != BudgetStatusUnknown {
+			return errs.New(errs.CategoryInvalidArgument, "%s: field %q cannot be listed in unknown_fields when status is %q (expected %q)", kind, "status", string(b.Status), string(BudgetStatusUnknown))
 		}
 	}
 	return nil

@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"strings"
+	"time"
 
 	"github.com/olostan/DevCadence/internal/errs"
 )
@@ -52,6 +53,13 @@ func (w WorkloadEnvelope) Validate() error {
 	}
 	if err := requireNonEmpty(kind, "calibration_date", w.CalibrationDate); err != nil {
 		return err
+	}
+	if w.ConfidenceLevel == "verified" {
+		if w.CalibrationEvidenceRef == nil || *w.CalibrationEvidenceRef == "" {
+			return errs.New(errs.CategoryInvalidArgument,
+				"%s: calibration_evidence_ref is required when confidence_level is %q",
+				kind, w.ConfidenceLevel)
+		}
 	}
 	if w.CalibrationEvidenceRef != nil {
 		if err := requireNonEmpty(kind, "calibration_evidence_ref", *w.CalibrationEvidenceRef); err != nil {
@@ -450,8 +458,19 @@ func (e *EvidenceLease) Validate() error {
 	if err := requireNonEmpty(kind, "acquired_at", e.AcquiredAt); err != nil {
 		return err
 	}
-	if e.ExpiresAt != nil && *e.ExpiresAt < e.AcquiredAt {
-		return errs.New(errs.CategoryInvalidArgument, "%s: expires_at (%q) cannot be earlier than acquired_at (%q)", kind, *e.ExpiresAt, e.AcquiredAt)
+	if e.ExpiresAt != nil {
+		if err := requireNonEmpty(kind, "expires_at", *e.ExpiresAt); err != nil {
+			return err
+		}
+		acqTime, errAcq := time.Parse(time.RFC3339Nano, e.AcquiredAt)
+		expTime, errExp := time.Parse(time.RFC3339Nano, *e.ExpiresAt)
+		if errAcq == nil && errExp == nil {
+			if expTime.Before(acqTime) {
+				return errs.New(errs.CategoryInvalidArgument, "%s: expires_at (%q) cannot be earlier than acquired_at (%q)", kind, *e.ExpiresAt, e.AcquiredAt)
+			}
+		} else if *e.ExpiresAt < e.AcquiredAt {
+			return errs.New(errs.CategoryInvalidArgument, "%s: expires_at (%q) cannot be earlier than acquired_at (%q)", kind, *e.ExpiresAt, e.AcquiredAt)
+		}
 	}
 	return nil
 }

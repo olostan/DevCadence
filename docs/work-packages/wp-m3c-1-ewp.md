@@ -6,8 +6,8 @@
 - **Branch:** `feat/m3c-cognition-substrate`
 - **Task ID:** `task-m3c-1-portfolio-protocol-economics-context-refactoring`
 - **Work Package ID:** `WP-M3C-1`
-- **Version:** 1
-- **Status:** Approved by Frontier Principal Engineer for Implementation
+- **Version:** 1.3
+- **Status:** Approved by Frontier Principal Engineer for Implementation (Post-Review Contract Resolution)
 
 ---
 
@@ -15,10 +15,10 @@
 
 ```json
 {
-  "manifest_id": "manifest-wp-m3c-1-v1",
+  "manifest_id": "manifest-wp-m3c-1-v3",
   "task_id": "task-m3c-1-portfolio-protocol-economics-context-refactoring",
   "work_package_id": "WP-M3C-1",
-  "work_package_revision": 1,
+  "work_package_revision": 3,
   "role": "principal_engineer",
   "base_commit": "58869d99635ee0d05b5fe30e3b152dacddc12445",
   "project_state_revision": "bootstrap-m3b-closed",
@@ -255,11 +255,12 @@ const (
 
 // WorkloadEnvelope specifies empirical effective context bounds.
 type WorkloadEnvelope struct {
-    Workload              WorkloadKind `json:"workload"`
-    EffectiveTokens       int          `json:"effective_tokens"`
-    CalibrationTask       string       `json:"calibration_task"`
-    CalibrationDate       string       `json:"calibration_date"`
-    ConfidenceLevel       string       `json:"confidence_level"` // verified | provisional | unknown
+    Workload               WorkloadKind `json:"workload"`
+    EffectiveTokens        int          `json:"effective_tokens"`
+    CalibrationTask        string       `json:"calibration_task"`
+    CalibrationDate        string       `json:"calibration_date"`
+    CalibrationEvidenceRef *string      `json:"calibration_evidence_ref,omitempty"`
+    ConfidenceLevel        string       `json:"confidence_level"` // verified | provisional | unknown
 }
 
 // TokenizerAccountingMethod indicates how tokens were counted.
@@ -273,25 +274,29 @@ const (
 
 // ContextProfile contains endpoint- and workload-specific capability/budget evidence.
 type ContextProfile struct {
-    SchemaVersion              SchemaVersion             `json:"schema_version"`
-    ProfileID                  string                    `json:"profile_id"`
-    EndpointID                 string                    `json:"endpoint_id"`
-    ChannelID                  string                    `json:"channel_id"`
-    Revision                   int                       `json:"revision"`
-    DeclaredWindowTokens       int                       `json:"declared_window_tokens"`
-    RuntimeWindowTokens        int                       `json:"runtime_window_tokens"`
-    WorkloadEnvelopes          []WorkloadEnvelope        `json:"workload_envelopes"`
-    TargetResidentTokens       int                       `json:"target_resident_tokens"`
-    HardResidentCeilingTokens  int                       `json:"hard_resident_ceiling_tokens"`
-    ProtectedCoreLimitTokens   int                       `json:"protected_core_limit_tokens"`
-    ContractLimitTokens        int                       `json:"contract_limit_tokens"`
-    MaxSingleLeaseTokens       int                       `json:"max_single_lease_tokens"`
-    OutputReserveTokens        int                       `json:"output_reserve_tokens"`
-    ToolTailReserveTokens      int                       `json:"tool_tail_reserve_tokens"`
-    AccountingMethod           TokenizerAccountingMethod `json:"accounting_method"`
-    EstimateUncertaintyRatio   float64                   `json:"estimate_uncertainty_ratio"`
-    ObservedContextControl     ContextControl            `json:"observed_context_control"`
-    ObservedPrefixCache        PrefixCache               `json:"observed_prefix_cache"`
+    SchemaVersion             SchemaVersion             `json:"schema_version"`
+    ProfileID                 string                    `json:"profile_id"`
+    EndpointID                string                    `json:"endpoint_id"`
+    ChannelID                 string                    `json:"channel_id"`
+    Runtime                   string                    `json:"runtime"`
+    ModelRef                  string                    `json:"model_ref"`
+    Quantization              *string                   `json:"quantization,omitempty"`
+    ContextConfiguration     map[string]string         `json:"context_configuration,omitempty"`
+    Revision                  int                       `json:"revision"`
+    DeclaredWindowTokens      int                       `json:"declared_window_tokens"`
+    RuntimeWindowTokens       int                       `json:"runtime_window_tokens"`
+    WorkloadEnvelopes         []WorkloadEnvelope        `json:"workload_envelopes"`
+    TargetResidentTokens      int                       `json:"target_resident_tokens"`
+    HardResidentCeilingTokens int                       `json:"hard_resident_ceiling_tokens"`
+    ProtectedCoreLimitTokens  int                       `json:"protected_core_limit_tokens"`
+    ContractLimitTokens       int                       `json:"contract_limit_tokens"`
+    MaxSingleLeaseTokens      int                       `json:"max_single_lease_tokens"`
+    OutputReserveTokens       int                       `json:"output_reserve_tokens"`
+    ToolTailReserveTokens     int                       `json:"tool_tail_reserve_tokens"`
+    AccountingMethod          TokenizerAccountingMethod `json:"accounting_method"`
+    EstimateUncertaintyRatio  float64                   `json:"estimate_uncertainty_ratio"`
+    ObservedContextControl    ContextControl            `json:"observed_context_control"`
+    ObservedPrefixCache       PrefixCache               `json:"observed_prefix_cache"`
 }
 
 // MandatoryClauseRef identifies an exact normative clause deterministically admitted.
@@ -304,28 +309,31 @@ type MandatoryClauseRef struct {
 
 // ContextManifest represents the compiled task intent, read/write scopes, and references.
 type ContextManifest struct {
-    SchemaVersion         SchemaVersion        `json:"schema_version"`
-    ManifestID            string               `json:"manifest_id"`
-    TaskID                string               `json:"task_id"`
-    WorkPackageID         string               `json:"work_package_id"`
-    WorkPackageRevision   int                  `json:"work_package_revision"`
-    WorkPackageDigest     string               `json:"work_package_digest"`
-    Role                  string               `json:"role"`
-    BaseCommit            string               `json:"base_commit"`
-    CandidateCommit       *string              `json:"candidate_commit,omitempty"`
-    ProjectStateRevision  string               `json:"project_state_revision"`
-    ReadEnvelope          []string             `json:"read_envelope"`
-    WriteScope            []string             `json:"write_scope"`
-    Domains               []string             `json:"domains"`
-    RiskTags              []string             `json:"risk_tags"`
-    MandatoryClauses      []MandatoryClauseRef `json:"mandatory_clauses"`
-    InitialEvidenceRefs   []string             `json:"initial_evidence_refs"`
-    DeferredEvidenceRefs  []string             `json:"deferred_evidence_refs,omitempty"`
-    Assumptions           []Assumption         `json:"assumptions"`
-    ExplicitQuestions     []string             `json:"explicit_questions"`
-    ExpansionTriggers     []string             `json:"expansion_triggers"`
-    ContextProfileID      string               `json:"context_profile_id"`
-    BudgetPoolID          string               `json:"budget_pool_id"`
+    SchemaVersion        SchemaVersion        `json:"schema_version"`
+    ManifestID           string               `json:"manifest_id"`
+    TaskID               string               `json:"task_id"`
+    WorkPackageID        string               `json:"work_package_id"`
+    WorkPackageRevision  int                  `json:"work_package_revision"`
+    WorkPackageDigest    string               `json:"work_package_digest"`
+    Role                 string               `json:"role"`
+    BaseCommit           string               `json:"base_commit"`
+    CandidateCommit      *string              `json:"candidate_commit,omitempty"`
+    ProjectStateRevision string               `json:"project_state_revision"`
+    MappingVersion       string               `json:"mapping_version"`
+    SourceRevision       string               `json:"source_revision"`
+    ReadEnvelope         []string             `json:"read_envelope"`
+    WriteScope           []string             `json:"write_scope"`
+    Domains              []string             `json:"domains"`
+    RiskTags             []string             `json:"risk_tags"`
+    MandatoryClauses     []MandatoryClauseRef `json:"mandatory_clauses"`
+    InitialEvidenceRefs  []string             `json:"initial_evidence_refs"`
+    DeferredEvidenceRefs []string             `json:"deferred_evidence_refs,omitempty"`
+    Assumptions          []Assumption         `json:"assumptions"`
+    ExplicitQuestions    []string             `json:"explicit_questions"`
+    ExpansionTriggers    []string             `json:"expansion_triggers"`
+    ContextProfileID     string               `json:"context_profile_id"`
+    BudgetPoolID         string               `json:"budget_pool_id"`
+    AdmissionProvenance  []string             `json:"admission_provenance"`
 }
 
 // EvidenceLeaseKind enumerates the leased evidence categories.
@@ -409,19 +417,21 @@ const (
 
 // ContextPack is the ephemeral compiled invocation input reproducible from a manifest.
 type ContextPack struct {
-    SchemaVersion        SchemaVersion            `json:"schema_version"`
-    PackID               string                   `json:"pack_id"`
-    ManifestID           string                   `json:"manifest_id"`
-    ManifestRevision     int                      `json:"manifest_revision"`
-    RoleCore             string                   `json:"role_core"`
-    ExecutionContract    string                   `json:"execution_contract"`
-    NormativeClauses     []string                 `json:"normative_clauses"`
-    CognitiveState       CognitiveStateCapsule    `json:"cognitive_state"`
-    EvidenceWorkingSet   []EvidenceLease          `json:"evidence_working_set"`
-    EphemeralTail        EphemeralTailBlock       `json:"ephemeral_tail"`
-    TokenAccounting      TokenAccountingBreakdown `json:"token_accounting"`
-    PackDigest           string                   `json:"pack_digest"`
-    Status               ContextPackStatus        `json:"status"`
+    SchemaVersion         SchemaVersion            `json:"schema_version"`
+    PackID                string                   `json:"pack_id"`
+    ManifestID            string                   `json:"manifest_id"`
+    ManifestRevision      int                      `json:"manifest_revision"`
+    RoleCore              string                   `json:"role_core"`
+    ExecutionContract     string                   `json:"execution_contract"`
+    NormativeClauses      []string                 `json:"normative_clauses"`
+    CognitiveState        CognitiveStateCapsule    `json:"cognitive_state"`
+    EvidenceWorkingSet    []EvidenceLease          `json:"evidence_working_set"`
+    EphemeralTail         EphemeralTailBlock       `json:"ephemeral_tail"`
+    TokenAccounting       TokenAccountingBreakdown `json:"token_accounting"`
+    AdmittedObjectDigests map[string]string        `json:"admitted_object_digests"`
+    PackDigest            string                   `json:"pack_digest"`
+    CoverageSummary       string                   `json:"coverage_summary"`
+    Status                ContextPackStatus        `json:"status"`
 }
 ```
 
@@ -538,6 +548,7 @@ const (
     BudgetStatusHealthy           BudgetPoolStatus = "healthy"
     BudgetStatusSoftLimitExceeded BudgetPoolStatus = "soft_limit_exceeded"
     BudgetStatusExhausted         BudgetPoolStatus = "exhausted"
+    BudgetStatusUnknown           BudgetPoolStatus = "unknown"
 )
 
 // BudgetState captures live pool balance and status with honest unknown representation (PROTOCOLS §10B).
@@ -571,29 +582,62 @@ type ResourceState struct {
 ```go
 package protocol
 
+// FallbackBinding defines an explicit, routable fallback path for a role binding (ADR-0018 §1, §9).
+type FallbackBinding struct {
+    EndpointID       string `json:"endpoint_id"`
+    ChannelID        string `json:"channel_id"`
+    BudgetPoolID     string `json:"budget_pool_id"`
+    ContextProfileID string `json:"context_profile_id"`
+}
+
 // RoleBinding maps an engineering role to an endpoint, channel, and budget pool (ADR-0018 §1, FR-062).
 type RoleBinding struct {
-    Role                string   `json:"role"`
-    EndpointID          string   `json:"endpoint_id"`
-    ChannelID           string   `json:"channel_id"`
-    BudgetPoolID        string   `json:"budget_pool_id"`
-    ContextProfileID    string   `json:"context_profile_id"`
-    Priority            int      `json:"priority"`
-    FallbackEndpointIDs []string `json:"fallback_endpoint_ids,omitempty"`
+    Role             string            `json:"role"`
+    EndpointID       string            `json:"endpoint_id"`
+    ChannelID        string            `json:"channel_id"`
+    BudgetPoolID     string            `json:"budget_pool_id"`
+    ContextProfileID string            `json:"context_profile_id"`
+    Priority         int               `json:"priority"`
+    Fallbacks        []FallbackBinding `json:"fallbacks,omitempty"`
+}
+
+// DiversityPolicy specifies provider and model diversity constraints (COGNITION_PORTFOLIO §11, PROTOCOLS §10B).
+type DiversityPolicy struct {
+    RequireDistinctModelsForReview    bool `json:"require_distinct_models_for_review,omitempty"`
+    RequireDistinctProvidersForReview bool `json:"require_distinct_providers_for_review,omitempty"`
+    RequireDistinctEndpointsForReview bool `json:"require_distinct_endpoints_for_review,omitempty"`
+}
+
+// EscalationRule specifies an explicit escalation transition path between roles/endpoints (COGNITION_PORTFOLIO §11).
+type EscalationRule struct {
+    FromRole         string `json:"from_role"`
+    ToRole           string `json:"to_role"`
+    TriggerCondition string `json:"trigger_condition"`
+    MaxEscalations   int    `json:"max_escalations"`
+}
+
+// WorkflowDefaults specifies default execution constraints for synthesized workflows (COGNITION_PORTFOLIO §11).
+type WorkflowDefaults struct {
+    DefaultTopology       WorkflowTopologyKind `json:"default_topology,omitempty"`
+    DefaultTimeoutSeconds int                  `json:"default_timeout_seconds,omitempty"`
+    MaxRetries            int                  `json:"max_retries,omitempty"`
 }
 
 // CognitionPortfolio is the canonical routing configuration (ADR-0018 §7, FR-062).
 type CognitionPortfolio struct {
-    SchemaVersion       SchemaVersion    `json:"schema_version"`
-    PortfolioID         string           `json:"portfolio_id"`
-    Revision            int              `json:"revision"`
-    CreatedAt           string           `json:"created_at"`
-    Channels            []AccessChannel  `json:"channels"`
-    RoleBindings        []RoleBinding    `json:"role_bindings"`
-    BudgetPools         []BudgetPool     `json:"budget_pools"`
-    MaxSourceExposure   SourceExposure   `json:"max_source_exposure"`
-    ExcludedEndpointIDs []string         `json:"excluded_endpoint_ids,omitempty"`
-    BudgetReservations  map[string]int64 `json:"budget_reservations,omitempty"`
+    SchemaVersion         SchemaVersion     `json:"schema_version"`
+    PortfolioID           string            `json:"portfolio_id"`
+    Revision              int               `json:"revision"`
+    CreatedAt             string            `json:"created_at"`
+    Channels              []AccessChannel   `json:"channels"`
+    RoleBindings          []RoleBinding     `json:"role_bindings"`
+    BudgetPools           []BudgetPool      `json:"budget_pools"`
+    MaxSourceExposure     SourceExposure    `json:"max_source_exposure"`
+    ExcludedEndpointIDs   []string          `json:"excluded_endpoint_ids,omitempty"`
+    BudgetReservations    map[string]int64  `json:"budget_reservations,omitempty"`
+    DiversityRequirements *DiversityPolicy  `json:"diversity_requirements,omitempty"`
+    EscalationRules       []EscalationRule  `json:"escalation_rules,omitempty"`
+    WorkflowDefaults      *WorkflowDefaults `json:"workflow_defaults,omitempty"`
 }
 
 // PortfolioRecommendation is an AI-suggested or heuristic portfolio proposal.
@@ -618,14 +662,30 @@ const (
     TopologyDeterministicOnly     WorkflowTopologyKind = "deterministic_only"
 )
 
-// WorkflowStage defines one cognitive pass in a workflow plan.
+// StageKind distinguishes cognitive from deterministic stages in a workflow (ADR-0018 §8).
+type StageKind string
+
+const (
+    StageKindCognition     StageKind = "cognition"
+    StageKindDeterministic StageKind = "deterministic"
+)
+
+// WorkflowStage defines one cognitive or deterministic pass in a workflow plan.
 type WorkflowStage struct {
-    StageID        string   `json:"stage_id"`
-    Role           string   `json:"role"`
-    Order          int      `json:"order"`
-    DependsOn      []string `json:"depends_on,omitempty"`
-    BudgetPoolID   string   `json:"budget_pool_id"`
-    TimeoutSeconds int      `json:"timeout_seconds"`
+    StageID             string    `json:"stage_id"`
+    Role                string    `json:"role"`
+    Kind                StageKind `json:"kind"`
+    IsReview            bool      `json:"is_review,omitempty"`
+    Order               int       `json:"order"`
+    DependsOn           []string  `json:"depends_on,omitempty"`
+    BudgetPoolID        string    `json:"budget_pool_id"`
+    TimeoutSeconds      int       `json:"timeout_seconds"`
+    EndpointID          *string   `json:"endpoint_id,omitempty"`
+    ChannelID           *string   `json:"channel_id,omitempty"`
+    ContextProfileID    *string   `json:"context_profile_id,omitempty"`
+    RetryLimit          int       `json:"retry_limit,omitempty"`
+    EscalationTarget    *string   `json:"escalation_target,omitempty"`
+    DeterministicGateID *string   `json:"deterministic_gate_id,omitempty"`
 }
 
 // WorkflowPlan describes the task-specific workflow topology (ADR-0018 §8).

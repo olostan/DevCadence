@@ -37,7 +37,8 @@
       "enum": [
         "healthy",
         "soft_limit_exceeded",
-        "exhausted"
+        "exhausted",
+        "unknown"
       ]
     },
     "observed_at": {
@@ -52,7 +53,8 @@
           "current_usage",
           "remaining_balance",
           "period_start",
-          "period_end"
+          "period_end",
+          "status"
         ]
       },
       "uniqueItems": true

@@ -32,61 +32,7 @@
     "channels": {
       "type": "array",
       "items": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "schema_version",
-          "channel_id",
-          "endpoint_id",
-          "kind",
-          "session_mode",
-          "context_control",
-          "prefix_cache",
-          "supports_streaming",
-          "supports_tools",
-          "native_worktree_access",
-          "max_concurrent_requests"
-        ],
-        "properties": {
-          "schema_version": { "const": "1.0" },
-          "channel_id": { "type": "string", "minLength": 1 },
-          "endpoint_id": { "type": "string", "minLength": 1 },
-          "kind": {
-            "enum": [
-              "direct_http_api",
-              "cli_subprocess",
-              "local_daemon_socket",
-              "remote_agent_proxy"
-            ]
-          },
-          "session_mode": {
-            "enum": [
-              "stateless_per_call",
-              "persistent_session",
-              "resumable_session"
-            ]
-          },
-          "context_control": {
-            "enum": [
-              "exact_stateless",
-              "append_only",
-              "opaque_session"
-            ]
-          },
-          "prefix_cache": {
-            "enum": [
-              "explicit",
-              "implicit",
-              "session_kv",
-              "none"
-            ]
-          },
-          "supports_streaming": { "type": "boolean" },
-          "supports_tools": { "type": "boolean" },
-          "native_worktree_access": { "type": "boolean" },
-          "credential_ref_id": { "type": "string", "minLength": 1 },
-          "max_concurrent_requests": { "type": "integer", "minimum": 1 }
-        }
+        "$ref": "devcadence:///access-channel.schema.json"
       }
     },
     "role_bindings": {
@@ -109,9 +55,24 @@
           "budget_pool_id": { "type": "string", "minLength": 1 },
           "context_profile_id": { "type": "string", "minLength": 1 },
           "priority": { "type": "integer", "minimum": 1 },
-          "fallback_endpoint_ids": {
+          "fallbacks": {
             "type": "array",
-            "items": { "type": "string", "minLength": 1 }
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "endpoint_id",
+                "channel_id",
+                "budget_pool_id",
+                "context_profile_id"
+              ],
+              "properties": {
+                "endpoint_id": { "type": "string", "minLength": 1 },
+                "channel_id": { "type": "string", "minLength": 1 },
+                "budget_pool_id": { "type": "string", "minLength": 1 },
+                "context_profile_id": { "type": "string", "minLength": 1 }
+              }
+            }
           }
         }
       }
@@ -119,57 +80,7 @@
     "budget_pools": {
       "type": "array",
       "items": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "schema_version",
-          "pool_id",
-          "name",
-          "regime",
-          "unit",
-          "hard_limit",
-          "soft_alert_limit",
-          "period",
-          "allow_overage",
-          "fallback_allowed_to_metered"
-        ],
-        "properties": {
-          "schema_version": { "const": "1.0" },
-          "pool_id": { "type": "string", "minLength": 1 },
-          "name": { "type": "string", "minLength": 1 },
-          "regime": {
-            "enum": [
-              "local_compute",
-              "subscription_quota",
-              "metered_api",
-              "prepaid_credits",
-              "enterprise_allocation",
-              "unknown_custom"
-            ]
-          },
-          "unit": {
-            "enum": [
-              "usd_cents",
-              "token_credits",
-              "tokens",
-              "requests",
-              "seconds"
-            ]
-          },
-          "hard_limit": { "type": "integer", "minimum": 0 },
-          "soft_alert_limit": { "type": "integer", "minimum": 0 },
-          "period": {
-            "enum": [
-              "rolling_hour",
-              "rolling_day",
-              "billing_cycle",
-              "per_attempt",
-              "per_task"
-            ]
-          },
-          "allow_overage": { "type": "boolean" },
-          "fallback_allowed_to_metered": { "type": "boolean" }
-        }
+        "$ref": "devcadence:///budget-pool.schema.json"
       }
     },
     "max_source_exposure": {
@@ -191,6 +102,50 @@
       "additionalProperties": {
         "type": "integer",
         "minimum": 0
+      }
+    },
+    "diversity_requirements": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "require_distinct_models_for_review": { "type": "boolean" },
+        "require_distinct_providers_for_review": { "type": "boolean" },
+        "require_distinct_endpoints_for_review": { "type": "boolean" }
+      }
+    },
+    "escalation_rules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "from_role",
+          "to_role",
+          "trigger_condition",
+          "max_escalations"
+        ],
+        "properties": {
+          "from_role": { "type": "string", "minLength": 1 },
+          "to_role": { "type": "string", "minLength": 1 },
+          "trigger_condition": { "type": "string", "minLength": 1 },
+          "max_escalations": { "type": "integer", "minimum": 1 }
+        }
+      }
+    },
+    "workflow_defaults": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "default_topology": {
+          "enum": [
+            "single_pass",
+            "iterative_escalation",
+            "dual_independent_review",
+            "deterministic_only"
+          ]
+        },
+        "default_timeout_seconds": { "type": "integer", "minimum": 0 },
+        "max_retries": { "type": "integer", "minimum": 0 }
       }
     }
   }

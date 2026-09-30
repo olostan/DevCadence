@@ -227,6 +227,32 @@ func TestBudgetStateValidation(t *testing.T) {
 			t.Fatal("expected error when populated field is in unknown_fields, got nil")
 		}
 	})
+
+	t.Run("status unknown accepted and can be listed in unknown_fields", func(t *testing.T) {
+		bs := &protocol.BudgetState{
+			SchemaVersion: protocol.SchemaVersion1,
+			PoolID:        "pool_unmetered_subscription",
+			Status:        protocol.BudgetStatusUnknown,
+			ObservedAt:    "2026-09-30T00:00:00Z",
+			UnknownFields: []string{"status"},
+		}
+		if err := bs.Validate(); err != nil {
+			t.Fatalf("expected valid BudgetState when status is unknown, got: %v", err)
+		}
+	})
+
+	t.Run("status healthy listed in unknown_fields rejected", func(t *testing.T) {
+		bs := &protocol.BudgetState{
+			SchemaVersion: protocol.SchemaVersion1,
+			PoolID:        "pool_1",
+			Status:        protocol.BudgetStatusHealthy,
+			ObservedAt:    "2026-09-30T00:00:00Z",
+			UnknownFields: []string{"status"},
+		}
+		if err := bs.Validate(); err == nil {
+			t.Fatal("expected error when healthy status is listed in unknown_fields, got nil")
+		}
+	})
 }
 
 func TestResourceStateValidation(t *testing.T) {
