@@ -1,0 +1,52 @@
+{
+  "schema_version": "1.0",
+  "manifest_id": "manifest_wp_m3c_1_01",
+  "task_id": "task_m3c_1",
+  "work_package_id": "WP-M3C-1",
+  "work_package_revision": 1,
+  "work_package_digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "role": "implementer",
+  "base_commit": "58869d99635ee0d05b5fe30e3b152dacddc12445",
+  "project_state_revision": "rev_m3b_closed",
+  "read_envelope": [
+    "internal/protocol/*",
+    "schemas/*"
+  ],
+  "write_scope": [
+    "internal/protocol/access_channel.go",
+    "schemas/access-channel.schema.json"
+  ],
+  "domains": [
+    "cognition_protocol"
+  ],
+  "risk_tags": [
+    "protocol_drift"
+  ],
+  "mandatory_clauses": [
+    {
+      "clause_id": "DCI-018",
+      "source_doc": "docs/INVARIANTS.md",
+      "revision": "v1.0",
+      "content_digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "initial_evidence_refs": [
+    "git:58869d9:internal/protocol/credentials.go"
+  ],
+  "assumptions": [
+    {
+      "id": "asm_1",
+      "statement": "All schemas compile under draft 2020-12",
+      "status": "verified",
+      "material": true
+    }
+  ],
+  "explicit_questions": [
+    "Do all Go twin fields match top-level schema properties?"
+  ],
+  "expansion_triggers": [
+    "New domain requirement"
+  ],
+  "context_profile_id": "profile_ollama_qwen_32b_local",
+  "budget_pool_id": "pool_local_compute_01"
+}

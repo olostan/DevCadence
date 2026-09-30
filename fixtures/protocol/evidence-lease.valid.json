@@ -1,0 +1,17 @@
+{
+  "schema_version": "1.0",
+  "lease_id": "lease_doc_doctor_815_835",
+  "evidence_kind": "source_snippet",
+  "source_revision": "58869d99635ee0d05b5fe30e3b152dacddc12445",
+  "worktree_id": "wt_session_01",
+  "file_path": "internal/setup/doctor.go",
+  "locator": "L815-L835",
+  "content_digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "acquisition_question": "How are doctor check results rendered to text?",
+  "acquisition_reason": "Verifying text output formatting against CLI spec",
+  "content": "func (r *DoctorReport) FormatSummary() string {\n\treturn \"all checks passed\"\n}",
+  "token_count": 28,
+  "accounting_method": "exact_bpe",
+  "status": "active",
+  "acquired_at": "2026-09-30T00:50:00Z"
+}

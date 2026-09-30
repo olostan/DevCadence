@@ -448,6 +448,26 @@ func NewRecord(kind string) (Record, error) {
 		return &AuthEvidence{}, nil
 	case "ResourceInventory":
 		return &ResourceInventory{}, nil
+	case "AccessChannel":
+		return &AccessChannel{}, nil
+	case "ContextProfile":
+		return &ContextProfile{}, nil
+	case "ContextManifest":
+		return &ContextManifest{}, nil
+	case "ContextPack":
+		return &ContextPack{}, nil
+	case "EvidenceLease":
+		return &EvidenceLease{}, nil
+	case "RefactoringProposal":
+		return &RefactoringProposal{}, nil
+	case "BudgetPool":
+		return &BudgetPool{}, nil
+	case "CognitionPortfolio":
+		return &CognitionPortfolio{}, nil
+	case "PortfolioRecommendation":
+		return &PortfolioRecommendation{}, nil
+	case "WorkflowPlan":
+		return &WorkflowPlan{}, nil
 	}
 	return nil, errs.New(errs.CategoryInvalidArgument, "unknown record kind %q", kind)
 }

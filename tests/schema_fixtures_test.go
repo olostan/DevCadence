@@ -171,6 +171,16 @@ func TestFixturesRoundTripWithoutSemanticLoss(t *testing.T) {
 		{"credential-ref.valid.json", decodeInto[protocol.CredentialRef]},
 		{"auth-evidence.valid.json", decodeInto[protocol.AuthEvidence]},
 		{"resource-inventory.valid.json", decodeInto[protocol.ResourceInventory]},
+		{"access-channel.valid.json", decodeInto[protocol.AccessChannel]},
+		{"context-profile.valid.json", decodeInto[protocol.ContextProfile]},
+		{"context-manifest.valid.json", decodeInto[protocol.ContextManifest]},
+		{"context-pack.valid.json", decodeInto[protocol.ContextPack]},
+		{"evidence-lease.valid.json", decodeInto[protocol.EvidenceLease]},
+		{"refactoring-proposal.valid.json", decodeInto[protocol.RefactoringProposal]},
+		{"budget-pool.valid.json", decodeInto[protocol.BudgetPool]},
+		{"cognition-portfolio.valid.json", decodeInto[protocol.CognitionPortfolio]},
+		{"portfolio-recommendation.valid.json", decodeInto[protocol.PortfolioRecommendation]},
+		{"workflow-plan.valid.json", decodeInto[protocol.WorkflowPlan]},
 	}
 	for _, tc := range cases {
 		t.Run(tc.file, func(t *testing.T) {

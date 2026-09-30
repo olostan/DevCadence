@@ -1,0 +1,26 @@
+{
+  "schema_version": "1.0",
+  "plan_id": "plan_wp_m3c_1_workflow",
+  "task_id": "task_m3c_1",
+  "work_package_id": "WP-M3C-1",
+  "topology": "iterative_escalation",
+  "stages": [
+    {
+      "stage_id": "stage_1_implement",
+      "role": "implementer",
+      "order": 1,
+      "budget_pool_id": "pool_subscription_anthropic_pro",
+      "timeout_seconds": 600
+    },
+    {
+      "stage_id": "stage_2_review",
+      "role": "reviewer",
+      "order": 2,
+      "depends_on": [
+        "stage_1_implement"
+      ],
+      "budget_pool_id": "pool_subscription_anthropic_pro",
+      "timeout_seconds": 300
+    }
+  ]
+}

@@ -69,6 +69,20 @@ const (
 	NameResourceInventory    Name = "resource-inventory"
 )
 
+// Names of the M3C cognition, context, economics, and portfolio schemas (ADR-0018, ADR-0019).
+const (
+	NameAccessChannel           Name = "access-channel"
+	NameContextProfile          Name = "context-profile"
+	NameContextManifest         Name = "context-manifest"
+	NameContextPack             Name = "context-pack"
+	NameEvidenceLease           Name = "evidence-lease"
+	NameRefactoringProposal     Name = "refactoring-proposal"
+	NameBudgetPool              Name = "budget-pool"
+	NameCognitionPortfolio      Name = "cognition-portfolio"
+	NamePortfolioRecommendation Name = "portfolio-recommendation"
+	NameWorkflowPlan            Name = "workflow-plan"
+)
+
 // Names of the review-convergence schemas published ahead of their M6 Go
 // implementation.
 const (
@@ -104,6 +118,16 @@ var RecordKindToSchema = map[string]Name{
 	"CredentialRef":             NameCredentialRef,
 	"AuthEvidence":              NameAuthEvidence,
 	"ResourceInventory":         NameResourceInventory,
+	"AccessChannel":             NameAccessChannel,
+	"ContextProfile":            NameContextProfile,
+	"ContextManifest":           NameContextManifest,
+	"ContextPack":               NameContextPack,
+	"EvidenceLease":             NameEvidenceLease,
+	"RefactoringProposal":       NameRefactoringProposal,
+	"BudgetPool":                NameBudgetPool,
+	"CognitionPortfolio":        NameCognitionPortfolio,
+	"PortfolioRecommendation":   NamePortfolioRecommendation,
+	"WorkflowPlan":              NameWorkflowPlan,
 }
 
 // Set is a compiled collection of schemas.
@@ -249,6 +273,9 @@ func AllNames() []Name {
 		NameClosureDecision, NameMachineCapabilityProfile,
 		NameDoctorReport, NameSetupPlan, NameSetupExecutionReport, NameSetupRecoveryReport, NameSetupLedgerEvent,
 		NameCredentialRef, NameAuthEvidence, NameResourceInventory,
+		NameAccessChannel, NameContextProfile, NameContextManifest, NameContextPack,
+		NameEvidenceLease, NameRefactoringProposal, NameBudgetPool, NameCognitionPortfolio,
+		NamePortfolioRecommendation, NameWorkflowPlan,
 	}
 	sort.Slice(names, func(i, j int) bool {
 		if len(names[i]) != len(names[j]) {

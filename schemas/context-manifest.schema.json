@@ -1,0 +1,160 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/olostan/DevCadence/schemas/context-manifest.schema.json",
+  "title": "DevCadence ContextManifest",
+  "description": "Compiled task intent, read/write authority scopes, and revision-pinned reference manifest (PROTOCOLS §10B).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "manifest_id",
+    "task_id",
+    "work_package_id",
+    "work_package_revision",
+    "work_package_digest",
+    "role",
+    "base_commit",
+    "project_state_revision",
+    "read_envelope",
+    "write_scope",
+    "domains",
+    "risk_tags",
+    "mandatory_clauses",
+    "initial_evidence_refs",
+    "assumptions",
+    "explicit_questions",
+    "expansion_triggers",
+    "context_profile_id",
+    "budget_pool_id"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "manifest_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "task_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "work_package_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "work_package_revision": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "work_package_digest": {
+      "type": "string",
+      "minLength": 1
+    },
+    "role": {
+      "type": "string",
+      "minLength": 1
+    },
+    "base_commit": {
+      "type": "string",
+      "minLength": 7
+    },
+    "candidate_commit": {
+      "type": "string",
+      "minLength": 7
+    },
+    "project_state_revision": {
+      "type": "string",
+      "minLength": 1
+    },
+    "read_envelope": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "write_scope": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "domains": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "risk_tags": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "mandatory_clauses": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "clause_id",
+          "source_doc",
+          "revision",
+          "content_digest"
+        ],
+        "properties": {
+          "clause_id": { "type": "string", "minLength": 1 },
+          "source_doc": { "type": "string", "minLength": 1 },
+          "revision": { "type": "string", "minLength": 1 },
+          "content_digest": {
+            "type": "string",
+            "pattern": "^sha256:[a-f0-9]{64}$"
+          }
+        }
+      }
+    },
+    "initial_evidence_refs": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "deferred_evidence_refs": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "assumptions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "statement",
+          "status",
+          "material"
+        ],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "statement": { "type": "string", "minLength": 1 },
+          "status": {
+            "enum": [
+              "verified",
+              "accepted_risk",
+              "unverified"
+            ]
+          },
+          "material": { "type": "boolean" },
+          "evidence_refs": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        }
+      }
+    },
+    "explicit_questions": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "expansion_triggers": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "context_profile_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "budget_pool_id": {
+      "type": "string",
+      "minLength": 1
+    }
+  }
+}

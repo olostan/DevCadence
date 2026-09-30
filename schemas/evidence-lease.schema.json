@@ -1,0 +1,99 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/olostan/DevCadence/schemas/evidence-lease.schema.json",
+  "title": "DevCadence EvidenceLease",
+  "description": "Verbatim content-addressed leased slice of working memory with eviction and invalidation lifecycle (PROTOCOLS §10B).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "lease_id",
+    "evidence_kind",
+    "source_revision",
+    "worktree_id",
+    "file_path",
+    "locator",
+    "content_digest",
+    "acquisition_question",
+    "acquisition_reason",
+    "content",
+    "token_count",
+    "accounting_method",
+    "status",
+    "acquired_at"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "lease_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "evidence_kind": {
+      "enum": [
+        "source_snippet",
+        "diff_hunk",
+        "log_excerpt",
+        "symbol_signature",
+        "normative_clause"
+      ]
+    },
+    "source_revision": {
+      "type": "string",
+      "minLength": 1
+    },
+    "worktree_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "file_path": {
+      "type": "string",
+      "minLength": 1
+    },
+    "locator": {
+      "type": "string",
+      "minLength": 1
+    },
+    "content_digest": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "acquisition_question": {
+      "type": "string",
+      "minLength": 1
+    },
+    "acquisition_reason": {
+      "type": "string",
+      "minLength": 1
+    },
+    "content": {
+      "type": "string",
+      "minLength": 1
+    },
+    "token_count": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "accounting_method": {
+      "enum": [
+        "exact_bpe",
+        "provider_api",
+        "approximate_estimate"
+      ]
+    },
+    "status": {
+      "enum": [
+        "active",
+        "released",
+        "invalidated"
+      ]
+    },
+    "acquired_at": {
+      "type": "string",
+      "minLength": 1
+    },
+    "expires_at": {
+      "type": "string",
+      "minLength": 1
+    }
+  }
+}

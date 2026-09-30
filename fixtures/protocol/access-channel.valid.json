@@ -1,0 +1,14 @@
+{
+  "schema_version": "1.0",
+  "channel_id": "chan_claude_cli_01",
+  "endpoint_id": "ep_claude_37_sonnet",
+  "kind": "cli_subprocess",
+  "session_mode": "resumable_session",
+  "context_control": "append_only",
+  "prefix_cache": "implicit",
+  "supports_streaming": true,
+  "supports_tools": true,
+  "native_worktree_access": true,
+  "credential_ref_id": "cred_claude_oauth_01",
+  "max_concurrent_requests": 2
+}

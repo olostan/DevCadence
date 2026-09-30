@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/olostan/DevCadence/schemas/access-channel.schema.json",
+  "title": "DevCadence AccessChannel",
+  "description": "Concrete access path to a cognition endpoint, separating operational mechanism and controllability from model identity.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "channel_id",
+    "endpoint_id",
+    "kind",
+    "session_mode",
+    "context_control",
+    "prefix_cache",
+    "supports_streaming",
+    "supports_tools",
+    "native_worktree_access",
+    "max_concurrent_requests"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "channel_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "endpoint_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "kind": {
+      "enum": [
+        "direct_http_api",
+        "cli_subprocess",
+        "local_daemon_socket",
+        "remote_agent_proxy"
+      ]
+    },
+    "session_mode": {
+      "enum": [
+        "stateless_per_call",
+        "persistent_session",
+        "resumable_session"
+      ]
+    },
+    "context_control": {
+      "enum": [
+        "exact_stateless",
+        "append_only",
+        "opaque_session"
+      ]
+    },
+    "prefix_cache": {
+      "enum": [
+        "explicit",
+        "implicit",
+        "session_kv",
+        "none"
+      ]
+    },
+    "supports_streaming": { "type": "boolean" },
+    "supports_tools": { "type": "boolean" },
+    "native_worktree_access": { "type": "boolean" },
+    "credential_ref_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "max_concurrent_requests": {
+      "type": "integer",
+      "minimum": 1
+    }
+  }
+}

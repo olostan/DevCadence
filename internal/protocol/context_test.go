@@ -1,0 +1,224 @@
+package protocol_test
+
+import (
+	"testing"
+
+	"github.com/olostan/DevCadence/internal/protocol"
+)
+
+func validContextProfile() *protocol.ContextProfile {
+	return &protocol.ContextProfile{
+		SchemaVersion:             protocol.SchemaVersion1,
+		ProfileID:                 "prof_1",
+		EndpointID:                "ep_1",
+		ChannelID:                 "chan_1",
+		Revision:                  1,
+		DeclaredWindowTokens:      32768,
+		RuntimeWindowTokens:       32768,
+		WorkloadEnvelopes:         []protocol.WorkloadEnvelope{
+			{
+				Workload:        protocol.WorkloadImplementation,
+				EffectiveTokens: 24000,
+				CalibrationTask: "task_1",
+				CalibrationDate: "2026-09-30T00:00:00Z",
+				ConfidenceLevel: "verified",
+			},
+		},
+		TargetResidentTokens:      16000,
+		HardResidentCeilingTokens: 28000,
+		ProtectedCoreLimitTokens:  2000,
+		ContractLimitTokens:       4000,
+		MaxSingleLeaseTokens:      6000,
+		OutputReserveTokens:       4000,
+		ToolTailReserveTokens:     2000,
+		AccountingMethod:          protocol.AccountingExactBPE,
+		EstimateUncertaintyRatio:  0.05,
+		ObservedContextControl:    protocol.ContextControlExactStateless,
+		ObservedPrefixCache:       protocol.PrefixCacheSessionKV,
+	}
+}
+
+func validEvidenceLease() *protocol.EvidenceLease {
+	return &protocol.EvidenceLease{
+		SchemaVersion:       protocol.SchemaVersion1,
+		LeaseID:             "lease_1",
+		EvidenceKind:        protocol.LeaseKindSourceSnippet,
+		SourceRevision:      "58869d99635ee0d05b5fe30e3b152dacddc12445",
+		WorktreeID:          "wt_1",
+		FilePath:            "internal/setup/doctor.go",
+		Locator:             "L815-L835",
+		ContentDigest:       "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+		AcquisitionQuestion: "Question?",
+		AcquisitionReason:   "Reason",
+		Content:             "func Test() {}",
+		TokenCount:          28,
+		AccountingMethod:    protocol.AccountingExactBPE,
+		Status:              protocol.LeaseStatusActive,
+		AcquiredAt:          "2026-09-30T00:00:00Z",
+	}
+}
+
+func validContextManifest() *protocol.ContextManifest {
+	return &protocol.ContextManifest{
+		SchemaVersion:        protocol.SchemaVersion1,
+		ManifestID:           "manifest_1",
+		TaskID:               "task_1",
+		WorkPackageID:        "WP-M3C-1",
+		WorkPackageRevision:  1,
+		WorkPackageDigest:    "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+		Role:                 "implementer",
+		BaseCommit:           "58869d99635ee0d05b5fe30e3b152dacddc12445",
+		ProjectStateRevision: "rev_1",
+		ReadEnvelope:         []string{"internal/*"},
+		WriteScope:           []string{"internal/protocol/*"},
+		Domains:              []string{"cognition"},
+		RiskTags:             []string{"drift"},
+		MandatoryClauses: []protocol.MandatoryClauseRef{
+			{
+				ClauseID:      "DCI-018",
+				SourceDoc:     "docs/INVARIANTS.md",
+				Revision:      "v1.0",
+				ContentDigest: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+			},
+		},
+		InitialEvidenceRefs: []string{"git:58869d9:internal/protocol/credentials.go"},
+		Assumptions: []protocol.Assumption{
+			{
+				ID:        "asm_1",
+				Statement: "Assumption statement",
+				Status:    protocol.AssumptionVerified,
+				Material:  true,
+			},
+		},
+		ExplicitQuestions: []string{"Q?"},
+		ExpansionTriggers: []string{"trigger"},
+		ContextProfileID:  "prof_1",
+		BudgetPoolID:      "pool_1",
+	}
+}
+
+func validContextPack() *protocol.ContextPack {
+	lease := *validEvidenceLease()
+	return &protocol.ContextPack{
+		SchemaVersion:      protocol.SchemaVersion1,
+		PackID:             "pack_1",
+		ManifestID:         "manifest_1",
+		ManifestRevision:   1,
+		RoleCore:           "Role core",
+		ExecutionContract:  "Execution contract",
+		NormativeClauses:   []string{"DCI-018"},
+		CognitiveState: protocol.CognitiveStateCapsule{
+			Hypotheses:            []string{"H1"},
+			ActiveTODOs:           []string{"T1"},
+			IntermediateDecisions: []string{"D1"},
+			OpenQuestions:         []string{},
+			EvidenceDependencies:  []string{"lease_1"},
+		},
+		EvidenceWorkingSet: []protocol.EvidenceLease{lease},
+		EphemeralTail: protocol.EphemeralTailBlock{
+			RecentToolExchanges: []string{"Tool output"},
+			CurrentAction:       "Action",
+		},
+		TokenAccounting: protocol.TokenAccountingBreakdown{
+			RoleTokens:          100,
+			ContractTokens:      500,
+			NormativeTokens:     80,
+			StateTokens:         120,
+			EvidenceTokens:      28,
+			TailTokens:          50,
+			OutputReserveTokens: 2000,
+			TotalResidentTokens: 878,
+			AccountingMethod:    protocol.AccountingExactBPE,
+		},
+		PackDigest: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+		Status:     protocol.PackStatusReady,
+	}
+}
+
+func TestContextProfileValidation(t *testing.T) {
+	t.Run("valid profile passes", func(t *testing.T) {
+		cp := validContextProfile()
+		if err := cp.Validate(); err != nil {
+			t.Fatalf("expected valid, got: %v", err)
+		}
+		if cp.RecordKind() != "ContextProfile" {
+			t.Errorf("record kind: got %q, want ContextProfile", cp.RecordKind())
+		}
+	})
+
+	t.Run("target tokens exceeding ceiling rejected", func(t *testing.T) {
+		cp := validContextProfile()
+		cp.TargetResidentTokens = cp.HardResidentCeilingTokens + 1
+		if err := cp.Validate(); err == nil {
+			t.Fatal("expected error when target > ceiling, got nil")
+		}
+	})
+
+	t.Run("invalid uncertainty ratio rejected", func(t *testing.T) {
+		cp := validContextProfile()
+		cp.EstimateUncertaintyRatio = 1.5
+		if err := cp.Validate(); err == nil {
+			t.Fatal("expected error on uncertainty ratio > 1.0, got nil")
+		}
+	})
+}
+
+func TestContextManifestValidation(t *testing.T) {
+	t.Run("valid manifest passes", func(t *testing.T) {
+		cm := validContextManifest()
+		if err := cm.Validate(); err != nil {
+			t.Fatalf("expected valid, got: %v", err)
+		}
+		if cm.RecordKind() != "ContextManifest" {
+			t.Errorf("record kind: got %q, want ContextManifest", cm.RecordKind())
+		}
+	})
+
+	t.Run("invalid clause digest rejected", func(t *testing.T) {
+		cm := validContextManifest()
+		cm.MandatoryClauses[0].ContentDigest = "md5:invalid"
+		if err := cm.Validate(); err == nil {
+			t.Fatal("expected error on non-sha256 clause digest, got nil")
+		}
+	})
+}
+
+func TestEvidenceLeaseValidation(t *testing.T) {
+	t.Run("valid lease passes", func(t *testing.T) {
+		el := validEvidenceLease()
+		if err := el.Validate(); err != nil {
+			t.Fatalf("expected valid, got: %v", err)
+		}
+		if el.RecordKind() != "EvidenceLease" {
+			t.Errorf("record kind: got %q, want EvidenceLease", el.RecordKind())
+		}
+	})
+
+	t.Run("token count < 1 rejected", func(t *testing.T) {
+		el := validEvidenceLease()
+		el.TokenCount = 0
+		if err := el.Validate(); err == nil {
+			t.Fatal("expected error on token count < 1, got nil")
+		}
+	})
+}
+
+func TestContextPackValidation(t *testing.T) {
+	t.Run("valid pack passes", func(t *testing.T) {
+		pack := validContextPack()
+		if err := pack.Validate(); err != nil {
+			t.Fatalf("expected valid, got: %v", err)
+		}
+		if pack.RecordKind() != "ContextPack" {
+			t.Errorf("record kind: got %q, want ContextPack", pack.RecordKind())
+		}
+	})
+
+	t.Run("negative tokens rejected", func(t *testing.T) {
+		pack := validContextPack()
+		pack.TokenAccounting.RoleTokens = -1
+		if err := pack.Validate(); err == nil {
+			t.Fatal("expected error on negative tokens, got nil")
+		}
+	})
+}

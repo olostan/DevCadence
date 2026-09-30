@@ -78,6 +78,21 @@ type Assumption struct {
 	EvidenceRefs []string         `json:"evidence_refs,omitempty"`
 }
 
+// Validate checks that an assumption has required fields and a valid status.
+func (a Assumption) Validate() error {
+	const kind = "Assumption"
+	if err := requireNonEmpty(kind, "id", a.ID); err != nil {
+		return err
+	}
+	if err := requireNonEmpty(kind, "statement", a.Statement); err != nil {
+		return err
+	}
+	if !a.Status.Valid() {
+		return enumError(kind, "status", string(a.Status), "verified", "accepted_risk", "unverified")
+	}
+	return nil
+}
+
 // Guidance is one instruction with explicit authority (DCI-022).
 type Guidance struct {
 	ID         string           `json:"id"`
