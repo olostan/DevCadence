@@ -182,7 +182,7 @@ Schedule Refactoring Epochs. Periodically perform Architecture Reconciliation ra
 
 ## Normative references
 
-Read and follow:
+Resolve the clauses that apply to the task from these owners (do not preload them whole; see ../../AGENTS.md §2):
 - ../../INVARIANTS.md
 - ../../docs/PRINCIPAL_ENGINEER.md
 - ../../docs/PROTOCOLS.md

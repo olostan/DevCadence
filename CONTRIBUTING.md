@@ -4,7 +4,7 @@ DevCadence welcomes changes that strengthen the central idea: deep, grounded fro
 
 ## Before contributing
 
-Read README.md, INVARIANTS.md, AGENTS.md and the relevant architecture/protocol documentation.
+Read README.md and AGENTS.md. Then resolve only the clauses your change touches, using the routing index in [docs/README.md](docs/README.md#context-routing); do not preload the whole corpus.
 
 If your change contradicts an invariant, do not code around it. Propose an ADR explaining why the invariant should be changed or superseded.
 
