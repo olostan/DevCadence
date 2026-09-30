@@ -73,6 +73,25 @@ Once the principal records a disposition with rationale and evidence, equivalent
 
 Reopening requires materially new evidence, changed requirements, a failed deterministic check, a newly discovered invariant conflict, or demonstrated correctness/security/integrity failure.
 
+### 1.5 Dual independent review and the "Double-Green" adjudication fast-path
+
+For systemic or high-risk candidates, DevCadence supports an optional **Dual Independent Review** ("2nd Point of View"):
+- Two independent reviewer models evaluate the candidate commit in parallel, each starting from a clean context. Independence spans both **endpoint/model diversity** (e.g. distinct provider families) and **review-method diversity** (e.g. invariant/contract tracing vs. failure-first/mutation testing).
+- **The "Double-Green" Adjudication Fast-Path**: If both independent reviewers return `PASS` with zero blocking findings AND all deterministic validation checks pass, the Principal receives an instant green card allowing immediate, frictionless closure. Double-Green is an **adjudication fast-path**, not an unmoderated bypass of human/principal authority (DCI-009) or deterministic closure prerequisites (`closure-decision.schema.json`).
+- **Asymmetric Veto**: If any reviewer raises a `BLOCKING` finding in `security` or `invariants`, an Aggregator model **cannot** discard or override it. Deterministic evidence may prove a finding *false or inapplicable* (e.g. proving a cited vulnerability path is unreachable or a claimed invariant conflict is refuted by code), but cannot waive or override a genuine invariant requirement. A real invariant conflict requires an explicit human/principal decision record, never an automatic reviewer dismissal.
+- **Aggregator Synthesis**: If findings exist or reviewers disagree, an Aggregator model (or Principal) deduplicates the findings, filters opportunistic nits, adjudicates tensions into standard `FindingDisposition` records, and compiles at most **one single consolidated `RepairWorkPackage`** per round. Implementers never argue directly with reviewers.
+
+### 1.6 Cognitive freedom with silent multi-dimensional metering
+
+Review prompts must **never** impose artificial turn limits (e.g. "you have 5 turns") on reviewer models. Turn countdowns induce "budget anxiety," causing models to rush, skip crucial caller verification, and hallucinate conclusions when running low on turns.
+- Reviewer models are granted full cognitive freedom to inspect whatever files, conventions, or tests they need to reach certainty.
+- Context runaway and resource exhaustion are bounded structurally at the runtime level via **Silent Multi-Dimensional Metering**:
+  - Cumulative token caps (input, cached, output);
+  - Wall-clock execution limits per operation;
+  - Cumulative tool-call limits;
+  - Semantic loop detection (identifying oscillating edits or repeating identical failed tool calls).
+- When an outer budget is exhausted, the control plane does not rush the model; it pauses execution with `PAUSED_BUDGET_EXCEEDED`, checkpoints state, and escalates to the Principal/Human for disposition (DCI-045, DCI-049).
+
 ## 2. Review Campaign
 
 A **ReviewCampaign** is the bounded lifecycle around one immutable candidate lineage.
@@ -92,6 +111,44 @@ It records:
 - outcome.
 
 A campaign is not an open-ended conversation.
+
+## 2A. Dynamic cognitive review lenses and active falsification [Planned - M7]
+
+*Status:* Automated review lens metadata and machine-executed falsification probes are **Planned for Milestone M7**.
+
+DevCadence distinguishes **effective-now process guidance** from **future machine protocol**:
+
+- **Effective-Now Process Guidance**: Human and model reviewers may adopt these lenses today to guide qualitative focus across the stable `ReviewDimension` taxonomy (`correctness`, `architecture`, `invariants`, `security`, `test_adequacy`, `concurrency`, `performance`, `maintainability`, `other`), without changing wire schemas:
+  1. **Anti-Rabbit Hole Lens (YAGNI & Simplicity)**:
+     - Scrutinizes code for defensive bloat, speculative future-proofing, and over-engineering.
+     - Replaces paranoid error-handling cascades with simple, clean assertions or fail-fast checks.
+  2. **Anti-Drift Lens (Scope Discipline)**:
+     - Verifies that only authorized files and packages were modified.
+     - Flags drive-by refactorings, unsolicited style tweaks in untouched code, and unapproved dependency additions.
+  3. **Anti-Hallucination Lens (Fact & Grounding Verification)**:
+     - Verifies that cited symbols, functions, and CLI flags genuinely exist in the repository.
+     - Checks that tests drive real execution paths rather than passing vacuously through tautological mocks.
+  4. **Architecture & Invariant Lens**:
+     - Evaluates cross-layer coupling, security boundaries, and persistence semantics against durable project invariants (DCI compliance).
+  Manual reviewers can also perform manual falsification checks (e.g. verifying a test suite fails when an assertion is commented out).
+
+- **Planned M7 Machine Protocol**:
+  In Milestone M7, review lens metadata will be attached to automated review invocations, and the control plane's deterministic validation machinery will execute structured **Active Falsification Probes** (`FalsificationProbe` / mutation testing) in isolated worktrees, returning hard evidence to convert reviewer suspicion into empirical proof.
+
+Lenses are selected dynamically based on task risk (e.g. bug fixes emphasize Anti-Drift and Anti-Rabbit Hole; major features invoke Architecture and Anti-Hallucination).
+
+## 2B. Bidirectional Work Package evolution (Living baselines) [Proposed - M3C]
+
+An accepted Work Package is a **stable baseline, not an immutable dogma**.
+
+If a local implementer or reviewer discovers that an upstream interface (e.g. from an earlier Work Package) is clunky, incomplete, or missing a parameter, the implementer is forbidden from building hacky workarounds or shims.
+
+Instead, the worker emits a typed **`RefactoringProposal`** (ADR-0019 §3):
+- Cites the upstream package and the specific architectural tension;
+- Provides concrete compiler or test evidence;
+- Outlines the proposed upstream interface refactor and affected callers.
+
+The Principal adjudicates the proposal. When accepted, an atomic upstream refactor is applied cleanly, regression tests verify all callers, and the codebase stays unified and elegant.
 
 ## 3. Finding classes
 

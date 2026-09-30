@@ -279,7 +279,7 @@ Stores durable engineering transitions. The current state is a materialized view
 Represents milestones, tasks, dependencies, readiness, attempts, blockers and integration order.
 
 ### 6.5 Engineering Work Package service
-Stores versioned frontier-authored implementation blueprints.
+Stores versioned frontier-authored implementation blueprints. Work Packages serve as stable baselines rather than immutable dogmas: local implementers have direct contact with reality and may challenge upstream designs via typed `RefactoringProposal` records [Proposed - M3C], enabling atomic refactoring and preventing hacky shims (ADR-0019).
 
 ### 6.6 Evidence service
 Stores structured claims and references to raw artifacts without forcing raw artifacts into every model context.
@@ -341,9 +341,11 @@ Provides controlled repository reads, isolated mutations, commits, diffs and int
 Executes deterministic commands and normalizes their evidence.
 
 ### 6.10 Review coordinator
-Runs bounded ReviewCampaigns. It schedules clean-context review vectors against an immutable candidate, normalizes findings, applies reporting/reopen thresholds, coordinates focused revalidation, and records campaign/closure state.
-
-The principal—not individual reviewers—adjudicates findings and creates the consolidated Repair Work Package. The coordinator must not default to serial unrestricted re-review after every repair.
+Runs bounded ReviewCampaigns without conversational chat inflation (ADR-0019). It coordinates:
+- **Adaptive Context Architecture**: Reviewers operate with a prefix-cached static baseline (EWP, diff, invariants), a compact Cognitive State Capsule, and an Evidence Working Set (leased snippets with content-addressed provenance and freshness checks), preventing token explosion while inspecting verbatim code.
+- **Dynamic review lenses & active falsification**: Dispatches specialized cognitive lenses based on risk (Anti-Rabbit Hole, Anti-Drift, Anti-Hallucination, Architecture & Invariants) and executes deterministic mutation probes (`FalsificationProbe`) in isolated worktrees to verify assertions fail when code is broken.
+- **Dual Independent Review & Adjudication Fast-Path**: Dispatches parallel reviews across distinct model families for high-risk work; enables the "Double-Green" adjudication fast-path for rapid Principal acceptance when independent reviews and deterministic validation pass, subject to Asymmetric Veto for security and invariant blockers.
+- **Adjudication and repair**: The Principal—not individual reviewers—adjudicates findings into standard `FindingDisposition` records and compiles at most one single consolidated Repair Work Package per round. The coordinator never permits unmoderated conversational debate between implementers and reviewers.
 
 ### 6.11 Consultant service
 Normalizes frontier consultant requests and results.

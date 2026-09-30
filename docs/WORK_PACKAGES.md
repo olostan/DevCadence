@@ -300,29 +300,68 @@ does not yet let AI choose the portfolio.
 
 Branch: `feat/m3c-cognition-substrate`.
 
-### WP-M3C-1 — Portfolio protocol, economics and policy
-Define AccessChannel/session capabilities, EconomicRegime, BudgetPool,
-BudgetState/ResourceState, policy constraints, CognitionPortfolio,
-PortfolioRecommendation and WorkflowPlan protocol/schema shapes without
-overloading model identity with billing semantics.
+### WP-M3C-1 — Portfolio protocol, economics, context capabilities and refactoring proposals
 
-### WP-M3C-2 — Session-driver abstraction
-Normalize model selection, structured/streaming events, resume, cancellation,
-worktree/tool/MCP access and usage/quota evidence across authenticated
-CLIs/SDKs/APIs/local runtimes. Include at least two materially different
-drivers and a fake third-adapter contract test.
+**Objective:** define the provider-neutral deterministic protocol and schema types for access channels, economic regimes, context-control capabilities, and bottom-up living work package challenges.
+
+**Deliverables:**
+- `AccessChannel` and session capability contracts (`internal/protocol/access_channel.go`, `schemas/access-channel.schema.json`).
+- Provider-neutral context control and prefix caching capability shapes: `ContextControl = ExactStateless | AppendOnly | OpaqueSession` and `PrefixCache = Explicit | Implicit | SessionKV | None` (ADR-0019 §1).
+- `RefactoringProposal` Go type, validation, and JSON Schema (`internal/protocol/refactoring_proposal.go`, `schemas/refactoring-proposal.schema.json`) enabling bottom-up upstream challenge without code rot (ADR-0019 §3).
+- `EconomicRegime`, `BudgetPool`, `BudgetState`, and `ResourceState` protocol and schema definitions.
+- Protocol shapes for `CognitionPortfolio`, `PortfolioRecommendation`, and `WorkflowPlan` without conflating model identity with billing semantics.
+- Unit and schema parity tests (`TestSchemaTopLevelFieldsMatchTheGoTwin`).
+
+**MUST:** no silent subscription/local → metered API fallback; context capabilities must represent endpoint reality without assuming universal statelessness or prefix caching.
+
+**Acceptance criteria:** all protocol shapes serialize to JSON matching strict JSON schemas (`additionalProperties: false`); `ContextControl` and `PrefixCache` enumerations are validated; `RefactoringProposal` passes schema/Go twin parity tests; no credential or billing leaks.
+
+### WP-M3C-2 — Session-driver abstraction and working-memory context mediation
+
+**Objective:** build the session-driver abstraction across heterogeneous cognition endpoints and implement the Adaptive Context Architecture runtime mediation.
+
+**Deliverables:**
+- Session-driver interface (`internal/cognition/drivers`) normalizing model selection, structured/streaming events, resume, cancellation, and worktree/tool/MCP access across direct APIs, local runtimes, and authenticated CLIs.
+- Context strategy mapper mapping endpoint `ContextControl` capabilities to concrete context layouts (exact stateless prefix, append-only prompt, or opaque session).
+- `Cognitive State Capsule` state manager maintaining non-authoritative derived hypotheses, active TODOs, intermediate decisions, and evidence references across turns.
+- `Evidence Working Set` lease manager with content-addressed provenance `(file_path, content_digest, start_line, end_line)`, automatic freshness invalidation upon worktree file mutation, and server-side path authorization bounds.
+- Runtime enforcement of silent multi-dimensional metering (cumulative tokens, wall clock, tool-call count, semantic loop detection) pausing with `PAUSED_BUDGET_EXCEEDED` on budget exhaustion.
+- At least two materially different driver implementations (e.g. direct API / local runtime and authenticated CLI wrapper) plus a fake third-adapter contract test.
+
+**MUST:** prompts must never contain artificial turn countdowns; code snippets must be verbatim (no lossy summaries); snippets must be validated against worktree path authorization and content digests.
+
+**Acceptance criteria:** drivers correctly report `ContextControl` and `PrefixCache` capabilities; modifying a file in an active attempt invalidates dependent snippet leases; out-of-scope snippet paths fail closed; silent budget exhaustion pauses execution without crashing; two distinct driver implementations pass the driver contract test suite.
 
 ### WP-M3C-3 — Deterministic portfolio validator and activation
-Validate endpoints, capability provenance, source exposure, spending/overage,
-budget bindings, driver features and resource constraints. Add versioned
-portfolio activation/persistence/rollback primitives. No AI output can bypass
-this layer later.
+
+**Objective:** implement deterministic validation and safe versioned activation of candidate portfolios.
+
+**Deliverables:**
+- Deterministic portfolio validator in `internal/cognition` checking: endpoint existence, capability provenance, source-exposure policy, spending/overage limits, budget bindings, context/cache feature compatibility, and machine resource constraints.
+- Versioned portfolio activation and rollback primitives (`active-portfolio.json` management, rollback to prior known-good configuration).
+- Explanatory rejection reporting: when a portfolio is rejected, emit structured diagnostic reasons citing the exact violated policy or missing capability.
+
+**MUST:** deterministic validation is an unbypassable gate; no AI recommendation can activate a portfolio without passing this validator; no silent spending expansion.
+
+**Acceptance criteria:** invalid budget bindings, mismatched context capabilities, or unauthorized source exposure cause deterministic rejection with clear reasons; valid portfolios activate atomically and can be rolled back; zero non-deterministic checks in the validator.
 
 ### WP-M3C-4 — Substrate integration verification
-Exercise local, subscription, metered and mixed candidate portfolios; missing
-quota/resource evidence; endpoint removal; denied source exposure/spend; and
-driver capability differences. Prove a future driver can participate without
-core provider-specific changes.
+
+**Objective:** verify the integrated cognition substrate across heterogeneous portfolios and edge cases.
+
+**Deliverables:**
+- End-to-end integration test suite in `tests/m3c_substrate_test.go` covering:
+  - Exact stateless vs. opaque session driver behavior;
+  - Stale snippet invalidation upon worktree modification;
+  - Path authorization blocking access to out-of-scope paths and credentials;
+  - Local, subscription, metered, and mixed candidate portfolios;
+  - Graceful degradation when quota/resource evidence is missing or unknown;
+  - Extensibility proof demonstrating a third fake provider/driver participates without core changes.
+- Documentation synchronization across `docs/IMPLEMENTATION_PLAN.md`, `docs/PROTOCOLS.md`, and `docs/WORK_PACKAGES.md`.
+
+**MUST:** tests must run deterministically without requiring external API tokens or real GPUs.
+
+**Acceptance criteria:** all integration scenarios pass cleanly; `go test -count=1 ./...` and `go test -race ./...` pass; schema/Go parity holds for all new M3C protocol records.
 
 ## M3D — Adaptive portfolio and workflow synthesis
 

@@ -323,6 +323,35 @@ flowchart TB
 - observability requirements;
 - migration/rollback details.
 
+### 7.4 RefactoringProposal (Bottom-Up Challenge Protocol) [Proposed - M3C]
+
+*Status:* Proposed for Milestone M3C. Protocol Go types and JSON Schemas will be formalized under `internal/protocol/` and `schemas/` during M3C implementation.
+
+An accepted Work Package is a stable baseline, not an immutable dogma (ADR-0019 §3). When an implementer or reviewer discovers that an upstream interface, dependency, or contract is flawed, clunky, or missing essential parameters, it is forbidden from writing hacky workarounds or local shims.
+
+Instead, the worker emits a typed `RefactoringProposal`:
+
+```yaml
+schema_version: "1.0"
+proposal_id: "REF-001"
+source_work_package_id: "WP-M3B-5"
+target_work_package_id: "WP-M3B-2"
+architectural_tension: >
+  Doctor.Run requires context.Context for cancellation and timeouts,
+  but WP-2 defined the interface with only facts and scope.
+contradiction_evidence:
+  - "internal/setup/doctor.go:210"
+  - "compiler error on timeout handler implementation"
+proposed_interface: >
+  Run(ctx context.Context, scope ReadinessEvaluationScope, facts EnvironmentFacts) (*DoctorReport, error)
+affected_callers:
+  - "cmd/devcadence/cmd_doctor.go"
+  - "tests/m3b_milestone_closure_test.go"
+reversibility_assessment: "Low risk; atomic signature update across 3 callers."
+```
+
+The Principal adjudicates the proposal. If accepted, an atomic upstream refactor is applied cleanly, regression tests run, and the codebase remains free of architectural rot.
+
 ## 8. Guidance strength
 
 ```mermaid
@@ -409,6 +438,35 @@ Under ADR-0016:
 - **Response Yield Threshold:** Commands taking longer than 10 seconds yield `status: "running"` with an `OperationID`. The operation proceeds uninterrupted; upon completion, hosts receive event-driven wakeups without token-wasting busy-loops.
 - **Universal Pagination (`fetch_content`):** Process outputs are decoupled via injected output sinks. Models page through immutable content-addressed artifacts with strict byte limits and contiguous offsets using `fetch_content(content_ref, offset, limit, unit)`. Full daemon-level live streaming into artifact storage with 4 KiB inline previews is scheduled with the background runner milestone.
 
+## 10B. Adaptive Context Architecture and Evidence Working Set [Proposed - M3C]
+
+*Status:* Proposed for Milestone M3C. Provider-neutral context control capabilities (`ContextControl = ExactStateless | AppendOnly | OpaqueSession`) and Evidence Working Set lease mediation land in M3C.
+
+Rather than treating cognition as monolithic conversational loops that cause context bloat, token waste, and attention dilution, DevCadence structures cognition across four adaptive layers (ADR-0019 §1):
+
+1. **Protected Core (Static Prefix)**: System instructions, task EWP, candidate/base commit SHAs, invariants, deterministic validation summaries, and a **diff manifest** (touched files, line change counts, and semantic hotspots). Full file diffs are included inline only when below a configured token/size threshold; larger diffs or multi-package refactors are leased progressively through the Evidence Working Set, preserving progressive disclosure (DCI-014) and preventing prefix cache bloat.
+2. **Cognitive State Capsule**: A compact, typed data structure maintaining derived hypotheses, active TODOs, intermediate decisions, and unresolved questions across turns. Explicitly categorized as derived cognition (not ground fact), preserving continuity without dragging raw conversational debris.
+3. **Evidence Working Set (Leased Snippet Pool)**: Models manage their active evidence dynamically through verbatim code snippets, diffs, and log excerpts:
+   - **Content-Addressed Leases**: Snippets reference `(file_path, content_digest, start_line, end_line)`;
+   - **Freshness Invalidation**: If underlying files are modified in a worktree during implementation, dependent snippet leases are automatically marked stale;
+   - **Server-Side Authorization**: The control plane enforces path authorization and bounds to prevent leaking out-of-scope files or secrets.
+4. **Short Ephemeral Tail**: Immediate prior tool call/result exchange for drivers that benefit from local conversational continuity, discarded across task boundaries and never treated as canonical project state.
+
+Example working-memory lease update:
+
+```json
+{
+  "request_facts": [
+    { "path": "internal/setup/doctor.go", "start_line": 815, "end_line": 835 }
+  ],
+  "release_facts": [
+    "snippet_1"
+  ]
+}
+```
+
+The control plane runtime deterministically drops released leases, verifies and fetches requested lines, and maintains a lean working memory envelope.
+
 ## 11. ReviewResult
 
 ReviewResult is model-assisted evidence **about an implementation candidate**,
@@ -441,15 +499,27 @@ Fields:
 - whether principal escalation is recommended.
 
 Possible dimensions:
-- correctness;
-- architecture;
-- invariants;
-- security;
-- test adequacy;
-- performance;
-- concurrency;
-- API compatibility;
-- complexity/maintainability.
+- `correctness`: algorithmic accuracy, nil safety, boundary conditions;
+- `architecture`: layer boundaries, dependency inversion, public contract adherence;
+- `invariants`: durable system invariants (DCI compliance);
+- `security`: auth bypass, injection, secret exposure, command safety;
+- `test_adequacy`: assertion validity, edge-case coverage, negative-path and mutation testing;
+- `concurrency`: synchronization, race safety, cancellation lifetimes;
+- `performance`: algorithmic complexity, allocation profiles, concurrency overhead;
+- `maintainability`: code clarity, idiomatic style, comment accuracy;
+- `other`: explicitly scoped reviews outside the primary taxonomy.
+
+### 11.1 Dynamic Review Lenses and Active Falsification [Planned - M7]
+
+*Status:* Dynamic lenses and automated falsification execution are **Planned for Milestone M7**.
+
+DevCadence separates **immediate process guidance** from **future machine protocol**:
+- **Effective-Now Process Guidance**: Human and model reviewers may adopt these review lenses today to guide qualitative focus across the standard dimensions, without changing wire schemas:
+  - `anti_rabbit_hole`: scrutinizes code for YAGNI, defensive bloat, and speculative over-engineering;
+  - `anti_drift`: verifies strict scope discipline, checking that touched files match the declared work package and catching drive-by edits;
+  - `anti_hallucination`: grounds claims by verifying cited symbols, CLI flags, and test executions exist.
+  Manual reviewers can also perform manual falsification checks (e.g. verifying a test fails when an assertion is commented out).
+- **Future M7 Machine Protocol**: Milestone M7 will formalize review lens metadata on automated review invocations and introduce automated **Active Falsification Probes** (`FalsificationProbe` / mutation testing) executed by deterministic validation runners in isolated worktrees, converting reviewer suspicion into empirical proof.
 
 ## 11a. SpecificationReviewResult
 
@@ -472,6 +542,16 @@ Each finding carries a resolution authority and a recommended question, so a
 gap is routed to whoever can settle it (DCI-008), plus `blocks_readiness`. A
 `pass` verdict over a finding that blocks readiness is refused: the Design
 Readiness Gate must be passed by evidence, not by a summary.
+
+## 11b. Dual Independent Review and Aggregator Synthesis [Planned - M7]
+
+For systemic or high-risk candidates, DevCadence invokes dual independent reviews in parallel (ADR-0019 §5).
+
+Aggregation is an orchestration phase within `ReviewCampaign`, not a separate durable protocol table or SQLite schema:
+- **Parallel Independent Review**: Two independent reviewer models evaluate the candidate commit in parallel, each starting from a clean context. Independence spans both **endpoint/model diversity** (e.g. distinct provider families) and **review-method diversity** (e.g. invariant/contract tracing vs. failure-first/mutation testing).
+- **Double-Green Adjudication Fast-Path**: If both independent reviewers return `PASS` with zero blocking findings AND all deterministic validation checks pass, the Principal receives an instant green card allowing immediate, frictionless closure. Double-Green is an **adjudication fast-path**, not an unmoderated bypass of human/principal authority (DCI-009) or deterministic closure prerequisites (`closure-decision.schema.json`).
+- **Asymmetric Veto**: If any reviewer raises a `BLOCKING` finding in `security` or `invariants`, an Aggregator model **cannot** discard or override it. Deterministic falsification evidence may prove a finding *false or inapplicable* (e.g. demonstrating that a cited vulnerability path is unreachable or a claimed invariant conflict is refuted by code), but cannot waive or override a genuine invariant requirement. A real invariant conflict requires an explicit human/principal decision record, never an automatic reviewer dismissal.
+- **Consolidated Repair Synthesis**: If findings exist or reviewers disagree, the Aggregator synthesizes the findings into standard `FindingDisposition` records and compiles at most one consolidated `RepairWorkPackage`. Implementers never negotiate directly with multiple reviewers.
 
 ## 12. DisagreementReport
 
@@ -696,3 +776,47 @@ CLI adapters (`VersionOnlyAdapter`, `BoundedCLIAuthAdapter`) separate two identi
 
 `protocol.LooksLikeSecret` is prefix/keyword-based only and carries no length threshold of its own: `ref_id`/`locator`/`adapter_id` are bounded to 128 bytes, `probe_target` to 256, and `detail` to 512, each by its own field-specific check (mirrored exactly in the JSON Schema twins' `maxLength`), so a field's own declared contract — not a shared heuristic — decides what counts as "too long." Callers elsewhere in the codebase that want a shorter opaque-handle-length bound (e.g. `internal/cognition`'s and `internal/cognition/remoteapi`'s `CredentialRef`/`AccountRef` declaration fields) apply that bound locally alongside `protocol.LooksLikeSecret`, rather than the shared helper enforcing it for every caller. `ref_id`/`locator`/`adapter_id` are ASCII-regex-constrained, so byte length and Unicode character count coincide; `probe_target`/`detail` are free text, so their Go-side length checks use `utf8.RuneCountInString`, not `len()`, to agree with JSON Schema's `maxLength` (which counts Unicode characters, not UTF-8 bytes).
 See schemas/credential-ref.schema.json and schemas/auth-evidence.schema.json.
+
+## 21. Milestone Retrospective Artifact (Inter-Milestone "What Learned" Phase)
+
+At every milestone boundary, before the control plane transitions to planning or executing the next milestone, an explicit **Milestone Retrospective** is produced (ADR-0019 §6).
+
+The retrospective is a **structured, versioned Markdown engineering artifact** (stored under `docs/retrospectives/<milestone>.md`), not a premature canonical database table or separate wire schema. It serves as an auditable bridge between milestones, synthesizing:
+1. **Succeeded Patterns**: Architectural designs, EWP structures, and verification patterns to promote;
+2. **Failed Patterns & Anti-Patterns**: Process friction, tautological tests, premature status claims, or role boundary blurring;
+3. **Repository Reconciliation**: Pruning ephemeral session handoff files (e.g. removing temporary `HANDOFF.md` from tracking) and verifying canonical docs match as-built reality;
+4. **Governed Promotions**: Emits standard durable `LessonCandidate` records (`schemas/lesson-candidate.schema.json`) and `DecisionRecord` / ADR amendments for formal adoption.
+
+Example retrospective artifact structure (`docs/retrospectives/M3B.md`):
+
+```yaml
+retrospective_id: "RETRO-M3B"
+milestone_id: "M3B"
+completion_commit: "9b2166f"
+evaluated_work_packages:
+  - "WP-M3B-1"
+  - "WP-M3B-2"
+  - "WP-M3B-3"
+  - "WP-M3B-4"
+  - "WP-M3B-5"
+  - "WP-M3B-6"
+  - "WP-M3B-7"
+  - "WP-M3B-8"
+patterns_succeeded:
+  - "Explicit keep/adapt/deprecate/delete pre-checks prevented duplicate logic"
+  - "Deterministic CLI exit codes (0-6) prevented vague test suites"
+  - "Dual independent review caught blind spots single models missed"
+patterns_failed:
+  - "EWP written in the same commit as implementation violated role separation"
+  - "Preemptive doc claims stating milestone complete before review accepted it"
+  - "Decorative/tautological tests passing without exercising real discovery"
+reconciled_artifacts:
+  - "Removed temporary HANDOFF.md from tracking"
+promoted_lessons:
+  - lesson_id: "LESSON-M3B-01"
+    target: "INVARIANTS.md"
+    description: "Require mutation check verification on negative-path test assertions"
+  - lesson_id: "LESSON-M3B-02"
+    target: "REVIEW_AND_CONVERGENCE.md"
+    description: "Adopt Dual Independent Review and Double-Green adjudication fast-path"
+```

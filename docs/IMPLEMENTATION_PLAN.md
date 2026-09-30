@@ -504,6 +504,9 @@ asking AI to choose the portfolio.
 
 #### Deliverables
 - provider-neutral AccessChannel and session-driver capability contracts;
+- provider-neutral context-control capabilities: `ContextControl = ExactStateless | AppendOnly | OpaqueSession` and `PrefixCache = Explicit | Implicit | SessionKV | None` (ADR-0019 §1);
+- `Evidence Working Set` lease manager with content-addressed provenance `(file_path, content_digest, start_line, end_line)`, automatic freshness invalidation on file mutation, and server-side path authorization;
+- `RefactoringProposal` protocol definition in Go and JSON Schema (`internal/protocol/`, `schemas/refactoring-proposal.schema.json`) enabling bottom-up upstream challenge (ADR-0019 §3);
 - EconomicRegime, BudgetPool and optional dynamic BudgetState / ResourceState;
 - explicit privacy/spending/source-exposure/reserve/preference/diversity policy;
 - versioned CognitionPortfolio / PortfolioRecommendation / WorkflowPlan
@@ -593,12 +596,27 @@ and mixed local/subscription/API portfolios. The role graph need not be
 identical across scenarios, and "one capable session + deterministic checks"
 is a valid DevCadence outcome.
 
+Benchmark the **Adaptive Context Architecture** (ADR-0019) against standard
+conversational agent baselines across seeded defect suites:
+- Strategy 1: Full conversational history (traditional agent loop);
+- Strategy 2: Multi-tier context compaction (ADR-0016);
+- Strategy 3: Static prefix + active snippet pool;
+- Strategy 4: Hybrid 4-layer context (Protected Core, Cognitive State Capsule, Evidence Working Set, Ephemeral Tail).
+
+Empirically validate working hypotheses:
+- Context length degradation boundary (evaluating reasoning degradation when active prompts exceed 30k–50k tokens);
+- Provider cognitive diversity across language idioms, concurrency, schemas, and invariants;
+- Working-memory budget sweeps (testing 6k, 12k, 24k token envelopes).
+
 ### Measurements
 - accepted correctness, regressions and human corrections;
 - subscription/quota consumption;
+- input tokens, prompt-cached tokens, and output tokens;
 - metered API spend and token volume where observable;
-- local inference/compute use;
+- local inference/compute use and working-memory footprint;
 - cognition invocation/session count;
+- defect catch rate across review vectors;
+- stale-evidence error rates and duplicate reads/rediscovery;
 - repair/review rounds and Principal re-entry;
 - source exposure and wall time;
 - whether a simpler topology would have produced the same accepted result;
@@ -714,8 +732,12 @@ than an AI committee that can reopen work forever.
 
 ### Deliverables
 - multiple review dimensions;
+- dual independent review fan-out on clean starting contexts across model families (ADR-0019 §5);
+- dynamic review lenses (`anti_rabbit_hole`, `anti_drift`, `anti_hallucination`) guiding reviewer attention without schema churn (ADR-0019 §4);
+- active falsification probes (`FalsificationProbe` / mutation testing) executed by deterministic validation runners in isolated worktrees (ADR-0019 §4);
 - bounded ReviewCampaign orchestration;
-- FindingDisposition adjudication;
+- Aggregator synthesis into `FindingDisposition` adjudication with Asymmetric Veto for security/invariants blockers;
+- "Double-Green" adjudication fast-path for rapid Principal approval when dual independent reviews and deterministic validation pass;
 - rising reopen thresholds and repair-round limits, including enforcement of
   `TaskDelegated.max_attempts`;
 - focused revalidation and ClosureDecision freeze semantics;
