@@ -5,6 +5,7 @@
 - **Decision owner:** Principal / Human
 - **Supersedes:** none
 - **Superseded by:** none
+- **Related:** ADR-0016 (supervised validation services, bounded execution tools, and multi-tier context compaction). Scope boundary: ADR-0016 owns bounded-tool-output mediation and trajectory/history compaction for in-flight execution; ADR-0019 owns the per-turn prompt architecture (Protected Core, Cognitive State Capsule, Evidence Working Set, Ephemeral Tail) and review/attempt-context layering built on top of it. Both cite DCI-014 (progressive disclosure) from their respective layers and are intended to compose, not compete.
 - **Related invariants:** DCI-001, DCI-005, DCI-008, DCI-009, DCI-020, DCI-021, DCI-040, DCI-045, DCI-049, DCI-050, DCI-055, DCI-060, DCI-070, DCI-074, DCI-090, DCI-091, DCI-108
 - **Related tasks:** WP-M3B (1–8 empirical review baseline), M3C, M3D, M4, M7
 
