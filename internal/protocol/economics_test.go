@@ -48,68 +48,150 @@ func TestBudgetPoolValidation(t *testing.T) {
 		}
 	})
 
-	t.Run("MUST: silent fallback to metered billing rejected for subscription_quota (ADR-0018 §9, DCI-104)", func(t *testing.T) {
-		bp := validBudgetPool()
-		bp.Regime = protocol.RegimeSubscriptionQuota
-		bp.FallbackAllowedToMetered = true
-		if err := bp.Validate(); err == nil {
-			t.Fatal("expected error: subscription_quota must forbid fallback_allowed_to_metered")
+	t.Run("table-driven regime constraints across all 6 regimes", func(t *testing.T) {
+		regimes := []struct {
+			regime                  protocol.EconomicRegime
+			allowFallbackToMetered  bool
+			allowOverage            bool
+		}{
+			{protocol.RegimeLocalCompute, false, false},
+			{protocol.RegimeSubscriptionQuota, false, false},
+			{protocol.RegimeMeteredAPI, true, true},
+			{protocol.RegimePrepaidCredits, false, true},
+			{protocol.RegimeEnterpriseAllocation, false, true},
+			{protocol.RegimeUnknownCustom, false, false},
 		}
-	})
 
-	t.Run("MUST: silent fallback to metered billing rejected for local_compute (ADR-0018 §9, DCI-104)", func(t *testing.T) {
-		bp := validBudgetPool()
-		bp.Regime = protocol.RegimeLocalCompute
-		bp.FallbackAllowedToMetered = true
-		if err := bp.Validate(); err == nil {
-			t.Fatal("expected error: local_compute must forbid fallback_allowed_to_metered")
-		}
-	})
+		for _, tc := range regimes {
+			t.Run(string(tc.regime), func(t *testing.T) {
+				// Test fallback allowed to metered
+				bp := validBudgetPool()
+				bp.Regime = tc.regime
+				bp.FallbackAllowedToMetered = true
+				err := bp.Validate()
+				if tc.allowFallbackToMetered && err != nil {
+					t.Errorf("regime %s should permit fallback_allowed_to_metered, got %v", tc.regime, err)
+				}
+				if !tc.allowFallbackToMetered && err == nil {
+					t.Errorf("regime %s MUST forbid fallback_allowed_to_metered per ADR-0018 §9", tc.regime)
+				}
 
-	t.Run("fallback_allowed_to_metered allowed for metered_api regime itself", func(t *testing.T) {
-		bp := validBudgetPool()
-		bp.Regime = protocol.RegimeMeteredAPI
-		bp.FallbackAllowedToMetered = true
-		if err := bp.Validate(); err != nil {
-			t.Fatalf("metered_api should permit fallback flag, got: %v", err)
+				// Test allow overage
+				bp = validBudgetPool()
+				bp.Regime = tc.regime
+				bp.AllowOverage = true
+				err = bp.Validate()
+				if tc.allowOverage && err != nil {
+					t.Errorf("regime %s should permit allow_overage, got %v", tc.regime, err)
+				}
+				if !tc.allowOverage && err == nil {
+					t.Errorf("regime %s MUST forbid allow_overage per ADR-0018 §9", tc.regime)
+				}
+			})
 		}
 	})
 }
 
 func TestBudgetStateValidation(t *testing.T) {
-	bs := protocol.BudgetState{
-		PoolID:           "pool_1",
-		CurrentUsage:     100,
-		RemainingBalance: 400,
-		PeriodStart:      "2026-09-01T00:00:00Z",
-		PeriodEnd:        "2026-10-01T00:00:00Z",
-		Status:           protocol.BudgetStatusHealthy,
-	}
-	if err := bs.Validate(); err != nil {
-		t.Fatalf("expected valid BudgetState, got: %v", err)
-	}
+	currentUsage := int64(100)
+	remainingBalance := int64(400)
+	periodStart := "2026-09-01T00:00:00Z"
+	periodEnd := "2026-10-01T00:00:00Z"
 
-	bs.CurrentUsage = -1
-	if err := bs.Validate(); err == nil {
-		t.Fatal("expected error on negative current usage, got nil")
-	}
+	t.Run("valid full BudgetState", func(t *testing.T) {
+		bs := &protocol.BudgetState{
+			SchemaVersion:    protocol.SchemaVersion1,
+			PoolID:           "pool_1",
+			CurrentUsage:     &currentUsage,
+			RemainingBalance: &remainingBalance,
+			PeriodStart:      &periodStart,
+			PeriodEnd:        &periodEnd,
+			Status:           protocol.BudgetStatusHealthy,
+			ObservedAt:       "2026-09-30T00:00:00Z",
+		}
+		if err := bs.Validate(); err != nil {
+			t.Fatalf("expected valid BudgetState, got: %v", err)
+		}
+		if bs.RecordKind() != "BudgetState" {
+			t.Errorf("expected RecordKind BudgetState, got %q", bs.RecordKind())
+		}
+	})
+
+	t.Run("valid BudgetState with honest unknown nil fields", func(t *testing.T) {
+		bs := &protocol.BudgetState{
+			SchemaVersion: protocol.SchemaVersion1,
+			PoolID:        "pool_unmetered_subscription",
+			Status:        protocol.BudgetStatusHealthy,
+			ObservedAt:    "2026-09-30T00:00:00Z",
+			UnknownFields: []string{"current_usage", "remaining_balance"},
+		}
+		if err := bs.Validate(); err != nil {
+			t.Fatalf("expected valid BudgetState with nil pointers, got: %v", err)
+		}
+	})
+
+	t.Run("negative usage rejected", func(t *testing.T) {
+		neg := int64(-1)
+		bs := &protocol.BudgetState{
+			SchemaVersion: protocol.SchemaVersion1,
+			PoolID:        "pool_1",
+			CurrentUsage:  &neg,
+			Status:        protocol.BudgetStatusHealthy,
+			ObservedAt:    "2026-09-30T00:00:00Z",
+		}
+		if err := bs.Validate(); err == nil {
+			t.Fatal("expected error on negative current usage, got nil")
+		}
+	})
 }
 
 func TestResourceStateValidation(t *testing.T) {
-	rs := protocol.ResourceState{
-		HostID:                  "host_1",
-		Timestamp:               "2026-09-30T00:00:00Z",
-		AvailableGPUMemoryBytes: 16000000000,
-		AvailableRAMBytes:       64000000000,
-		MaxConcurrentSlots:      4,
-		ActiveSlots:             1,
-	}
-	if err := rs.Validate(); err != nil {
-		t.Fatalf("expected valid ResourceState, got: %v", err)
-	}
+	gpuBytes := int64(16000000000)
+	ramBytes := int64(64000000000)
+	maxSlots := 4
+	activeSlots := 1
 
-	rs.ActiveSlots = 5
-	if err := rs.Validate(); err == nil {
-		t.Fatal("expected error when active slots > max slots, got nil")
-	}
+	t.Run("valid full ResourceState", func(t *testing.T) {
+		rs := &protocol.ResourceState{
+			SchemaVersion:           protocol.SchemaVersion1,
+			HostID:                  "host_1",
+			Timestamp:               "2026-09-30T00:00:00Z",
+			AvailableGPUMemoryBytes: &gpuBytes,
+			AvailableRAMBytes:       &ramBytes,
+			MaxConcurrentSlots:      &maxSlots,
+			ActiveSlots:             &activeSlots,
+		}
+		if err := rs.Validate(); err != nil {
+			t.Fatalf("expected valid ResourceState, got: %v", err)
+		}
+		if rs.RecordKind() != "ResourceState" {
+			t.Errorf("expected RecordKind ResourceState, got %q", rs.RecordKind())
+		}
+	})
+
+	t.Run("valid ResourceState with honest unknown nil metrics", func(t *testing.T) {
+		rs := &protocol.ResourceState{
+			SchemaVersion:  protocol.SchemaVersion1,
+			HostID:         "host_headless_ci",
+			Timestamp:      "2026-09-30T00:00:00Z",
+			UnknownMetrics: []string{"available_gpu_memory_bytes"},
+		}
+		if err := rs.Validate(); err != nil {
+			t.Fatalf("expected valid ResourceState with nil metrics, got: %v", err)
+		}
+	})
+
+	t.Run("active slots exceeding max slots rejected", func(t *testing.T) {
+		tooMany := 5
+		rs := &protocol.ResourceState{
+			SchemaVersion:      protocol.SchemaVersion1,
+			HostID:             "host_1",
+			Timestamp:          "2026-09-30T00:00:00Z",
+			MaxConcurrentSlots: &maxSlots,
+			ActiveSlots:        &tooMany,
+		}
+		if err := rs.Validate(); err == nil {
+			t.Fatal("expected error when active slots > max slots, got nil")
+		}
+	})
 }

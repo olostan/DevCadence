@@ -78,6 +78,8 @@ const (
 	NameEvidenceLease           Name = "evidence-lease"
 	NameRefactoringProposal     Name = "refactoring-proposal"
 	NameBudgetPool              Name = "budget-pool"
+	NameBudgetState             Name = "budget-state"
+	NameResourceState           Name = "resource-state"
 	NameCognitionPortfolio      Name = "cognition-portfolio"
 	NamePortfolioRecommendation Name = "portfolio-recommendation"
 	NameWorkflowPlan            Name = "workflow-plan"
@@ -125,6 +127,8 @@ var RecordKindToSchema = map[string]Name{
 	"EvidenceLease":             NameEvidenceLease,
 	"RefactoringProposal":       NameRefactoringProposal,
 	"BudgetPool":                NameBudgetPool,
+	"BudgetState":               NameBudgetState,
+	"ResourceState":             NameResourceState,
 	"CognitionPortfolio":        NameCognitionPortfolio,
 	"PortfolioRecommendation":   NamePortfolioRecommendation,
 	"WorkflowPlan":              NameWorkflowPlan,
@@ -274,7 +278,8 @@ func AllNames() []Name {
 		NameDoctorReport, NameSetupPlan, NameSetupExecutionReport, NameSetupRecoveryReport, NameSetupLedgerEvent,
 		NameCredentialRef, NameAuthEvidence, NameResourceInventory,
 		NameAccessChannel, NameContextProfile, NameContextManifest, NameContextPack,
-		NameEvidenceLease, NameRefactoringProposal, NameBudgetPool, NameCognitionPortfolio,
+		NameEvidenceLease, NameRefactoringProposal, NameBudgetPool,
+		NameBudgetState, NameResourceState, NameCognitionPortfolio,
 		NamePortfolioRecommendation, NameWorkflowPlan,
 	}
 	sort.Slice(names, func(i, j int) bool {

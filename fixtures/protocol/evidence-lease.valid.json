@@ -6,7 +6,7 @@
   "worktree_id": "wt_session_01",
   "file_path": "internal/setup/doctor.go",
   "locator": "L815-L835",
-  "content_digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "content_digest": "sha256:a9c955a9301cbb7fb1b5e3e92f91f7c2ff8a53f3c5df4f53a43b88e5a0f31293",
   "acquisition_question": "How are doctor check results rendered to text?",
   "acquisition_reason": "Verifying text output formatting against CLI spec",
   "content": "func (r *DoctorReport) FormatSummary() string {\n\treturn \"all checks passed\"\n}",

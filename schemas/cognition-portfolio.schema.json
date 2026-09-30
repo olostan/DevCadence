@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/olostan/DevCadence/schemas/cognition-portfolio.schema.json",
   "title": "DevCadence CognitionPortfolio",
-  "description": "Canonical routing configuration mapping engineering roles to endpoints, access channels, and budget pools (ADR-0018 §7).",
+  "description": "Canonical routing configuration mapping engineering roles to endpoints, access channels, and budget pools (ADR-0018 §7, FR-062).",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -99,14 +99,20 @@
           "endpoint_id",
           "channel_id",
           "budget_pool_id",
-          "context_profile_id"
+          "context_profile_id",
+          "priority"
         ],
         "properties": {
           "role": { "type": "string", "minLength": 1 },
           "endpoint_id": { "type": "string", "minLength": 1 },
           "channel_id": { "type": "string", "minLength": 1 },
           "budget_pool_id": { "type": "string", "minLength": 1 },
-          "context_profile_id": { "type": "string", "minLength": 1 }
+          "context_profile_id": { "type": "string", "minLength": 1 },
+          "priority": { "type": "integer", "minimum": 1 },
+          "fallback_endpoint_ids": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1 }
+          }
         }
       }
     },
@@ -175,6 +181,17 @@
         "tool_mediated_worktree",
         "unrestricted_authorized"
       ]
+    },
+    "excluded_endpoint_ids": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "budget_reservations": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "integer",
+        "minimum": 0
+      }
     }
   }
 }

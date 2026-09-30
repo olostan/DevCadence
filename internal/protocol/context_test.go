@@ -12,6 +12,8 @@ func validContextProfile() *protocol.ContextProfile {
 		ProfileID:                 "prof_1",
 		EndpointID:                "ep_1",
 		ChannelID:                 "chan_1",
+		Runtime:                   "ollama",
+		ModelRef:                  "qwen2.5-coder:32b",
 		Revision:                  1,
 		DeclaredWindowTokens:      32768,
 		RuntimeWindowTokens:       32768,
@@ -25,7 +27,7 @@ func validContextProfile() *protocol.ContextProfile {
 			},
 		},
 		TargetResidentTokens:      16000,
-		HardResidentCeilingTokens: 28000,
+		HardResidentCeilingTokens: 24000,
 		ProtectedCoreLimitTokens:  2000,
 		ContractLimitTokens:       4000,
 		MaxSingleLeaseTokens:      6000,
@@ -47,7 +49,7 @@ func validEvidenceLease() *protocol.EvidenceLease {
 		WorktreeID:          "wt_1",
 		FilePath:            "internal/setup/doctor.go",
 		Locator:             "L815-L835",
-		ContentDigest:       "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+		ContentDigest:       "sha256:2fbce30fb68b9fd298ea9914785690e3959fd7ec42f4a2ab093984a331d90f5a",
 		AcquisitionQuestion: "Question?",
 		AcquisitionReason:   "Reason",
 		Content:             "func Test() {}",
@@ -69,6 +71,8 @@ func validContextManifest() *protocol.ContextManifest {
 		Role:                 "implementer",
 		BaseCommit:           "58869d99635ee0d05b5fe30e3b152dacddc12445",
 		ProjectStateRevision: "rev_1",
+		MappingVersion:       "v1.0",
+		SourceRevision:       "58869d99635ee0d05b5fe30e3b152dacddc12445",
 		ReadEnvelope:         []string{"internal/*"},
 		WriteScope:           []string{"internal/protocol/*"},
 		Domains:              []string{"cognition"},
@@ -90,10 +94,11 @@ func validContextManifest() *protocol.ContextManifest {
 				Material:  true,
 			},
 		},
-		ExplicitQuestions: []string{"Q?"},
-		ExpansionTriggers: []string{"trigger"},
-		ContextProfileID:  "prof_1",
-		BudgetPoolID:      "pool_1",
+		ExplicitQuestions:   []string{"Q?"},
+		ExpansionTriggers:   []string{"trigger"},
+		AdmissionProvenance: []string{"automated_resolver_v1"},
+		ContextProfileID:    "prof_1",
+		BudgetPoolID:        "pool_1",
 	}
 }
 
@@ -130,8 +135,12 @@ func validContextPack() *protocol.ContextPack {
 			TotalResidentTokens: 878,
 			AccountingMethod:    protocol.AccountingExactBPE,
 		},
-		PackDigest: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-		Status:     protocol.PackStatusReady,
+		AdmittedObjectDigests: map[string]string{
+			"manifest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+		},
+		PackDigest:      "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+		CoverageSummary: "Full coverage for WP-M3C-1 requirements",
+		Status:          protocol.PackStatusReady,
 	}
 }
 
@@ -151,6 +160,15 @@ func TestContextProfileValidation(t *testing.T) {
 		cp.TargetResidentTokens = cp.HardResidentCeilingTokens + 1
 		if err := cp.Validate(); err == nil {
 			t.Fatal("expected error when target > ceiling, got nil")
+		}
+	})
+
+	t.Run("ceiling plus reserves exceeding runtime window rejected", func(t *testing.T) {
+		cp := validContextProfile()
+		cp.HardResidentCeilingTokens = 30000
+		// 30000 + 4000 + 2000 = 36000 > 32768
+		if err := cp.Validate(); err == nil {
+			t.Fatal("expected error when ceiling + reserves > runtime window, got nil")
 		}
 	})
 
@@ -181,6 +199,20 @@ func TestContextManifestValidation(t *testing.T) {
 			t.Fatal("expected error on non-sha256 clause digest, got nil")
 		}
 	})
+
+	t.Run("missing mapping_version or source_revision rejected", func(t *testing.T) {
+		cm := validContextManifest()
+		cm.MappingVersion = ""
+		if err := cm.Validate(); err == nil {
+			t.Fatal("expected error on empty mapping_version, got nil")
+		}
+
+		cm = validContextManifest()
+		cm.SourceRevision = ""
+		if err := cm.Validate(); err == nil {
+			t.Fatal("expected error on empty source_revision, got nil")
+		}
+	})
 }
 
 func TestEvidenceLeaseValidation(t *testing.T) {
@@ -191,6 +223,14 @@ func TestEvidenceLeaseValidation(t *testing.T) {
 		}
 		if el.RecordKind() != "EvidenceLease" {
 			t.Errorf("record kind: got %q, want EvidenceLease", el.RecordKind())
+		}
+	})
+
+	t.Run("verbatim content addressing: sha256 mismatch rejected", func(t *testing.T) {
+		el := validEvidenceLease()
+		el.ContentDigest = "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+		if err := el.Validate(); err == nil {
+			t.Fatal("expected error when content digest does not match sha256 of content, got nil")
 		}
 	})
 
@@ -211,6 +251,14 @@ func TestContextPackValidation(t *testing.T) {
 		}
 		if pack.RecordKind() != "ContextPack" {
 			t.Errorf("record kind: got %q, want ContextPack", pack.RecordKind())
+		}
+	})
+
+	t.Run("token accounting layer sum mismatch rejected", func(t *testing.T) {
+		pack := validContextPack()
+		pack.TokenAccounting.TotalResidentTokens = 9999
+		if err := pack.Validate(); err == nil {
+			t.Fatal("expected error when total resident tokens != sum of layers, got nil")
 		}
 	})
 

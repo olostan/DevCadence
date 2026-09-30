@@ -61,6 +61,8 @@ func TestSchemaTopLevelFieldsMatchTheGoTwin(t *testing.T) {
 		{"evidence-lease.schema.json", &protocol.EvidenceLease{}},
 		{"refactoring-proposal.schema.json", &protocol.RefactoringProposal{}},
 		{"budget-pool.schema.json", &protocol.BudgetPool{}},
+		{"budget-state.schema.json", &protocol.BudgetState{}},
+		{"resource-state.schema.json", &protocol.ResourceState{}},
 		{"cognition-portfolio.schema.json", &protocol.CognitionPortfolio{}},
 		{"portfolio-recommendation.schema.json", &protocol.PortfolioRecommendation{}},
 		{"workflow-plan.schema.json", &protocol.WorkflowPlan{}},

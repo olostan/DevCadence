@@ -59,6 +59,8 @@ inference.
 - `context-pack.schema.json`
 - `evidence-lease.schema.json`
 - `budget-pool.schema.json`
+- `budget-state.schema.json`
+- `resource-state.schema.json`
 - `cognition-portfolio.schema.json`
 - `portfolio-recommendation.schema.json`
 - `workflow-plan.schema.json`

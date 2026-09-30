@@ -17,7 +17,9 @@
     "evidence_working_set",
     "ephemeral_tail",
     "token_accounting",
+    "admitted_object_digests",
     "pack_digest",
+    "coverage_summary",
     "status"
   ],
   "properties": {
@@ -196,7 +198,15 @@
         }
       }
     },
+    "admitted_object_digests": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    },
     "pack_digest": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "coverage_summary": {
       "type": "string",
       "minLength": 1
     },

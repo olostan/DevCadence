@@ -8,6 +8,8 @@
   "role": "implementer",
   "base_commit": "58869d99635ee0d05b5fe30e3b152dacddc12445",
   "project_state_revision": "rev_m3b_closed",
+  "mapping_version": "v1.0",
+  "source_revision": "58869d99635ee0d05b5fe30e3b152dacddc12445",
   "read_envelope": [
     "internal/protocol/*",
     "schemas/*"
@@ -46,6 +48,9 @@
   ],
   "expansion_triggers": [
     "New domain requirement"
+  ],
+  "admission_provenance": [
+    "automated_resolver_v1"
   ],
   "context_profile_id": "profile_ollama_qwen_32b_local",
   "budget_pool_id": "pool_local_compute_01"

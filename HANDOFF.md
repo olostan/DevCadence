@@ -1,9 +1,9 @@
 # Handoff — feat/m3c-cognition-substrate
 
-Last updated: 2026-09-30T01:15:00Z by Implementer Session
+Last updated: 2026-09-30T03:15:00Z by Principal Engineer Session
 
 Session takeover HEAD: `58869d99635ee0d05b5fe30e3b152dacddc12445`
-Expected remote HEAD before next push: `08751435e553359b54284600e73563d689ad44c2`
+PR #16 Base: `08751435e553359b54284600e73563d689ad44c2`
 Active PR: https://github.com/olostan/DevCadence/pull/16
 
 ## Milestone
@@ -14,70 +14,61 @@ See docs/WORK_PACKAGES.md#m3c--cognition-resource-and-session-substrate for the 
 
 | WP | Status | Checkpoint | Validation | Review |
 |----|--------|------------|------------|--------|
-| WP-M3C-1 | ready for review | `0875143` (PR #16) | `go test ./...` PASS | implementation complete, awaiting independent review |
+| WP-M3C-1 | review repairs completed | PR #16 repair commit pending | `go test -count=1 ./...` PASS | Round-1 findings from owner and inline review fully addressed |
 | WP-M3C-2 | not started | — | — | blocked on WP-M3C-1 acceptance |
 | WP-M3C-3 | not started | — | — | blocked on WP-M3C-1, WP-M3C-2 |
 | WP-M3C-4 | not started | — | — | blocked on WP-M3C-1..3 |
 
 ## Currently in progress: WP-M3C-1
 
-- **EWP status:** Authored, implemented, and verified at `docs/work-packages/wp-m3c-1-ewp.md`.
+- **EWP status:** Amended and verified at `docs/work-packages/wp-m3c-1-ewp.md`.
 - **Base commit this WP started from:** `58869d99635ee0d05b5fe30e3b152dacddc12445`
-- **What's implemented:**
+- **What's implemented & repaired:**
   1. Go protocol types and validation in `internal/protocol/`:
      - `access_channel.go` (`AccessChannel`, `ChannelKind`, `SessionMode`, `ContextControl`, `PrefixCache`)
-     - `context.go` (`ContextProfile`, `ContextManifest`, `ContextPack`, `EvidenceLease`, `WorkloadEnvelope`, `TokenAccountingBreakdown`, `CognitiveStateCapsule`, `EphemeralTailBlock`)
-     - `refactoring_proposal.go` (`RefactoringProposal`, `ReversibilityClass`, `ProposalStatus`, `ProposalAdjudication`)
-     - `economics.go` (`EconomicRegime`, `BudgetPool`, `BudgetState`, `ResourceState`, `BudgetUnit`, `BudgetPeriod`)
-     - `portfolio.go` (`CognitionPortfolio`, `RoleBinding`, `PortfolioRecommendation`, `WorkflowPlan`, `WorkflowTopologyKind`, `WorkflowStage`)
-     - `Assumption.Validate()` in `internal/protocol/work_package.go`
-     - Added all 10 record kinds to `NewRecord` in `internal/protocol/protocol.go`
+     - `context.go` (`ContextProfile`, `ContextManifest`, `ContextPack`, `EvidenceLease`, `WorkloadEnvelope`, `TokenAccountingBreakdown`, `CognitiveStateCapsule`, `EphemeralTailBlock`). Added PROTOCOLS §10B fields (`Runtime`, `ModelRef`, `Quantization`, `ContextConfiguration`, `MappingVersion`, `SourceRevision`, `AdmissionProvenance`, `AdmittedObjectDigests`, `CoverageSummary`). Enforced verbatim content-addressing check in `EvidenceLease.Validate()` (SHA-256 match).
+     - `refactoring_proposal.go` (`RefactoringProposal`, `ReversibilityClass`, `ProposalStatus`, `ProposalAdjudication`). Enforced fail-closed lifecycle: `proposed` forbids adjudication, terminal requires adjudication, `accepted` requires non-empty `ResultingWorkPackageID`.
+     - `economics.go` (`EconomicRegime`, `BudgetPool`, `BudgetState`, `ResourceState`, `BudgetUnit`, `BudgetPeriod`). Enforced allowlist guard on `FallbackAllowedToMetered` (only `metered_api`) and `AllowOverage` prohibition on subscription/local/custom regimes. Added pointers for honest unknown/unobserved metrics on `BudgetState` and `ResourceState` (`Record` implementations, `NewRecord` registration).
+     - `portfolio.go` (`CognitionPortfolio`, `RoleBinding`, `PortfolioRecommendation`, `WorkflowPlan`, `WorkflowTopologyKind`, `WorkflowStage`). Added FR-062 fields (`Priority`, `FallbackEndpointIDs`, `ExcludedEndpointIDs`, `BudgetReservations`), referential integrity checks against channels and pools, DAG forward-only non-self dependency checks, and topology compatibility rules.
+     - Registered all 12 record kinds in `internal/protocol/protocol.go` (`NewRecord`).
   2. Draft 2020-12 JSON Schemas under `schemas/` with `additionalProperties: false`:
      - `access-channel.schema.json`
      - `context-profile.schema.json`
      - `context-manifest.schema.json`
      - `context-pack.schema.json`
      - `evidence-lease.schema.json`
-     - `refactoring-proposal.schema.json`
-     - `budget-pool.schema.json`
+     - `refactoring-proposal.schema.json` (with conditional `allOf` fail-closed adjudication constraints)
+     - `budget-pool.schema.json` (with conditional `allOf` allowlist and overage constraints)
+     - `budget-state.schema.json` (published)
+     - `resource-state.schema.json` (published)
      - `cognition-portfolio.schema.json`
      - `portfolio-recommendation.schema.json`
      - `workflow-plan.schema.json`
   3. Registered schema names and `RecordKindToSchema` mappings in `internal/schema/schema.go`, documented in `schemas/README.md`.
-  4. Tested 100% top-level field parity in `tests/twin_fields_test.go` (`TestSchemaTopLevelFieldsMatchTheGoTwin`).
-  5. Authored valid and invalid test fixtures under `fixtures/protocol/`, wired into `tests/schema_fixtures_test.go` round-trip tests.
+  4. Tested 100% top-level field parity across all 35 schemas in `tests/twin_fields_test.go` (`TestSchemaTopLevelFieldsMatchTheGoTwin`).
+  5. Authored valid and invalid test fixtures under `fixtures/protocol/`, wired into `tests/schema_fixtures_test.go` round-trip and negative reader parity tests (`TestTheGoReaderRejectsWhatTheSchemaRejects`).
   6. Added comprehensive domain unit tests in `internal/protocol/` (`access_channel_test.go`, `context_test.go`, `refactoring_proposal_test.go`, `economics_test.go`, `portfolio_test.go`).
 - **What's verified:**
   - `go build ./...` clean (exit 0)
   - `go vet ./...` clean (exit 0)
-  - `go test -count=1 ./...` across all 26 packages clean (exit 0)
-  - `TestSchemaTopLevelFieldsMatchTheGoTwin` PASS
+  - `go test -count=1 ./...` across all packages clean (exit 0)
+  - `TestSchemaTopLevelFieldsMatchTheGoTwin` PASS (35/35 schemas)
   - `TestEveryRecordKindHasASchema` PASS
   - `TestEverySchemaCompiles` PASS
   - `TestValidFixturesValidate` PASS
   - `TestInvalidFixturesAreRejected` PASS
   - `TestFixturesRoundTripWithoutSemanticLoss` PASS
-  - ADR-0018 §9 & DCI-104 no-silent-paid-fallback policy strictly enforced and verified (`TestBudgetPoolValidation`).
+  - `TestTheGoReaderRejectsWhatTheSchemaRejects` PASS (including all M3C schemas)
+  - ADR-0018 §9 & DCI-104 no-silent-paid-fallback policy strictly enforced and verified.
 - **What's left for this WP:**
-  - Independent checkpoint review per `AGENT_HANDOFF_PROTOCOL.md` and disposition of findings.
+  - Push repair commit to PR #16 and post review response.
 - **Known blockers / open questions:** None.
 
 ## Context and evidence capsule
 
-- **Contract:** WP-M3C-1 v1, `docs/work-packages/wp-m3c-1-ewp.md`
+- **Contract:** WP-M3C-1 v1.1, `docs/work-packages/wp-m3c-1-ewp.md`
 - **Context Manifest:** `docs/work-packages/wp-m3c-1-ewp.md §1`
-- **Derived state:** Implementation complete; all acceptance criteria satisfied by deterministic tests.
+- **Derived state:** Repairs complete; all PR #16 review findings resolved and deterministically verified.
 - **Evidence:** Clean test runs across all packages, base commit `58869d9`.
-- **Coverage:** 100% of WP-M3C-1 scope card deliverables implemented and verified.
+- **Coverage:** 100% of WP-M3C-1 scope card deliverables implemented, repaired, and verified.
 - **Expansion needed:** None.
-
-## Next concrete action
-
-Perform independent checkpoint review on WP-M3C-1 implementation candidate.
-
-## Resume checklist for the next agent
-
-1. `git fetch origin feat/m3c-cognition-substrate` and check out the branch.
-2. Confirm `go test ./...` passes.
-3. Review `docs/work-packages/wp-m3c-1-ewp.md` and the implemented schemas and Go twins.
-4. Execute independent review and record findings / disposition.

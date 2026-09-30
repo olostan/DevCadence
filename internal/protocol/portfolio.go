@@ -1,14 +1,20 @@
 package protocol
 
-import "github.com/olostan/DevCadence/internal/errs"
+import (
+	"strings"
 
-// RoleBinding maps an engineering role to an endpoint, channel, and budget pool (ADR-0018 §1).
+	"github.com/olostan/DevCadence/internal/errs"
+)
+
+// RoleBinding maps an engineering role to an endpoint, channel, and budget pool (ADR-0018 §1, FR-062).
 type RoleBinding struct {
-	Role             string `json:"role"`
-	EndpointID       string `json:"endpoint_id"`
-	ChannelID        string `json:"channel_id"`
-	BudgetPoolID     string `json:"budget_pool_id"`
-	ContextProfileID string `json:"context_profile_id"`
+	Role                string   `json:"role"`
+	EndpointID          string   `json:"endpoint_id"`
+	ChannelID           string   `json:"channel_id"`
+	BudgetPoolID        string   `json:"budget_pool_id"`
+	ContextProfileID    string   `json:"context_profile_id"`
+	Priority            int      `json:"priority"`
+	FallbackEndpointIDs []string `json:"fallback_endpoint_ids,omitempty"`
 }
 
 // Validate checks RoleBinding fields.
@@ -29,19 +35,32 @@ func (r RoleBinding) Validate() error {
 	if err := requireNonEmpty(kind, "context_profile_id", r.ContextProfileID); err != nil {
 		return err
 	}
+	if r.Priority < 1 {
+		return errs.New(errs.CategoryInvalidArgument, "%s: priority must be >= 1, got %d", kind, r.Priority)
+	}
+	for i, fb := range r.FallbackEndpointIDs {
+		if fb == "" {
+			return errs.New(errs.CategoryInvalidArgument, "%s: fallback_endpoint_ids[%d] cannot be empty", kind, i)
+		}
+		if fb == r.EndpointID {
+			return errs.New(errs.CategoryInvalidArgument, "%s: fallback_endpoint_ids[%d] %q matches primary endpoint_id", kind, i, fb)
+		}
+	}
 	return nil
 }
 
-// CognitionPortfolio is the canonical routing configuration (ADR-0018 §7).
+// CognitionPortfolio is the canonical routing configuration (ADR-0018 §7, FR-062).
 type CognitionPortfolio struct {
-	SchemaVersion     SchemaVersion   `json:"schema_version"`
-	PortfolioID       string          `json:"portfolio_id"`
-	Revision          int             `json:"revision"`
-	CreatedAt         string          `json:"created_at"`
-	Channels          []AccessChannel `json:"channels"`
-	RoleBindings      []RoleBinding   `json:"role_bindings"`
-	BudgetPools       []BudgetPool    `json:"budget_pools"`
-	MaxSourceExposure SourceExposure  `json:"max_source_exposure"`
+	SchemaVersion       SchemaVersion    `json:"schema_version"`
+	PortfolioID         string           `json:"portfolio_id"`
+	Revision            int              `json:"revision"`
+	CreatedAt           string           `json:"created_at"`
+	Channels            []AccessChannel  `json:"channels"`
+	RoleBindings        []RoleBinding    `json:"role_bindings"`
+	BudgetPools         []BudgetPool     `json:"budget_pools"`
+	MaxSourceExposure   SourceExposure   `json:"max_source_exposure"`
+	ExcludedEndpointIDs []string         `json:"excluded_endpoint_ids,omitempty"`
+	BudgetReservations  map[string]int64 `json:"budget_reservations,omitempty"`
 }
 
 // RecordKind implements Record.
@@ -53,7 +72,7 @@ func (c *CognitionPortfolio) RecordID() string { return c.PortfolioID }
 // SchemaVer implements Record.
 func (c *CognitionPortfolio) SchemaVer() SchemaVersion { return c.SchemaVersion }
 
-// Validate enforces CognitionPortfolio constraints per ADR-0018.
+// Validate enforces CognitionPortfolio constraints per ADR-0018 and FR-062.
 func (c *CognitionPortfolio) Validate() error {
 	const kind = "CognitionPortfolio"
 	if err := c.SchemaVersion.Validate(kind); err != nil {
@@ -74,21 +93,67 @@ func (c *CognitionPortfolio) Validate() error {
 			string(ExposureFocusedSnippets), string(ExposureSelectedFiles),
 			string(ExposureToolMediatedWorktree), string(ExposureUnrestrictedAuthorized))
 	}
+
+	channelMap := make(map[string]AccessChannel, len(c.Channels))
 	for i, ch := range c.Channels {
 		if err := ch.Validate(); err != nil {
 			return errs.New(errs.CategoryInvalidArgument, "%s: channels[%d]: %v", kind, i, err)
 		}
-	}
-	for i, rb := range c.RoleBindings {
-		if err := rb.Validate(); err != nil {
-			return errs.New(errs.CategoryInvalidArgument, "%s: role_bindings[%d]: %v", kind, i, err)
+		if _, exists := channelMap[ch.ChannelID]; exists {
+			return errs.New(errs.CategoryInvalidArgument, "%s: duplicate channel_id %q", kind, ch.ChannelID)
 		}
+		channelMap[ch.ChannelID] = ch
 	}
+
+	poolMap := make(map[string]BudgetPool, len(c.BudgetPools))
 	for i, bp := range c.BudgetPools {
 		if err := bp.Validate(); err != nil {
 			return errs.New(errs.CategoryInvalidArgument, "%s: budget_pools[%d]: %v", kind, i, err)
 		}
+		if _, exists := poolMap[bp.PoolID]; exists {
+			return errs.New(errs.CategoryInvalidArgument, "%s: duplicate budget_pool_id %q", kind, bp.PoolID)
+		}
+		poolMap[bp.PoolID] = bp
 	}
+
+	excludedMap := make(map[string]bool, len(c.ExcludedEndpointIDs))
+	for _, epID := range c.ExcludedEndpointIDs {
+		excludedMap[epID] = true
+	}
+
+	for i, rb := range c.RoleBindings {
+		if err := rb.Validate(); err != nil {
+			return errs.New(errs.CategoryInvalidArgument, "%s: role_bindings[%d]: %v", kind, i, err)
+		}
+		ch, ok := channelMap[rb.ChannelID]
+		if !ok {
+			return errs.New(errs.CategoryInvalidArgument, "%s: role_bindings[%d] references non-existent channel_id %q", kind, i, rb.ChannelID)
+		}
+		if rb.EndpointID != ch.EndpointID {
+			return errs.New(errs.CategoryInvalidArgument, "%s: role_bindings[%d] endpoint_id %q does not match channel endpoint_id %q", kind, i, rb.EndpointID, ch.EndpointID)
+		}
+		if _, ok := poolMap[rb.BudgetPoolID]; !ok {
+			return errs.New(errs.CategoryInvalidArgument, "%s: role_bindings[%d] references non-existent budget_pool_id %q", kind, i, rb.BudgetPoolID)
+		}
+		if excludedMap[rb.EndpointID] {
+			return errs.New(errs.CategoryInvalidArgument, "%s: role_bindings[%d] uses excluded endpoint_id %q", kind, i, rb.EndpointID)
+		}
+		for _, fb := range rb.FallbackEndpointIDs {
+			if excludedMap[fb] {
+				return errs.New(errs.CategoryInvalidArgument, "%s: role_bindings[%d] fallback_endpoint_id %q is excluded", kind, i, fb)
+			}
+		}
+	}
+
+	for poolID, amount := range c.BudgetReservations {
+		if _, ok := poolMap[poolID]; !ok {
+			return errs.New(errs.CategoryInvalidArgument, "%s: budget_reservations references non-existent budget_pool_id %q", kind, poolID)
+		}
+		if amount < 0 {
+			return errs.New(errs.CategoryInvalidArgument, "%s: budget_reservation for %q cannot be negative (%d)", kind, poolID, amount)
+		}
+	}
+
 	return nil
 }
 
@@ -226,10 +291,65 @@ func (w *WorkflowPlan) Validate() error {
 			string(TopologySinglePass), string(TopologyIterativeEscalation),
 			string(TopologyDualIndependentReview), string(TopologyDeterministicOnly))
 	}
+	if err := requireMinItems(kind, "stages", len(w.Stages), 1); err != nil {
+		return err
+	}
+
+	stageIDs := make(map[string]WorkflowStage, len(w.Stages))
+	orders := make(map[int]string, len(w.Stages))
+	reviewStageCount := 0
+	deterministicStageCount := 0
+
 	for i, stage := range w.Stages {
 		if err := stage.Validate(); err != nil {
 			return errs.New(errs.CategoryInvalidArgument, "%s: stages[%d]: %v", kind, i, err)
 		}
+		if _, exists := stageIDs[stage.StageID]; exists {
+			return errs.New(errs.CategoryInvalidArgument, "%s: duplicate stage_id %q", kind, stage.StageID)
+		}
+		stageIDs[stage.StageID] = stage
+
+		if existingID, exists := orders[stage.Order]; exists {
+			return errs.New(errs.CategoryInvalidArgument, "%s: duplicate stage order %d (stages %q and %q)", kind, stage.Order, existingID, stage.StageID)
+		}
+		orders[stage.Order] = stage.StageID
+
+		roleLower := strings.ToLower(stage.Role)
+		if strings.Contains(roleLower, "review") {
+			reviewStageCount++
+		}
+		if strings.Contains(roleLower, "verif") || strings.Contains(roleLower, "determinis") || strings.Contains(roleLower, "lint") || strings.Contains(roleLower, "test") {
+			deterministicStageCount++
+		}
 	}
+
+	// Validate DAG dependencies: forward-only, no self-deps, references valid stages
+	for _, stage := range w.Stages {
+		for _, depID := range stage.DependsOn {
+			if depID == stage.StageID {
+				return errs.New(errs.CategoryInvalidArgument, "%s: stage %q cannot depend on itself", kind, stage.StageID)
+			}
+			depStage, exists := stageIDs[depID]
+			if !exists {
+				return errs.New(errs.CategoryInvalidArgument, "%s: stage %q depends on non-existent stage %q", kind, stage.StageID, depID)
+			}
+			if depStage.Order >= stage.Order {
+				return errs.New(errs.CategoryInvalidArgument, "%s: stage %q (order %d) cannot depend on later or equal stage %q (order %d)", kind, stage.StageID, stage.Order, depID, depStage.Order)
+			}
+		}
+	}
+
+	// Topology compatibility checks
+	switch w.Topology {
+	case TopologyDualIndependentReview:
+		if reviewStageCount < 2 {
+			return errs.New(errs.CategoryInvalidArgument, "%s: topology %q requires at least 2 review stages, got %d", kind, w.Topology, reviewStageCount)
+		}
+	case TopologyDeterministicOnly:
+		if deterministicStageCount != len(w.Stages) {
+			return errs.New(errs.CategoryInvalidArgument, "%s: topology %q permits only deterministic/verification stages, but found non-deterministic stages", kind, w.Topology)
+		}
+	}
+
 	return nil
 }

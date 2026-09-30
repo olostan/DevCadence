@@ -65,5 +65,27 @@
     },
     "allow_overage": { "type": "boolean" },
     "fallback_allowed_to_metered": { "type": "boolean" }
-  }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "fallback_allowed_to_metered": { "const": true } }
+      },
+      "then": {
+        "properties": { "regime": { "const": "metered_api" } }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "regime": {
+            "enum": ["local_compute", "subscription_quota", "unknown_custom"]
+          }
+        }
+      },
+      "then": {
+        "properties": { "allow_overage": { "const": false } }
+      }
+    }
+  ]
 }

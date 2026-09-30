@@ -134,5 +134,38 @@
         "resulting_work_package_id": { "type": "string", "minLength": 1 }
       }
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "status": { "const": "proposed" } }
+      },
+      "then": {
+        "not": { "required": ["adjudication"] }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": { "enum": ["accepted", "rejected", "superseded"] }
+        }
+      },
+      "then": {
+        "required": ["adjudication"]
+      }
+    },
+    {
+      "if": {
+        "properties": { "status": { "const": "accepted" } }
+      },
+      "then": {
+        "required": ["adjudication"],
+        "properties": {
+          "adjudication": {
+            "required": ["resulting_work_package_id"]
+          }
+        }
+      }
+    }
+  ]
 }

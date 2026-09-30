@@ -1,0 +1,9 @@
+{
+  "schema_version": "1.0",
+  "host_id": "host_macbook_pro_m3_max",
+  "timestamp": "2026-09-30T00:00:00Z",
+  "available_gpu_memory_bytes": 107374182400,
+  "available_ram_bytes": 137438953472,
+  "max_concurrent_slots": 4,
+  "active_slots": 1
+}

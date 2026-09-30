@@ -67,8 +67,34 @@ func TestRefactoringProposalValidation(t *testing.T) {
 		}
 	})
 
-	t.Run("adjudication validation", func(t *testing.T) {
+	t.Run("fail-closed adjudication lifecycle", func(t *testing.T) {
+		wpID := "WP-M3C-3"
+
+		// 1. Proposed status must NOT have adjudication
 		prop := validRefactoringProposal()
+		prop.Status = protocol.ProposalProposed
+		prop.Adjudication = &protocol.ProposalAdjudication{
+			AdjudicatedBy: protocol.Actor{
+				Kind: protocol.ActorPrincipal,
+				ID:   "principal_session_01",
+			},
+			AdjudicatedAt:    "2026-09-30T00:10:00Z",
+			DispositionNotes: "Early notes",
+		}
+		if err := prop.Validate(); err == nil {
+			t.Fatal("expected error: proposed status must not have adjudication")
+		}
+
+		// 2. Terminal accepted without adjudication must fail
+		prop = validRefactoringProposal()
+		prop.Status = protocol.ProposalAccepted
+		prop.Adjudication = nil
+		if err := prop.Validate(); err == nil {
+			t.Fatal("expected error: accepted status requires adjudication")
+		}
+
+		// 3. Terminal accepted without resulting_work_package_id must fail
+		prop = validRefactoringProposal()
 		prop.Status = protocol.ProposalAccepted
 		prop.Adjudication = &protocol.ProposalAdjudication{
 			AdjudicatedBy: protocol.Actor{
@@ -76,12 +102,34 @@ func TestRefactoringProposalValidation(t *testing.T) {
 				ID:   "principal_session_01",
 			},
 			AdjudicatedAt:    "2026-09-30T00:10:00Z",
-			DispositionNotes: "Accepted into WP-M3C-1 amendment",
+			DispositionNotes: "Accepted",
 		}
-		if err := prop.Validate(); err != nil {
-			t.Fatalf("expected valid with adjudication, got: %v", err)
+		if err := prop.Validate(); err == nil {
+			t.Fatal("expected error: accepted status requires resulting_work_package_id")
 		}
 
+		// 4. Terminal accepted with resulting_work_package_id passes
+		prop.Adjudication.ResultingWorkPackageID = &wpID
+		if err := prop.Validate(); err != nil {
+			t.Fatalf("expected valid accepted proposal, got: %v", err)
+		}
+
+		// 5. Terminal rejected with adjudication passes even without resulting_work_package_id
+		prop = validRefactoringProposal()
+		prop.Status = protocol.ProposalRejected
+		prop.Adjudication = &protocol.ProposalAdjudication{
+			AdjudicatedBy: protocol.Actor{
+				Kind: protocol.ActorHuman,
+				ID:   "owner_olostan",
+			},
+			AdjudicatedAt:    "2026-09-30T00:10:00Z",
+			DispositionNotes: "Not aligned with architectural boundaries",
+		}
+		if err := prop.Validate(); err != nil {
+			t.Fatalf("expected valid rejected proposal, got: %v", err)
+		}
+
+		// 6. Invalid actor in adjudication fails
 		prop.Adjudication.AdjudicatedBy.Kind = "invalid_actor"
 		if err := prop.Validate(); err == nil {
 			t.Fatal("expected error on invalid actor kind in adjudication, got nil")

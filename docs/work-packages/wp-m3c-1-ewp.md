@@ -537,24 +537,29 @@ const (
     BudgetStatusExhausted         BudgetPoolStatus = "exhausted"
 )
 
-// BudgetState captures live pool balance and status.
+// BudgetState captures live pool balance and status with honest unknown representation (PROTOCOLS §10B).
 type BudgetState struct {
+    SchemaVersion    SchemaVersion    `json:"schema_version"`
     PoolID           string           `json:"pool_id"`
-    CurrentUsage     int64            `json:"current_usage"`
-    RemainingBalance int64            `json:"remaining_balance"`
-    PeriodStart      string           `json:"period_start"`
-    PeriodEnd        string           `json:"period_end"`
+    CurrentUsage     *int64           `json:"current_usage,omitempty"`
+    RemainingBalance *int64           `json:"remaining_balance,omitempty"`
+    PeriodStart      *string          `json:"period_start,omitempty"`
+    PeriodEnd        *string          `json:"period_end,omitempty"`
     Status           BudgetPoolStatus `json:"status"`
+    ObservedAt       string           `json:"observed_at"`
+    UnknownFields    []string         `json:"unknown_fields,omitempty"`
 }
 
-// ResourceState captures machine-level compute availability.
+// ResourceState captures machine-level compute availability with honest unknown metrics (PROTOCOLS §10B).
 type ResourceState struct {
-    HostID                  string  `json:"host_id"`
-    Timestamp               string  `json:"timestamp"`
-    AvailableGPUMemoryBytes int64   `json:"available_gpu_memory_bytes"`
-    AvailableRAMBytes       int64   `json:"available_ram_bytes"`
-    MaxConcurrentSlots      int     `json:"max_concurrent_slots"`
-    ActiveSlots             int     `json:"active_slots"`
+    SchemaVersion           SchemaVersion `json:"schema_version"`
+    HostID                  string        `json:"host_id"`
+    Timestamp               string        `json:"timestamp"`
+    AvailableGPUMemoryBytes *int64        `json:"available_gpu_memory_bytes,omitempty"`
+    AvailableRAMBytes       *int64        `json:"available_ram_bytes,omitempty"`
+    MaxConcurrentSlots      *int          `json:"max_concurrent_slots,omitempty"`
+    ActiveSlots             *int          `json:"active_slots,omitempty"`
+    UnknownMetrics          []string      `json:"unknown_metrics,omitempty"`
 }
 ```
 
@@ -563,25 +568,29 @@ type ResourceState struct {
 ```go
 package protocol
 
-// RoleBinding maps an engineering role to an endpoint, channel, and budget pool.
+// RoleBinding maps an engineering role to an endpoint, channel, and budget pool (ADR-0018 §1, FR-062).
 type RoleBinding struct {
-    Role             string `json:"role"`
-    EndpointID       string `json:"endpoint_id"`
-    ChannelID        string `json:"channel_id"`
-    BudgetPoolID     string `json:"budget_pool_id"`
-    ContextProfileID string `json:"context_profile_id"`
+    Role                string   `json:"role"`
+    EndpointID          string   `json:"endpoint_id"`
+    ChannelID           string   `json:"channel_id"`
+    BudgetPoolID        string   `json:"budget_pool_id"`
+    ContextProfileID    string   `json:"context_profile_id"`
+    Priority            int      `json:"priority"`
+    FallbackEndpointIDs []string `json:"fallback_endpoint_ids,omitempty"`
 }
 
-// CognitionPortfolio is the canonical routing configuration (ADR-0018 §7).
+// CognitionPortfolio is the canonical routing configuration (ADR-0018 §7, FR-062).
 type CognitionPortfolio struct {
-    SchemaVersion        SchemaVersion     `json:"schema_version"`
-    PortfolioID          string            `json:"portfolio_id"`
-    Revision             int               `json:"revision"`
-    CreatedAt            string            `json:"created_at"`
-    Channels             []AccessChannel   `json:"channels"`
-    RoleBindings         []RoleBinding     `json:"role_bindings"`
-    BudgetPools          []BudgetPool      `json:"budget_pools"`
-    MaxSourceExposure    SourceExposure    `json:"max_source_exposure"`
+    SchemaVersion       SchemaVersion    `json:"schema_version"`
+    PortfolioID         string           `json:"portfolio_id"`
+    Revision            int              `json:"revision"`
+    CreatedAt           string           `json:"created_at"`
+    Channels            []AccessChannel  `json:"channels"`
+    RoleBindings        []RoleBinding    `json:"role_bindings"`
+    BudgetPools         []BudgetPool     `json:"budget_pools"`
+    MaxSourceExposure   SourceExposure   `json:"max_source_exposure"`
+    ExcludedEndpointIDs []string         `json:"excluded_endpoint_ids,omitempty"`
+    BudgetReservations  map[string]int64 `json:"budget_reservations,omitempty"`
 }
 
 // PortfolioRecommendation is an AI-suggested or heuristic portfolio proposal.
@@ -600,10 +609,10 @@ type PortfolioRecommendation struct {
 type WorkflowTopologyKind string
 
 const (
-    TopologySinglePass           WorkflowTopologyKind = "single_pass"
-    TopologyIterativeEscalation  WorkflowTopologyKind = "iterative_escalation"
+    TopologySinglePass            WorkflowTopologyKind = "single_pass"
+    TopologyIterativeEscalation   WorkflowTopologyKind = "iterative_escalation"
     TopologyDualIndependentReview WorkflowTopologyKind = "dual_independent_review"
-    TopologyDeterministicOnly    WorkflowTopologyKind = "deterministic_only"
+    TopologyDeterministicOnly     WorkflowTopologyKind = "deterministic_only"
 )
 
 // WorkflowStage defines one cognitive pass in a workflow plan.
@@ -640,9 +649,11 @@ The following Draft 2020-12 JSON Schemas must be published under `schemas/` with
 5. `schemas/evidence-lease.schema.json`
 6. `schemas/refactoring-proposal.schema.json`
 7. `schemas/budget-pool.schema.json`
-8. `schemas/cognition-portfolio.schema.json`
-9. `schemas/portfolio-recommendation.schema.json`
-10. `schemas/workflow-plan.schema.json`
+8. `schemas/budget-state.schema.json`
+9. `schemas/resource-state.schema.json`
+10. `schemas/cognition-portfolio.schema.json`
+11. `schemas/portfolio-recommendation.schema.json`
+12. `schemas/workflow-plan.schema.json`
 
 All schema names must be registered in `internal/schema/schema.go`, documented in `schemas/README.md`, and wired into `RecordKindToSchema`.
 
@@ -652,12 +663,12 @@ All schema names must be registered in `internal/schema/schema.go`, documented i
 
 | Deliverable / Requirement | Verification Command / Suite | Pass Criteria |
 |---|---|---|
-| Schema Compilation | `go test ./internal/schema/...` | All 10 new schemas compile successfully in `TestEverySchemaCompiles`. |
+| Schema Compilation | `go test ./internal/schema/...` | All 12 new schemas compile successfully in `TestEverySchemaCompiles`. |
 | Top-Level Field Parity | `go test ./tests -run TestSchemaTopLevelFieldsMatchTheGoTwin` | All new protocol records match their schema twin properties bidirectionally. |
 | Record Kind Mapping | `go test ./tests -run TestEveryRecordKindHasASchema` | Every new schema has its Go twin mapped in `RecordKindToSchema`. |
 | Fixture Validation | `go test ./tests -run "TestValidFixturesValidate\|TestInvalidFixturesAreRejected"` | Valid and invalid fixtures for each schema pass validation. |
 | Semantic Validation Tests | `go test ./internal/protocol/...` | Validation logic rejects empty IDs, unknown enum constants, negative tokens/limits, and unvalidated fallback. |
-| Non-Fallback Guarantee | `go test ./internal/protocol/... -run TestBudgetPoolFallbackPolicy` | `BudgetPool` rejects `FallbackAllowedToMetered = true` without explicit manual regime. |
+| Non-Fallback Guarantee | `go test ./internal/protocol/... -run TestBudgetPoolValidation` | `BudgetPool` rejects `FallbackAllowedToMetered = true` without explicit manual regime. |
 | Zero Credential Leakage | Code inspection & fixture check | No schema includes secret fields (tokens, passwords, api_keys). |
 
 ---

@@ -15,6 +15,8 @@
     "role",
     "base_commit",
     "project_state_revision",
+    "mapping_version",
+    "source_revision",
     "read_envelope",
     "write_scope",
     "domains",
@@ -24,6 +26,7 @@
     "assumptions",
     "explicit_questions",
     "expansion_triggers",
+    "admission_provenance",
     "context_profile_id",
     "budget_pool_id"
   ],
@@ -47,7 +50,7 @@
     },
     "work_package_digest": {
       "type": "string",
-      "minLength": 1
+      "pattern": "^sha256:[a-f0-9]{64}$"
     },
     "role": {
       "type": "string",
@@ -62,6 +65,14 @@
       "minLength": 7
     },
     "project_state_revision": {
+      "type": "string",
+      "minLength": 1
+    },
+    "mapping_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source_revision": {
       "type": "string",
       "minLength": 1
     },
@@ -145,6 +156,10 @@
       "items": { "type": "string" }
     },
     "expansion_triggers": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "admission_provenance": {
       "type": "array",
       "items": { "type": "string" }
     },

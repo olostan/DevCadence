@@ -131,9 +131,22 @@ func (r *RefactoringProposal) Validate() error {
 		return enumError(kind, "status", string(r.Status),
 			string(ProposalProposed), string(ProposalAccepted), string(ProposalRejected), string(ProposalSuperseded))
 	}
-	if r.Adjudication != nil {
+	switch r.Status {
+	case ProposalProposed:
+		if r.Adjudication != nil {
+			return errs.New(errs.CategoryInvalidArgument, "%s: adjudication must be nil when status is %q", kind, r.Status)
+		}
+	case ProposalAccepted, ProposalRejected, ProposalSuperseded:
+		if r.Adjudication == nil {
+			return errs.New(errs.CategoryInvalidArgument, "%s: adjudication is required when status is %q", kind, r.Status)
+		}
 		if err := r.Adjudication.Validate(); err != nil {
 			return err
+		}
+		if r.Status == ProposalAccepted {
+			if r.Adjudication.ResultingWorkPackageID == nil || *r.Adjudication.ResultingWorkPackageID == "" {
+				return errs.New(errs.CategoryInvalidArgument, "%s: resulting_work_package_id is required when status is %q", kind, r.Status)
+			}
 		}
 	}
 	return nil

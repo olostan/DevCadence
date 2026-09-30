@@ -1,7 +1,8 @@
 package protocol
 
 import (
-	"strings"
+	"crypto/sha256"
+	"encoding/hex"
 
 	"github.com/olostan/DevCadence/internal/errs"
 )
@@ -27,33 +28,35 @@ func (w WorkloadKind) Valid() bool {
 
 // WorkloadEnvelope specifies empirical effective context bounds for a specific workload.
 type WorkloadEnvelope struct {
-	Workload        WorkloadKind `json:"workload"`
-	EffectiveTokens int          `json:"effective_tokens"`
-	CalibrationTask string       `json:"calibration_task"`
-	CalibrationDate string       `json:"calibration_date"`
-	ConfidenceLevel string       `json:"confidence_level"` // verified | provisional | unknown
+	Workload               WorkloadKind `json:"workload"`
+	EffectiveTokens        int          `json:"effective_tokens"`
+	CalibrationTask        string       `json:"calibration_task"`
+	CalibrationDate        string       `json:"calibration_date"`
+	CalibrationEvidenceRef *string      `json:"calibration_evidence_ref,omitempty"`
+	ConfidenceLevel        string       `json:"confidence_level"` // verified | provisional | unknown
 }
 
 // Validate checks WorkloadEnvelope constraints.
 func (w WorkloadEnvelope) Validate() error {
+	const kind = "WorkloadEnvelope"
 	if !w.Workload.Valid() {
-		return enumError("WorkloadEnvelope", "workload", string(w.Workload),
+		return enumError(kind, "workload", string(w.Workload),
 			string(WorkloadNavigation), string(WorkloadImplementation), string(WorkloadReview), string(WorkloadArchitecture))
 	}
 	if w.EffectiveTokens < 1 {
-		return errs.New(errs.CategoryInvalidArgument, "WorkloadEnvelope: effective_tokens must be >= 1, got %d", w.EffectiveTokens)
+		return errs.New(errs.CategoryInvalidArgument, "%s: effective_tokens must be >= 1, got %d", kind, w.EffectiveTokens)
 	}
-	if err := requireNonEmpty("WorkloadEnvelope", "calibration_task", w.CalibrationTask); err != nil {
+	if err := requireNonEmpty(kind, "calibration_task", w.CalibrationTask); err != nil {
 		return err
 	}
-	if err := requireNonEmpty("WorkloadEnvelope", "calibration_date", w.CalibrationDate); err != nil {
+	if err := requireNonEmpty(kind, "calibration_date", w.CalibrationDate); err != nil {
 		return err
 	}
 	switch w.ConfidenceLevel {
 	case "verified", "provisional", "unknown":
 		return nil
 	default:
-		return enumError("WorkloadEnvelope", "confidence_level", w.ConfidenceLevel, "verified", "provisional", "unknown")
+		return enumError(kind, "confidence_level", w.ConfidenceLevel, "verified", "provisional", "unknown")
 	}
 }
 
@@ -76,11 +79,16 @@ func (m TokenizerAccountingMethod) Valid() bool {
 }
 
 // ContextProfile contains endpoint- and access-channel-specific capability and budget evidence.
+// It captures hardware, runtime, quantization, and context limits per PROTOCOLS §10B.
 type ContextProfile struct {
 	SchemaVersion             SchemaVersion             `json:"schema_version"`
 	ProfileID                 string                    `json:"profile_id"`
 	EndpointID                string                    `json:"endpoint_id"`
 	ChannelID                 string                    `json:"channel_id"`
+	Runtime                   string                    `json:"runtime"`
+	ModelRef                  string                    `json:"model_ref"`
+	Quantization              *string                   `json:"quantization,omitempty"`
+	ContextConfiguration     map[string]string         `json:"context_configuration,omitempty"`
 	Revision                  int                       `json:"revision"`
 	DeclaredWindowTokens      int                       `json:"declared_window_tokens"`
 	RuntimeWindowTokens       int                       `json:"runtime_window_tokens"`
@@ -122,6 +130,12 @@ func (c *ContextProfile) Validate() error {
 	if err := requireNonEmpty(kind, "channel_id", c.ChannelID); err != nil {
 		return err
 	}
+	if err := requireNonEmpty(kind, "runtime", c.Runtime); err != nil {
+		return err
+	}
+	if err := requireNonEmpty(kind, "model_ref", c.ModelRef); err != nil {
+		return err
+	}
 	if c.Revision < 1 {
 		return errs.New(errs.CategoryInvalidArgument, "%s: revision must be >= 1, got %d", kind, c.Revision)
 	}
@@ -131,16 +145,36 @@ func (c *ContextProfile) Validate() error {
 	if c.RuntimeWindowTokens < 1 {
 		return errs.New(errs.CategoryInvalidArgument, "%s: runtime_window_tokens must be >= 1, got %d", kind, c.RuntimeWindowTokens)
 	}
+	if c.RuntimeWindowTokens > c.DeclaredWindowTokens {
+		return errs.New(errs.CategoryInvalidArgument, "%s: runtime_window_tokens (%d) cannot exceed declared_window_tokens (%d)", kind, c.RuntimeWindowTokens, c.DeclaredWindowTokens)
+	}
 	if c.HardResidentCeilingTokens < 1 {
 		return errs.New(errs.CategoryInvalidArgument, "%s: hard_resident_ceiling_tokens must be >= 1, got %d", kind, c.HardResidentCeilingTokens)
 	}
-	if c.TargetResidentTokens < 1 || c.TargetResidentTokens > c.HardResidentCeilingTokens {
-		return errs.New(errs.CategoryInvalidArgument, "%s: target_resident_tokens must be between 1 and hard_resident_ceiling_tokens", kind)
+	if c.OutputReserveTokens < 0 || c.ToolTailReserveTokens < 0 || c.ProtectedCoreLimitTokens < 0 ||
+		c.ContractLimitTokens < 0 || c.MaxSingleLeaseTokens < 0 {
+		return errs.New(errs.CategoryInvalidArgument, "%s: reserve and limit tokens cannot be negative", kind)
 	}
+	if c.HardResidentCeilingTokens+c.OutputReserveTokens+c.ToolTailReserveTokens > c.RuntimeWindowTokens {
+		return errs.New(errs.CategoryInvalidArgument,
+			"%s: hard_resident_ceiling_tokens (%d) + output_reserve (%d) + tool_tail_reserve (%d) exceeds runtime_window_tokens (%d)",
+			kind, c.HardResidentCeilingTokens, c.OutputReserveTokens, c.ToolTailReserveTokens, c.RuntimeWindowTokens)
+	}
+	if c.TargetResidentTokens < 1 || c.TargetResidentTokens > c.HardResidentCeilingTokens {
+		return errs.New(errs.CategoryInvalidArgument, "%s: target_resident_tokens (%d) must be between 1 and hard_resident_ceiling_tokens (%d)", kind, c.TargetResidentTokens, c.HardResidentCeilingTokens)
+	}
+	if err := requireMinItems(kind, "workload_envelopes", len(c.WorkloadEnvelopes), 1); err != nil {
+		return err
+	}
+	seenWorkloads := make(map[WorkloadKind]struct{}, len(c.WorkloadEnvelopes))
 	for i, env := range c.WorkloadEnvelopes {
 		if err := env.Validate(); err != nil {
 			return errs.New(errs.CategoryInvalidArgument, "%s: workload_envelopes[%d]: %v", kind, i, err)
 		}
+		if _, dup := seenWorkloads[env.Workload]; dup {
+			return errs.New(errs.CategoryInvalidArgument, "%s: duplicate workload envelope %q", kind, env.Workload)
+		}
+		seenWorkloads[env.Workload] = struct{}{}
 	}
 	if !c.AccountingMethod.Valid() {
 		return enumError(kind, "accounting_method", string(c.AccountingMethod),
@@ -180,13 +214,10 @@ func (m MandatoryClauseRef) Validate() error {
 	if err := requireNonEmpty(kind, "revision", m.Revision); err != nil {
 		return err
 	}
-	if !strings.HasPrefix(m.ContentDigest, "sha256:") || len(m.ContentDigest) != 71 {
-		return errs.New(errs.CategoryInvalidArgument, "%s: content_digest must be sha256 hex prefixed", kind)
-	}
-	return nil
+	return validateSHA256Digest(kind, "content_digest", m.ContentDigest)
 }
 
-// ContextManifest represents the compiled task intent, read/write scopes, and references.
+// ContextManifest represents the compiled task intent, read/write scopes, and references (PROTOCOLS §10B).
 type ContextManifest struct {
 	SchemaVersion        SchemaVersion        `json:"schema_version"`
 	ManifestID           string               `json:"manifest_id"`
@@ -198,6 +229,8 @@ type ContextManifest struct {
 	BaseCommit           string               `json:"base_commit"`
 	CandidateCommit      *string              `json:"candidate_commit,omitempty"`
 	ProjectStateRevision string               `json:"project_state_revision"`
+	MappingVersion       string               `json:"mapping_version"`
+	SourceRevision       string               `json:"source_revision"`
 	ReadEnvelope         []string             `json:"read_envelope"`
 	WriteScope           []string             `json:"write_scope"`
 	Domains              []string             `json:"domains"`
@@ -208,6 +241,7 @@ type ContextManifest struct {
 	Assumptions          []Assumption         `json:"assumptions"`
 	ExplicitQuestions    []string             `json:"explicit_questions"`
 	ExpansionTriggers    []string             `json:"expansion_triggers"`
+	AdmissionProvenance  []string             `json:"admission_provenance"`
 	ContextProfileID     string               `json:"context_profile_id"`
 	BudgetPoolID         string               `json:"budget_pool_id"`
 }
@@ -239,6 +273,9 @@ func (m *ContextManifest) Validate() error {
 	if m.WorkPackageRevision < 1 {
 		return errs.New(errs.CategoryInvalidArgument, "%s: work_package_revision must be >= 1, got %d", kind, m.WorkPackageRevision)
 	}
+	if err := validateSHA256Digest(kind, "work_package_digest", m.WorkPackageDigest); err != nil {
+		return err
+	}
 	if err := requireNonEmpty(kind, "role", m.Role); err != nil {
 		return err
 	}
@@ -246,6 +283,12 @@ func (m *ContextManifest) Validate() error {
 		return requireMinItems(kind, "base_commit characters", len(m.BaseCommit), 7)
 	}
 	if err := requireNonEmpty(kind, "project_state_revision", m.ProjectStateRevision); err != nil {
+		return err
+	}
+	if err := requireNonEmpty(kind, "mapping_version", m.MappingVersion); err != nil {
+		return err
+	}
+	if err := requireNonEmpty(kind, "source_revision", m.SourceRevision); err != nil {
 		return err
 	}
 	if err := requireNonEmpty(kind, "context_profile_id", m.ContextProfileID); err != nil {
@@ -334,7 +377,7 @@ func (e *EvidenceLease) RecordID() string { return e.LeaseID }
 // SchemaVer implements Record.
 func (e *EvidenceLease) SchemaVer() SchemaVersion { return e.SchemaVersion }
 
-// Validate enforces EvidenceLease constraints.
+// Validate enforces EvidenceLease constraints, including content-addressing verification.
 func (e *EvidenceLease) Validate() error {
 	const kind = "EvidenceLease"
 	if err := e.SchemaVersion.Validate(kind); err != nil {
@@ -351,14 +394,17 @@ func (e *EvidenceLease) Validate() error {
 	if err := requireNonEmpty(kind, "source_revision", e.SourceRevision); err != nil {
 		return err
 	}
+	if err := requireNonEmpty(kind, "worktree_id", e.WorktreeID); err != nil {
+		return err
+	}
 	if err := requireNonEmpty(kind, "file_path", e.FilePath); err != nil {
 		return err
 	}
 	if err := requireNonEmpty(kind, "locator", e.Locator); err != nil {
 		return err
 	}
-	if !strings.HasPrefix(e.ContentDigest, "sha256:") || len(e.ContentDigest) != 71 {
-		return errs.New(errs.CategoryInvalidArgument, "%s: content_digest must be sha256 hex prefixed", kind)
+	if err := validateSHA256Digest(kind, "content_digest", e.ContentDigest); err != nil {
+		return err
 	}
 	if err := requireNonEmpty(kind, "acquisition_question", e.AcquisitionQuestion); err != nil {
 		return err
@@ -368,6 +414,13 @@ func (e *EvidenceLease) Validate() error {
 	}
 	if err := requireNonEmpty(kind, "content", e.Content); err != nil {
 		return err
+	}
+	// Verbatim content-addressing check: content_digest must match SHA-256 of content
+	hasher := sha256.New()
+	hasher.Write([]byte(e.Content))
+	expectedDigest := "sha256:" + hex.EncodeToString(hasher.Sum(nil))
+	if e.ContentDigest != expectedDigest {
+		return errs.New(errs.CategoryInvalidArgument, "%s: content_digest (%q) does not match sha256 of content (%q)", kind, e.ContentDigest, expectedDigest)
 	}
 	if e.TokenCount < 1 {
 		return errs.New(errs.CategoryInvalidArgument, "%s: token_count must be >= 1, got %d", kind, e.TokenCount)
@@ -382,6 +435,9 @@ func (e *EvidenceLease) Validate() error {
 	}
 	if err := requireNonEmpty(kind, "acquired_at", e.AcquiredAt); err != nil {
 		return err
+	}
+	if e.ExpiresAt != nil && *e.ExpiresAt < e.AcquiredAt {
+		return errs.New(errs.CategoryInvalidArgument, "%s: expires_at (%q) cannot be earlier than acquired_at (%q)", kind, *e.ExpiresAt, e.AcquiredAt)
 	}
 	return nil
 }
@@ -424,6 +480,11 @@ func (t TokenAccountingBreakdown) Validate() error {
 		t.OutputReserveTokens < 0 || t.TotalResidentTokens < 0 {
 		return errs.New(errs.CategoryInvalidArgument, "%s: token counts cannot be negative", kind)
 	}
+	expectedResident := t.RoleTokens + t.ContractTokens + t.NormativeTokens + t.StateTokens + t.EvidenceTokens + t.TailTokens
+	if t.TotalResidentTokens != expectedResident {
+		return errs.New(errs.CategoryInvalidArgument,
+			"%s: total_resident_tokens (%d) must equal sum of constituent layers (%d)", kind, t.TotalResidentTokens, expectedResident)
+	}
 	if !t.AccountingMethod.Valid() {
 		return enumError(kind, "accounting_method", string(t.AccountingMethod),
 			string(AccountingExactBPE), string(AccountingProviderAPI), string(AccountingApproximateEstimate))
@@ -449,21 +510,23 @@ func (s ContextPackStatus) Valid() bool {
 	return false
 }
 
-// ContextPack is the ephemeral compiled invocation input reproducible from a manifest.
+// ContextPack is the ephemeral compiled invocation input reproducible from a manifest (PROTOCOLS §10B).
 type ContextPack struct {
-	SchemaVersion      SchemaVersion            `json:"schema_version"`
-	PackID             string                   `json:"pack_id"`
-	ManifestID         string                   `json:"manifest_id"`
-	ManifestRevision   int                      `json:"manifest_revision"`
-	RoleCore           string                   `json:"role_core"`
-	ExecutionContract  string                   `json:"execution_contract"`
-	NormativeClauses   []string                 `json:"normative_clauses"`
-	CognitiveState     CognitiveStateCapsule    `json:"cognitive_state"`
-	EvidenceWorkingSet []EvidenceLease          `json:"evidence_working_set"`
-	EphemeralTail      EphemeralTailBlock       `json:"ephemeral_tail"`
-	TokenAccounting    TokenAccountingBreakdown `json:"token_accounting"`
-	PackDigest         string                   `json:"pack_digest"`
-	Status             ContextPackStatus        `json:"status"`
+	SchemaVersion         SchemaVersion            `json:"schema_version"`
+	PackID                string                   `json:"pack_id"`
+	ManifestID            string                   `json:"manifest_id"`
+	ManifestRevision      int                      `json:"manifest_revision"`
+	RoleCore              string                   `json:"role_core"`
+	ExecutionContract     string                   `json:"execution_contract"`
+	NormativeClauses      []string                 `json:"normative_clauses"`
+	CognitiveState        CognitiveStateCapsule    `json:"cognitive_state"`
+	EvidenceWorkingSet    []EvidenceLease          `json:"evidence_working_set"`
+	EphemeralTail         EphemeralTailBlock       `json:"ephemeral_tail"`
+	TokenAccounting       TokenAccountingBreakdown `json:"token_accounting"`
+	AdmittedObjectDigests map[string]string        `json:"admitted_object_digests"`
+	PackDigest            string                   `json:"pack_digest"`
+	CoverageSummary       string                   `json:"coverage_summary"`
+	Status                ContextPackStatus        `json:"status"`
 }
 
 // RecordKind implements Record.
@@ -475,7 +538,7 @@ func (p *ContextPack) RecordID() string { return p.PackID }
 // SchemaVer implements Record.
 func (p *ContextPack) SchemaVer() SchemaVersion { return p.SchemaVersion }
 
-// Validate enforces ContextPack constraints.
+// Validate enforces ContextPack constraints per PROTOCOLS §10B.
 func (p *ContextPack) Validate() error {
 	const kind = "ContextPack"
 	if err := p.SchemaVersion.Validate(kind); err != nil {
@@ -496,15 +559,23 @@ func (p *ContextPack) Validate() error {
 	if err := requireNonEmpty(kind, "execution_contract", p.ExecutionContract); err != nil {
 		return err
 	}
+	for i, lease := range p.EvidenceWorkingSet {
+		if err := lease.Validate(); err != nil {
+			return errs.New(errs.CategoryInvalidArgument, "%s: evidence_working_set[%d]: %v", kind, i, err)
+		}
+	}
 	if err := p.TokenAccounting.Validate(); err != nil {
+		return err
+	}
+	if err := validateSHA256Digest(kind, "pack_digest", p.PackDigest); err != nil {
+		return err
+	}
+	if err := requireNonEmpty(kind, "coverage_summary", p.CoverageSummary); err != nil {
 		return err
 	}
 	if !p.Status.Valid() {
 		return enumError(kind, "status", string(p.Status),
 			string(PackStatusReady), string(PackStatusContextUnfit), string(PackStatusRejected))
-	}
-	if err := requireNonEmpty(kind, "pack_digest", p.PackDigest); err != nil {
-		return err
 	}
 	return nil
 }

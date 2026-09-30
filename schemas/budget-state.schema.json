@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/olostan/DevCadence/schemas/budget-state.schema.json",
+  "title": "DevCadence BudgetState",
+  "description": "Live budget pool balance and status with honest unknown representation (PROTOCOLS §10B, ADR-0018).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "pool_id",
+    "status",
+    "observed_at"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "pool_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "current_usage": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "remaining_balance": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "period_start": {
+      "type": "string",
+      "minLength": 1
+    },
+    "period_end": {
+      "type": "string",
+      "minLength": 1
+    },
+    "status": {
+      "enum": [
+        "healthy",
+        "soft_limit_exceeded",
+        "exhausted"
+      ]
+    },
+    "observed_at": {
+      "type": "string",
+      "minLength": 1
+    },
+    "unknown_fields": {
+      "type": "array",
+      "items": { "type": "string" },
+      "uniqueItems": true
+    }
+  }
+}

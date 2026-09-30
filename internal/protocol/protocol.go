@@ -15,6 +15,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"io"
+	"regexp"
 	"time"
 
 	"github.com/olostan/DevCadence/internal/errs"
@@ -373,6 +374,16 @@ func enumError(kind, field, value string, allowed ...string) error {
 	return errs.New(errs.CategoryInvalidArgument, "%s: %s %q is not one of %v", kind, field, value, allowed)
 }
 
+var sha256HexRegex = regexp.MustCompile(`^sha256:[a-f0-9]{64}$`)
+
+// validateSHA256Digest enforces that a digest is a lowercase sha256 hex string with sha256: prefix.
+func validateSHA256Digest(kind, field, digest string) error {
+	if !sha256HexRegex.MatchString(digest) {
+		return errs.New(errs.CategoryInvalidArgument, "%s: %s must be a valid sha256 hex digest (got %q)", kind, field, digest)
+	}
+	return nil
+}
+
 // ProjectOf implementations. Each simply returns the record's own project_id,
 // which persistence checks against the project it is being written to.
 func (s *ProjectState) ProjectOf() string           { return s.ProjectID }
@@ -462,6 +473,10 @@ func NewRecord(kind string) (Record, error) {
 		return &RefactoringProposal{}, nil
 	case "BudgetPool":
 		return &BudgetPool{}, nil
+	case "BudgetState":
+		return &BudgetState{}, nil
+	case "ResourceState":
+		return &ResourceState{}, nil
 	case "CognitionPortfolio":
 		return &CognitionPortfolio{}, nil
 	case "PortfolioRecommendation":
