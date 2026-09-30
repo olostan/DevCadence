@@ -47,7 +47,10 @@ See docs/WORK_PACKAGES.md#m3c--cognition-resource-and-session-substrate for the 
   3. Registered schema names and `RecordKindToSchema` mappings in `internal/schema/schema.go`, documented in `schemas/README.md`.
   4. Tested 100% top-level field parity across all 35 schemas in `tests/twin_fields_test.go` (`TestSchemaTopLevelFieldsMatchTheGoTwin`).
   5. Authored valid and invalid test fixtures under `fixtures/protocol/`, wired into `tests/schema_fixtures_test.go` round-trip and negative reader parity tests (`TestTheGoReaderRejectsWhatTheSchemaRejects`).
-  6. Added comprehensive domain unit tests in `internal/protocol/` (`access_channel_test.go`, `context_test.go`, `refactoring_proposal_test.go`, `economics_test.go`, `portfolio_test.go`).
+   6. Added comprehensive domain unit tests in `internal/protocol/` (`access_channel_test.go`, `context_test.go`, `refactoring_proposal_test.go`, `economics_test.go`, `portfolio_test.go`).
+   7. Addressed PR #16 Round 2 review comments:
+      - Validated `BudgetState.UnknownFields` and `ResourceState.UnknownMetrics` against allowed property names, enforced mutual exclusivity against populated pointer fields, and added consistency rules (`status: exhausted` requires zero/nil balance; `period_end` >= `period_start`). Documented observation versioning conventions in `Tx.PutRecord` and `soft_limit_exceeded`.
+      - Enforced SHA-256 digest validation and non-empty key checks for `ContextPack.AdmittedObjectDigests`, validated non-empty `admission_provenance` on `ContextManifest`, and enforced non-empty `calibration_evidence_ref` on `WorkloadEnvelope`.
 - **What's verified:**
   - `go build ./...` clean (exit 0)
   - `go vet ./...` clean (exit 0)
@@ -61,14 +64,14 @@ See docs/WORK_PACKAGES.md#m3c--cognition-resource-and-session-substrate for the 
   - `TestTheGoReaderRejectsWhatTheSchemaRejects` PASS (including all M3C schemas)
   - ADR-0018 §9 & DCI-104 no-silent-paid-fallback policy strictly enforced and verified.
 - **What's left for this WP:**
-  - Push repair commit to PR #16 and post review response.
+  - Merge PR #16 when reviewed and approved.
 - **Known blockers / open questions:** None.
 
 ## Context and evidence capsule
 
-- **Contract:** WP-M3C-1 v1.1, `docs/work-packages/wp-m3c-1-ewp.md`
+- **Contract:** WP-M3C-1 v1.2, `docs/work-packages/wp-m3c-1-ewp.md`
 - **Context Manifest:** `docs/work-packages/wp-m3c-1-ewp.md §1`
-- **Derived state:** Repairs complete; all PR #16 review findings resolved and deterministically verified.
+- **Derived state:** Round 2 reviews resolved; all PR #16 review findings resolved and deterministically verified.
 - **Evidence:** Clean test runs across all packages, base commit `58869d9`.
 - **Coverage:** 100% of WP-M3C-1 scope card deliverables implemented, repaired, and verified.
 - **Expansion needed:** None.

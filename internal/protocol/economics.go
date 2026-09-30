@@ -1,6 +1,10 @@
 package protocol
 
-import "github.com/olostan/DevCadence/internal/errs"
+import (
+	"time"
+
+	"github.com/olostan/DevCadence/internal/errs"
+)
 
 // EconomicRegime defines billing and consumption semantics (ADR-0018 §3).
 type EconomicRegime string
@@ -154,6 +158,14 @@ func (s BudgetPoolStatus) Valid() bool {
 
 // BudgetState captures live pool balance and status.
 // Fields for usage/balance are pointers to honestly represent unknown or unobserved values (PROTOCOLS §10B).
+//
+// Note on status: BudgetStatusSoftLimitExceeded reflects adherence to a pool's soft alert policy
+// as determined by the observer; the policy limits themselves reside on the parent BudgetPool.
+//
+// Note on identity and persistence: RecordID() returns PoolID, keying the record to the pool.
+// In the control plane store (Tx.PutRecord), records are versioned by (kind, id, version).
+// Because ObservedAt represents a point-in-time observation, callers persisting successive
+// observations of the same pool must supply distinct caller-allocated versions to avoid conflicts.
 type BudgetState struct {
 	SchemaVersion    SchemaVersion    `json:"schema_version"`
 	PoolID           string           `json:"pool_id"`
@@ -169,7 +181,7 @@ type BudgetState struct {
 // RecordKind implements Record.
 func (b *BudgetState) RecordKind() string { return "BudgetState" }
 
-// RecordID implements Record.
+// RecordID implements Record. Returns PoolID; callers version each point-in-time observation in Tx.PutRecord.
 func (b *BudgetState) RecordID() string { return b.PoolID }
 
 // SchemaVer implements Record.
@@ -197,11 +209,77 @@ func (b *BudgetState) Validate() error {
 		return enumError(kind, "status", string(b.Status),
 			string(BudgetStatusHealthy), string(BudgetStatusSoftLimitExceeded), string(BudgetStatusExhausted))
 	}
+	if b.Status == BudgetStatusExhausted && b.RemainingBalance != nil && *b.RemainingBalance > 0 {
+		return errs.New(errs.CategoryInvalidArgument,
+			"%s: remaining_balance must be 0 or nil when status is %q, got %d", kind, string(BudgetStatusExhausted), *b.RemainingBalance)
+	}
+	if b.PeriodStart != nil {
+		if err := requireNonEmpty(kind, "period_start", *b.PeriodStart); err != nil {
+			return err
+		}
+	}
+	if b.PeriodEnd != nil {
+		if err := requireNonEmpty(kind, "period_end", *b.PeriodEnd); err != nil {
+			return err
+		}
+	}
+	if b.PeriodStart != nil && b.PeriodEnd != nil {
+		start, errStart := time.Parse(time.RFC3339Nano, *b.PeriodStart)
+		if errStart != nil {
+			start, errStart = time.Parse("2006-01-02", *b.PeriodStart)
+		}
+		end, errEnd := time.Parse(time.RFC3339Nano, *b.PeriodEnd)
+		if errEnd != nil {
+			end, errEnd = time.Parse("2006-01-02", *b.PeriodEnd)
+		}
+		if errStart == nil && errEnd == nil {
+			if end.Before(start) {
+				return errs.New(errs.CategoryInvalidArgument,
+					"%s: period_end (%s) cannot be earlier than period_start (%s)", kind, *b.PeriodEnd, *b.PeriodStart)
+			}
+		} else if *b.PeriodEnd < *b.PeriodStart {
+			return errs.New(errs.CategoryInvalidArgument,
+				"%s: period_end (%s) cannot be earlier than period_start (%s)", kind, *b.PeriodEnd, *b.PeriodStart)
+		}
+	}
+	if len(b.UnknownFields) > 0 {
+		seen := make(map[string]struct{}, len(b.UnknownFields))
+		for _, f := range b.UnknownFields {
+			switch f {
+			case "current_usage", "remaining_balance", "period_start", "period_end":
+			default:
+				return errs.New(errs.CategoryInvalidArgument,
+					"%s: unknown_fields contains invalid field name %q (expected one of: current_usage, remaining_balance, period_start, period_end)",
+					kind, f)
+			}
+			if _, exists := seen[f]; exists {
+				return errs.New(errs.CategoryInvalidArgument, "%s: duplicate entry in unknown_fields: %q", kind, f)
+			}
+			seen[f] = struct{}{}
+		}
+		if _, ok := seen["current_usage"]; ok && b.CurrentUsage != nil {
+			return errs.New(errs.CategoryInvalidArgument, "%s: field %q cannot be listed in unknown_fields when populated", kind, "current_usage")
+		}
+		if _, ok := seen["remaining_balance"]; ok && b.RemainingBalance != nil {
+			return errs.New(errs.CategoryInvalidArgument, "%s: field %q cannot be listed in unknown_fields when populated", kind, "remaining_balance")
+		}
+		if _, ok := seen["period_start"]; ok && b.PeriodStart != nil {
+			return errs.New(errs.CategoryInvalidArgument, "%s: field %q cannot be listed in unknown_fields when populated", kind, "period_start")
+		}
+		if _, ok := seen["period_end"]; ok && b.PeriodEnd != nil {
+			return errs.New(errs.CategoryInvalidArgument, "%s: field %q cannot be listed in unknown_fields when populated", kind, "period_end")
+		}
+	}
 	return nil
 }
 
 // ResourceState captures machine-level compute availability.
 // Metric fields are pointers to honestly represent partially observable hardware (PROTOCOLS §10B).
+//
+// Note on identity and persistence: RecordID() returns HostID, keying the record to the host.
+// In the control plane store (Tx.PutRecord), records are versioned by (kind, id, version).
+// Because Timestamp represents a point-in-time observation, callers persisting successive
+// observations of the same host must supply distinct caller-allocated versions to avoid conflicts.
 type ResourceState struct {
 	SchemaVersion           SchemaVersion `json:"schema_version"`
 	HostID                  string        `json:"host_id"`
@@ -216,7 +294,7 @@ type ResourceState struct {
 // RecordKind implements Record.
 func (r *ResourceState) RecordKind() string { return "ResourceState" }
 
-// RecordID implements Record.
+// RecordID implements Record. Returns HostID; callers version each point-in-time observation in Tx.PutRecord.
 func (r *ResourceState) RecordID() string { return r.HostID }
 
 // SchemaVer implements Record.
@@ -248,6 +326,34 @@ func (r *ResourceState) Validate() error {
 	}
 	if r.ActiveSlots != nil && r.MaxConcurrentSlots != nil && *r.ActiveSlots > *r.MaxConcurrentSlots {
 		return errs.New(errs.CategoryInvalidArgument, "%s: active_slots (%d) cannot exceed max_concurrent_slots (%d)", kind, *r.ActiveSlots, *r.MaxConcurrentSlots)
+	}
+	if len(r.UnknownMetrics) > 0 {
+		seen := make(map[string]struct{}, len(r.UnknownMetrics))
+		for _, m := range r.UnknownMetrics {
+			switch m {
+			case "available_gpu_memory_bytes", "available_ram_bytes", "max_concurrent_slots", "active_slots":
+			default:
+				return errs.New(errs.CategoryInvalidArgument,
+					"%s: unknown_metrics contains invalid metric name %q (expected one of: available_gpu_memory_bytes, available_ram_bytes, max_concurrent_slots, active_slots)",
+					kind, m)
+			}
+			if _, exists := seen[m]; exists {
+				return errs.New(errs.CategoryInvalidArgument, "%s: duplicate entry in unknown_metrics: %q", kind, m)
+			}
+			seen[m] = struct{}{}
+		}
+		if _, ok := seen["available_gpu_memory_bytes"]; ok && r.AvailableGPUMemoryBytes != nil {
+			return errs.New(errs.CategoryInvalidArgument, "%s: metric %q cannot be listed in unknown_metrics when populated", kind, "available_gpu_memory_bytes")
+		}
+		if _, ok := seen["available_ram_bytes"]; ok && r.AvailableRAMBytes != nil {
+			return errs.New(errs.CategoryInvalidArgument, "%s: metric %q cannot be listed in unknown_metrics when populated", kind, "available_ram_bytes")
+		}
+		if _, ok := seen["max_concurrent_slots"]; ok && r.MaxConcurrentSlots != nil {
+			return errs.New(errs.CategoryInvalidArgument, "%s: metric %q cannot be listed in unknown_metrics when populated", kind, "max_concurrent_slots")
+		}
+		if _, ok := seen["active_slots"]; ok && r.ActiveSlots != nil {
+			return errs.New(errs.CategoryInvalidArgument, "%s: metric %q cannot be listed in unknown_metrics when populated", kind, "active_slots")
+		}
 	}
 	return nil
 }

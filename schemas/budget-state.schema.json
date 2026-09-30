@@ -46,7 +46,15 @@
     },
     "unknown_fields": {
       "type": "array",
-      "items": { "type": "string" },
+      "items": {
+        "type": "string",
+        "enum": [
+          "current_usage",
+          "remaining_balance",
+          "period_start",
+          "period_end"
+        ]
+      },
       "uniqueItems": true
     }
   }

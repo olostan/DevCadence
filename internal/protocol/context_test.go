@@ -179,6 +179,15 @@ func TestContextProfileValidation(t *testing.T) {
 			t.Fatal("expected error on uncertainty ratio > 1.0, got nil")
 		}
 	})
+
+	t.Run("empty calibration evidence ref rejected", func(t *testing.T) {
+		cp := validContextProfile()
+		emptyRef := ""
+		cp.WorkloadEnvelopes[0].CalibrationEvidenceRef = &emptyRef
+		if err := cp.Validate(); err == nil {
+			t.Fatal("expected error on empty calibration evidence ref, got nil")
+		}
+	})
 }
 
 func TestContextManifestValidation(t *testing.T) {
@@ -211,6 +220,22 @@ func TestContextManifestValidation(t *testing.T) {
 		cm.SourceRevision = ""
 		if err := cm.Validate(); err == nil {
 			t.Fatal("expected error on empty source_revision, got nil")
+		}
+	})
+
+	t.Run("empty admission provenance rejected", func(t *testing.T) {
+		cm := validContextManifest()
+		cm.AdmissionProvenance = []string{}
+		if err := cm.Validate(); err == nil {
+			t.Fatal("expected error on empty admission_provenance, got nil")
+		}
+	})
+
+	t.Run("empty string in admission provenance rejected", func(t *testing.T) {
+		cm := validContextManifest()
+		cm.AdmissionProvenance = []string{""}
+		if err := cm.Validate(); err == nil {
+			t.Fatal("expected error on empty string in admission_provenance, got nil")
 		}
 	})
 }
@@ -267,6 +292,22 @@ func TestContextPackValidation(t *testing.T) {
 		pack.TokenAccounting.RoleTokens = -1
 		if err := pack.Validate(); err == nil {
 			t.Fatal("expected error on negative tokens, got nil")
+		}
+	})
+
+	t.Run("empty key in admitted object digests rejected", func(t *testing.T) {
+		pack := validContextPack()
+		pack.AdmittedObjectDigests[""] = "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+		if err := pack.Validate(); err == nil {
+			t.Fatal("expected error on empty key in admitted_object_digests, got nil")
+		}
+	})
+
+	t.Run("invalid digest in admitted object digests rejected", func(t *testing.T) {
+		pack := validContextPack()
+		pack.AdmittedObjectDigests["bad"] = "md5:not_a_sha256"
+		if err := pack.Validate(); err == nil {
+			t.Fatal("expected error on invalid digest in admitted_object_digests, got nil")
 		}
 	})
 }

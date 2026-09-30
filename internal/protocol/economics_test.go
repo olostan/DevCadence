@@ -143,6 +143,90 @@ func TestBudgetStateValidation(t *testing.T) {
 			t.Fatal("expected error on negative current usage, got nil")
 		}
 	})
+	t.Run("exhausted status with positive balance rejected", func(t *testing.T) {
+		pos := int64(10)
+		bs := &protocol.BudgetState{
+			SchemaVersion:    protocol.SchemaVersion1,
+			PoolID:           "pool_1",
+			RemainingBalance: &pos,
+			Status:           protocol.BudgetStatusExhausted,
+			ObservedAt:       "2026-09-30T00:00:00Z",
+		}
+		if err := bs.Validate(); err == nil {
+			t.Fatal("expected error when status exhausted with remaining balance > 0, got nil")
+		}
+	})
+
+	t.Run("exhausted status with zero balance accepted", func(t *testing.T) {
+		zero := int64(0)
+		bs := &protocol.BudgetState{
+			SchemaVersion:    protocol.SchemaVersion1,
+			PoolID:           "pool_1",
+			RemainingBalance: &zero,
+			Status:           protocol.BudgetStatusExhausted,
+			ObservedAt:       "2026-09-30T00:00:00Z",
+		}
+		if err := bs.Validate(); err != nil {
+			t.Fatalf("expected valid BudgetState when exhausted with 0 balance, got: %v", err)
+		}
+	})
+
+	t.Run("period_end before period_start rejected", func(t *testing.T) {
+		start := "2026-10-01T00:00:00Z"
+		end := "2026-09-01T00:00:00Z"
+		bs := &protocol.BudgetState{
+			SchemaVersion: protocol.SchemaVersion1,
+			PoolID:        "pool_1",
+			PeriodStart:   &start,
+			PeriodEnd:     &end,
+			Status:        protocol.BudgetStatusHealthy,
+			ObservedAt:    "2026-09-30T00:00:00Z",
+		}
+		if err := bs.Validate(); err == nil {
+			t.Fatal("expected error when period_end before period_start, got nil")
+		}
+	})
+
+	t.Run("unknown_fields with invalid field name rejected", func(t *testing.T) {
+		bs := &protocol.BudgetState{
+			SchemaVersion: protocol.SchemaVersion1,
+			PoolID:        "pool_1",
+			Status:        protocol.BudgetStatusHealthy,
+			ObservedAt:    "2026-09-30T00:00:00Z",
+			UnknownFields: []string{"nonexistent_metric"},
+		}
+		if err := bs.Validate(); err == nil {
+			t.Fatal("expected error for invalid unknown_fields entry, got nil")
+		}
+	})
+
+	t.Run("unknown_fields with duplicate field rejected", func(t *testing.T) {
+		bs := &protocol.BudgetState{
+			SchemaVersion: protocol.SchemaVersion1,
+			PoolID:        "pool_1",
+			Status:        protocol.BudgetStatusHealthy,
+			ObservedAt:    "2026-09-30T00:00:00Z",
+			UnknownFields: []string{"current_usage", "current_usage"},
+		}
+		if err := bs.Validate(); err == nil {
+			t.Fatal("expected error for duplicate in unknown_fields, got nil")
+		}
+	})
+
+	t.Run("populated field also in unknown_fields rejected", func(t *testing.T) {
+		usage := int64(50)
+		bs := &protocol.BudgetState{
+			SchemaVersion: protocol.SchemaVersion1,
+			PoolID:        "pool_1",
+			CurrentUsage:  &usage,
+			Status:        protocol.BudgetStatusHealthy,
+			ObservedAt:    "2026-09-30T00:00:00Z",
+			UnknownFields: []string{"current_usage"},
+		}
+		if err := bs.Validate(); err == nil {
+			t.Fatal("expected error when populated field is in unknown_fields, got nil")
+		}
+	})
 }
 
 func TestResourceStateValidation(t *testing.T) {
@@ -192,6 +276,43 @@ func TestResourceStateValidation(t *testing.T) {
 		}
 		if err := rs.Validate(); err == nil {
 			t.Fatal("expected error when active slots > max slots, got nil")
+		}
+	})
+
+	t.Run("unknown_metrics with invalid metric name rejected", func(t *testing.T) {
+		rs := &protocol.ResourceState{
+			SchemaVersion:  protocol.SchemaVersion1,
+			HostID:         "host_1",
+			Timestamp:      "2026-09-30T00:00:00Z",
+			UnknownMetrics: []string{"unsupported_metric"},
+		}
+		if err := rs.Validate(); err == nil {
+			t.Fatal("expected error for invalid unknown_metrics entry, got nil")
+		}
+	})
+
+	t.Run("unknown_metrics with duplicate metric rejected", func(t *testing.T) {
+		rs := &protocol.ResourceState{
+			SchemaVersion:  protocol.SchemaVersion1,
+			HostID:         "host_1",
+			Timestamp:      "2026-09-30T00:00:00Z",
+			UnknownMetrics: []string{"available_ram_bytes", "available_ram_bytes"},
+		}
+		if err := rs.Validate(); err == nil {
+			t.Fatal("expected error for duplicate in unknown_metrics, got nil")
+		}
+	})
+
+	t.Run("populated metric also in unknown_metrics rejected", func(t *testing.T) {
+		rs := &protocol.ResourceState{
+			SchemaVersion:     protocol.SchemaVersion1,
+			HostID:            "host_1",
+			Timestamp:         "2026-09-30T00:00:00Z",
+			AvailableRAMBytes: &ramBytes,
+			UnknownMetrics:    []string{"available_ram_bytes"},
+		}
+		if err := rs.Validate(); err == nil {
+			t.Fatal("expected error when populated metric is in unknown_metrics, got nil")
 		}
 	})
 }

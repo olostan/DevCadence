@@ -3,6 +3,7 @@ package protocol
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"strings"
 
 	"github.com/olostan/DevCadence/internal/errs"
 )
@@ -51,6 +52,11 @@ func (w WorkloadEnvelope) Validate() error {
 	}
 	if err := requireNonEmpty(kind, "calibration_date", w.CalibrationDate); err != nil {
 		return err
+	}
+	if w.CalibrationEvidenceRef != nil {
+		if err := requireNonEmpty(kind, "calibration_evidence_ref", *w.CalibrationEvidenceRef); err != nil {
+			return err
+		}
 	}
 	switch w.ConfidenceLevel {
 	case "verified", "provisional", "unknown":
@@ -305,6 +311,14 @@ func (m *ContextManifest) Validate() error {
 	for i, asm := range m.Assumptions {
 		if err := asm.Validate(); err != nil {
 			return errs.New(errs.CategoryInvalidArgument, "%s: assumptions[%d]: %v", kind, i, err)
+		}
+	}
+	if err := requireMinItems(kind, "admission_provenance", len(m.AdmissionProvenance), 1); err != nil {
+		return err
+	}
+	for i, prov := range m.AdmissionProvenance {
+		if strings.TrimSpace(prov) == "" {
+			return errs.New(errs.CategoryInvalidArgument, "%s: admission_provenance[%d] cannot be empty", kind, i)
 		}
 	}
 	return nil
@@ -566,6 +580,14 @@ func (p *ContextPack) Validate() error {
 	}
 	if err := p.TokenAccounting.Validate(); err != nil {
 		return err
+	}
+	for k, v := range p.AdmittedObjectDigests {
+		if strings.TrimSpace(k) == "" {
+			return errs.New(errs.CategoryInvalidArgument, "%s: admitted_object_digests key cannot be empty", kind)
+		}
+		if err := validateSHA256Digest(kind, "admitted_object_digests["+k+"]", v); err != nil {
+			return err
+		}
 	}
 	if err := validateSHA256Digest(kind, "pack_digest", p.PackDigest); err != nil {
 		return err

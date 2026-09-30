@@ -38,7 +38,15 @@
     },
     "unknown_metrics": {
       "type": "array",
-      "items": { "type": "string" },
+      "items": {
+        "type": "string",
+        "enum": [
+          "available_gpu_memory_bytes",
+          "available_ram_bytes",
+          "max_concurrent_slots",
+          "active_slots"
+        ]
+      },
       "uniqueItems": true
     }
   }

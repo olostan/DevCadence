@@ -200,7 +200,13 @@
     },
     "admitted_object_digests": {
       "type": "object",
-      "additionalProperties": { "type": "string" }
+      "propertyNames": {
+        "minLength": 1
+      },
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^sha256:[a-f0-9]{64}$"
+      }
     },
     "pack_digest": {
       "type": "string",
