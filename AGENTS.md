@@ -1,381 +1,91 @@
 # DevCadence Agent Operating Directives
 
-This file is normative for every human or AI agent modifying this repository. If a lower-level prompt conflicts with this file, stop and surface the conflict rather than silently overriding these rules.
+Normative for every agent modifying this repository. Apply the conflict hierarchy in [docs/README.md](docs/README.md#normative-hierarchy); surface conflicts rather than silently choosing a convenient source.
 
 ## 1. Mission
 
-DevCadence is an intelligent software-engineering control plane. Its job is to combine deep frontier-model reasoning with high-volume lower-cost execution cognition through typed protocols, evidence, deterministic verification, independent review, and auditable governance.
+DevCadence combines high-leverage Principal cognition, capability-routed execution cognition, deterministic verification and a local control plane holding canonical state, evidence and authority. Local-first concerns project authority, not mandatory local inference. Preserve these boundaries and optional independent consultants; do not reduce the project to a generic coding-agent wrapper.
 
-Local-first means local project authority, repository execution, canonical state and evidence. It does **not** mean every model inference must run locally.
+## 2. Context admission, not mandatory corpus reading
 
-Do not reduce the project to a generic coding-agent wrapper. Preserve the separation between:
+Before substantial work, obtain or construct a task **Context Manifest**: role, task/EWP revision, base/candidate identity, read and write scope, applicable normative clauses, evidence references, explicit questions and escalation triggers.
 
-- **Principal cognition:** product reasoning, architecture, alternatives, research, algorithms, pseudocode, detailed work-package design, high-risk decisions.
-- **Execution cognition:** repository reconnaissance, implementation, debugging, repeated review and test generation through capability-routed local or policy-authorized remote endpoints.
-- **Deterministic machinery:** Git, builds, tests, linters, static analysis, benchmarks, schema validation, policy checks.
-- **Control plane:** canonical state, orchestration, task graph, risk classification, evidence, event history, routing, learning and promotion.
-- **Consultants:** optional independent reasoning sources used deliberately, never automatically trusted and never tied to one mandatory provider.
+Load this file, the applicable role template under `prompts/` (or Principal protocol clauses), the complete bounded EWP **Execution Contract**, and exact applicable normative clauses. Retrieve evidence progressively. An index or summary locates authority; it does not replace exact MUST/MUST-NOT text.
 
-## 2. Mandatory reading order
+Do not preload README, invariants, architecture, protocols, milestones or whole ADR sets just because they are normative. Full-document reads require a specific question, architectural reconciliation, detected conflict or systemic design work. Record the reason and stay within the selected endpoint's admission envelope. Authority does not imply residency (DCI-018); delegation must have no hidden requirements (DCI-019).
 
-Before substantial changes, read:
-1. README.md
-2. INVARIANTS.md
-3. docs/VISION.md
-4. docs/ARCHITECTURE.md
-5. docs/PROTOCOLS.md
-6. docs/IMPLEMENTATION_PLAN.md
-7. the specific domain document relevant to the task.
+Entering a new domain, discovering a new risk or proposing undeclared paths requires context re-resolution **before modification**. Context admission never grants write, network, credential or spending authority. Unknown mappings are unresolved context, not proof that no constraints apply.
 
-For work touching agent behavior, additionally read docs/PRINCIPAL_ENGINEER.md and docs/LOCAL_AGENTS.md.
+Until the M3C resolver exists, record the manifest in the EWP, PR or handoff and use targeted search/section reads manually. Do not claim automatic enforcement. See [docs/PROTOCOLS.md §10B](docs/PROTOCOLS.md#10b-adaptive-context-architecture-and-evidence-working-set-proposed---m3c) for planned contracts and [docs/README.md](docs/README.md#context-routing) for domain triggers.
 
-For work touching state or schemas, read docs/PROJECT_STATE.md and all affected files under schemas/.
+## 3. Do not spend intelligence on repository noise
 
-For security or external execution, read docs/SECURITY.md.
+Principal interfaces are semantic: project_state, investigate, propose/create_work_package, delegate, validate, review, request_evidence, consult, accept/reject, record_decision and promote_lesson. Raw filesystem tools are not the primary Principal contract. Exact evidence remains progressively retrievable (DCI-014).
 
-For environment discovery, cognition routing, setup, hardware/runtime detection or authentication, read docs/ENVIRONMENT_INTELLIGENCE_AND_ONBOARDING.md and docs/MODEL_RUNTIME.md.
+## 4. Principal reasoning is a correctness mechanism
 
-For principal-host integration, read docs/PRINCIPAL_HOSTS.md and the relevant host-specific integration document.
+Optimize relevant context, not reasoning effort. Distinguish facts, assumptions, inferences and preferences; verify material assumptions; consider credible alternatives and failure cases; challenge the preferred design; use targeted scouts and current external sources where needed. Independent consultants are optional evidence, not authority. Revise after critique and record uncertainty before producing the EWP. See applicable clauses of [docs/PRINCIPAL_ENGINEER.md](docs/PRINCIPAL_ENGINEER.md).
 
-For existing/brownfield project onboarding, read docs/PROJECT_ADOPTION.md. A merely registered repository is not automatically ready for normal DevCadence-managed work.
+## 4A. Discovery and specification
 
-For changes to review, quality, or learning, read docs/VERIFICATION.md, docs/REVIEW_AND_CONVERGENCE.md, docs/REFACTORING_AND_HEALTH.md, and docs/LEARNING.md.
+For fuzzy ideas or product-semantic changes, apply [docs/DISCOVERY_AND_SPECIFICATION.md](docs/DISCOVERY_AND_SPECIFICATION.md): preserve human product authority, requirement provenance and the Ambiguity Ledger; resolve factual uncertainty with evidence; require Specification Readiness and independent review for substantial work before architecture.
 
-## 3. First principle: do not spend intelligence on repository noise
+## 4B. Brownfield adoption
 
-The system is explicitly designed so that frontier models do not repeatedly ingest large source trees, logs, compiler output, or unchanged context. Preserve this boundary.
+Apply [docs/PROJECT_ADOPTION.md](docs/PROJECT_ADOPTION.md) when introducing DevCadence to an existing project. Pin source identity, inventory evidence, distinguish observed/documented/inferred/confirmed claims, surface contradictions, commit the canonical documentation baseline and require Adoption Readiness. Registration is not readiness. Before READY, only bounded investigation and isolated adoption work are authorized.
 
-Do not expose raw file-system primitives as the primary MCP contract to principals. Expose semantic engineering operations such as:
-- project_state
-- investigate
-- create_work_package / propose_work
-- delegate
-- validate
-- review
-- request_evidence
-- consult
-- accept / reject
-- record_decision
-- promote_lesson
+## 5. First-answer convergence is insufficient
 
-Raw evidence may be requested progressively when necessary, but should not be the default transport.
+For systemic or architectural work, compare at least two viable approaches under explicit criteria, adversarially critique the preferred choice and verify assumptions that could invalidate it. Consider correctness, simplicity, security, testability, operability and evolvability.
 
-## 4. Frontier principal behavior is a correctness mechanism
+## 6. Engineering Work Packages
 
-Never optimize frontier behavior merely for fewer reasoning steps. The desired optimization is **high-value reasoning over compact, relevant context**.
+A substantial EWP has a bounded authoritative **Execution Contract** plus retrievable design/rationale. The contract includes objective, revision/base identity, allowed paths, MUST/MUST-NOT requirements, interfaces, acceptance, validation, escalation and exact normative references. Include algorithms/pseudocode and edge-case semantics needed for correct execution. No execution-critical constraint may live only in rationale. If the contract cannot fit, split work, choose an authorized capable endpoint or escalate; never silently truncate. See [docs/WORK_PACKAGES.md](docs/WORK_PACKAGES.md#execution-contract-and-context-manifest) and PROTOCOLS §7.
 
-For non-trivial decisions the principal must:
-- distinguish facts, assumptions, inferences, and preferences;
-- verify material assumptions;
-- generate credible alternatives;
-- challenge its preferred design;
-- identify failure modes and counterexamples;
-- request targeted repository evidence from local scouts;
-- use external sources when claims depend on current libraries, standards, security guidance, APIs, or performance facts;
-- use independent consultants when disagreement would materially increase confidence;
-- revise the design after critique;
-- document unresolved uncertainty;
-- produce a detailed Engineering Work Package before implementation.
+## 7. Challenge without silent redesign
 
-The principal must assume it can be confidently wrong.
+Workers may adapt names, helpers, local data structures and idioms within the EWP. False assumptions require exact contradiction evidence and escalation. Changing public contracts, cross-layer dependencies, invariants, persistence/security boundaries, external services or scope requires explicit authorization and an amended EWP.
 
-## 4A. Product discovery and specification
+## 8. Accepted changes require evidence
 
-When work begins from a fuzzy idea or changes user-visible/product semantics, read [docs/DISCOVERY_AND_SPECIFICATION.md](docs/DISCOVERY_AND_SPECIFICATION.md) and apply its protocol before architecture.
+Capture exact commands, exit status, relevant versions, base/head identities, counts where available and applicable lint/schema/API results. A model's “tests pass” is not evidence. Model review and deterministic verification are separate signals.
 
-Agents must:
-- preserve human authority for goals, preferences and acceptable tradeoffs;
-- expose ambiguity rather than silently invent requirements;
-- resolve factual uncertainties with tools/research/experiments when appropriate;
-- record ProductDecisions and requirement provenance;
-- use the Ambiguity Ledger for material unknowns;
-- require Specification Readiness before substantial architecture;
-- use independent specification review for substantial greenfield/product-semantic work.
+## 8A. Review convergence
 
-Do not turn a fixed questionnaire into a substitute for adaptive discovery.
-
-## 4B. Brownfield project adoption
-
-When DevCadence is introduced to an existing repository, read [docs/PROJECT_ADOPTION.md](docs/PROJECT_ADOPTION.md).
-
-Agents must not assume existing Markdown is canonical, and must not infer that repository registration means the project is ready for managed engineering.
-
-Before normal managed implementation:
-- pin the adoption source commit;
-- inventory code/tests/configuration/history and inherited documentation;
-- preserve provenance between observed, documented, inferred and human-confirmed statements;
-- surface contradictions instead of silently choosing one source;
-- materialize the required canonical documentation set in committed repository state;
-- require Adoption Readiness.
-
-Before READY, bounded investigation and isolated adoption work are allowed; normal autonomous implementation, acceptance and integration are not.
-
-## 5. The first plausible solution is not enough
-
-For systemic or architectural changes, do not accept the first coherent design. At minimum:
-- identify two viable approaches;
-- state why the selected approach is preferable under explicit criteria;
-- perform one adversarial critique of the selected approach;
-- verify the assumptions that would invalidate the choice.
-
-Architectural work should often use multiple independent review vectors: simplicity, correctness, scalability, security, testability, operability, evolvability, and consistency with current project invariants.
-
-## 6. Engineering Work Packages are executable design artifacts
-
-Local implementers should not receive vague instructions such as “implement feature X.”
-
-A substantial Work Package must include:
-- objective and rationale;
-- architectural intent;
-- verified assumptions and evidence handles;
-- relevant ADRs and invariants;
-- MUST / SHOULD / SUGGESTED / LOCAL_DISCRETION constraints;
-- implementation strategy;
-- interface sketches;
-- pseudocode or algorithm details when logic is non-trivial;
-- code snippets when they materially reduce ambiguity;
-- expected code areas and existing patterns to follow;
-- explicit non-goals and forbidden changes;
-- edge cases and failure modes;
-- acceptance criteria;
-- required tests and verification;
-- escalation conditions;
-- base commit / state revision.
-
-See docs/PROTOCOLS.md.
-
-## 7. Local agents may challenge but may not silently redesign
-
-A local agent that finds a blueprint assumption to be false must return a contradiction or escalation report with exact evidence. It must not quietly reinterpret a MUST-level architectural requirement.
-
-Local discretion is expected for:
-- idiomatic decomposition;
-- symbol naming;
-- helper functions;
-- local data structures;
-- mechanically necessary adaptations;
-- small refactors that do not change contracts or semantics.
-
-Local discretion does not include:
-- changing public contracts not authorized by the Work Package;
-- adding new cross-layer dependencies;
-- changing invariants;
-- changing persistence semantics;
-- changing security boundaries;
-- introducing new external services;
-- broad scope expansion.
-
-## 8. Every accepted change requires evidence
-
-A model saying “tests pass” is not sufficient. Capture deterministic evidence:
-- exact command;
-- exit status;
-- relevant tool versions;
-- base and head commits;
-- test counts when available;
-- lint/static-analysis outcomes;
-- schema or API diffs where applicable.
-
-Model review and deterministic validation are separate signals.
-
-## 8A. Review convergence and closure
-
-Review is evidence gathering, not a search for perfection.
-
-For substantial candidate review:
-- prefer independent reviewers examining the same immutable candidate in parallel;
-- do not send raw reviewer suggestions directly to implementers;
-- principal/adjudicator deduplicates and classifies findings before repair;
-- consolidate all FIX_NOW findings into one Repair Work Package per repair round;
-- after repair, run focused revalidation rather than another unrestricted broad review;
-- raise the threshold required to reopen code as the campaign converges;
-- treat OPPORTUNISTIC findings as future work, not current blockers;
-- a frozen decision may be reopened only by materially new evidence or changed requirements;
-- reporting zero closure-threshold findings is valid.
-
-Review and repair rounds are bounded by policy. Hitting the bound with unresolved blockers escalates rather than creating an infinite loop.
-
-See docs/REVIEW_AND_CONVERGENCE.md.
+Use independent review of the same immutable candidate; prefer parallel review for substantial work. Principal adjudication deduplicates/disposes findings into one Repair EWP per round. Revalidate repairs narrowly, raise reopening thresholds, defer opportunistic changes and escalate unresolved blockers at policy bounds. Zero findings is valid. Preserve DCI-046–049 and [docs/REVIEW_AND_CONVERGENCE.md](docs/REVIEW_AND_CONVERGENCE.md).
 
 ## 9. Reviewer independence
 
-Reviewers should normally use a clean context and should not inherit the implementer’s reasoning chain.
+Use clean, lens-specific context: complete acceptance/contract requirements, applicable exact clauses, immutable candidate/diff manifest and validation evidence. Fetch additional hunks, callers and dependants as needed. Do not inherit author reasoning or suppress blockers to meet a context budget. Record disagreements and uncovered areas; incomplete coverage is not PASS.
 
-A reviewer receives:
-- Work Package;
-- relevant invariants and ADRs;
-- diff / candidate commit;
-- focused source context when needed;
-- deterministic validation evidence.
+## 10. Planned structural health
 
-Review dimensions should be explicit. “Review the code” is weaker than independent correctness, architecture, security, test-adequacy and complexity reviews.
+Passing tests do not prove maintainability. Preserve health measurement, Refactoring Epochs, Architecture Reconciliation, duplication/dependency/API analysis and documentation drift detection under [docs/REFACTORING_AND_HEALTH.md](docs/REFACTORING_AND_HEALTH.md).
 
-Disagreement is information and should be recorded, not averaged away.
+## 11. Governed learning
 
-## 10. Refactoring is planned work
-
-Do not allow repeated feature delivery to indefinitely defer structural health.
-
-Maintain the mechanisms needed for:
-- code-health measurement;
-- Refactoring Epochs;
-- periodic Architecture Reconciliation;
-- semantic duplication detection;
-- dependency and API growth analysis;
-- documentation-to-code drift detection.
-
-Do not treat passing tests as proof of long-term maintainability.
-
-## 11. Learning is proposal-based, never uncontrolled self-modification
-
-Agents may generate LessonCandidates and PolicyExperiments from trajectories.
-
-They may not directly rewrite normative prompts, rules, routing policies, invariants, or architecture based solely on a single run.
-
-Promotion requires:
-1. evidence from one or more trajectories;
-2. conflict check against current invariants/ADRs;
-3. evaluation or replay where feasible;
-4. approval according to the policy level;
-5. versioned persistence with provenance and rollback.
+Trajectories produce LessonCandidates/PolicyExperiments, not direct autonomous changes to normative rules. Promotion requires evidence, conflict checks, evaluation/replay where feasible, policy-level approval, versioned provenance and rollback. Explicit human-authorized design changes are reviewed through the normal change process.
 
 ## 12. Git and isolation
 
-Autonomous implementations must use isolated branches/worktrees once the worktree manager exists.
+Do not merge worker changes directly to protected main. Use isolated branches/worktrees under the applicable runtime manager; development of DevCadence itself follows [AGENT_HANDOFF_PROTOCOL.md](AGENT_HANDOFF_PROTOCOL.md), including its single-writer and no-force-push rules. Preserve task/EWP, base, attempt, validation, review and acceptance lineage.
 
-Local workers never merge directly to the protected main branch.
+## 13. Engineering defaults
 
-Every candidate change must be traceable to:
-- task/work-package ID;
-- base revision;
-- implementation attempt;
-- validation result;
-- review result;
-- acceptance decision.
-
-## 13. Code-quality expectations
-
-Until superseded by an ADR:
-- control plane: Go;
-- state store: SQLite;
-- external and model integrations: adapters behind interfaces;
-- protocol structures: strongly typed Go types plus versioned JSON Schema;
-- MCP transport: thin adapter over application services, not business logic;
-- CLI first; web dashboard later;
-- structured logging, no printf-style operational state;
-- context-aware cancellation for long-running processes;
-- bounded concurrency;
-- explicit process timeouts;
-- no hidden global mutable state;
-- deterministic tests wherever possible.
-
-See ENGINEERING_STANDARDS.md.
+Go control plane, SQLite canonical storage, typed Go plus versioned JSON Schemas, integrations behind interfaces, thin MCP adapters, CLI first, structured logs, explicit cancellation/timeouts, bounded concurrency, no hidden global mutable state and deterministic tests. Apply relevant [ENGINEERING_STANDARDS.md](ENGINEERING_STANDARDS.md) clauses.
 
 ## 14. Documentation synchronization
 
-Architecture and protocol changes are incomplete until affected documentation is updated.
-
-At minimum verify:
-- README overview remains accurate;
-- INVARIANTS.md is respected;
-- docs/ARCHITECTURE.md reflects component boundaries;
-- docs/PROTOCOLS.md reflects schema/state-machine changes;
-- docs/IMPLEMENTATION_PLAN.md accurately reflects milestone status if changed;
-- relevant JSON Schemas match prose contracts.
-
-An implementation that changes behavior but leaves normative docs misleading is not done.
+Update affected owning contracts and references; verify overview, invariants, architecture, protocols, milestone status and schema agreement only where impacted. This is a dependency check, not a requirement to reload the corpus. A behavior change leaving normative prose misleading is incomplete. Future context linting is M3C work, not an existing command.
 
 ## 15. Failure behavior
 
-Never hide uncertainty or force progress through an architectural contradiction.
-
-When blocked:
-- state the violated or uncertain assumption;
-- cite evidence;
-- separate observed fact from interpretation;
-- provide bounded options;
-- identify the decision owner;
-- preserve the failed trajectory for later learning.
-
-Repeated failure should escalate rather than produce infinite retries.
+State the uncertain/violated assumption, exact evidence, observation versus interpretation, bounded options and decision owner. Preserve failed trajectories; repeated failure escalates. Context shortage never authorizes guessing, truncating required clauses or relaxing policy.
 
 ## 16. Current phase
 
-M0 (normative baseline), M1 (domain core and canonical state), M2
-(repository/worktree/process execution), M3A (environment intelligence and
-cognition runtime) and M3B (guided deterministic bootstrap) are complete.
-
-The control plane now has typed protocol records, an append-only engineering
-event journal, deterministic ProjectState reduction, task/attempt state
-machines, SQLite persistence, schema validation, real Git/repository
-inspection, isolated worktrees, controlled external processes,
-content-addressed artifacts, validation profiles, candidate metadata and
-non-mutating integration checks. None of that requires a model runtime.
-
-**M3A** adds environment intelligence and the cognition runtime. DevCadence
-discovers hardware and software from operating-system facts, assesses accelerator
-backend candidates as a pure function of those facts, discovers cognition
-endpoints across local runtimes / authenticated coding CLIs / remote APIs,
-verifies local acceleration only from an authoritative runtime signal produced by
-real inference, and capability-routes roles deterministically under privacy and
-cost policy. Everything in M3A is read-only; nothing mutates the machine.
-
-When working on this area, note the contracts settled by
-[ADR-0013](docs/adr/0013-environment-intelligence-and-cognition-contracts.md):
-facts are separate from assessment, a capability grade requires provenance,
-`verified` acceleration requires authoritative evidence and is refused by record
-validation without it, machine profiles are computed rather than persisted, and
-routing is a filter plus an explicit ordering with no score.
-
-**M3B — guided deterministic bootstrap** is complete: `setup`/`doctor`,
-remediation planning, installation recipes, credential references,
-deterministic `ResourceInventory`, readiness projection, and a
-plain/JSON/basic-terminal surface (WP-M3B-1 through WP-M3B-8, all accepted).
-M3B computes factual readiness and resource inventory without embedding a
-static deployment-profile chooser. A rich adaptive setup TUI was deliberately
-not an M3B exit criterion.
-
-The next milestone is:
-- **M3C — cognition resource and session substrate** implements provider-neutral
-  session drivers, access-channel capability contracts, `EconomicRegime`,
-  `BudgetPool` / dynamic resource state, portfolio protocol shapes, and the
-  deterministic portfolio validator/activation boundary.
-- **M3D — adaptive portfolio and workflow synthesis** implements the
-  AI-assisted Portfolio Planner, adaptive `WorkflowPlan` topology,
-  re-recommendation/versioning/rollback, and the richer explain/setup UX.
-
-Do not reintroduce the old assumption that M3 means "install one local model."
-A strong local model—and even a local LLM at all—is optional capability.
-
-After M3:
-- **M4** is the adaptive-cognition vertical-slice **evidence gate**. It compares
-  DevCadence allocation/workflow decisions against simpler baselines before
-  broad productization; if the evidence is weak, revise M3D rather than
-  preserving orchestration for its own sake.
-- **M5** productizes the semantic MCP principal interface and first-class host
-  portability for Antigravity, Cursor and Visual Studio Code.
-- **M6** owns Project Adoption and Retrospective Reconstruction as a full
-  brownfield milestone.
-- **M7** implements bounded multi-review and consultant cognition.
-- **M8** implements engineering health/refactoring epochs.
-- **M9** implements evaluated learning and promotion/rollback.
-- **M10** implements long-running autonomous campaigns.
-
-ADRs 0011, 0012, 0013, 0014, and 0018 are accepted and normative for this
-direction; `docs/IMPLEMENTATION_PLAN.md` is the canonical milestone sequence.
-
-The overall implementation objective is still to prove the central hypothesis
-without prematurely adding dashboard complexity, generalized distributed
-scheduling, fine-tuning, or autonomous policy mutation.
+M0–M3B are complete. M3C adds cognition resources/session drivers and context mediation; M3D adds adaptive portfolio/workflow synthesis; M4 is the empirical evidence gate. M5 covers semantic Principal integration/hosts; M6 adoption; M7 multi-review; M8 health; M9 evaluated learning; M10 autonomous campaigns. [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) owns detail and status. A local LLM is optional; no provider, subscription or host is mandatory. Prove the core hypothesis before dashboard/distributed-scheduling/training expansion.
 
 ## 17. Definition of done
 
-A change is done when:
-- its contract is satisfied;
-- required deterministic checks pass;
-- required review passes or disagreements are explicitly resolved;
-- no invariant is silently violated;
-- documentation and schemas are synchronized;
-- provenance and decision records are available;
-- the resulting system is simpler or at least no more fragile than before.
-
+Contract satisfied; required checks and independent review complete (or disagreements explicitly adjudicated); no silent invariant violation; affected docs/schemas synchronized; provenance available; system no more fragile than before. Opening a PR is a candidate for review, not acceptance.

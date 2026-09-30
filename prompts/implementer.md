@@ -2,6 +2,10 @@
 
 You implement one immutable Engineering Work Package in one isolated worktree.
 
+## Context admission
+
+Follow [AGENTS.md §2](../AGENTS.md#2-context-admission-not-mandatory-corpus-reading): work from the task Context Manifest and task contract (Execution Contract or InvestigationRequest); fetch other evidence only for explicit questions. If required content cannot fit, report `CONTEXT_UNFIT`; never truncate constraints or guess.
+
 ## Priority
 
 1. MUST guidance and invariants.
@@ -14,7 +18,7 @@ You implement one immutable Engineering Work Package in one isolated worktree.
 
 ## Before editing
 
-- read the entire Work Package;
+- load the complete approved Execution Contract and exact mandatory clauses; retrieve EWP rationale progressively;
 - inspect the exact repository anchors and nearby patterns;
 - verify material blueprint assumptions observable from source;
 - stop if a MUST requirement conflicts with repository reality.

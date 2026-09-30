@@ -504,6 +504,8 @@ asking AI to choose the portfolio.
 
 #### Deliverables
 - provider-neutral AccessChannel and session-driver capability contracts;
+- ContextProfile / ContextManifest / ContextPack / EvidenceLease shapes, versioned schemas and EWP companion compatibility; deterministic role/domain/risk clause resolver with projection freshness and complete-contract admission/reserves (`CONTEXT_UNFIT`);
+- context budget/reference linting for role cores, contracts and compiled packs, plus honest measured/estimated/unknown telemetry and expansion/restart handling;
 - provider-neutral context-control capabilities: `ContextControl = ExactStateless | AppendOnly | OpaqueSession` and `PrefixCache = Explicit | Implicit | SessionKV | None` (ADR-0019 §1);
 - `Evidence Working Set` lease manager with content-addressed provenance `(file_path, content_digest, start_line, end_line)`, automatic freshness invalidation on file mutation, and server-side path authorization;
 - `RefactoringProposal` protocol definition in Go and JSON Schema (`internal/protocol/`, `schemas/refactoring-proposal.schema.json`) enabling bottom-up upstream challenge (ADR-0019 §3);
@@ -604,14 +606,17 @@ conversational agent baselines across seeded defect suites:
 - Strategy 4: Hybrid 4-layer context (Protected Core, Cognitive State Capsule, Evidence Working Set, Ephemeral Tail).
 
 Empirically validate working hypotheses:
-- Context length degradation boundary (evaluating reasoning degradation when active prompts exceed 30k–50k tokens);
+- Workload-specific effective context and instruction/constraint adherence across endpoint/runtime/quantization/context configurations, without assuming a universal degradation boundary;
 - Provider cognitive diversity across language idioms, concurrency, schemas, and invariants;
-- Working-memory budget sweeps (testing 6k, 12k, 24k token envelopes).
+- Working-memory budget sweeps (e.g. 6k, 12k, 24k) with full-reserve accounting and complete-contract admission, including contracts too large to fit;
+- Working-set versus full-corpus/compaction baselines on representative implementation and documentation/code review tasks across a small local coder, larger local model, subscription CLI and frontier API where available. Missing endpoint classes are explicit limits of the evidence;
+- Held-out tasks and repeated runs with predeclared quality/defect-yield criteria; do not tune and validate on the same tasks or treat token savings alone as success. Separate endpoint/layout and task-decomposition effects, report configuration and opaque-session accounting limitations.
 
 ### Measurements
 - accepted correctness, regressions and human corrections;
 - subscription/quota consumption;
-- input tokens, prompt-cached tokens, and output tokens;
+- initial/peak resident tokens and protected/contract/normative/state/leased-evidence components, reserves, cumulative input/cached/output, reloaded evidence and counting provenance/unknowns;
+- expansion/eviction/restart counts, coverage gaps, false positives and missed seeded defects;
 - metered API spend and token volume where observable;
 - local inference/compute use and working-memory footprint;
 - cognition invocation/session count;
@@ -628,7 +633,7 @@ without dependence on local inference, one provider, one subscription model or
 one fixed role topology. If adaptive orchestration routinely consumes more
 scarce resources than a simpler baseline without quality benefit, revise M3D
 routing/topology policy before broadening product scope. M4 is a real
-go/revise gate, not a ceremonial demo.
+go/revise gate, not a ceremonial demo. Working-set context must preserve predeclared accepted-quality and defect-yield criteria while improving useful resource efficiency; otherwise revise admission/profile/decomposition policy. No claimed percentage reduction is an exit requirement or an established result.
 
 ## M5 — Semantic principal integration and host portability
 

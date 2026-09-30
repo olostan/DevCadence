@@ -288,15 +288,15 @@ One optional closure review may inspect broadly, but it reports only findings ab
 Review prompts SHOULD request only the most consequential findings.
 
 Recommended default:
-- at most 5 material findings per reviewer;
+- normally prioritize 5 material findings per response; additional blockers must be reported or durably queued with an explicit incomplete-review status;
 - no quota that forces findings;
 - lower-value observations omitted or placed in a non-blocking appendix.
 
 The instruction is:
 
-> Report at most the N most consequential findings. Reporting zero findings is valid. Do not invent findings to demonstrate usefulness.
+> Prioritize the N most consequential findings per response. Never suppress a blocker to meet an output budget; batch additional findings with an explicit pending status. Reporting zero findings is valid after genuine coverage. Do not invent findings to demonstrate usefulness.
 
-Finding budgets control context size and force prioritization; they do not cap critical safety findings.
+Finding budgets prioritize output, not cognition or the total number of defects. They do not cap blocking findings or permit PASS with queued blockers/incomplete coverage.
 
 ## 10. Principal adjudication
 
@@ -367,25 +367,23 @@ closure:
 
 ## 14. Context and token discipline
 
-Rules:
-- reviewers inspect an immutable candidate, not evolving chat narratives;
-- reviewer outputs are structured and bounded;
-- the principal receives deduplicated findings, not every raw transcript by default;
-- implementers receive the Repair Work Package, not all reviewer conversations;
-- focused revalidation gets finding IDs + changed evidence, not the entire campaign history;
-- closure review gets compact campaign state plus candidate evidence;
-- raw transcripts remain retrievable by reference when needed.
+Review uses an independent **Review Context Pack**: complete bounded Execution Contract/acceptance obligations, common exact mandatory constraints, immutable base/candidate identity, assigned dimensions/lenses, diff manifest and validation summaries/handles. Initial evidence is lens-specific; reviewers need not share duplicated corpus bootstraps. Roles may fetch exact clauses, hunks, callers, tests and dependencies for explicit questions. Critical cross-cutting findings remain reportable.
 
-~~~mermaid
-flowchart LR
-    Raw["Many reviewer transcripts"]
-    Normalize["Normalized findings"]
-    Adjudicate["Disposition records"]
-    EWP["Repair Work Package"]
-    Repair["Repair agent"]
-    Closure["Compact closure packet"]
-    Raw --> Normalize --> Adjudicate --> EWP --> Repair --> Closure
-~~~
+Track which changed hunks, requirements and affected dependencies have been inspected or assigned elsewhere. A scoped initial pack is not a restriction to changed lines. Missing baseline behavior, hidden contracts and callers can be decisive. Coverage gaps are reported and routed; review cannot PASS merely because the admitted snippets looked sound. Campaign completion requires collective required coverage plus existing closure gates.
+
+Models may use multiple bounded/stateless reasoning invocations with compact derived ReviewState and evidence refs. Do not impose `MaxTurns = 1` for prose reviews or suppress blockers to achieve token savings. Endpoint resident limits and silent cumulative budgets are distinct. At exhaustion, checkpoint and report unreviewed areas; suspend/escalate under policy rather than inventing completion. Legitimate expansion is permitted within hard admission/privacy/spending bounds.
+
+### Documentation dependency review
+
+Before model analysis, run available deterministic checks for changed links/anchors, normative ID uniqueness, schema/prose agreement and generated-projection/budget drift. Distinguish executable checks from manual ones; unavailable validators are disclosed, not reported PASS. Mermaid validation is required when diagrams change and an appropriate parser is available; absence is recorded for review.
+
+Identify changed/added/removed normative clauses and direct/reverse references, affected schemas/types/prompts and owning documents. Review the changed semantic units **and their affected dependencies**, progressively expanding the graph until applicable contradictions/coverage are resolved. A foundational change may legitimately require architectural reconciliation and broad reads; a typo need not preload the corpus. Existing heading anchors plus source revision/digest provide transitional identities; M3C tooling adds machine mappings and generated projections.
+
+The reviewer independently challenges the dependency set, including a changed rule whose consumers were not updated. No findings cap or token target proves completeness. Missing/unmapped applicability is an unresolved review question. Deterministic link/schema lint cannot establish semantic equivalence or that all hidden requirements were found.
+
+### Transfer and aggregation
+
+Reviewers do not inherit implementer reasoning. Principals receive deduplicated findings; implementers receive one Repair Execution Contract; focused revalidation receives finding IDs and changed evidence; closure receives compact campaign/coverage state and candidate identity. Transcripts are forensic references, never the default active handoff. Required evidence remains retrievable and revision-pinned; state summaries stay explicitly derived.
 
 ## 15. Review yield and convergence telemetry
 
@@ -393,7 +391,8 @@ Track:
 - new material findings per round;
 - duplicate/rejected/opportunistic findings;
 - repair regressions;
-- context/tokens consumed;
+- initial and peak resident context, protected/contract/normative/state/leased-evidence components, reserves, cumulative input/cached/output, reloaded tokens, expansions/restarts and counting method/unknowns;
+- inspected and outstanding coverage by hunk/requirement/dependency;
 - reviewer disagreement;
 - reopened frozen campaigns;
 - time/tokens per material finding.

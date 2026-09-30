@@ -17,7 +17,7 @@ coherent unit of review.
 **Each entry here is a scope card, not the full Engineering Work Package
 AGENTS.md §6 describes, and a scope card is not implementation authority.**
 Per `AGENT_HANDOFF_PROTOCOL.md`'s "Principal/Implementer separation," a
-Principal-capable session must read the milestone's ADRs (cited per WP
+Principal-capable session must resolve the relevant milestone ADR clauses (cited per WP
 below), expand the scope card into a full Work Package (objective,
 architectural intent, MUST/SHOULD/SUGGESTED/LOCAL_DISCRETION constraints,
 interface sketches, pseudocode where logic is non-trivial, edge cases,
@@ -36,6 +36,21 @@ concurrently, under this v1 protocol.
 
 ---
 
+## Execution Contract and Context Manifest
+
+**Effective now for new or amended delegated EWPs.** Scope cards below are roadmap entries, never substitutes for an approved EWP. Existing accepted EWPs remain historical artifacts; do not rewrite their accepted requirements or schema records retroactively.
+
+An EWP has two layers:
+
+1. **Execution Contract:** bounded and authoritative for its task, containing EWP ID/revision/digest and base/state revision; objective; allowed write paths/domains and forbidden changes; applicable exact MUST/MUST-NOT clauses; required interfaces and algorithm/edge-case semantics; acceptance criteria; validation commands/profiles; escalation triggers and unresolved assumptions.
+2. **Design and rationale:** alternatives, research, extended pseudocode/examples, historical decisions and explanatory material, retrieved progressively. Necessary interfaces or semantics cannot be relegated here alone. Requirement strength remains explicit; any conflict with owning normative sources escalates.
+
+Every EWP declares a **Context Manifest** with role/task, revision-pinned contract reference, read-authority envelope distinct from write scope, domains/risk tags, exact normative references, initial evidence handles, deferred references, assumptions, expansion/re-resolution triggers and the endpoint profile/budget. Deterministic mappings complete declared requirements; the Principal validates completeness. A pointer becomes mandatory context only after its exact clause is resolved and admitted. An implementer need not read the milestone ADR set wholesale.
+
+The whole Execution Contract must fit the selected endpoint. If it does not, split into independently reviewed atomic contracts, route to an authorized capable endpoint or return `CONTEXT_UNFIT`. Do not dynamically cut arbitrary paragraphs or silently truncate requirements. Decomposition must preserve shared interface/dependency requirements and the complete acceptance obligations of each subtask.
+
+Manual Markdown manifests/contracts are used until M3C implements typed structures. Current strict `EngineeringWorkPackage` schema/Go records are unchanged by this documentation amendment; proposed fields are not legal extra fields in existing records. Store manual companions as referenced artifacts using existing supported evidence references. M3C must version new shapes, validators and fixtures together before emitting them.
+
 ## M3B — Guided bootstrap and onboarding
 
 Branch: `feat/m3b-guided-bootstrap` (create when WP-M3B-1 starts).
@@ -44,8 +59,7 @@ Normative grounding for this milestone: ADR-0014 (guided bootstrap, setup
 plans, operational event ledger, readiness contracts — already `Accepted`,
 so the architecture decisions below are mostly settled, not open for
 relitigation), ADR-0011, ADR-0013, ADR-0018, `docs/ENVIRONMENT_INTELLIGENCE_AND_ONBOARDING.md`,
-`docs/MODEL_RUNTIME.md`, `docs/SETUP.md`, `docs/SECURITY.md`. Read these —
-in that order — before expanding WP-M3B-1.
+`docs/MODEL_RUNTIME.md`, `docs/SETUP.md`, `docs/SECURITY.md`. This is the historical authority set, not a default loading set. Resolve applicable clauses before work in this domain.
 
 Dependency chain: WP1 → WP2 → WP3 → {WP4, WP5, WP6 in any order} → WP7 →
 WP8. WP4–WP6 have no dependency on each other and may be completed in
@@ -306,6 +320,7 @@ Branch: `feat/m3c-cognition-substrate`.
 
 **Deliverables:**
 - `AccessChannel` and session capability contracts (`internal/protocol/access_channel.go`, `schemas/access-channel.schema.json`).
+- `ContextProfile`, `ContextManifest`, `ContextPack` and `EvidenceLease` typed shapes, versioned schemas, source-clause identity and admission/expansion outcomes as specified in PROTOCOLS §10B; EWP contract/manifest companion references with explicit compatibility migration.
 - Provider-neutral context control and prefix caching capability shapes: `ContextControl = ExactStateless | AppendOnly | OpaqueSession` and `PrefixCache = Explicit | Implicit | SessionKV | None` (ADR-0019 §1).
 - `RefactoringProposal` Go type, validation, and JSON Schema (`internal/protocol/refactoring_proposal.go`, `schemas/refactoring-proposal.schema.json`) enabling bottom-up upstream challenge without code rot (ADR-0019 §3).
 - `EconomicRegime`, `BudgetPool`, `BudgetState`, and `ResourceState` protocol and schema definitions.
@@ -322,6 +337,8 @@ Branch: `feat/m3c-cognition-substrate`.
 
 **Deliverables:**
 - Session-driver interface (`internal/cognition/drivers`) normalizing model selection, structured/streaming events, resume, cancellation, and worktree/tool/MCP access across direct APIs, local runtimes, and authenticated CLIs.
+- Deterministic Context Resolver combining role, complete Execution Contract, path/domain/risk mappings, revision-pinned normative clauses and endpoint profile; context linting for role/contract/pack budgets, missing/stale references and complete mandatory admission.
+- Atomic expansion/re-resolution and eviction: never remove mandatory clauses to fit evidence; unknown mapping or unavailable required clause blocks the affected action; append-only/opaque drivers restart or checkpoint where eviction is not enforceable.
 - Context strategy mapper mapping endpoint `ContextControl` capabilities to concrete context layouts (exact stateless prefix, append-only prompt, or opaque session).
 - `Cognitive State Capsule` state manager maintaining non-authoritative derived hypotheses, active TODOs, intermediate decisions, and evidence references across turns.
 - `Evidence Working Set` lease manager with content-addressed provenance `(file_path, content_digest, start_line, end_line)`, automatic freshness invalidation upon worktree file mutation, and server-side path authorization bounds.
@@ -352,6 +369,7 @@ Branch: `feat/m3c-cognition-substrate`.
 **Deliverables:**
 - End-to-end integration test suite in `tests/m3c_substrate_test.go` covering:
   - Exact stateless vs. opaque session driver behavior;
+  - Oversized contract/pack rejection without truncation; stale normative projection rejection; unmapped-domain re-resolution; output reserve accounting; independent read/write authority; expansion within policy and honest unknown opaque-session usage;
   - Stale snippet invalidation upon worktree modification;
   - Path authorization blocking access to out-of-scope paths and credentials;
   - Local, subscription, metered, and mixed candidate portfolios;

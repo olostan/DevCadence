@@ -230,6 +230,14 @@ Appropriate detail may include:
 - tests/properties;
 - migration strategy.
 
+### Compile the execution context
+
+The Principal pays the architectural reasoning cost and compiles it into a **complete bounded Execution Contract**. Rich alternatives, research and explanatory examples stay in retrievable EWP rationale. Required algorithms/interfaces/edge cases and MUST/MUST-NOT semantics cannot be hidden there. Exact normative clauses are revision-pinned and deterministically admitted; one-line summaries are not substitutes.
+
+Declare the Context Manifest: role, revision/base identity, paths/domains/risks, normative/evidence refs, assumptions and re-resolution/escalation triggers. Resolve cross-cutting security/state/review obligations. The target endpoint's effective workload profile must fit the whole contract plus mandatory clauses and reserves. If not, decompose into complete atomic contracts, choose an authorized capable endpoint or escalate; never trim requirements to win a token budget.
+
+Manual contracts/manifests apply now; M3C implements the resolver/linting. Lint can validate references and size, not prove semantic completeness. Independent contract review must challenge hidden requirements and stale assumptions. Principals also use progressive context; justified architectural reconciliation permits broader reads without making the corpus a permanent boot payload.
+
 ### Example design handoff shape
 
 ```mermaid

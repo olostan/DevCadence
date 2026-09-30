@@ -59,6 +59,12 @@ For substantial greenfield or product-semantic work, architecture must not begin
 ### DCI-017 — Humans are not asked to guess resolvable facts
 When a material question can be established through repository evidence, current authoritative research or a bounded experiment, the system should resolve it there rather than forcing the human to provide a technical guess.
 
+### DCI-018 — Durable knowledge is not resident context
+Normative authority does not imply default prompt admission. Every substantial context object must be required by the task contract, selected by deterministic role/domain/risk mapping, or retrieved to resolve an explicit question with provenance. Additional evidence remains progressively retrievable; legitimate investigation is bounded by endpoint and policy admission, not forbidden by default context targets.
+
+### DCI-019 — Delegated execution has no hidden requirements
+Every execution-critical MUST/MUST-NOT requirement must be present verbatim in the bounded Execution Contract or deterministically admitted as an exact, revision-pinned normative clause before the affected action. A summary, index or reference handle alone is insufficient. Correct execution must not depend on discovering requirements through broad corpus reading; unresolved applicability blocks the affected action and triggers context resolution.
+
 ## C. Work-package invariants
 
 ### DCI-020 — Non-trivial implementation starts from an Engineering Work Package

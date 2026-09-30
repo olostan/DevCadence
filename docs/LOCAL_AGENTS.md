@@ -49,6 +49,18 @@ All execution roles:
 - do not mark deterministic facts without tool evidence;
 - are replaceable by another model/harness.
 
+## Context admission and endpoint envelopes
+
+Effective now: each role starts from a Context Manifest, its role template, the complete bounded Execution Contract (or scoped InvestigationRequest for scouts), exact mandatory clauses and relevant initial evidence. Do not load whole reference docs or EWP rationale by default. Small 20–30k endpoints are first-class workers when complete obligations fit their demonstrated capability. Unknown capabilities use conservative provisional profiles, not assumed universal limits.
+
+Planned M3C: resolver and ContextProfile enforce target/hard residency, reserves, clause mappings and lease bounds. Count role/system/host/tool schemas, contract, normative, state, evidence and tail, with accounting uncertainty. A typical uncalibrated 24–32k endpoint may begin around 8–12k **total**; this is a target hypothesis, not a hard 12k law. Required constraints are never dropped to meet it.
+
+When a question needs more evidence, request exact clause/symbol/hunk/range with reason. Release resolved optional evidence while retaining handles and derived state dependencies. Full sections/files are legitimate when required and admitted. If the complete protected contract cannot fit, return `CONTEXT_UNFIT` and request decomposition, authorized endpoint routing or escalation. Default targets permit justified expansion under hard ceilings; admission cannot expand tool/write/privacy/spending authority.
+
+New risk/domain or proposed paths require re-resolution before modification; an incomplete mapping is not “no constraints.” A changed contract/normative source rebuilds the pack; changed evidence invalidates leases and dependent state. Exact drivers can evict, append-only drivers may need restart, opaque drivers report uncertainty and may be ineligible for strict-bound policies. Cached prefixes improve reuse without making obsolete material harmless.
+
+PROTOCOLS §10B owns planned structures and telemetry. Until implemented, record manual manifest/evidence decisions and do not claim exact automatic pruning or hidden provider-token measurements.
+
 ## 3. Repository Scout
 
 ### Purpose
@@ -98,7 +110,7 @@ sequenceDiagram
 Realize an approved Engineering Work Package in an isolated worktree.
 
 ### Required input
-- immutable Work Package version;
+- immutable Work Package revision and its complete bounded Execution Contract plus Context Manifest;
 - base commit/worktree;
 - relevant evidence;
 - repository tools;
@@ -108,7 +120,7 @@ Realize an approved Engineering Work Package in an isolated worktree.
 
 ```mermaid
 flowchart TD
-    Read["Read Work Package"]
+    Read["Load complete Execution Contract"]
     Inspect["Inspect exact repository context"]
     Check{"Blueprint assumptions hold?"}
     Code["Implement"]
@@ -259,7 +271,7 @@ flowchart LR
     Impl -. no reasoning transcript .-> RevB
 ```
 
-This reduces correlated self-justification.
+This reduces correlated self-justification. Reviewers share immutable candidate/contract identity and common mandatory constraints, with lens-specific evidence packs. Distinct packs must collectively cover the change; omitted hunks/dependants are explicitly outstanding, not implicitly reviewed.
 
 ## 14. Multi-model diversity
 
