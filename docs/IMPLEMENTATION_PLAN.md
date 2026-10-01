@@ -507,7 +507,7 @@ asking AI to choose the portfolio.
 - provider-neutral AccessChannel and session-driver capability contracts;
 - ContextProfile / ContextManifest / ContextPack / EvidenceLease shapes, versioned schemas and EWP companion compatibility;
 - Cognitive Invocation Compiler with deterministic task/role/action/path/domain/risk applicability mapping, dependency-closed exact mandatory clause admission, projection freshness and complete-contract admission/reserves (`CONTEXT_UNFIT`);
-- hybrid optional-context retrieval interfaces: exact/lexical + dependency graph baseline, with dense embeddings/reranking as optional empirically gated strategies that can never remove mandatory authority;
+- optional-context retrieval baseline: exact/lexical + dependency graph traversal; dense embeddings/reranking are not required M3C implementation and are evaluated experimentally in M4;
 - endpoint-specific prompt-renderer interface so canonical protocol/state stays format-neutral while model-facing task/contract/evidence/action projections can be calibrated;
 - context budget/reference linting for role cores, contracts and compiled packs, plus honest measured/estimated/unknown telemetry and expansion/restart handling;
 - provider-neutral context-control capabilities: `ContextControl = ExactStateless | AppendOnly | OpaqueSession` and `PrefixCache = Explicit | Implicit | SessionKV | None` (ADR-0019 §1);
@@ -524,7 +524,7 @@ asking AI to choose the portfolio.
 - deterministic portfolio validator covering endpoint identity/capability
   provenance, source exposure, spending/overage, budget bindings, driver
   features and resource constraints;
-- compact durable review-state foundation: stable ReviewFinding identity, author fix-attempt/challenge response, independent resolution verification and focused role-specific context projections; rich fan-out/aggregation remains M7;
+- separate WP-M3C-5 durable review-ledger foundation: stable ReviewFinding identity, author fix-attempt/challenge response, independent resolution verification and focused role-specific context projections, decoupled from WP-M3C-2 session/compiler delivery; rich fan-out/aggregation remains M7;
 - no silent subscription/local → metered API fallback.
 
 M3C is deliberately deterministic infrastructure. It may validate an explicit
@@ -537,10 +537,12 @@ provider/driver contract; local and remote access; subscription and metered
 economic regimes; missing/unknown quota; endpoint loss; source-exposure and
 spending denial; resume/cancellation capability differences; and a machine
 with no cognition endpoint. Prove that a mandatory clause with low semantic
-similarity is still admitted, optional retrieval cannot displace required
-authority, an oversized mandatory pack returns `CONTEXT_UNFIT`, and review
-finding/resolution state survives a clean-session handoff without permitting
-author self-verification.
+similarity is still admitted, mandatory admission classes have reverse coverage,
+optional retrieval cannot displace required authority, provisional profiles do
+not masquerade as calibrated evidence, hostile evidence delimiters cannot escape
+their PromptProjection container, and an oversized mandatory pack returns
+`CONTEXT_UNFIT`. Separately, WP-M3C-5 proves review finding/resolution state
+survives a clean-session handoff without permitting author self-verification.
 
 #### Exit criterion
 Given ResourceInventory + policy + an explicit candidate portfolio, DevCadence
@@ -620,7 +622,8 @@ Empirically validate working hypotheses:
 - Provider cognitive diversity across language idioms, concurrency, schemas, and invariants;
 - Working-memory budget sweeps (e.g. 6k, 12k, 24k) with full-reserve accounting and complete-contract admission, including contracts too large to fit;
 - Working-set versus full-corpus/compaction baselines on representative implementation and documentation/code review tasks across a small local coder, larger local model, subscription CLI and frontier API where available. Missing endpoint classes are explicit limits of the evidence;
-- rule-selection strategies: deterministic mandatory mapping alone versus lexical/graph retrieval plus optional dense embeddings/reranking; measure mandatory-rule false negatives separately from optional-context relevance;
+- rule-selection strategies: deterministic admission classes/mapping plus lexical/graph retrieval, compared with optional dense embeddings/reranking experiments; measure mandatory-rule false negatives separately from optional-context relevance;
+- mandatory-admission ground truth independent of the compiler under test: seeded omitted/mis-mapped mandatory rules plus held-out task applicability sets established by an independent full-corpus Principal/human audit; report unmapped and confidently mis-mapped false negatives separately;
 - prompt renderers (for example compact tagged Markdown/XML-like sections versus JSON/YAML where supported) by endpoint/configuration rather than assuming a universal best serialization;
 - effective cognitive load in addition to tokens: active normative-clause count, evidence-object count, dependency depth and structured-output adherence;
 - Held-out tasks and repeated runs with predeclared quality/defect-yield criteria; do not tune and validate on the same tasks or treat token savings alone as success. Separate endpoint/layout and task-decomposition effects, report configuration and opaque-session accounting limitations.

@@ -79,7 +79,8 @@ Minimum semantic fields:
 finding_id: RF-...
 candidate_commit: ...
 contract_revision: ...
-importance: blocking | material_non_blocking | opportunistic
+severity: info | low | medium | high | critical
+materiality: blocking | material_non_blocking | opportunistic
 confidence: high | medium | low
 claim: ...
 evidence:
@@ -97,9 +98,9 @@ status: open
 
 The serialization is illustrative. The typed protocol may use different field names.
 
-### Materiality / importance
+### Severity, materiality, and confidence
 
-Canonical durable materiality remains compatible with the existing FindingDisposition schema: `blocking | material_non_blocking | opportunistic`. A model-facing renderer may present simpler labels such as blocking / non-blocking / advisory, but canonical state does not depend on prompt wording.
+Canonical severity and materiality remain compatible with the existing FindingDisposition schema. **Severity** estimates harm if the finding is true; **materiality** determines current-campaign significance (`blocking | material_non_blocking | opportunistic`); optional **confidence** records evidence strength. FindingDisposition preserves the normalized finding's severity/materiality rather than inventing another classification vocabulary.
 
 **blocking**
 
@@ -210,7 +211,7 @@ A challenge is evaluated in an unbiased context containing:
 - exact applicable normative clauses;
 - only the additional evidence needed to decide.
 
-Do not prime the verifier with "the author says reviewer X was wrong" or load the conversational transcript.
+The verifier-facing projection is blinded by default to reviewer/challenger identity and model/provider. The control plane separately enforces independence and reveals identity only when it is materially relevant evidence. Do not prime the verifier with "the author says reviewer X was wrong" or load the conversational transcript.
 
 Conceptual terminal outcomes:
 
@@ -293,7 +294,7 @@ Agents report evidence and attempted work. DevCadence computes closure.
 
 ## 11. Contract completeness review
 
-For systemic/durable protocol work, perform Contract Completeness Review before implementation.
+For systemic/durable protocol work, the Principal/contract author performs Contract Completeness Review before implementation as an effective-now manual evidence step; M7 may automate it later.
 
 The purpose is representability, not code correctness:
 
@@ -378,9 +379,9 @@ It is not a reason to add more prose rules to every prompt.
 - no equivalent reopening without new evidence;
 - contract completeness review for systemic protocol WPs.
 
-### M3C
+### WP-M3C-5
 
-Implement compact typed finding/resolution/verification records sufficient to preserve state across clean sessions and integrate them with the Cognitive Invocation Compiler.
+Implement compact typed finding/resolution/verification records sufficient to preserve state across clean sessions as a companion work package independent of WP-M3C-2's session/compiler implementation.
 
 ### M4
 
