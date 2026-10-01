@@ -1,0 +1,186 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/olostan/DevCadence/schemas/context-profile.schema.json",
+  "title": "DevCadence ContextProfile",
+  "description": "Endpoint- and workload-specific capability/budget evidence under the Adaptive Context Architecture (PROTOCOLS §10B).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "profile_id",
+    "endpoint_id",
+    "channel_id",
+    "runtime",
+    "model_ref",
+    "revision",
+    "declared_window_tokens",
+    "runtime_window_tokens",
+    "workload_envelopes",
+    "target_resident_tokens",
+    "hard_resident_ceiling_tokens",
+    "protected_core_limit_tokens",
+    "contract_limit_tokens",
+    "max_single_lease_tokens",
+    "output_reserve_tokens",
+    "tool_tail_reserve_tokens",
+    "accounting_method",
+    "estimate_uncertainty_ratio",
+    "observed_context_control",
+    "observed_prefix_cache"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "profile_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "endpoint_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "channel_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "runtime": {
+      "type": "string",
+      "minLength": 1
+    },
+    "model_ref": {
+      "type": "string",
+      "minLength": 1
+    },
+    "quantization": {
+      "type": "string",
+      "minLength": 1
+    },
+    "context_configuration": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "declared_window_tokens": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "runtime_window_tokens": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "workload_envelopes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "workload",
+          "effective_tokens",
+          "calibration_task",
+          "calibration_date",
+          "confidence_level"
+        ],
+        "properties": {
+          "workload": {
+            "enum": [
+              "navigation",
+              "implementation",
+              "review",
+              "architectural_reasoning"
+            ]
+          },
+          "effective_tokens": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "calibration_task": {
+            "type": "string",
+            "minLength": 1
+          },
+          "calibration_date": {
+            "type": "string",
+            "minLength": 1
+          },
+          "calibration_evidence_ref": {
+            "type": "string",
+            "minLength": 1
+          },
+          "confidence_level": {
+            "enum": [
+              "verified",
+              "provisional",
+              "unknown"
+            ]
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": { "confidence_level": { "const": "verified" } }
+            },
+            "then": {
+              "required": ["calibration_evidence_ref"]
+            }
+          }
+        ]
+      }
+    },
+    "target_resident_tokens": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "hard_resident_ceiling_tokens": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "protected_core_limit_tokens": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "contract_limit_tokens": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "max_single_lease_tokens": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "output_reserve_tokens": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "tool_tail_reserve_tokens": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "accounting_method": {
+      "enum": [
+        "exact_bpe",
+        "provider_api",
+        "approximate_estimate"
+      ]
+    },
+    "estimate_uncertainty_ratio": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 1.0
+    },
+    "observed_context_control": {
+      "enum": [
+        "exact_stateless",
+        "append_only",
+        "opaque_session"
+      ]
+    },
+    "observed_prefix_cache": {
+      "enum": [
+        "explicit",
+        "implicit",
+        "session_kv",
+        "none"
+      ]
+    }
+  }
+}

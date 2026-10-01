@@ -1,0 +1,106 @@
+{
+  "schema_version": "1.0",
+  "portfolio_id": "portfolio_hybrid_standard",
+  "revision": 1,
+  "created_at": "2026-09-30T00:58:00Z",
+  "channels": [
+    {
+      "schema_version": "1.0",
+      "channel_id": "chan_claude_cli_01",
+      "endpoint_id": "ep_claude_37_sonnet",
+      "kind": "cli_subprocess",
+      "session_mode": "resumable_session",
+      "context_control": "append_only",
+      "prefix_cache": "implicit",
+      "supports_streaming": true,
+      "supports_tools": true,
+      "native_worktree_access": true,
+      "credential_ref_id": "cred_claude_oauth_01",
+      "max_concurrent_requests": 2
+    },
+    {
+      "schema_version": "1.0",
+      "channel_id": "chan_ollama_daemon",
+      "endpoint_id": "ep_ollama_qwen_32b",
+      "kind": "local_daemon_socket",
+      "session_mode": "stateless_per_call",
+      "context_control": "exact_stateless",
+      "prefix_cache": "session_kv",
+      "supports_streaming": true,
+      "supports_tools": false,
+      "native_worktree_access": false,
+      "max_concurrent_requests": 1
+    }
+  ],
+  "role_bindings": [
+    {
+      "role": "principal",
+      "endpoint_id": "ep_claude_37_sonnet",
+      "channel_id": "chan_claude_cli_01",
+      "budget_pool_id": "pool_subscription_anthropic_pro",
+      "context_profile_id": "profile_claude_37_cli",
+      "priority": 1,
+      "fallbacks": [
+        {
+          "endpoint_id": "ep_ollama_qwen_32b",
+          "channel_id": "chan_ollama_daemon",
+          "budget_pool_id": "pool_local_compute",
+          "context_profile_id": "profile_ollama_qwen_32b_local"
+        }
+      ]
+    },
+    {
+      "role": "reviewer",
+      "endpoint_id": "ep_ollama_qwen_32b",
+      "channel_id": "chan_ollama_daemon",
+      "budget_pool_id": "pool_local_compute",
+      "context_profile_id": "profile_ollama_qwen_32b_local",
+      "priority": 1
+    }
+  ],
+  "budget_pools": [
+    {
+      "schema_version": "1.0",
+      "pool_id": "pool_subscription_anthropic_pro",
+      "name": "Anthropic Pro Claude Code Subscription",
+      "regime": "subscription_quota",
+      "unit": "requests",
+      "hard_limit": 500,
+      "soft_alert_limit": 400,
+      "period": "billing_cycle",
+      "allow_overage": false,
+      "fallback_allowed_to_metered": false
+    },
+    {
+      "schema_version": "1.0",
+      "pool_id": "pool_local_compute",
+      "name": "Local Workstation GPU Compute",
+      "regime": "local_compute",
+      "unit": "seconds",
+      "hard_limit": 36000,
+      "soft_alert_limit": 28800,
+      "period": "rolling_day",
+      "allow_overage": false,
+      "fallback_allowed_to_metered": false
+    }
+  ],
+  "max_source_exposure": "focused_snippets",
+  "diversity_requirements": {
+    "require_distinct_models_for_review": true,
+    "require_distinct_providers_for_review": false,
+    "require_distinct_endpoints_for_review": true
+  },
+  "escalation_rules": [
+    {
+      "from_role": "reviewer",
+      "to_role": "principal",
+      "trigger_condition": "review_rejected",
+      "max_escalations": 2
+    }
+  ],
+  "workflow_defaults": {
+    "default_topology": "iterative_escalation",
+    "default_timeout_seconds": 600,
+    "max_retries": 3
+  }
+}

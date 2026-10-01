@@ -1,0 +1,555 @@
+package protocol_test
+
+import (
+	"testing"
+
+	"github.com/olostan/DevCadence/internal/protocol"
+)
+
+func validPortfolio() *protocol.CognitionPortfolio {
+	ch := *validAccessChannel()
+	chFallback := *validAccessChannel()
+	chFallback.ChannelID = "chan_fallback_01"
+	chFallback.EndpointID = "ep_fallback_01"
+	bp := *validBudgetPool()
+	return &protocol.CognitionPortfolio{
+		SchemaVersion: protocol.SchemaVersion1,
+		PortfolioID:   "port_1",
+		Revision:      1,
+		CreatedAt:     "2026-09-30T00:00:00Z",
+		Channels:      []protocol.AccessChannel{ch, chFallback},
+		RoleBindings: []protocol.RoleBinding{
+			{
+				Role:             "principal",
+				EndpointID:       "ep_1",
+				ChannelID:        "chan_1",
+				BudgetPoolID:     "pool_1",
+				ContextProfileID: "prof_1",
+				Priority:         1,
+				Fallbacks: []protocol.FallbackBinding{
+					{
+						EndpointID:       "ep_fallback_01",
+						ChannelID:        "chan_fallback_01",
+						BudgetPoolID:     "pool_1",
+						ContextProfileID: "prof_1",
+					},
+				},
+			},
+			{
+				Role:             "secondary",
+				EndpointID:       "ep_fallback_01",
+				ChannelID:        "chan_fallback_01",
+				BudgetPoolID:     "pool_1",
+				ContextProfileID: "prof_1",
+				Priority:         1,
+			},
+		},
+		BudgetPools:       []protocol.BudgetPool{bp},
+		MaxSourceExposure: protocol.ExposureFocusedSnippets,
+		BudgetReservations: map[string]int64{
+			"pool_1": 100,
+		},
+		DiversityRequirements: &protocol.DiversityPolicy{
+			RequireDistinctModelsForReview: true,
+		},
+		EscalationRules: []protocol.EscalationRule{
+			{
+				FromRole:         "secondary",
+				ToRole:           "principal",
+				TriggerCondition: "timeout",
+				MaxEscalations:   2,
+			},
+		},
+		WorkflowDefaults: &protocol.WorkflowDefaults{
+			DefaultTopology:       protocol.TopologyIterativeEscalation,
+			DefaultTimeoutSeconds: 600,
+			MaxRetries:            2,
+		},
+	}
+}
+
+func TestPortfolioValidation(t *testing.T) {
+	t.Run("valid portfolio passes", func(t *testing.T) {
+		p := validPortfolio()
+		if err := p.Validate(); err != nil {
+			t.Fatalf("expected valid, got: %v", err)
+		}
+		if p.RecordKind() != "CognitionPortfolio" {
+			t.Errorf("record kind: got %q, want CognitionPortfolio", p.RecordKind())
+		}
+	})
+
+	t.Run("invalid max_source_exposure rejected", func(t *testing.T) {
+		p := validPortfolio()
+		p.MaxSourceExposure = "broadcast_to_world"
+		if err := p.Validate(); err == nil {
+			t.Fatal("expected error on invalid source exposure, got nil")
+		}
+	})
+
+	t.Run("referential integrity: non-existent channel rejected", func(t *testing.T) {
+		p := validPortfolio()
+		p.RoleBindings[0].ChannelID = "non_existent_chan"
+		if err := p.Validate(); err == nil {
+			t.Fatal("expected error when role binding cites non-existent channel, got nil")
+		}
+	})
+
+	t.Run("referential integrity: endpoint mismatch with channel rejected", func(t *testing.T) {
+		p := validPortfolio()
+		p.RoleBindings[0].EndpointID = "ep_mismatched"
+		if err := p.Validate(); err == nil {
+			t.Fatal("expected error when role binding endpoint does not match channel, got nil")
+		}
+	})
+
+	t.Run("referential integrity: non-existent budget pool rejected", func(t *testing.T) {
+		p := validPortfolio()
+		p.RoleBindings[0].BudgetPoolID = "non_existent_pool"
+		if err := p.Validate(); err == nil {
+			t.Fatal("expected error when role binding cites non-existent pool, got nil")
+		}
+	})
+
+	t.Run("excluded endpoint cannot be primary or fallback", func(t *testing.T) {
+		p := validPortfolio()
+		p.ExcludedEndpointIDs = []string{"ep_1"}
+		if err := p.Validate(); err == nil {
+			t.Fatal("expected error when primary endpoint is in excluded list, got nil")
+		}
+
+		p = validPortfolio()
+		p.ExcludedEndpointIDs = []string{"ep_fallback_01"}
+		if err := p.Validate(); err == nil {
+			t.Fatal("expected error when fallback endpoint is in excluded list, got nil")
+		}
+	})
+
+	t.Run("role binding fallback cannot match primary endpoint", func(t *testing.T) {
+		p := validPortfolio()
+		p.RoleBindings[0].Fallbacks[0].EndpointID = "ep_1"
+		if err := p.Validate(); err == nil {
+			t.Fatal("expected error when fallback matches primary endpoint, got nil")
+		}
+	})
+
+	t.Run("fallback endpoint without channel in portfolio rejected", func(t *testing.T) {
+		p := validPortfolio()
+		p.RoleBindings[0].Fallbacks[0].ChannelID = "non_existent_chan"
+		if err := p.Validate(); err == nil {
+			t.Fatal("expected error when fallback cites non-existent channel, got nil")
+		}
+	})
+
+	t.Run("fallback endpoint referencing non-existent budget pool rejected", func(t *testing.T) {
+		p := validPortfolio()
+		p.RoleBindings[0].Fallbacks[0].BudgetPoolID = "non_existent_pool"
+		if err := p.Validate(); err == nil {
+			t.Fatal("expected error when fallback cites non-existent budget pool, got nil")
+		}
+	})
+
+	t.Run("fallback endpoint using metered pool when primary forbids metered rejected", func(t *testing.T) {
+		p := validPortfolio()
+		meteredPool := protocol.BudgetPool{
+			SchemaVersion:            protocol.SchemaVersion1,
+			PoolID:                   "pool_metered",
+			Name:                     "Metered Pool",
+			Regime:                   protocol.RegimeMeteredAPI,
+			Unit:                     protocol.UnitUSDCents,
+			HardLimit:                1000,
+			SoftAlertLimit:           800,
+			Period:                   protocol.PeriodBillingCycle,
+			AllowOverage:             true,
+			FallbackAllowedToMetered: true,
+		}
+		p.BudgetPools = append(p.BudgetPools, meteredPool)
+		p.RoleBindings[0].Fallbacks[0].BudgetPoolID = "pool_metered"
+		// Primary pool (pool_1) is subscription quota with FallbackAllowedToMetered == false
+		if err := p.Validate(); err == nil {
+			t.Fatal("expected error when fallback uses metered pool but primary forbids metered fallback, got nil")
+		}
+	})
+
+	t.Run("role binding duplicate priority per role rejected", func(t *testing.T) {
+		p := validPortfolio()
+		p.RoleBindings = append(p.RoleBindings, protocol.RoleBinding{
+			Role:             "principal", // same role as RoleBindings[0]
+			EndpointID:       "ep_fallback_01",
+			ChannelID:        "chan_fallback_01",
+			BudgetPoolID:     "pool_1",
+			ContextProfileID: "prof_1",
+			Priority:         1, // same priority -> tie!
+		})
+		if err := p.Validate(); err == nil {
+			t.Fatal("expected error on duplicate priority for same role, got nil")
+		}
+	})
+
+	t.Run("role binding distinct priority per role accepted", func(t *testing.T) {
+		p := validPortfolio()
+		p.RoleBindings = append(p.RoleBindings, protocol.RoleBinding{
+			Role:             "principal", // same role as RoleBindings[0]
+			EndpointID:       "ep_fallback_01",
+			ChannelID:        "chan_fallback_01",
+			BudgetPoolID:     "pool_1",
+			ContextProfileID: "prof_1",
+			Priority:         2, // distinct priority
+		})
+		if err := p.Validate(); err != nil {
+			t.Fatalf("expected valid when priorities are distinct for same role, got: %v", err)
+		}
+	})
+
+	t.Run("escalation rule with undefined role rejected", func(t *testing.T) {
+		p := validPortfolio()
+		p.EscalationRules[0].FromRole = "ghost_role"
+		if err := p.Validate(); err == nil {
+			t.Fatal("expected error when escalation rule references undefined from_role, got nil")
+		}
+	})
+
+	t.Run("budget reservations integrity", func(t *testing.T) {
+		p := validPortfolio()
+		p.BudgetReservations = map[string]int64{"non_existent_pool": 50}
+		if err := p.Validate(); err == nil {
+			t.Fatal("expected error when reservation references non-existent pool, got nil")
+		}
+
+		p = validPortfolio()
+		p.BudgetReservations = map[string]int64{"pool_1": -10}
+		if err := p.Validate(); err == nil {
+			t.Fatal("expected error on negative reservation amount, got nil")
+		}
+
+		p = validPortfolio()
+		p.BudgetReservations = map[string]int64{"pool_1": 600} // HardLimit is 500
+		if err := p.Validate(); err == nil {
+			t.Fatal("expected error when reservation exceeds pool hard limit, got nil")
+		}
+	})
+
+	t.Run("duplicate channel or pool IDs rejected", func(t *testing.T) {
+		p := validPortfolio()
+		p.Channels = append(p.Channels, p.Channels[0])
+		if err := p.Validate(); err == nil {
+			t.Fatal("expected error on duplicate channel ID, got nil")
+		}
+
+		p = validPortfolio()
+		p.BudgetPools = append(p.BudgetPools, p.BudgetPools[0])
+		if err := p.Validate(); err == nil {
+			t.Fatal("expected error on duplicate pool ID, got nil")
+		}
+	})
+}
+
+func TestPortfolioRecommendationValidation(t *testing.T) {
+	t.Run("valid recommendation passes", func(t *testing.T) {
+		p := *validPortfolio()
+		rec := &protocol.PortfolioRecommendation{
+			SchemaVersion:          protocol.SchemaVersion1,
+			RecommendationID:       "rec_1",
+			InventoryDigest:        "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+			SynthesizedAt:          "2026-09-30T00:00:00Z",
+			RecommendedPortfolio:   p,
+			Rationale:              "Optimal configuration for machine",
+			ExplanatoryDiagnostics: []string{"Diagnosed healthy endpoints"},
+			CapabilityProvenance:   []string{"prov_1"},
+		}
+		if err := rec.Validate(); err != nil {
+			t.Fatalf("expected valid recommendation, got: %v", err)
+		}
+		if rec.RecordKind() != "PortfolioRecommendation" {
+			t.Errorf("record kind: got %q, want PortfolioRecommendation", rec.RecordKind())
+		}
+	})
+}
+
+func TestWorkflowPlanValidation(t *testing.T) {
+	t.Run("valid workflow plan passes", func(t *testing.T) {
+		plan := &protocol.WorkflowPlan{
+			SchemaVersion: protocol.SchemaVersion1,
+			PlanID:        "plan_1",
+			TaskID:        "task_1",
+			WorkPackageID: "WP-M3C-1",
+			Topology:      protocol.TopologyIterativeEscalation,
+			Stages: []protocol.WorkflowStage{
+				{
+					StageID:        "stage_1",
+					Role:           "implementer",
+					Kind:           protocol.StageKindCognition,
+					Order:          1,
+					BudgetPoolID:   "pool_1",
+					TimeoutSeconds: 600,
+				},
+				{
+					StageID:        "stage_2",
+					Role:           "reviewer",
+					Kind:           protocol.StageKindCognition,
+					IsReview:       true,
+					Order:          2,
+					DependsOn:      []string{"stage_1"},
+					BudgetPoolID:   "pool_1",
+					TimeoutSeconds: 300,
+				},
+			},
+		}
+		if err := plan.Validate(); err != nil {
+			t.Fatalf("expected valid WorkflowPlan, got: %v", err)
+		}
+		if plan.RecordKind() != "WorkflowPlan" {
+			t.Errorf("record kind: got %q, want WorkflowPlan", plan.RecordKind())
+		}
+	})
+
+	t.Run("empty stages rejected", func(t *testing.T) {
+		plan := &protocol.WorkflowPlan{
+			SchemaVersion: protocol.SchemaVersion1,
+			PlanID:        "plan_1",
+			TaskID:        "task_1",
+			WorkPackageID: "WP-M3C-1",
+			Topology:      protocol.TopologySinglePass,
+			Stages:        []protocol.WorkflowStage{},
+		}
+		if err := plan.Validate(); err == nil {
+			t.Fatal("expected error on empty stages, got nil")
+		}
+	})
+
+	t.Run("duplicate stage ID or duplicate order rejected", func(t *testing.T) {
+		plan := &protocol.WorkflowPlan{
+			SchemaVersion: protocol.SchemaVersion1,
+			PlanID:        "plan_1",
+			TaskID:        "task_1",
+			WorkPackageID: "WP-M3C-1",
+			Topology:      protocol.TopologySinglePass,
+			Stages: []protocol.WorkflowStage{
+				{StageID: "s1", Role: "implementer", Kind: protocol.StageKindCognition, Order: 1, BudgetPoolID: "p1", TimeoutSeconds: 100},
+				{StageID: "s1", Role: "reviewer", Kind: protocol.StageKindCognition, IsReview: true, Order: 2, BudgetPoolID: "p1", TimeoutSeconds: 100},
+			},
+		}
+		if err := plan.Validate(); err == nil {
+			t.Fatal("expected error on duplicate stage ID, got nil")
+		}
+
+		plan.Stages[1].StageID = "s2"
+		plan.Stages[1].Order = 1
+		if err := plan.Validate(); err == nil {
+			t.Fatal("expected error on duplicate stage order, got nil")
+		}
+	})
+
+	t.Run("DAG dependency checks: self dependency rejected", func(t *testing.T) {
+		plan := &protocol.WorkflowPlan{
+			SchemaVersion: protocol.SchemaVersion1,
+			PlanID:        "plan_1",
+			TaskID:        "task_1",
+			WorkPackageID: "WP-M3C-1",
+			Topology:      protocol.TopologySinglePass,
+			Stages: []protocol.WorkflowStage{
+				{StageID: "s1", Role: "implementer", Kind: protocol.StageKindCognition, Order: 1, DependsOn: []string{"s1"}, BudgetPoolID: "p1", TimeoutSeconds: 100},
+			},
+		}
+		if err := plan.Validate(); err == nil {
+			t.Fatal("expected error on self dependency, got nil")
+		}
+	})
+
+	t.Run("DAG dependency checks: non-existent dependency rejected", func(t *testing.T) {
+		plan := &protocol.WorkflowPlan{
+			SchemaVersion: protocol.SchemaVersion1,
+			PlanID:        "plan_1",
+			TaskID:        "task_1",
+			WorkPackageID: "WP-M3C-1",
+			Topology:      protocol.TopologySinglePass,
+			Stages: []protocol.WorkflowStage{
+				{StageID: "s1", Role: "implementer", Kind: protocol.StageKindCognition, Order: 1, DependsOn: []string{"ghost_stage"}, BudgetPoolID: "p1", TimeoutSeconds: 100},
+			},
+		}
+		if err := plan.Validate(); err == nil {
+			t.Fatal("expected error on non-existent dependency, got nil")
+		}
+	})
+
+	t.Run("DAG dependency checks: out of order dependency rejected", func(t *testing.T) {
+		plan := &protocol.WorkflowPlan{
+			SchemaVersion: protocol.SchemaVersion1,
+			PlanID:        "plan_1",
+			TaskID:        "task_1",
+			WorkPackageID: "WP-M3C-1",
+			Topology:      protocol.TopologyIterativeEscalation,
+			Stages: []protocol.WorkflowStage{
+				{StageID: "s1", Role: "implementer", Kind: protocol.StageKindCognition, Order: 1, DependsOn: []string{"s2"}, BudgetPoolID: "p1", TimeoutSeconds: 100},
+				{StageID: "s2", Role: "reviewer", Kind: protocol.StageKindCognition, IsReview: true, Order: 2, BudgetPoolID: "p1", TimeoutSeconds: 100},
+			},
+		}
+		if err := plan.Validate(); err == nil {
+			t.Fatal("expected error on backwards dependency, got nil")
+		}
+	})
+
+	t.Run("topology compatibility: TopologyDualIndependentReview requires >= 2 review stages", func(t *testing.T) {
+		plan := &protocol.WorkflowPlan{
+			SchemaVersion: protocol.SchemaVersion1,
+			PlanID:        "plan_1",
+			TaskID:        "task_1",
+			WorkPackageID: "WP-M3C-1",
+			Topology:      protocol.TopologyDualIndependentReview,
+			Stages: []protocol.WorkflowStage{
+				{StageID: "s1", Role: "implementer", Kind: protocol.StageKindCognition, Order: 1, BudgetPoolID: "p1", TimeoutSeconds: 100},
+				{StageID: "s2", Role: "reviewer_alpha", Kind: protocol.StageKindCognition, IsReview: true, Order: 2, DependsOn: []string{"s1"}, BudgetPoolID: "p1", TimeoutSeconds: 100},
+			},
+		}
+		if err := plan.Validate(); err == nil {
+			t.Fatal("expected error when DualIndependentReview has only 1 reviewer, got nil")
+		}
+
+		// Add second review stage
+		plan.Stages = append(plan.Stages, protocol.WorkflowStage{
+			StageID:        "s3",
+			Role:           "reviewer_beta",
+			Kind:           protocol.StageKindCognition,
+			IsReview:       true,
+			Order:          3,
+			DependsOn:      []string{"s1"},
+			BudgetPoolID:   "p1",
+			TimeoutSeconds: 100,
+		})
+		if err := plan.Validate(); err != nil {
+			t.Fatalf("expected valid DualIndependentReview with 2 reviewers, got: %v", err)
+		}
+	})
+
+	t.Run("topology compatibility: TopologyDeterministicOnly permits only deterministic stages", func(t *testing.T) {
+		// LLM stage named "tester" or "test_author" with kind: cognition is NOT deterministic
+		plan := &protocol.WorkflowPlan{
+			SchemaVersion: protocol.SchemaVersion1,
+			PlanID:        "plan_1",
+			TaskID:        "task_1",
+			WorkPackageID: "WP-M3C-1",
+			Topology:      protocol.TopologyDeterministicOnly,
+			Stages: []protocol.WorkflowStage{
+				{StageID: "s1", Role: "test_author", Kind: protocol.StageKindCognition, Order: 1, BudgetPoolID: "p1", TimeoutSeconds: 100},
+			},
+		}
+		if err := plan.Validate(); err == nil {
+			t.Fatal("expected error when DeterministicOnly has stage with kind: cognition, got nil")
+		}
+
+		// Update to Kind: deterministic without gate should fail
+		plan.Stages[0].Kind = protocol.StageKindDeterministic
+		if err := plan.Validate(); err == nil {
+			t.Fatal("expected error when deterministic stage lacks deterministic_gate_id, got nil")
+		}
+
+		// Providing deterministic_gate_id succeeds
+		gate := "gate_lint"
+		plan.Stages[0].DeterministicGateID = &gate
+		if err := plan.Validate(); err != nil {
+			t.Fatalf("expected valid DeterministicOnly with kind: deterministic, got: %v", err)
+		}
+	})
+
+	t.Run("topology compatibility: TopologyDualIndependentReview requires independent endpoints or roles", func(t *testing.T) {
+		plan := &protocol.WorkflowPlan{
+			SchemaVersion: protocol.SchemaVersion1,
+			PlanID:        "plan_1",
+			TaskID:        "task_1",
+			WorkPackageID: "WP-M3C-1",
+			Topology:      protocol.TopologyDualIndependentReview,
+			Stages: []protocol.WorkflowStage{
+				{StageID: "s1", Role: "implementer", Kind: protocol.StageKindCognition, Order: 1, BudgetPoolID: "p1", TimeoutSeconds: 100},
+				{StageID: "s2", Role: "reviewer", Kind: protocol.StageKindCognition, IsReview: true, Order: 2, DependsOn: []string{"s1"}, BudgetPoolID: "p1", TimeoutSeconds: 100},
+				{StageID: "s3", Role: "reviewer", Kind: protocol.StageKindCognition, IsReview: true, Order: 3, DependsOn: []string{"s1"}, BudgetPoolID: "p1", TimeoutSeconds: 100},
+			},
+		}
+		if err := plan.Validate(); err == nil {
+			t.Fatal("expected error when DualIndependentReview stages share same role without distinct endpoints, got nil")
+		}
+
+		ep1 := "ep_1"
+		plan.Stages[1].EndpointID = &ep1
+		plan.Stages[2].EndpointID = &ep1
+		if err := plan.Validate(); err == nil {
+			t.Fatal("expected error when DualIndependentReview stages bind to the same endpoint, got nil")
+		}
+
+		ep2 := "ep_2"
+		plan.Stages[2].EndpointID = &ep2
+		if err := plan.Validate(); err != nil {
+			t.Fatalf("expected valid when review stages have distinct endpoints, got: %v", err)
+		}
+	})
+}
+
+func TestWorkflowStageValidation(t *testing.T) {
+	gate := "gate_test"
+	empty := ""
+
+	t.Run("deterministic stage requires deterministic_gate_id", func(t *testing.T) {
+		s := protocol.WorkflowStage{
+			StageID:        "s1",
+			Role:           "verifier",
+			Kind:           protocol.StageKindDeterministic,
+			Order:          1,
+			BudgetPoolID:   "p1",
+			TimeoutSeconds: 60,
+		}
+		if err := s.Validate(); err == nil {
+			t.Fatal("expected error when deterministic stage lacks gate ID, got nil")
+		}
+		s.DeterministicGateID = &gate
+		if err := s.Validate(); err != nil {
+			t.Fatalf("expected valid with gate ID, got: %v", err)
+		}
+	})
+
+	t.Run("cognition stage forbids deterministic_gate_id", func(t *testing.T) {
+		s := protocol.WorkflowStage{
+			StageID:             "s1",
+			Role:                "implementer",
+			Kind:                protocol.StageKindCognition,
+			Order:               1,
+			BudgetPoolID:        "p1",
+			TimeoutSeconds:      60,
+			DeterministicGateID: &gate,
+		}
+		if err := s.Validate(); err == nil {
+			t.Fatal("expected error when cognition stage sets gate ID, got nil")
+		}
+	})
+
+	t.Run("negative retry limit rejected", func(t *testing.T) {
+		s := protocol.WorkflowStage{
+			StageID:        "s1",
+			Role:           "implementer",
+			Kind:           protocol.StageKindCognition,
+			Order:          1,
+			BudgetPoolID:   "p1",
+			TimeoutSeconds: 60,
+			RetryLimit:     -1,
+		}
+		if err := s.Validate(); err == nil {
+			t.Fatal("expected error on negative retry limit, got nil")
+		}
+	})
+
+	t.Run("empty string pointers rejected", func(t *testing.T) {
+		s := protocol.WorkflowStage{
+			StageID:          "s1",
+			Role:             "implementer",
+			Kind:             protocol.StageKindCognition,
+			Order:            1,
+			BudgetPoolID:     "p1",
+			TimeoutSeconds:   60,
+			EndpointID:       &empty,
+			ChannelID:        &empty,
+			ContextProfileID: &empty,
+			EscalationTarget: &empty,
+		}
+		if err := s.Validate(); err == nil {
+			t.Fatal("expected error on empty pointer fields, got nil")
+		}
+	})
+}

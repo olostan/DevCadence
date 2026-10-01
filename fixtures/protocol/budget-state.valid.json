@@ -1,0 +1,10 @@
+{
+  "schema_version": "1.0",
+  "pool_id": "pool_subscription_anthropic_pro",
+  "current_usage": 150,
+  "remaining_balance": 350,
+  "period_start": "2026-09-01T00:00:00Z",
+  "period_end": "2026-10-01T00:00:00Z",
+  "status": "healthy",
+  "observed_at": "2026-09-30T00:00:00Z"
+}

@@ -1,0 +1,22 @@
+{
+  "schema_version": "1.0",
+  "proposal_id": "prop_m3c_1_adapter_refactor",
+  "created_at": "2026-09-30T00:55:00Z",
+  "source_work_package_id": "WP-M3C-2",
+  "target_work_package_id": "WP-M3C-1",
+  "architectural_tension": "Driver needs explicit session handle token refresh",
+  "contradiction_evidence": [
+    {
+      "id": "ev_1",
+      "type": "source",
+      "locator": "internal/protocol/access_channel.go#L35"
+    }
+  ],
+  "proposed_interface": "type SessionRefresher interface { RefreshSession(ctx context.Context) error }",
+  "affected_callers": [
+    "internal/cognition/drivers/cli.go"
+  ],
+  "reversibility": "trivial",
+  "reversibility_rationale": "Purely additive interface addition with zero downstream breaking changes",
+  "status": "proposed"
+}

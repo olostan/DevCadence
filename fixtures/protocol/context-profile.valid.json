@@ -1,0 +1,32 @@
+{
+  "schema_version": "1.0",
+  "profile_id": "profile_ollama_qwen_32b_local",
+  "endpoint_id": "ep_ollama_qwen_32b",
+  "channel_id": "chan_ollama_daemon",
+  "runtime": "ollama",
+  "model_ref": "qwen2.5-coder:32b",
+  "revision": 1,
+  "declared_window_tokens": 32768,
+  "runtime_window_tokens": 32768,
+  "workload_envelopes": [
+    {
+      "workload": "implementation",
+      "effective_tokens": 24000,
+      "calibration_task": "task_m3b_doctor_calibration",
+      "calibration_date": "2026-09-25T14:30:00Z",
+      "calibration_evidence_ref": "evidence_m3b_doctor_calibration_001",
+      "confidence_level": "verified"
+    }
+  ],
+  "target_resident_tokens": 16000,
+  "hard_resident_ceiling_tokens": 24000,
+  "protected_core_limit_tokens": 2000,
+  "contract_limit_tokens": 4000,
+  "max_single_lease_tokens": 6000,
+  "output_reserve_tokens": 4000,
+  "tool_tail_reserve_tokens": 2000,
+  "accounting_method": "exact_bpe",
+  "estimate_uncertainty_ratio": 0.05,
+  "observed_context_control": "exact_stateless",
+  "observed_prefix_cache": "session_kv"
+}

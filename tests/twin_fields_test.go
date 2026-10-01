@@ -54,6 +54,18 @@ func TestSchemaTopLevelFieldsMatchTheGoTwin(t *testing.T) {
 		{"credential-ref.schema.json", &protocol.CredentialRef{}},
 		{"auth-evidence.schema.json", &protocol.AuthEvidence{}},
 		{"resource-inventory.schema.json", &protocol.ResourceInventory{}},
+		{"access-channel.schema.json", &protocol.AccessChannel{}},
+		{"context-profile.schema.json", &protocol.ContextProfile{}},
+		{"context-manifest.schema.json", &protocol.ContextManifest{}},
+		{"context-pack.schema.json", &protocol.ContextPack{}},
+		{"evidence-lease.schema.json", &protocol.EvidenceLease{}},
+		{"refactoring-proposal.schema.json", &protocol.RefactoringProposal{}},
+		{"budget-pool.schema.json", &protocol.BudgetPool{}},
+		{"budget-state.schema.json", &protocol.BudgetState{}},
+		{"resource-state.schema.json", &protocol.ResourceState{}},
+		{"cognition-portfolio.schema.json", &protocol.CognitionPortfolio{}},
+		{"portfolio-recommendation.schema.json", &protocol.PortfolioRecommendation{}},
+		{"workflow-plan.schema.json", &protocol.WorkflowPlan{}},
 	} {
 		t.Run(tc.schema, func(t *testing.T) {
 			published := topLevelProperties(t, tc.schema)

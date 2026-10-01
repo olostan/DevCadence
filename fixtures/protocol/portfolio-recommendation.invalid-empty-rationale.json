@@ -1,0 +1,19 @@
+{
+  "schema_version": "1.0",
+  "recommendation_id": "rec_m3c_portfolio_001",
+  "inventory_digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "synthesized_at": "2026-09-30T00:59:00Z",
+  "recommended_portfolio": {
+    "schema_version": "1.0",
+    "portfolio_id": "portfolio_hybrid_standard",
+    "revision": 1,
+    "created_at": "2026-09-30T00:58:00Z",
+    "channels": [],
+    "role_bindings": [],
+    "budget_pools": [],
+    "max_source_exposure": "local_only"
+  },
+  "rationale": "",
+  "explanatory_diagnostics": [],
+  "capability_provenance": []
+}

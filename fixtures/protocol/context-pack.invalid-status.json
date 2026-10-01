@@ -1,0 +1,34 @@
+{
+  "schema_version": "1.0",
+  "pack_id": "pack_m3c_1_001",
+  "manifest_id": "manifest_wp_m3c_1_01",
+  "manifest_revision": 1,
+  "role_core": "You are the DevCadence implementer.",
+  "execution_contract": "Implement WP-M3C-1 protocol types and schemas.",
+  "normative_clauses": [],
+  "cognitive_state": {
+    "hypotheses": [],
+    "active_todos": [],
+    "intermediate_decisions": [],
+    "open_questions": [],
+    "evidence_dependencies": []
+  },
+  "evidence_working_set": [],
+  "ephemeral_tail": {
+    "recent_tool_exchanges": [],
+    "current_action": "Compile"
+  },
+  "token_accounting": {
+    "role_tokens": 150,
+    "contract_tokens": 600,
+    "normative_tokens": 80,
+    "state_tokens": 120,
+    "evidence_tokens": 28,
+    "tail_tokens": 90,
+    "output_reserve_tokens": 2000,
+    "total_resident_tokens": 1068,
+    "accounting_method": "exact_bpe"
+  },
+  "pack_digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "status": "invalid_status_value"
+}

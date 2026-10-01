@@ -171,6 +171,16 @@ func TestFixturesRoundTripWithoutSemanticLoss(t *testing.T) {
 		{"credential-ref.valid.json", decodeInto[protocol.CredentialRef]},
 		{"auth-evidence.valid.json", decodeInto[protocol.AuthEvidence]},
 		{"resource-inventory.valid.json", decodeInto[protocol.ResourceInventory]},
+		{"access-channel.valid.json", decodeInto[protocol.AccessChannel]},
+		{"context-profile.valid.json", decodeInto[protocol.ContextProfile]},
+		{"context-manifest.valid.json", decodeInto[protocol.ContextManifest]},
+		{"context-pack.valid.json", decodeInto[protocol.ContextPack]},
+		{"evidence-lease.valid.json", decodeInto[protocol.EvidenceLease]},
+		{"refactoring-proposal.valid.json", decodeInto[protocol.RefactoringProposal]},
+		{"budget-pool.valid.json", decodeInto[protocol.BudgetPool]},
+		{"cognition-portfolio.valid.json", decodeInto[protocol.CognitionPortfolio]},
+		{"portfolio-recommendation.valid.json", decodeInto[protocol.PortfolioRecommendation]},
+		{"workflow-plan.valid.json", decodeInto[protocol.WorkflowPlan]},
 	}
 	for _, tc := range cases {
 		t.Run(tc.file, func(t *testing.T) {
@@ -353,6 +363,18 @@ func TestTheGoReaderRejectsWhatTheSchemaRejects(t *testing.T) {
 		"setup-plan.invalid-",
 		"setup-execution-report.invalid-",
 		"setup-ledger-event.invalid-",
+		"access-channel.invalid-",
+		"context-profile.invalid-",
+		"context-manifest.invalid-",
+		"context-pack.invalid-",
+		"evidence-lease.invalid-",
+		"refactoring-proposal.invalid-",
+		"budget-pool.invalid-",
+		"budget-state.invalid-",
+		"resource-state.invalid-",
+		"cognition-portfolio.invalid-",
+		"portfolio-recommendation.invalid-",
+		"workflow-plan.invalid-",
 	} {
 		for _, file := range fixtures(t, prefix) {
 			t.Run(filepath.Base(file), func(t *testing.T) {
@@ -386,6 +408,30 @@ func recordKindFor(t *testing.T, file string) string {
 		return "SetupExecutionReport"
 	case strings.HasPrefix(base, "setup-ledger-event."):
 		return "SetupLedgerEvent"
+	case strings.HasPrefix(base, "access-channel."):
+		return "AccessChannel"
+	case strings.HasPrefix(base, "context-profile."):
+		return "ContextProfile"
+	case strings.HasPrefix(base, "context-manifest."):
+		return "ContextManifest"
+	case strings.HasPrefix(base, "context-pack."):
+		return "ContextPack"
+	case strings.HasPrefix(base, "evidence-lease."):
+		return "EvidenceLease"
+	case strings.HasPrefix(base, "refactoring-proposal."):
+		return "RefactoringProposal"
+	case strings.HasPrefix(base, "budget-pool."):
+		return "BudgetPool"
+	case strings.HasPrefix(base, "budget-state."):
+		return "BudgetState"
+	case strings.HasPrefix(base, "resource-state."):
+		return "ResourceState"
+	case strings.HasPrefix(base, "cognition-portfolio."):
+		return "CognitionPortfolio"
+	case strings.HasPrefix(base, "portfolio-recommendation."):
+		return "PortfolioRecommendation"
+	case strings.HasPrefix(base, "workflow-plan."):
+		return "WorkflowPlan"
 	}
 	t.Fatalf("no record kind is mapped for fixture %s", base)
 	return ""

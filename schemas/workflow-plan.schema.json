@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/olostan/DevCadence/schemas/workflow-plan.schema.json",
+  "title": "DevCadence WorkflowPlan",
+  "description": "Task-specific workflow topology and cognitive stage sequencing (ADR-0018 §8).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "plan_id",
+    "task_id",
+    "work_package_id",
+    "topology",
+    "stages"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "plan_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "task_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "work_package_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "topology": {
+      "enum": [
+        "single_pass",
+        "iterative_escalation",
+        "dual_independent_review",
+        "deterministic_only"
+      ]
+    },
+    "stages": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "stage_id",
+          "role",
+          "kind",
+          "order",
+          "budget_pool_id",
+          "timeout_seconds"
+        ],
+        "properties": {
+          "stage_id": { "type": "string", "minLength": 1 },
+          "role": { "type": "string", "minLength": 1 },
+          "kind": {
+            "enum": [
+              "cognition",
+              "deterministic"
+            ]
+          },
+          "is_review": { "type": "boolean" },
+          "order": { "type": "integer", "minimum": 1 },
+          "depends_on": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "budget_pool_id": { "type": "string", "minLength": 1 },
+          "timeout_seconds": { "type": "integer", "minimum": 1 },
+          "endpoint_id": { "type": "string", "minLength": 1 },
+          "channel_id": { "type": "string", "minLength": 1 },
+          "context_profile_id": { "type": "string", "minLength": 1 },
+          "retry_limit": { "type": "integer", "minimum": 0 },
+          "escalation_target": { "type": "string", "minLength": 1 },
+          "deterministic_gate_id": { "type": "string", "minLength": 1 }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": { "kind": { "const": "deterministic" } }
+            },
+            "then": {
+              "required": ["deterministic_gate_id"]
+            },
+            "else": {
+              "not": { "required": ["deterministic_gate_id"] }
+            }
+          }
+        ]
+      }
+    }
+  }
+}

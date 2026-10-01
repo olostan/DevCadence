@@ -1,0 +1,171 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/olostan/DevCadence/schemas/refactoring-proposal.schema.json",
+  "title": "DevCadence RefactoringProposal",
+  "description": "Bottom-up challenge protocol enabling workers to propose upstream work-package refactorings without code rot (ADR-0019 §3).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "proposal_id",
+    "created_at",
+    "source_work_package_id",
+    "target_work_package_id",
+    "architectural_tension",
+    "contradiction_evidence",
+    "proposed_interface",
+    "affected_callers",
+    "reversibility",
+    "reversibility_rationale",
+    "status"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "proposal_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "created_at": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source_work_package_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "target_work_package_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "architectural_tension": {
+      "type": "string",
+      "minLength": 1
+    },
+    "contradiction_evidence": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "type",
+          "locator"
+        ],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "type": {
+            "enum": [
+              "source",
+              "symbol",
+              "git",
+              "command",
+              "test",
+              "external_source",
+              "consultation",
+              "artifact"
+            ]
+          },
+          "locator": { "type": "string", "minLength": 1 },
+          "digest": { "type": "string" },
+          "excerpt": { "type": "string" }
+        }
+      }
+    },
+    "proposed_interface": {
+      "type": "string",
+      "minLength": 1
+    },
+    "affected_callers": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "reversibility": {
+      "enum": [
+        "trivial",
+        "moderate",
+        "significant"
+      ]
+    },
+    "reversibility_rationale": {
+      "type": "string",
+      "minLength": 1
+    },
+    "status": {
+      "enum": [
+        "proposed",
+        "accepted",
+        "rejected",
+        "superseded"
+      ]
+    },
+    "adjudication": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "adjudicated_by",
+        "adjudicated_at",
+        "disposition_notes"
+      ],
+      "properties": {
+        "adjudicated_by": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "id"
+          ],
+          "properties": {
+            "kind": {
+              "enum": [
+                "human",
+                "principal",
+                "control_plane",
+                "local_agent",
+                "consultant",
+                "tool"
+              ]
+            },
+            "id": { "type": "string", "minLength": 1 }
+          }
+        },
+        "adjudicated_at": { "type": "string", "minLength": 1 },
+        "disposition_notes": { "type": "string", "minLength": 1 },
+        "resulting_work_package_id": { "type": "string", "minLength": 1 }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "status": { "const": "proposed" } }
+      },
+      "then": {
+        "not": { "required": ["adjudication"] }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": { "enum": ["accepted", "rejected", "superseded"] }
+        }
+      },
+      "then": {
+        "required": ["adjudication"]
+      }
+    },
+    {
+      "if": {
+        "properties": { "status": { "const": "accepted" } }
+      },
+      "then": {
+        "required": ["adjudication"],
+        "properties": {
+          "adjudication": {
+            "required": ["resulting_work_package_id"]
+          }
+        }
+      }
+    }
+  ]
+}

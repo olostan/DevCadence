@@ -1,0 +1,152 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/olostan/DevCadence/schemas/cognition-portfolio.schema.json",
+  "title": "DevCadence CognitionPortfolio",
+  "description": "Canonical routing configuration mapping engineering roles to endpoints, access channels, and budget pools (ADR-0018 §7, FR-062).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "portfolio_id",
+    "revision",
+    "created_at",
+    "channels",
+    "role_bindings",
+    "budget_pools",
+    "max_source_exposure"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "portfolio_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "created_at": {
+      "type": "string",
+      "minLength": 1
+    },
+    "channels": {
+      "type": "array",
+      "items": {
+        "$ref": "devcadence:///access-channel.schema.json"
+      }
+    },
+    "role_bindings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "role",
+          "endpoint_id",
+          "channel_id",
+          "budget_pool_id",
+          "context_profile_id",
+          "priority"
+        ],
+        "properties": {
+          "role": { "type": "string", "minLength": 1 },
+          "endpoint_id": { "type": "string", "minLength": 1 },
+          "channel_id": { "type": "string", "minLength": 1 },
+          "budget_pool_id": { "type": "string", "minLength": 1 },
+          "context_profile_id": { "type": "string", "minLength": 1 },
+          "priority": { "type": "integer", "minimum": 1 },
+          "fallbacks": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "endpoint_id",
+                "channel_id",
+                "budget_pool_id",
+                "context_profile_id"
+              ],
+              "properties": {
+                "endpoint_id": { "type": "string", "minLength": 1 },
+                "channel_id": { "type": "string", "minLength": 1 },
+                "budget_pool_id": { "type": "string", "minLength": 1 },
+                "context_profile_id": { "type": "string", "minLength": 1 }
+              }
+            }
+          }
+        }
+      }
+    },
+    "budget_pools": {
+      "type": "array",
+      "items": {
+        "$ref": "devcadence:///budget-pool.schema.json"
+      }
+    },
+    "max_source_exposure": {
+      "enum": [
+        "local_only",
+        "semantic_evidence_only",
+        "focused_snippets",
+        "selected_files",
+        "tool_mediated_worktree",
+        "unrestricted_authorized"
+      ]
+    },
+    "excluded_endpoint_ids": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "budget_reservations": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "diversity_requirements": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "require_distinct_models_for_review": { "type": "boolean" },
+        "require_distinct_providers_for_review": { "type": "boolean" },
+        "require_distinct_endpoints_for_review": { "type": "boolean" }
+      }
+    },
+    "escalation_rules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "from_role",
+          "to_role",
+          "trigger_condition",
+          "max_escalations"
+        ],
+        "properties": {
+          "from_role": { "type": "string", "minLength": 1 },
+          "to_role": { "type": "string", "minLength": 1 },
+          "trigger_condition": { "type": "string", "minLength": 1 },
+          "max_escalations": { "type": "integer", "minimum": 1 }
+        }
+      }
+    },
+    "workflow_defaults": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "default_topology": {
+          "enum": [
+            "single_pass",
+            "iterative_escalation",
+            "dual_independent_review",
+            "deterministic_only"
+          ]
+        },
+        "default_timeout_seconds": { "type": "integer", "minimum": 0 },
+        "max_retries": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}

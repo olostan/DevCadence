@@ -1,0 +1,68 @@
+{
+  "schema_version": "1.0",
+  "pack_id": "pack_m3c_1_001",
+  "manifest_id": "manifest_wp_m3c_1_01",
+  "manifest_revision": 1,
+  "role_core": "You are the DevCadence implementer.",
+  "execution_contract": "Implement WP-M3C-1 protocol types and schemas.",
+  "normative_clauses": [
+    "DCI-018: Authority does not imply residency."
+  ],
+  "cognitive_state": {
+    "hypotheses": [
+      "Protocols compile cleanly under Go 1.25"
+    ],
+    "active_todos": [
+      "Add schema fixtures"
+    ],
+    "intermediate_decisions": [
+      "Enforce additionalProperties: false"
+    ],
+    "open_questions": [],
+    "evidence_dependencies": [
+      "lease_doc_doctor_815_835"
+    ]
+  },
+  "evidence_working_set": [
+    {
+      "schema_version": "1.0",
+      "lease_id": "lease_doc_doctor_815_835",
+      "evidence_kind": "source_snippet",
+      "source_revision": "58869d99635ee0d05b5fe30e3b152dacddc12445",
+      "worktree_id": "wt_session_01",
+      "file_path": "internal/setup/doctor.go",
+      "locator": "L815-L835",
+      "content_digest": "sha256:a9c955a9301cbb7fb1b5e3e92f91f7c2ff8a53f3c5df4f53a43b88e5a0f31293",
+      "acquisition_question": "How are doctor check results rendered to text?",
+      "acquisition_reason": "Verifying text output formatting against CLI spec",
+      "content": "func (r *DoctorReport) FormatSummary() string {\n\treturn \"all checks passed\"\n}",
+      "token_count": 28,
+      "accounting_method": "exact_bpe",
+      "status": "active",
+      "acquired_at": "2026-09-30T00:50:00Z"
+    }
+  ],
+  "ephemeral_tail": {
+    "recent_tool_exchanges": [
+      "go test ./... PASS"
+    ],
+    "current_action": "Compile and verify context-pack schema"
+  },
+  "token_accounting": {
+    "role_tokens": 150,
+    "contract_tokens": 600,
+    "normative_tokens": 80,
+    "state_tokens": 120,
+    "evidence_tokens": 28,
+    "tail_tokens": 90,
+    "output_reserve_tokens": 2000,
+    "total_resident_tokens": 1068,
+    "accounting_method": "exact_bpe"
+  },
+  "admitted_object_digests": {
+    "manifest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "pack_digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "coverage_summary": "Full coverage for WP-M3C-1 requirements",
+  "status": "ready"
+}

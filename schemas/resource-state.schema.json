@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/olostan/DevCadence/schemas/resource-state.schema.json",
+  "title": "DevCadence ResourceState",
+  "description": "Live compute and memory availability with honest unknown metric representation (PROTOCOLS §10B, ADR-0018).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "host_id",
+    "timestamp"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "host_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "timestamp": {
+      "type": "string",
+      "minLength": 1
+    },
+    "available_gpu_memory_bytes": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "available_ram_bytes": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "max_concurrent_slots": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "active_slots": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "unknown_metrics": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "available_gpu_memory_bytes",
+          "available_ram_bytes",
+          "max_concurrent_slots",
+          "active_slots"
+        ]
+      },
+      "uniqueItems": true
+    }
+  }
+}

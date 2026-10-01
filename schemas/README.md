@@ -49,8 +49,23 @@ inference.
 - `review-result.schema.json`
 - `decision-record.schema.json`
 - `lesson-candidate.schema.json`
+- `refactoring-proposal.schema.json`
 
-The prose semantics are defined in [../docs/PROTOCOLS.md](../docs/PROTOCOLS.md) and [../docs/PROJECT_STATE.md](../docs/PROJECT_STATE.md).
+### Cognition resources, adaptive context, economics, and portfolios (M3C, ADR-0018, ADR-0019)
+
+- `access-channel.schema.json`
+- `context-profile.schema.json`
+- `context-manifest.schema.json`
+- `context-pack.schema.json`
+- `evidence-lease.schema.json`
+- `budget-pool.schema.json`
+- `budget-state.schema.json`
+- `resource-state.schema.json`
+- `cognition-portfolio.schema.json`
+- `portfolio-recommendation.schema.json`
+- `workflow-plan.schema.json`
+
+The prose semantics are defined in [../docs/PROTOCOLS.md](../docs/PROTOCOLS.md), [../docs/adr/0018-adaptive-cognition-portfolio-and-workflow-synthesis.md](../docs/adr/0018-adaptive-cognition-portfolio-and-workflow-synthesis.md), and [../docs/adr/0019-non-conversational-cognition-and-adaptive-review.md](../docs/adr/0019-non-conversational-cognition-and-adaptive-review.md).
 
 ## Rules
 

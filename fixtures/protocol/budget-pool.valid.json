@@ -1,0 +1,12 @@
+{
+  "schema_version": "1.0",
+  "pool_id": "pool_subscription_anthropic_pro",
+  "name": "Anthropic Pro Claude Code Subscription",
+  "regime": "subscription_quota",
+  "unit": "requests",
+  "hard_limit": 500,
+  "soft_alert_limit": 400,
+  "period": "billing_cycle",
+  "allow_overage": false,
+  "fallback_allowed_to_metered": false
+}

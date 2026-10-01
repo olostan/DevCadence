@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/olostan/DevCadence/schemas/budget-pool.schema.json",
+  "title": "DevCadence BudgetPool",
+  "description": "Resource and economic allocation pool without conflating model identity with billing semantics (ADR-0018 §3).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "pool_id",
+    "name",
+    "regime",
+    "unit",
+    "hard_limit",
+    "soft_alert_limit",
+    "period",
+    "allow_overage",
+    "fallback_allowed_to_metered"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "pool_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "regime": {
+      "enum": [
+        "local_compute",
+        "subscription_quota",
+        "metered_api",
+        "prepaid_credits",
+        "enterprise_allocation",
+        "unknown_custom"
+      ]
+    },
+    "unit": {
+      "enum": [
+        "usd_cents",
+        "token_credits",
+        "tokens",
+        "requests",
+        "seconds"
+      ]
+    },
+    "hard_limit": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "soft_alert_limit": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "period": {
+      "enum": [
+        "rolling_hour",
+        "rolling_day",
+        "billing_cycle",
+        "per_attempt",
+        "per_task"
+      ]
+    },
+    "allow_overage": { "type": "boolean" },
+    "fallback_allowed_to_metered": { "type": "boolean" }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "fallback_allowed_to_metered": { "const": true } }
+      },
+      "then": {
+        "properties": { "regime": { "const": "metered_api" } }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "regime": {
+            "enum": ["local_compute", "subscription_quota", "unknown_custom"]
+          }
+        }
+      },
+      "then": {
+        "properties": { "allow_overage": { "const": false } }
+      }
+    }
+  ]
+}
