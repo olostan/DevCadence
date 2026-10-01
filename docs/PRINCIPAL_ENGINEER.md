@@ -236,7 +236,7 @@ The Principal pays the architectural reasoning cost and compiles it into a **com
 
 Declare the Context Manifest: role, revision/base identity, paths/domains/risks, normative/evidence refs, assumptions and re-resolution/escalation triggers. Resolve cross-cutting security/state/review obligations. The target endpoint's effective workload profile must fit the whole contract plus mandatory clauses and reserves. If not, decompose into complete atomic contracts, choose an authorized capable endpoint or escalate; never trim requirements to win a token budget.
 
-Manual contracts/manifests apply now; M3C implements the resolver/linting. Lint can validate references and size, not prove semantic completeness. Independent contract review must challenge hidden requirements and stale assumptions. Principals also use progressive context; justified architectural reconciliation permits broader reads without making the corpus a permanent boot payload.
+Manual contracts/manifests apply now; M3C implements the Cognitive Invocation Compiler and linting. Deterministic mapping can validate applicability/freshness/size but cannot prove that the human/Principal contract captured every product semantic. Systemic durable-protocol work therefore receives Contract Completeness Review before implementation. Principals also use progressive context; justified architectural reconciliation permits broader reads without making the corpus a permanent boot payload. See ADR-0020.
 
 ### Example design handoff shape
 

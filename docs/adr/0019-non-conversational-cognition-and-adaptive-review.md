@@ -5,7 +5,7 @@
 - **Decision owner:** Principal / Human
 - **Supersedes:** none
 - **Superseded by:** none
-- **Related:** ADR-0016 (supervised validation services, bounded execution tools, and multi-tier context compaction). Scope boundary: ADR-0016 owns bounded-tool-output mediation and trajectory/history compaction for in-flight execution; ADR-0019 owns the per-turn prompt architecture (Protected Core, Cognitive State Capsule, Evidence Working Set, Ephemeral Tail) and review/attempt-context layering built on top of it. Both cite DCI-014 (progressive disclosure) from their respective layers and are intended to compose, not compete.
+- **Related:** ADR-0016 (bounded tools/history compaction) and ADR-0020 (Cognitive Invocation Compiler, deterministic rule admission, prompt rendering, and durable review ledger). ADR-0019 owns the per-turn context-layer architecture; ADR-0020 owns how the control plane selects mandatory/optional material and projects those layers into role-specific invocations.
 - **Related invariants:** DCI-018, DCI-019, DCI-129, DCI-001, DCI-005, DCI-008, DCI-009, DCI-020, DCI-021, DCI-040, DCI-045, DCI-049, DCI-050, DCI-055, DCI-060, DCI-070, DCI-074, DCI-090, DCI-091, DCI-108
 - **Related tasks:** WP-M3B (1–8 empirical review baseline), M3C, M3D, M4, M7
 
@@ -87,7 +87,7 @@ flowchart TD
     Corpus["Durable clauses, code and evidence"]
     Intent["Role, contract, scope and risk"]
     Profile["Endpoint context profile"]
-    Resolver["Deterministic Context Resolver"]
+    Resolver["Cognitive Invocation Compiler"]
     Pack["Bounded active working set"]
     Question["Explicit evidence question"]
     Corpus --> Resolver
@@ -260,7 +260,7 @@ At every milestone boundary, before transitioning to the next milestone:
 
 ## Implementation guidance & Milestone Alignment
 
-1. **Milestone M3C (Session Substrate & Context Capabilities)**:
+1. **Milestone M3C (Session Substrate & Cognitive Invocation Compiler)**:
    - Define provider-neutral context capabilities: `ContextControl = ExactStateless | AppendOnly | OpaqueSession` and `PrefixCache = Explicit | Implicit | SessionKV | None`.
    - Implement deterministic Context Resolver/profiles/packs, clause mappings/projection freshness, complete-contract admission with reserves, typed `CONTEXT_UNFIT` and lease/expansion mediation; do not claim automatic completeness from lint alone.
    - Implement the `Evidence Working Set` lease manager with content-addressed checks and path authorization.

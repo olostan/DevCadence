@@ -1,450 +1,401 @@
-# Review Campaigns, Convergence, and Closure
+# Review Campaigns, Durable Findings, and Convergence
 
 ## Scope
 
-This document defines how DevCadence obtains independent review without falling into unbounded reviewer/implementer/principal ping-pong.
+This document defines DevCadence review behavior. ADR-0020 owns the architectural decision that review state is durable control-plane state rather than conversational history.
 
-Review is an evidence-gathering process, not a search for perfection.
+The goal is independent criticism without endless reviewer/implementer ping-pong.
 
-> **A change is complete when material residual risk is bounded, not when further criticism becomes impossible.**
+> **Review gathers evidence. The control plane decides whether the candidate has satisfied closure policy.**
 
-Repeated intelligent review can almost always produce another locally defensible improvement. DevCadence therefore needs an explicit **termination mechanism for cognition**.
+A candidate is complete when material residual risk is bounded, not when no further criticism can be imagined.
 
-## 1. Core principles
+## 1. Default campaign shape
 
-### 1.1 Optimize for bounded residual risk
-
-DevCadence does not require zero conceivable criticism.
-
-A candidate is closable when:
-- deterministic validation passes;
-- no blocking finding remains open;
-- material disagreements are adjudicated or explicitly accepted as risk;
-- required review dimensions are satisfied;
-- remaining issues are deferred with clear ownership/boundary;
-- another review round has low expected material yield.
-
-### 1.2 Parallel review before serial repair
-
-Prefer many independent reviews of one immutable candidate over a chain of review -> repair -> broad review -> repair.
-
-~~~mermaid
-flowchart TB
-    Candidate["Immutable candidate commit"]
-    Candidate --> Correct["Correctness review"]
-    Candidate --> Arch["Architecture review"]
-    Candidate --> Security["Security review"]
-    Candidate --> Tests["Test adequacy review"]
-    Candidate --> Simple["Simplicity / maintainability review"]
-    Candidate --> Frontier["Independent frontier critic"]
-    Correct --> Synth["Principal adjudication"]
-    Arch --> Synth
-    Security --> Synth
-    Tests --> Synth
-    Simple --> Synth
-    Frontier --> Synth
-    Synth --> Repair["ONE Repair Work Package"]
-    Repair --> Implement["Repair implementation"]
-    Implement --> Focused["Focused revalidation"]
-    Focused --> Closure["Closure review"]
-~~~
-
-All broad reviewers should normally inspect the same candidate commit and Work Package revision.
-
-### 1.3 Reviewers do not directly control implementation scope
-
-Raw review findings are evidence, not commands.
-
-The flow is:
+Prefer parallel review of one immutable candidate, followed by one consolidated repair and focused verification.
 
 ~~~text
-Reviewer findings
-    -> Principal adjudication
-    -> ACCEPT / REJECT / DEFER / HUMAN_DECISION
-    -> consolidated Repair Work Package
-    -> Implementer
+immutable candidate + contract revision
+          |
+          +--> independent review A
+          +--> independent review B
+          +--> additional required lenses
+          |
+          v
+ finding normalization / deduplication
+          |
+          v
+     Review Ledger
+          |
+          v
+ one consolidated Repair Packet
+          |
+          v
+  attempted fixes / challenges
+          |
+          v
+ independent per-finding verification
+          |
+          v
+    one closure review
+          |
+          v
+         freeze
 ~~~
 
-The implementer should not independently negotiate every reviewer suggestion.
+The normal campaign is:
 
-### 1.4 Adjudicated disagreement is not endlessly relitigated
+1. broad independent review;
+2. normalization/adjudication;
+3. at most one consolidated repair packet;
+4. focused verification;
+5. closure decision.
 
-Once the principal records a disposition with rationale and evidence, equivalent new opinion does not reopen it.
+Additional repair rounds require a threshold-crossing material finding, repair regression, changed contract, or materially new evidence.
 
-Reopening requires materially new evidence, changed requirements, a failed deterministic check, a newly discovered invariant conflict, or demonstrated correctness/security/integrity failure.
+## 2. ReviewCampaign and compatibility
 
-### 1.5 Dual independent review and the "Double-Green" adjudication fast-path
+The existing durable `ReviewCampaign`, `FindingDisposition`, and `ClosureDecision` records remain canonical compatibility surfaces. Raw reviewer observations continue to originate in `ReviewResult.findings`. This design adds stable normalized finding identity and resolution-verification evidence between those existing stages; it does not create a parallel campaign system.
 
-For systemic or high-risk candidates, DevCadence supports an optional **Dual Independent Review** ("2nd Point of View"):
-- Two independent reviewer models evaluate the candidate commit in parallel, each starting from a clean context. Independence spans both **endpoint/model diversity** (e.g. distinct provider families) and **review-method diversity** (e.g. invariant/contract tracing vs. failure-first/mutation testing).
-- **The "Double-Green" Adjudication Fast-Path**: If both independent reviewers return `PASS` with zero blocking findings AND all deterministic validation checks pass, the Principal receives an instant green card allowing immediate, frictionless closure. Double-Green is an **adjudication fast-path**, not an unmoderated bypass of human/principal authority (DCI-009) or deterministic closure prerequisites (`closure-decision.schema.json`).
-- **Asymmetric Veto**: If any reviewer raises a `BLOCKING` finding in `security` or `invariants`, an Aggregator model **cannot** discard or override it. Deterministic evidence may prove a finding *false or inapplicable* (e.g. proving a cited vulnerability path is unreachable or a claimed invariant conflict is refuted by code), but cannot waive or override a genuine invariant requirement. A real invariant conflict requires an explicit human/principal decision record, never an automatic reviewer dismissal.
-- **Aggregator Synthesis**: If findings exist or reviewers disagree, an Aggregator model (or Principal) deduplicates the findings, filters opportunistic nits, adjudicates tensions into standard `FindingDisposition` records, and compiles at most **one single consolidated `RepairWorkPackage`** per round. Implementers never argue directly with reviewers.
+A ReviewCampaign is anchored to:
 
-### 1.6 Cognitive freedom with silent multi-dimensional metering
+- immutable base/candidate identity;
+- task/attempt/Work Package ID and contract revision/digest;
+- required review dimensions/lenses;
+- reviewer independence requirements;
+- deterministic validation evidence;
+- stable finding IDs;
+- current campaign/closure state.
 
-Review prompts must **never** impose artificial turn limits (e.g. "you have 5 turns") on reviewer models. Turn countdowns induce "budget anxiety," causing models to rush, skip crucial caller verification, and hallucinate conclusions when running low on turns.
-- Reviewer models are granted full cognitive freedom to inspect whatever files, conventions, or tests they need to reach certainty.
-- Context runaway and resource exhaustion are bounded structurally at the runtime level via **Silent Multi-Dimensional Metering**:
-  - Cumulative token caps (input, cached, output);
-  - Wall-clock execution limits per operation;
-  - Cumulative tool-call limits;
-  - Semantic loop detection (identifying oscillating edits or repeating identical failed tool calls).
-- When an outer budget is exhausted, the control plane does not rush the model; it pauses execution with `PAUSED_BUDGET_EXCEEDED`, checkpoints state, and escalates to the Principal/Human for disposition (DCI-045, DCI-049).
+The campaign is not a chat thread. Comments and model transcripts are evidence attached to canonical state.
 
-## 2. Review Campaign
+## 3. ReviewFinding
 
-A **ReviewCampaign** is the bounded lifecycle around one immutable candidate lineage.
+A material finding must be specific enough to verify independently. A normalized ReviewFinding gives stable identity to one or more raw `ReviewResult.findings` observations and is the object referenced by the existing `ReviewCampaign.finding_refs` / `FindingDisposition.finding_id` lineage.
 
-It records:
-- candidate commit;
-- task / attempt / Work Package;
-- review objectives/dimensions;
-- reviewers/models;
-- reporting threshold;
-- findings;
-- dispositions;
-- repair rounds;
-- focused revalidation;
-- closure threshold;
-- residual risks;
-- outcome.
-
-A campaign is not an open-ended conversation.
-
-## 2A. Dynamic cognitive review lenses and active falsification [Planned - M7]
-
-*Status:* Automated review lens metadata and machine-executed falsification probes are **Planned for Milestone M7**.
-
-DevCadence distinguishes **effective-now process guidance** from **future machine protocol**:
-
-- **Effective-Now Process Guidance**: Human and model reviewers may adopt these lenses today to guide qualitative focus across the stable `ReviewDimension` taxonomy (`correctness`, `architecture`, `invariants`, `security`, `test_adequacy`, `concurrency`, `performance`, `maintainability`, `other`), without changing wire schemas:
-  1. **Anti-Rabbit Hole Lens (YAGNI & Simplicity)**:
-     - Scrutinizes code for defensive bloat, speculative future-proofing, and over-engineering.
-     - Replaces paranoid error-handling cascades with simple, clean assertions or fail-fast checks.
-  2. **Anti-Drift Lens (Scope Discipline)**:
-     - Verifies that only authorized files and packages were modified.
-     - Flags drive-by refactorings, unsolicited style tweaks in untouched code, and unapproved dependency additions.
-  3. **Anti-Hallucination Lens (Fact & Grounding Verification)**:
-     - Verifies that cited symbols, functions, and CLI flags genuinely exist in the repository.
-     - Checks that tests drive real execution paths rather than passing vacuously through tautological mocks.
-  4. **Architecture & Invariant Lens**:
-     - Evaluates cross-layer coupling, security boundaries, and persistence semantics against durable project invariants (DCI compliance).
-  Manual reviewers can also perform manual falsification checks (e.g. verifying a test suite fails when an assertion is commented out).
-
-- **Planned M7 Machine Protocol**:
-  In Milestone M7, review lens metadata will be attached to automated review invocations, and the control plane's deterministic validation machinery will execute structured **Active Falsification Probes** (`FalsificationProbe` / mutation testing) in isolated worktrees, returning hard evidence to convert reviewer suspicion into empirical proof.
-
-Lenses are selected dynamically based on task risk (e.g. bug fixes emphasize Anti-Drift and Anti-Rabbit Hole; major features invoke Architecture and Anti-Hallucination).
-
-## 2B. Bidirectional Work Package evolution (Living baselines) [Proposed - M3C]
-
-An accepted Work Package is a **stable baseline, not an immutable dogma**.
-
-If a local implementer or reviewer discovers that an upstream interface (e.g. from an earlier Work Package) is clunky, incomplete, or missing a parameter, the implementer is forbidden from building hacky workarounds or shims.
-
-Instead, the worker emits a typed **`RefactoringProposal`** (ADR-0019 §3):
-- Cites the upstream package and the specific architectural tension;
-- Provides concrete compiler or test evidence;
-- Outlines the proposed upstream interface refactor and affected callers.
-
-The Principal adjudicates the proposal. When accepted, an atomic upstream refactor is applied cleanly, regression tests verify all callers, and the codebase stays unified and elegant.
-
-## 3. Finding classes
-
-### BLOCKING
-
-Must be fixed before closure.
-
-Typical examples:
-- incorrect externally visible behavior;
-- data loss/corruption;
-- security boundary violation;
-- invariant violation;
-- invalid durable schema/event/state semantics;
-- unverifiable acceptance/evidence lineage;
-- unrecoverable canonical state;
-- material requirement violation.
-
-### MATERIAL_NON_BLOCKING
-
-Real and material, but bounded enough to defer deliberately.
-
-Examples:
-- known scalability limitation outside current operating envelope;
-- maintainability debt with bounded blast radius;
-- incomplete observability that does not make current decisions unauditable;
-- optimization that measurements do not yet justify.
-
-A deferred material finding MUST retain risk, rationale, owner/target, and trigger for reconsideration.
-
-### OPPORTUNISTIC
-
-A valid improvement that does not justify reopening the current candidate.
-
-Examples:
-- naming/style refinement;
-- speculative generalization;
-- another reasonable abstraction;
-- extra defensive behavior without a plausible current failure mode;
-- documentation polish with no semantic ambiguity.
-
-Opportunistic findings may become future backlog items, but MUST NOT extend the active repair campaign.
-
-## 4. Severity and materiality are distinct
-
-Severity describes harm if the issue is real.
-
-Materiality/disposition answers whether it must change the current candidate.
-
-A small patch can be BLOCKING when it changes a durable contract. A large cleanup can be OPPORTUNISTIC.
-
-Important factors:
-- current correctness impact;
-- security/integrity impact;
-- durability/compatibility;
-- architecture impact;
-- probability;
-- blast radius;
-- cost of fixing later;
-- whether current milestone claims the affected behavior.
-
-## 5. The "why now?" test
-
-After the initial broad review, any finding proposed for current repair MUST answer:
-
-> Why must this be fixed in this milestone/candidate?
-
-Strong reasons:
-- current invariant violation;
-- current behavior is wrong;
-- current evidence/acceptance is unsound;
-- security/integrity failure;
-- durable protocol would become expensive/incompatible to repair later;
-- current milestone exit criterion would be false.
-
-Weak reasons:
-- cleaner;
-- might be useful later;
-- future subsystem may need it;
-- another abstraction is aesthetically preferable;
-- generalized support could be added now.
-
-Weak reasons normally become deferred/opportunistic work.
-
-## 6. Rising reopen threshold
-
-Review tolerance becomes stricter as the candidate converges.
-
-| Phase | Purpose | Minimum finding that may reopen code |
-|---|---|---|
-| Broad review | discover material weaknesses | MEDIUM/material or higher |
-| Repair revalidation | verify repairs/regressions | HIGH/material or direct repair regression |
-| Closure review | decide whether to freeze | BLOCKER / invariant-contract-security-integrity defect |
-
-Projects may tighten thresholds for high-risk changes, but SHOULD NOT lower them merely because more reviewer capacity is available.
-
-~~~mermaid
-stateDiagram-v2
-    [*] --> BroadReview
-    BroadReview --> Adjudication
-    Adjudication --> Repair: accepted current-campaign findings
-    Adjudication --> ClosureReview: no repair required
-    Repair --> FocusedRevalidation
-    FocusedRevalidation --> Repair: repair regression / threshold issue
-    FocusedRevalidation --> ClosureReview
-    ClosureReview --> Repair: blocker discovered
-    ClosureReview --> Frozen: closure gate passes
-    Frozen --> Reopened: materially new evidence
-    Reopened --> BroadReview
-~~~
-
-## 7. Repair rounds are bounded
-
-Default:
-- one broad review campaign;
-- one consolidated repair round;
-- one focused revalidation;
-- one closure review.
-
-Additional repair rounds require a threshold-crossing finding and explicit principal authorization.
-
-A project may configure a maximum number of repair rounds. Hitting the limit with unresolved blockers escalates; it does not silently accept or continue forever.
-
-## 8. Focused revalidation is not another unrestricted review
-
-After repair, reviewers primarily answer:
-- was each accepted finding actually fixed?
-- did the repair violate an invariant or introduce a regression?
-- do deterministic checks still pass?
-- is evidence/lineage still valid?
-
-They SHOULD NOT restart a general search for medium/low improvements.
-
-One optional closure review may inspect broadly, but it reports only findings above the closure threshold.
-
-## 9. Reviewer finding budget
-
-Review prompts SHOULD request only the most consequential findings.
-
-Recommended default:
-- normally prioritize 5 material findings per response; additional blockers must be reported or durably queued with an explicit incomplete-review status;
-- no quota that forces findings;
-- lower-value observations omitted or placed in a non-blocking appendix.
-
-The instruction is:
-
-> Prioritize the N most consequential findings per response. Never suppress a blocker to meet an output budget; batch additional findings with an explicit pending status. Reporting zero findings is valid after genuine coverage. Do not invent findings to demonstrate usefulness.
-
-Finding budgets prioritize output, not cognition or the total number of defects. They do not cap blocking findings or permit PASS with queued blockers/incomplete coverage.
-
-## 10. Principal adjudication
-
-For every material finding, the principal chooses exactly one disposition:
-
-- **FIX_NOW** — crosses current threshold and enters the Repair Work Package.
-- **REJECT** — false, already covered, outside contract, or unsupported.
-- **DEFER** — real but below current repair threshold; retain debt/risk and trigger.
-- **HUMAN_DECISION** — changes product intent, risk appetite, or milestone scope.
-- **DUPLICATE** — already represented by another finding.
-
-The principal should synthesize related findings before repair so multiple reviewers do not create duplicate implementation churn.
-
-## 11. Reopen Rule
-
-A closed/frozen candidate may be reopened only by materially new information:
-- deterministic validation failure;
-- production/reproduction evidence;
-- new or changed requirement;
-- newly discovered applicable invariant;
-- security/integrity/correctness defect;
-- evidence showing an adjudicated factual premise was false;
-- compatibility/durable-contract issue not previously represented.
-
-The following alone do NOT reopen:
-- another model prefers a different design;
-- a consultant proposes a cleaner abstraction;
-- restating an already adjudicated finding;
-- a new reviewer assigns higher subjective severity without new evidence.
-
-## 12. Freeze semantics
-
-When ClosureDecision = FROZEN:
-- current candidate review campaign terminates;
-- opportunistic/material-deferred findings move to backlog/risk;
-- ordinary new findings create new work rather than extending the campaign;
-- only the Reopen Rule can reactivate the campaign.
-
-Freeze is a governance state, not a claim of perfection.
-
-## 13. Closure Gate
-
-A closure decision should inspect structured evidence rather than ask "does everyone agree?"
+Minimum semantic fields:
 
 ~~~yaml
-closure:
-  deterministic_validation: pass
-  required_review_dimensions: complete
-  blocking_findings:
-    open: 0
-  material_findings:
-    unresolved_without_disposition: 0
-  reviewer_disagreements:
-    unresolved_material: 0
-  contract_changes:
-    reviewed: true
-  repair_regressions:
-    open: 0
-  residual_risks:
-    bounded: true
-  reopen_threshold: blocker
-  outcome: frozen
+finding_id: RF-...
+candidate_commit: ...
+contract_revision: ...
+importance: blocking | material_non_blocking | opportunistic
+confidence: high | medium | low
+claim: ...
+evidence:
+  - ...
+requirement_refs:
+  - DCI-...
+impact: ...
+why_now: ...
+verification_method: ...
+source:
+  reviewer: ...
+  lens: ...
+status: open
 ~~~
 
-**No blockers** is a valid completion criterion.
+The serialization is illustrative. The typed protocol may use different field names.
 
-**No findings** is not required.
+### Materiality / importance
 
-## 14. Context and token discipline
+Canonical durable materiality remains compatible with the existing FindingDisposition schema: `blocking | material_non_blocking | opportunistic`. A model-facing renderer may present simpler labels such as blocking / non-blocking / advisory, but canonical state does not depend on prompt wording.
 
-Review uses an independent **Review Context Pack**: complete bounded Execution Contract/acceptance obligations, common exact mandatory constraints, immutable base/candidate identity, assigned dimensions/lenses, diff manifest and validation summaries/handles. Initial evidence is lens-specific; reviewers need not share duplicated corpus bootstraps. Roles may fetch exact clauses, hunks, callers, tests and dependencies for explicit questions. Critical cross-cutting findings remain reportable.
+**blocking**
 
-Track which changed hunks, requirements and affected dependencies have been inspected or assigned elsewhere. A scoped initial pack is not a restriction to changed lines. Missing baseline behavior, hidden contracts and callers can be decisive. Coverage gaps are reported and routed; review cannot PASS merely because the admitted snippets looked sound. Campaign completion requires collective required coverage plus existing closure gates.
+The current candidate cannot close if the claim is true. Typical reasons:
 
-Models may use multiple bounded/stateless reasoning invocations with compact derived ReviewState and evidence refs. Do not impose `MaxTurns = 1` for prose reviews or suppress blockers to achieve token savings. Endpoint resident limits and silent cumulative budgets are distinct. At exhaustion, checkpoint and report unreviewed areas; suspend/escalate under policy rather than inventing completion. Legitimate expansion is permitted within hard admission/privacy/spending bounds.
+- correctness/security/integrity failure;
+- MUST/invariant violation;
+- invalid durable schema/state semantics;
+- acceptance evidence is unsound;
+- current milestone contract cannot be represented or satisfied.
 
-### Documentation dependency review
+**material_non_blocking**
 
-Before model analysis, run available deterministic checks for changed links/anchors, normative ID uniqueness, schema/prose agreement and generated-projection/budget drift. Distinguish executable checks from manual ones; unavailable validators are disclosed, not reported PASS. Mermaid validation is required when diagrams change and an appropriate parser is available; absence is recorded for review.
+A real issue with bounded current risk. It may be fixed now or explicitly deferred with owner/trigger.
 
-Identify changed/added/removed normative clauses and direct/reverse references, affected schemas/types/prompts and owning documents. Review the changed semantic units **and their affected dependencies**, progressively expanding the graph until applicable contradictions/coverage are resolved. A foundational change may legitimately require architectural reconciliation and broad reads; a typo need not preload the corpus. Existing heading anchors plus source revision/digest provide transitional identities; M3C tooling adds machine mappings and generated projections.
+**opportunistic**
 
-The reviewer independently challenges the dependency set, including a changed rule whose consumers were not updated. No findings cap or token target proves completeness. Missing/unmapped applicability is an unresolved review question. Deterministic link/schema lint cannot establish semantic equivalence or that all hidden requirements were found.
+An improvement, alternative, or future idea that does not justify extending the current campaign.
 
-### Transfer and aggregation
+Severity and materiality are not identical. A stylistically large change can be advisory; a one-line durable-contract defect can be blocking.
 
-Reviewers do not inherit implementer reasoning. Principals receive deduplicated findings; implementers receive one Repair Execution Contract; focused revalidation receives finding IDs and changed evidence; closure receives compact campaign/coverage state and candidate identity. Transcripts are forensic references, never the default active handoff. Required evidence remains retrievable and revision-pinned; state summaries stay explicitly derived.
+## 4. Finding admission
 
-## 15. Review yield and convergence telemetry
+Reviewer prose is not automatically implementation scope.
 
-Track:
-- new material findings per round;
-- duplicate/rejected/opportunistic findings;
+A material finding must provide:
+
+1. concrete claim;
+2. affected artifact/behavior;
+3. evidence;
+4. applicable requirement/invariant or engineering rationale;
+5. consequence if unfixed;
+6. importance;
+7. independent verification method.
+
+Findings that cannot satisfy this shape remain observations/advisories until clarified.
+
+### Why-now test
+
+A current-campaign repair should normally be justified by one of:
+
+- current invariant/requirement violation;
+- current behavior is wrong;
+- current evidence or acceptance is unsound;
+- security/integrity risk;
+- durable protocol would become materially harder to repair after freeze;
+- milestone exit claim would otherwise be false.
+
+"Cleaner", "more generic", or "might be useful later" is normally advisory/deferred.
+
+## 5. Normalize before repair
+
+Multiple reviewers may describe the same underlying defect differently.
+
+The Principal/Aggregator should create one canonical finding and retain reviewer observations as supporting evidence rather than giving the implementer duplicate tasks.
+
+Example:
+
+~~~text
+reviewer A: "fallback has no billing semantics"
+reviewer B: "fallback endpoint does not identify access/economic path"
+
+          ↓ normalize
+
+RF-021: fallback is not a complete routable/economic binding
+supported_by: [A-7, B-12]
+~~~
+
+The implementation packet consumes the canonical finding, not every transcript.
+
+## 6. Resolution is not verification
+
+After the existing FindingDisposition selects a current-campaign repair (`fix_now`), an implementer responds with exactly one semantic outcome:
+
+- **fix_attempted** — candidate changed; provide commit/files/evidence;
+- **challenge** — claim is false, inapplicable, outside the current contract, or belongs at another boundary; provide argument/evidence.
+
+An implementer MUST NOT mark its own resolution verified (DCI-134).
+
+The runtime verifies that every required finding received a response; the implementer does not need the full lifecycle rules in its prompt.
+
+## 7. Independent verification
+
+### Fix verification
+
+A clean verifier receives:
+
+- finding;
+- relevant contract/mandatory clauses;
+- old/new candidate identity and focused diff/evidence;
+- deterministic validation evidence relevant to the finding.
+
+It answers whether the original claim is:
+
+- verified fixed;
+- not fixed;
+- partially fixed;
+- invalidated by stronger deterministic evidence.
+
+Focused verification is not another unrestricted broad review.
+
+### Challenge verification
+
+A challenge is evaluated in an unbiased context containing:
+
+- original finding claim/evidence;
+- challenge argument/evidence;
+- exact applicable normative clauses;
+- only the additional evidence needed to decide.
+
+Do not prime the verifier with "the author says reviewer X was wrong" or load the conversational transcript.
+
+Conceptual terminal outcomes:
+
+- `verified_fixed`;
+- `verified_dismissed`;
+- `verified_deferred`.
+
+A deferment names a destination owner/WP, why deferral is safe now, and a reconsideration trigger. "Future work" alone is not closure.
+
+## 8. Review independence
+
+Reviewers start from clean role/lens-specific Context Packs and do not inherit author reasoning.
+
+For systemic/high-risk candidates, independence may require:
+
+- different endpoint/model family;
+- different provider/access path where policy requires;
+- different review method/lens;
+- clean starting context.
+
+Independence is a routing/control-plane policy. The reviewer should see only the independence-related information needed for its assignment.
+
+Security/invariant blockers cannot be waived merely by an Aggregator preference. They must be fixed, proven false/inapplicable with evidence, or explicitly escalated to the authorized decision owner.
+
+## 9. Closure review and reopen threshold
+
+Closure review exists to detect:
+
 - repair regressions;
-- initial and peak resident context, protected/contract/normative/state/leased-evidence components, reserves, cumulative input/cached/output, reloaded tokens, expansions/restarts and counting method/unknowns;
-- inspected and outstanding coverage by hunk/requirement/dependency;
-- reviewer disagreement;
-- reopened frozen campaigns;
-- time/tokens per material finding.
+- blockers missed by the initial campaign;
+- contract changes introduced during repair;
+- materially new evidence.
+
+A new closure finding should record origin:
+
+- `repair_regression`;
+- `previously_missed_material_defect`;
+- `contract_change`;
+- `new_evidence`.
+
+Equivalent restatements of already adjudicated findings do not reopen a campaign.
+
+A frozen candidate may reopen only for materially new information such as:
+
+- deterministic validation failure;
+- reproduction/production evidence;
+- changed requirement;
+- newly applicable invariant;
+- security/integrity/correctness defect;
+- evidence that an adjudicated factual premise was false;
+- previously unrepresented durable compatibility problem.
+
+Another model preferring a different abstraction is not new evidence.
+
+## 10. Closure gate
+
+The control plane evaluates structured state rather than asking agents whether "everything was addressed."
 
 Conceptually:
 
-~~~text
-Review Yield = new material findings / review effort
+~~~yaml
+closure:
+  candidate_identity: immutable
+  deterministic_validation: pass
+  required_review_dimensions: complete
+  blocking_findings:
+    unresolved: 0
+  material_findings:
+    without_verified_disposition: 0
+  repair_regressions:
+    unresolved: 0
+  residual_risk:
+    bounded: true
+  outcome: frozen
 ~~~
 
-This is telemetry, not a hard mathematical stopping function.
+Agents report evidence and attempted work. DevCadence computes closure.
 
-Falling review yield plus a passing Closure Gate is evidence to stop.
+"No blockers" is a valid completion condition. "No possible findings" is not.
 
-## 16. Relationship to consultants
+## 11. Contract completeness review
 
-Consultants participate as independent reviewers/evidence sources and SHOULD run in parallel when possible.
+For systemic/durable protocol work, perform Contract Completeness Review before implementation.
 
-After principal adjudication, a consultant's alternative opinion does not reopen a decision without new evidence.
+The purpose is representability, not code correctness:
 
-For unresolved material disagreement, the principal may request targeted evidence, run an experiment, invoke a neutral tie-break consultation, or escalate to human authority.
+- enumerate the owning requirements/clauses;
+- map each required concept to protocol/schema representation;
+- identify missing semantics before implementation;
+- challenge accidental provider/model coupling;
+- identify validation that is intentionally deferred to a later cross-record/runtime boundary.
 
-Do not recursively show every consultant every other consultant response.
+Prefer a compact matrix:
 
-## 17. Human role
+| Requirement | Required concept | Representation | Boundary |
+| --- | --- | --- | --- |
+| FR-X | fallback economic path | `FallbackBinding` | record-local |
+| PROTOCOL-Y | session requirement | `WorkflowStage` | protocol |
+| DCI-Z | activation authority | validator | later runtime |
 
-Human involvement is reserved for product/risk authority, scope changes, unusual residual-risk acceptance, policy exceptions, and unresolved material tradeoffs where the system lacks authority.
+An unresolved empty cell on a MUST is a blocker to implementation/freeze.
 
-Humans SHOULD NOT arbitrate routine stylistic reviewer disagreement.
+## 12. Context and token discipline
 
-## 18. Anti-patterns
+Review Context Packs follow ADR-0020 and ADR-0019:
 
-- sequential unrestricted broad reviews after every fix;
-- forwarding every reviewer comment directly to implementers;
-- "fix everything reviewers mention";
-- requiring all reviewers to agree;
-- reopening an adjudicated issue because another model expresses the same opinion;
-- treating stylistic cleanup as a blocker;
-- lowering the review threshold because context is still available;
-- asking closure reviewers to "find more issues";
-- allowing repair rounds without a maximum/escalation path;
-- carrying the entire review transcript into every subsequent model context.
+- complete bounded Execution Contract;
+- exact applicable mandatory clauses;
+- immutable candidate/diff identity;
+- assigned dimensions/lenses;
+- validation summaries/handles;
+- focused initial evidence;
+- progressive EvidenceLeases for explicit questions.
 
-## 19. Completion condition
+Do not preload the repository or previous review conversations merely because they exist.
 
-A ReviewCampaign terminates when:
-1. required deterministic validation passes;
-2. required review dimensions completed;
-3. all threshold-crossing findings have dispositions;
-4. accepted repairs are revalidated;
-5. no closure-threshold finding remains;
-6. residual risk is explicitly bounded;
-7. ClosureDecision freezes the candidate.
+Do not impose artificial "you have N turns" countdowns. Runtime meters tokens/tool calls/wall clock silently and checkpoints/escalates on exhaustion.
 
-At that point the correct next action is progress, not another unrestricted review.
+A finding-output budget may prioritize presentation but never suppress a blocker or convert incomplete coverage into PASS.
+
+## 13. Dynamic review lenses
+
+Lenses are selected from task risk rather than made resident in every review prompt.
+
+Examples:
+
+- correctness/failure-first;
+- architecture/invariants;
+- security;
+- test adequacy/falsification;
+- concurrency/performance;
+- anti-drift/scope discipline;
+- anti-rabbit-hole/simplicity;
+- grounding/anti-hallucination.
+
+M7 may automate lens selection, parallel fan-out, mutation/falsification probes, and aggregation. The Review Ledger semantics apply before M7; M7 expands orchestration rather than replacing them.
+
+## 14. Bounded cognition and campaign health
+
+DevCadence should record campaign metrics without turning them into model instructions:
+
+- initial findings;
+- normalized findings/duplicates;
+- fix attempts;
+- challenges;
+- verification failures;
+- repair rounds;
+- new material closure findings;
+- review/repair input and output tokens;
+- wall clock and economic regime usage where available.
+
+A high rate of previously-missed blockers or repeated fix verification failures is evidence that the review process, contract, or context compiler needs improvement.
+
+It is not a reason to add more prose rules to every prompt.
+
+## 15. Effective-now vs implementation roadmap
+
+### Effective immediately as process guidance
+
+- immutable candidate identity;
+- stable finding IDs in handoff/PR artifacts where practical;
+- fix/challenge distinction;
+- author does not self-verify;
+- focused revalidation;
+- no equivalent reopening without new evidence;
+- contract completeness review for systemic protocol WPs.
+
+### M3C
+
+Implement compact typed finding/resolution/verification records sufficient to preserve state across clean sessions and integrate them with the Cognitive Invocation Compiler.
+
+### M4
+
+Measure token/cost/defect yield and whether structured review reduces duplicate findings and repair rounds.
+
+### M7
+
+Add full multi-review campaign automation, dynamic lenses, active falsification, aggregation and closure orchestration.
+
+## 16. Relationship to other documents
+
+- **ADR-0020** owns cognitive invocation compilation and the durable review-state authority split.
+- **ADR-0019** owns adaptive context layers and non-conversational cognition.
+- **PROTOCOLS.md** owns wire/record semantics.
+- **WORK_PACKAGES.md / IMPLEMENTATION_PLAN.md** own milestone placement.
+- **AGENTS.md** contains only compact operating directives and points here for review behavior.
+
+Avoid duplicating these rules into prompts or role docs. Runtime projections should select only what the current model action requires.
