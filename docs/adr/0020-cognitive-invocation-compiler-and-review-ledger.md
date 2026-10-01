@@ -1,6 +1,6 @@
 # ADR-0020 — Cognitive Invocation Compiler, Deterministic Rule Admission, and Review Ledger
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-09-30
 - **Owners:** DevCadence architecture / cognition substrate
 - **Related:** ADR-0016, ADR-0018, ADR-0019
@@ -57,6 +57,14 @@ Embedding similarity, BM25, reranking, or an LLM MAY help retrieve optional/back
 
 A semantically distant safety or spending rule can still be binding. Conversely, a highly similar ADR paragraph may be rationale rather than authority.
 
+To bound **mis-mapped** rules, not only unmapped tasks, every execution-critical clause belongs to a deterministic admission class:
+
+- `always`: a very small project-wide authority floor that is present in every cognition invocation;
+- `capability_default`: admitted whenever the invocation can exercise the corresponding authority class (for example repository mutation, credentials, network access, spending, or durable-state mutation); exclusion requires an explicit revision-pinned not-applicable mapping, never merely the absence of a tag;
+- `mapped`: admitted through the normal task/role/action/path/domain/risk mappings and dependency closure.
+
+A reverse-coverage linter rejects any mandatory clause that has no deterministic admission path. This does not make every security or governance rule resident everywhere; it makes cross-cutting authority fail safe without turning the whole corpus into a prompt.
+
 The admission pipeline is therefore ordered:
 
 ~~~text
@@ -86,7 +94,7 @@ task + role + EWP + paths + domains + risks + action + project state
                        ContextPack
 ~~~
 
-Mandatory objects survive ranking and token pressure. If mandatory material plus reserves does not fit the selected endpoint's calibrated envelope, the compiler returns `CONTEXT_UNFIT`; it does not drop requirements.
+Mandatory objects survive ranking and token pressure. Before M4 has calibrated an endpoint, M3C uses a **provisional ContextProfile** derived from the runtime/declared hard window, explicit output/reasoning/tool reserves, configured policy ceilings, and conservative accounting uncertainty. A provisional target is configuration, not an empirical effectiveness claim; there is no universal fixed percentage such as 70%. If the complete mandatory pack cannot fit the applicable hard/provisional bound, the compiler returns `CONTEXT_UNFIT`; it does not drop requirements. Policies that require empirically demonstrated reliability may reject an uncalibrated endpoint rather than pretending the provisional profile is verified.
 
 ### 3. Hybrid retrieval, not embeddings alone
 
@@ -102,7 +110,7 @@ For non-mandatory discovery the compiler SHOULD combine:
 
 Embeddings are a **recall mechanism**, not authority.
 
-The first implementation may omit dense embeddings entirely if deterministic metadata + lexical retrieval provide adequate recall. M4 decides whether embeddings/rerankers materially improve quality/cost.
+M3C's required baseline is deterministic metadata plus lexical/exact and dependency-graph retrieval. Dense embeddings/reranking are **not an M3C implementation requirement**; M4 may prototype and compare them, and they graduate into production only if they materially improve accepted quality/resource use without weakening mandatory-rule recall.
 
 ### 4. Inline obligations; reference rationale; lease evidence
 
@@ -177,9 +185,10 @@ A normalized **ReviewFinding** supplies the stable identity that the existing `R
 
 - finding ID;
 - candidate/contract identity;
-- importance/materiality;
-- claim;
-- evidence;
+- `severity` compatible with the existing durable vocabulary (`info | low | medium | high | critical`);
+- `materiality` compatible with the existing durable vocabulary (`blocking | material_non_blocking | opportunistic`);
+- optional epistemic `confidence` (`high | medium | low`);
+- claim and evidence;
 - applicable requirement/invariant when known;
 - impact/why-now;
 - verification method;
@@ -187,9 +196,7 @@ A normalized **ReviewFinding** supplies the stable identity that the existing `R
 - normalization links to raw ReviewResult observations;
 - status.
 
-The existing `FindingDisposition.materiality` values remain the durable compatibility vocabulary (`blocking | material_non_blocking | opportunistic`). Model-facing projections MAY render those more simply as blocking / non-blocking / advisory if that empirically improves adherence, but projection labels do not change canonical semantics.
-
-Confidence MAY be `high | medium | low`. Richer categories are optional metadata and must earn their complexity empirically.
+These dimensions are intentionally distinct: **severity** is the harm if the claim is true; **materiality** is whether/how it affects the current candidate/campaign; **confidence** is the strength of the evidence. `FindingDisposition` must carry the normalized finding's severity/materiality values; any reclassification happens during normalization/adjudication with rationale rather than through a second vocabulary hidden in the prompt.
 
 ### 8. Resolution and verification are separate authorities
 
@@ -200,7 +207,7 @@ For a finding whose existing `FindingDisposition` requires current repair, the i
 
 The implementer cannot mark a finding verified. A verified challenge does not silently mutate historical `FindingDisposition` evidence; the campaign records the verification and, where policy requires a changed adjudication, appends the appropriate new/superseding decision record according to the durable compatibility rules.
 
-A clean independent verifier evaluates an attempted fix. A challenged finding is evaluated in an unbiased adjudication context containing the original claim/evidence, the challenge argument, and the applicable normative material — not the accumulated conversation transcript.
+A clean independent verifier evaluates an attempted fix. A challenged finding is evaluated in an unbiased adjudication context containing the original claim/evidence, the challenge argument, and the applicable normative material — not the accumulated conversation transcript. The cognitive verifier is **blinded by default** to the identities/model/provider of the original reviewer and challenger; independence/capability provenance is checked by the control plane and is exposed to the verifier only when identity itself is materially relevant evidence.
 
 Terminal outcomes are conceptually:
 
@@ -249,7 +256,7 @@ Equivalent restatements of already adjudicated findings do not reopen the campai
 
 ### 10. Contract completeness review precedes implementation for systemic protocol work
 
-For systemic/durable protocol WPs, DevCadence SHOULD perform a pre-implementation **Contract Completeness Review**.
+For systemic/durable protocol WPs, the **Principal/contract author MUST perform a pre-implementation Contract Completeness Review** as an effective-now manual evidence step. It does not require a new wire record. M7 may automate the check, but ownership exists before that automation.
 
 The review checks requirement → protocol/schema representability before implementation begins. A compact coverage matrix is preferred over broad prose, for example:
 
@@ -299,6 +306,8 @@ Measure at least:
 Do not optimize token count at the expense of correctness. The target is **high relevant-signal density under complete authority**, not the smallest prompt.
 
 ## Prompt projection
+
+Renderer boundaries are security boundaries: untrusted source/evidence text must be escaped, encoded, length-delimited, or otherwise structurally represented so content such as `</contract>` or Markdown fences cannot terminate an instruction block or become control text.
 
 A typical model-visible projection should be simple even when the underlying control plane is sophisticated:
 
@@ -367,8 +376,9 @@ Implement the deterministic Cognitive Invocation Compiler foundation:
 - mandatory admission and `CONTEXT_UNFIT`;
 - hybrid retrieval interfaces (lexical/graph required; dense retrieval optional);
 - context packing/leases/reserves;
-- endpoint-specific prompt renderer interface;
-- compact review finding/resolution/verification protocol sufficient to preserve state across sessions.
+- endpoint-specific prompt renderer interface.
+
+A separate **WP-M3C-5** implements the compact review finding/resolution/verification protocol so review-ledger state does not inflate the session/compiler implementation package.
 
 ### M3D
 
@@ -376,7 +386,7 @@ Use the compiler from adaptive portfolio/workflow synthesis. Planner-generated w
 
 ### M4
 
-Benchmark effective context/cognitive envelopes, renderer formats, retrieval strategies, and review convergence/token efficiency. Dense embeddings/reranking remain optional until they demonstrate value.
+Benchmark effective context/cognitive envelopes, renderer formats, retrieval strategies, and review convergence/token efficiency. Mandatory-admission ground truth must be independent of the compiler under test: include seeded omitted/mis-mapped rule cases and held-out tasks whose applicable mandatory set is established by an independent full-corpus Principal/human audit. Report false-negative mandatory omissions separately from irrelevant optional admissions. Dense embeddings/reranking remain optional until they demonstrate value.
 
 ### M7
 

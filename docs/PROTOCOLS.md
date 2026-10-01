@@ -444,7 +444,7 @@ Under ADR-0016:
 - **Response Yield Threshold:** Commands taking longer than 10 seconds yield `status: "running"` with an `OperationID`. The operation proceeds uninterrupted; upon completion, hosts receive event-driven wakeups without token-wasting busy-loops.
 - **Universal Pagination (`fetch_content`):** Process outputs are decoupled via injected output sinks. Models page through immutable content-addressed artifacts with strict byte limits and contiguous offsets using `fetch_content(content_ref, offset, limit, unit)`. Full daemon-level live streaming into artifact storage with 4 KiB inline previews is scheduled with the background runner milestone.
 
-## 10B. Adaptive Context Architecture and Evidence Working Set [Proposed - M3C]
+## 10B. Adaptive Context Architecture and Evidence Working Set [Partially Implemented - M3C]
 
 **Status:** WP-M3C-1 defines the core ContextProfile/Manifest/Pack/EvidenceLease shapes; runtime compilation/admission remains planned in WP-M3C-2. Existing `internal/compaction` and bounded tools under ADR-0016 remain useful mechanisms but are not the Cognitive Invocation Compiler. ADR-0019 owns context-layer rationale; ADR-0020 owns deterministic applicability, retrieval authority boundaries, prompt projection and review-ledger integration; this section owns protocol semantics.
 
@@ -459,6 +459,8 @@ Endpoint/access-path and workload-specific capability/budget evidence:
 
 Targets are defaults; hard endpoint/policy ceilings are enforced. Model/runtime/configuration changes invalidate calibration applicability. Admission counts all model-visible system/host/tool-schema, contract, normative, state, evidence and tail tokens plus reserves; estimated counts include conservative margin. Hidden tokens in opaque sessions are not reported as exact zero.
 
+Before M4 empirical calibration, an endpoint may use a **provisional** profile: hard fit comes from runtime/declared capacity plus configured policy ceilings, explicit output/reasoning/tool reserves, and conservative accounting uncertainty. Any provisional target ceiling is versioned configuration, not a claim of measured effectiveness; DevCadence does not hard-code a universal percentage of the nominal window. A policy that requires verified effectiveness may declare the provisional endpoint ineligible.
+
 ### Rule applicability and retrieval plan
 
 The compiler derives mandatory admission from deterministic metadata rather than ranking:
@@ -472,7 +474,14 @@ The compiler derives mandatory admission from deterministic metadata rather than
 
 The resulting mandatory clause set is dependency-closed and revision-pinned. Unknown applicability is an error state, not a low score.
 
-Optional retrieval may use exact/lexical search, graph traversal, dense embeddings and reranking. Retrieval results carry provenance, revision/freshness and admission reason. Dense similarity MAY expand recall but MUST NOT delete or override a mandatory clause.
+Every execution-critical clause declares one admission class:
+- `always`: admitted to every cognition invocation;
+- `capability_default`: admitted whenever the invocation can exercise the named authority class; exclusion requires an explicit revision-pinned not-applicable mapping;
+- `mapped`: admitted through normal task/role/action/path/domain/risk rules and dependency closure.
+
+A reverse-coverage check rejects a mandatory clause with no deterministic admission path. This catches orphan/mis-mapped authority that a successful task mapping alone would otherwise miss.
+
+Optional retrieval may use exact/lexical search and graph traversal. Dense embeddings/reranking are optional M4 experiments rather than an M3C baseline requirement. Retrieval results carry provenance, revision/freshness and admission reason. Dense similarity MAY expand recall but MUST NOT delete or override a mandatory clause.
 
 The compiler may internally maintain richer indexes than the model sees. Index metadata is navigation/provenance, never a substitute for exact operative clause text.
 
@@ -489,13 +498,13 @@ Projection MUST preserve:
 - output contract;
 - boundary between instructions and evidence.
 
-Projection format does not grant authority and is calibrated empirically per endpoint/configuration. Strict structured output SHOULD use schema-constrained decoding where supported.
+Projection format does not grant authority and is calibrated empirically per endpoint/configuration. A renderer MUST preserve instruction/data boundaries under adversarial evidence content: snippets containing apparent closing tags, Markdown fences, JSON-like control fields, or other delimiter text cannot escape their evidence container or become instructions. Strict structured output SHOULD use schema-constrained decoding where supported.
 
 ### ContextManifest
 
 Compiled task intent and provenance: role, task/EWP revision/digest, base/candidate/state identity; allowed read envelope and distinct allowed write paths; domains/risk tags; mandatory normative clause IDs with revision/digest; initial/deferred evidence refs; mapping/source versions; explicit questions, assumptions and expansion/re-resolution triggers; selected ContextProfile and budget.
 
-The Principal declares intent; the deterministic resolver adds applicable role/path/domain/risk rules. No semantic-search ranking decides whether MUST clauses apply. Unknown applicability blocks the affected action pending resolution. The manifest records why every substantial admitted object is required and how it was selected.
+The Principal declares intent; the Cognitive Invocation Compiler's deterministic resolver phase adds applicable role/action/path/domain/risk rules and admission-floor clauses. No semantic-search ranking decides whether MUST clauses apply. Unknown applicability blocks the affected action pending resolution. The manifest records why every substantial admitted object is required and how it was selected.
 
 ### ContextPack
 
@@ -511,7 +520,7 @@ Evidence is evictable; protected requirements are not. If required evidence chan
 
 ### Expansion and state transition
 
-A small request records the explicit question, required IDs/symbols/ranges and reason. The resolver authorizes retrieval, resolves exact references, measures the enlarged pack and atomically either admits it (with optional evidence eviction), rejects with a typed cause or suspends for decomposition/routing/approval under existing policy. Fetching larger sections/full files is legitimate when justified and fit; permission to investigate is not permission to expand authority.
+A small request records the explicit question, required IDs/symbols/ranges and reason. The Cognitive Invocation Compiler authorizes retrieval, resolves exact references, measures the enlarged pack and atomically either admits it (with optional evidence eviction), rejects with a typed cause or suspends for decomposition/routing/approval under existing policy. Fetching larger sections/full files is legitimate when justified and fit; permission to investigate is not permission to expand authority.
 
 New domains, risk tags or proposed write paths require context re-resolution before modification; write-scope changes also require EWP authorization. Required normative clauses cannot be evicted to accommodate expansion. Request/release evidence through the existing proposed working-memory operation shape; this is not a second durable request table:
 
@@ -778,8 +787,9 @@ A bounded campaign anchored to immutable candidate identity and contract revisio
 A normalized stable material claim produced from one or more existing `ReviewResult.findings` observations. It supplies the stable identity referenced by `ReviewCampaign.finding_refs` and `FindingDisposition.finding_id`. It records at least:
 
 - finding ID and candidate/contract identity;
+- canonical severity compatible with FindingDisposition (`info | low | medium | high | critical`);
 - canonical materiality compatible with FindingDisposition (`blocking | material_non_blocking | opportunistic`);
-- optional confidence;
+- optional epistemic confidence (`high | medium | low`);
 - claim and evidence;
 - requirement/invariant references when applicable;
 - impact / why-now;
@@ -787,7 +797,7 @@ A normalized stable material claim produced from one or more existing `ReviewRes
 - source reviewer/lens;
 - status.
 
-Multiple reviewer observations may support one normalized ReviewFinding.
+Multiple reviewer observations may support one normalized ReviewFinding. Severity means harm if true; materiality means current-campaign significance; confidence means evidence strength. FindingDisposition copies the normalized finding's severity/materiality; reclassification occurs during normalization/adjudication with explicit rationale, not implicitly during repair.
 
 ### FindingDisposition (existing compatibility record)
 
@@ -804,7 +814,7 @@ A FindingResolution is never self-verification.
 
 ### ResolutionVerification
 
-An independent decision over one finding + attempted resolution/challenge + focused evidence. Conceptual terminal outcomes are `verified_fixed`, `verified_dismissed`, or `verified_deferred`. A deferment retains owner/WP, safety rationale and reconsideration trigger.
+An independent decision over one finding + attempted resolution/challenge + focused evidence. The cognitive verifier is blinded by default to reviewer/challenger identity and model/provider; the control plane separately checks required independence and exposes identity only when it is materially relevant evidence. Conceptual terminal outcomes are `verified_fixed`, `verified_dismissed`, or `verified_deferred`. A deferment retains owner/WP, safety rationale and reconsideration trigger.
 
 The exact v1 enum/schema may be smaller if needed, but it MUST preserve the authority split: author attempts; independent verification or deterministic proof closes.
 
@@ -835,7 +845,7 @@ flowchart LR
 
 The model-facing projection for each role contains only the state needed for that action. The runtime owns lifecycle legality, required-response completeness and self-verification prevention.
 
-See schemas for implemented record versions as they land; do not infer implementation merely from this semantic contract.
+Existing durable compatibility schemas are already implemented: `schemas/review-result.schema.json`, `schemas/review-campaign.schema.json`, `schemas/finding-disposition.schema.json`, and `schemas/closure-decision.schema.json`. The new `ReviewFinding`, `FindingResolution`, and `ResolutionVerification` records are planned for WP-M3C-5 and do not yet have committed Go/schema twins. Do not infer those new records are implemented from this semantic contract.
 
 ## 20. Credential references and authentication evidence
 

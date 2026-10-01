@@ -109,7 +109,7 @@ A model-friendly starting layout is a small stable role/core prefix, contract an
 
 The Principal compiles the task's architecture into its complete bounded Execution Contract. Every required MUST/MUST-NOT appears there verbatim or in a deterministically admitted exact normative clause. Rationale stays retrievable. Arbitrary EWP paragraph slicing is forbidden; if the complete contract cannot fit, split the task, route to an authorized capable endpoint or escalate.
 
-A Context Resolver combines the manifest with versioned role/path/domain/risk mappings and the endpoint profile. **Normative applicability is deterministic, never embedding-ranked RAG.** Search or models may help propose references but cannot decide to exclude a required clause. Unknown mappings and missing/stale clauses are unresolved context and block the affected action.
+The deterministic resolver phase of the **Cognitive Invocation Compiler** combines the manifest with versioned role/action/path/domain/risk mappings, admission-floor classes, and the endpoint profile. ADR-0020 supersedes the older shorthand term “Context Resolver” for this broader compile/render boundary. **Normative applicability is deterministic, never embedding-ranked RAG.** Search or models may help propose references but cannot decide to exclude a required clause. Unknown mappings and missing/stale clauses are unresolved context and block the affected action.
 
 Adaptive evidence follows DCI-014: index/search, symbol/signature, exact clause, focused snippet/hunk, larger section, full file and broader exploration where necessary. Semantic units include qualifying headings, dependencies and exceptions, not arbitrary lines stripped of meaning. Full reads are allowed with a specific justified question or systemic reconciliation and successful admission.
 
@@ -262,7 +262,7 @@ At every milestone boundary, before transitioning to the next milestone:
 
 1. **Milestone M3C (Session Substrate & Cognitive Invocation Compiler)**:
    - Define provider-neutral context capabilities: `ContextControl = ExactStateless | AppendOnly | OpaqueSession` and `PrefixCache = Explicit | Implicit | SessionKV | None`.
-   - Implement deterministic Context Resolver/profiles/packs, clause mappings/projection freshness, complete-contract admission with reserves, typed `CONTEXT_UNFIT` and lease/expansion mediation; do not claim automatic completeness from lint alone.
+   - Implement the deterministic Cognitive Invocation Compiler resolver/profiles/packs, clause mappings/projection freshness, complete-contract admission with reserves, typed `CONTEXT_UNFIT` and lease/expansion mediation; do not claim automatic completeness from lint alone.
    - Implement the `Evidence Working Set` lease manager with content-addressed checks and path authorization.
    - Define `RefactoringProposal` in Go and JSON Schema (`internal/protocol/` and `schemas/`) so implementers can challenge baselines during M3C and M3D.
 2. **Milestone M4 (Hypothesis & Benchmark Gate)**:
