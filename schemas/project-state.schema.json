@@ -458,7 +458,7 @@
         },
         "consultants": {
           "deprecated": true,
-          "description": "Deprecated M1 representation, superseded by `cognition` (ADR-0013 §4). Consultant selection is an M6 policy over discovered endpoints, not a separate capability list. Never written by current builds.",
+          "description": "Deprecated M1 representation, superseded by `cognition` (ADR-0013 §4). Consultant selection is an M7 policy over discovered endpoints, not a separate capability list. Never written by current builds.",
           "type": "array",
           "items": {
             "type": "object",

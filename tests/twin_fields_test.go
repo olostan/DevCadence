@@ -23,8 +23,8 @@ import (
 // `protocol.ProjectState` had no such field, and nothing failed.
 //
 // The check is deliberately limited to top-level properties of the record
-// schemas that have a Go twin. Schemas with no Go type at all — the M6
-// review-convergence contracts — cannot diverge from a twin they do not have,
+// schemas that have a Go twin. Schemas with no Go type at all — the M7
+// campaign-level review-convergence contracts — cannot diverge from a twin they do not have,
 // and are covered instead by the awaitingImplementation list.
 func TestSchemaTopLevelFieldsMatchTheGoTwin(t *testing.T) {
 	for _, tc := range []struct {

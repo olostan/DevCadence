@@ -1,6 +1,6 @@
 # ADR-0020 — Cognitive Invocation Compiler, Deterministic Rule Admission, and Review Ledger
 
-- **Status:** Proposed while PR #17 is open; accepted by merge only after review closure
+- **Status:** Proposed while PR #17 is open; Accepted automatically by merge after review closure
 - **Date:** 2026-09-30
 - **Owners:** DevCadence architecture / cognition substrate
 - **Related:** ADR-0016, ADR-0018, ADR-0019
