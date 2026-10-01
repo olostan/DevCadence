@@ -310,7 +310,7 @@ Review findings, attempted resolutions, challenges and independent verification 
 - verifier: one finding + attempted resolution/challenge + focused diff/evidence;
 - closure: structured campaign state + deterministic validation + residual-risk evidence.
 
-The author may report a fix attempt or challenge but cannot self-verify closure (DCI-134). M3C provides compact persistence/projection primitives; M7 expands them into multi-review fan-out, dynamic lenses, falsification and automated aggregation.
+The author may report a fix attempt or challenge but cannot self-verify closure (DCI-134). WP-M3C-5 provides compact persistence/projection primitives independently of the session/compiler WP; M7 expands them into multi-review fan-out, dynamic lenses, falsification and automated aggregation.
 
 See [REVIEW_AND_CONVERGENCE.md](REVIEW_AND_CONVERGENCE.md) and [ADR-0020](adr/0020-cognitive-invocation-compiler-and-review-ledger.md).
 

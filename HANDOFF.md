@@ -32,8 +32,9 @@ ADR-0020 is the owning architectural decision.
 - PR #16 is merged and accepted.
 - PR #17 branch was created from PR #16 head, then merged with current main without rebase or force-push.
 - Runtime/compiler/review-ledger code is intentionally **not** implemented in this PR.
-- M3C-2 owns the compiler + compact review-state foundation.
-- M4 owns empirical retrieval/prompt-renderer/effective-load evaluation.
+- WP-M3C-2 owns session drivers + the Cognitive Invocation Compiler.
+- WP-M3C-5 separately owns minimal durable ReviewFinding/FindingResolution/ResolutionVerification primitives.
+- M4 owns empirical retrieval/prompt-renderer/effective-load evaluation, including seeded mis-mapping ground truth.
 - M7 owns rich multi-review orchestration, lenses, falsification and aggregation.
 
 ## Key invariants added
@@ -66,3 +67,17 @@ Challenge especially:
 - Old duplicated local-agent token target guidance was removed; M4 remains calibration owner.
 - Context followups CF-6, CF-7, CF-8 and CF-10 are closed by this architecture.
 - External long-context/prompt-format research is cited as motivation only, not normative authority.
+
+
+## PR #17 review processing
+
+Two independent reviews converged on the same issues. The branch now addresses them without rewriting reviewed history:
+- fail-safe mandatory admission adds always/capability-default/mapped classes plus reverse coverage;
+- provisional pre-M4 ContextProfiles use real hard limits/reserves/uncertainty rather than an arbitrary fixed percentage;
+- dense retrieval is removed from M3C's required baseline and left for M4 experiments;
+- review-ledger primitives move out of WP-M3C-2 into WP-M3C-5;
+- ReviewFinding uses canonical severity/materiality plus optional confidence;
+- existing review schema citations/status/ADR ownership are reconciled;
+- challenge verification is identity-blinded by default;
+- prompt renderers must safely contain adversarial delimiter text;
+- Contract Completeness Review has an explicit Principal owner as an effective-now manual step.
