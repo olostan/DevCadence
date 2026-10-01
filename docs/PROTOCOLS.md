@@ -446,7 +446,7 @@ Under ADR-0016:
 
 ## 10B. Adaptive Context Architecture and Evidence Working Set [Partially Implemented - M3C]
 
-**Status:** WP-M3C-1 defines the core ContextProfile/Manifest/Pack/EvidenceLease shapes; runtime compilation/admission remains planned in WP-M3C-2. Existing `internal/compaction` and bounded tools under ADR-0016 remain useful mechanisms but are not the Cognitive Invocation Compiler. ADR-0019 owns context-layer rationale; ADR-0020 owns deterministic applicability, retrieval authority boundaries, prompt projection and review-ledger integration; this section owns protocol semantics.
+**Status:** merged WP-M3C-1 implements the core ContextProfile/Manifest/Pack/EvidenceLease Go/schema shapes; runtime compilation/admission remains planned in WP-M3C-2. Existing `internal/compaction` and bounded tools under ADR-0016 remain useful mechanisms but are not the Cognitive Invocation Compiler. ADR-0019 owns context-layer rationale; ADR-0020 owns deterministic applicability, retrieval authority boundaries, prompt projection and review-ledger integration; this section owns protocol semantics.
 
 ### ContextProfile
 

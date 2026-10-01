@@ -339,7 +339,7 @@ Branch: `feat/m3c-cognition-substrate`.
 - Session-driver interface (`internal/cognition/drivers`) normalizing model selection, structured/streaming events, resume, cancellation, and worktree/tool/MCP access across direct APIs, local runtimes, and authenticated CLIs.
 - Deterministic **Cognitive Invocation Compiler** combining role, complete Execution Contract, action/path/domain/risk mappings, revision-pinned mandatory clauses, project state and endpoint ContextProfile into ContextManifest/ContextPack projections.
 - Applicability/dependency mapping with freshness ownership: mandatory MUST/MUST-NOT clauses are admitted by deterministic mapping/closure; unknown applicability or missing required content fails closed.
-- Retrieval interfaces for optional context: exact/lexical and explicit graph retrieval are baseline capabilities; dense embeddings/reranking are optional plugins/strategies and cannot rank away mandatory authority.
+- Retrieval baseline for optional context: exact/lexical search plus explicit dependency-graph traversal. Dense embeddings/reranking are not WP-M3C-2 deliverables; M4 may prototype them behind the same authority-neutral retrieval boundary.
 - Endpoint-specific prompt-renderer interface separating canonical typed state from model-facing serialization; renderers preserve task/contract/evidence/action boundaries and are calibratable by endpoint profile.
 - Atomic expansion/re-resolution and eviction: never remove mandatory clauses to fit evidence; append-only/opaque drivers restart or checkpoint where eviction is not enforceable.
 - Context strategy mapper mapping endpoint `ContextControl` capabilities to concrete context layouts (exact stateless prefix, append-only prompt, or opaque session).
