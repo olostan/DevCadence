@@ -314,6 +314,14 @@ does not yet let AI choose the portfolio.
 
 Branch: `feat/m3c-cognition-substrate`.
 
+Dependency/completion graph:
+- WP-M3C-1 is the protocol/schema foundation.
+- WP-M3C-2 (drivers/compiler) and WP-M3C-5 (review-ledger primitives) may proceed independently after WP-M3C-1.
+- WP-M3C-3 depends on the protocol foundation and the execution-side capabilities it validates.
+- WP-M3C-4 is the execution-substrate integration gate for WP-M3C-1..3; it does not substitute for WP-M3C-5 verification.
+- **M3C completes only when both WP-M3C-4 and WP-M3C-5 are accepted.**
+
+
 ### WP-M3C-1 — Portfolio protocol, economics, context capabilities and refactoring proposals
 
 **Objective:** define the provider-neutral deterministic protocol and schema types for access channels, economic regimes, context-control capabilities, and bottom-up living work package challenges.
@@ -385,7 +393,7 @@ Branch: `feat/m3c-cognition-substrate`.
 
 **MUST:** tests must run deterministically without requiring external API tokens or real GPUs.
 
-**Acceptance criteria:** all integration scenarios pass cleanly; `go test -count=1 ./...` and `go test -race ./...` pass; schema/Go parity holds for all new M3C protocol records.
+**Acceptance criteria:** all WP-M3C-1..3 execution-substrate integration scenarios pass cleanly; `go test -count=1 ./...` and `go test -race ./...` pass; schema/Go parity holds for the execution-substrate records under test. WP-M3C-5 has its own parity/closure acceptance and is separately required for M3C milestone completion.
 
 ### WP-M3C-5 — Durable review-ledger primitives
 

@@ -120,7 +120,7 @@ A real issue with bounded current risk. It may be fixed now or explicitly deferr
 
 An improvement, alternative, or future idea that does not justify extending the current campaign.
 
-Severity and materiality are not identical. A stylistically large change can be advisory; a one-line durable-contract defect can be blocking.
+Severity and materiality are not identical. A stylistically large change can be opportunistic; a one-line durable-contract defect can be blocking.
 
 ## 4. Finding admission
 
@@ -133,10 +133,10 @@ A material finding must provide:
 3. evidence;
 4. applicable requirement/invariant or engineering rationale;
 5. consequence if unfixed;
-6. importance;
+6. materiality;
 7. independent verification method.
 
-Findings that cannot satisfy this shape remain observations/advisories until clarified.
+Findings that cannot satisfy this shape remain observations or opportunistic suggestions until clarified.
 
 ### Why-now test
 
@@ -149,7 +149,7 @@ A current-campaign repair should normally be justified by one of:
 - durable protocol would become materially harder to repair after freeze;
 - milestone exit claim would otherwise be false.
 
-"Cleaner", "more generic", or "might be useful later" is normally advisory/deferred.
+"Cleaner", "more generic", or "might be useful later" is normally opportunistic/deferred.
 
 ## 5. Normalize before repair
 

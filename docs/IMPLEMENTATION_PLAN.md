@@ -547,8 +547,10 @@ survives a clean-session handoff without permitting author self-verification.
 #### Exit criterion
 Given ResourceInventory + policy + an explicit candidate portfolio, DevCadence
 can represent sessions/economics faithfully, deterministically validate or
-reject that portfolio, and explain why. No provider/model family or billing
-channel is structurally privileged.
+reject that portfolio, and explain why. The companion WP-M3C-5 review ledger
+can also preserve normalized finding -> resolution -> independent verification
+state across clean sessions without author self-verification. No provider/model
+family or billing channel is structurally privileged.
 
 ### M3D — Adaptive portfolio and workflow synthesis
 

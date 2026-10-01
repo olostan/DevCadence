@@ -30,7 +30,7 @@ ADR-0020 is the owning architectural decision.
 ## Current state
 
 - PR #16 is merged and accepted.
-- PR #17 branch was created from PR #16 head, then merged with current main without rebase or force-push.
+- PR #17 is based on current main; its early API-authored history was squashed before review began, and post-review repair commits were preserved without rewriting reviewer anchors.
 - Runtime/compiler/review-ledger code is intentionally **not** implemented in this PR.
 - WP-M3C-2 owns session drivers + the Cognitive Invocation Compiler.
 - WP-M3C-5 separately owns minimal durable ReviewFinding/FindingResolution/ResolutionVerification primitives.
@@ -81,3 +81,8 @@ Two independent reviews converged on the same issues. The branch now addresses t
 - challenge verification is identity-blinded by default;
 - prompt renderers must safely contain adversarial delimiter text;
 - Contract Completeness Review has an explicit Principal owner as an effective-now manual step.
+
+
+## Remaining closure condition
+
+The author-side repair packet is complete. Per DCI-134 and ADR-0020's own proposed process, PR #17 becomes green only after an independent focused verifier confirms the accepted findings on the repaired candidate (or the reviewers' conditional approval is explicitly treated as satisfied by objective evidence). No additional broad review is required absent a repair regression, changed contract, or materially new evidence.
