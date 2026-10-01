@@ -16,7 +16,7 @@ Do not preload README, invariants, architecture, protocols, milestones or whole 
 
 Entering a new domain, discovering a new risk or proposing undeclared paths requires context re-resolution **before modification**. Context admission never grants write, network, credential or spending authority. Unknown mappings are unresolved context, not proof that no constraints apply.
 
-Until the M3C Cognitive Invocation Compiler exists, record the manifest in the EWP, PR or handoff and use targeted search/section reads manually. Do not claim automatic enforcement. The future compiler deterministically admits mandatory clauses and may use lexical/semantic retrieval only for optional discovery; similarity never decides whether a MUST applies. Keep control-plane rules out of prompts when Go can enforce them (DCI-131/132). See [ADR-0020](docs/adr/0020-cognitive-invocation-compiler-and-review-ledger.md), [docs/PROTOCOLS.md §10B](docs/PROTOCOLS.md#10b-adaptive-context-architecture-and-evidence-working-set-proposed---m3c), and [docs/README.md](docs/README.md#context-routing).
+Until the M3C Cognitive Invocation Compiler exists, record the manifest in the EWP, PR or handoff and use targeted search/section reads manually. Do not claim automatic enforcement. The future compiler deterministically admits mandatory clauses and may use lexical/semantic retrieval only for optional discovery; similarity never decides whether a MUST applies. Keep control-plane rules out of prompts when Go can enforce them (DCI-131/132). See [ADR-0020](docs/adr/0020-cognitive-invocation-compiler-and-review-ledger.md), [docs/PROTOCOLS.md §10B](docs/PROTOCOLS.md#10b-adaptive-context-architecture-and-evidence-working-set-partially-implemented---m3c), and [docs/README.md](docs/README.md#context-routing).
 
 ## 3. Do not spend intelligence on repository noise
 
@@ -52,7 +52,7 @@ Capture exact commands, exit status, relevant versions, base/head identities, co
 
 ## 8A. Review convergence
 
-Use independent review of the same immutable candidate; prefer parallel review for substantial work. Material findings receive stable IDs and are normalized before one consolidated repair packet. Implementers report `fix_attempted` or `challenge`; they do not verify their own resolutions (DCI-134). Revalidate narrowly, reopen only for threshold-crossing new evidence/regressions/contract change, and let the control plane compute closure from structured state rather than prose claims. Zero findings is valid. Preserve DCI-046–049, DCI-135 and [docs/REVIEW_AND_CONVERGENCE.md](docs/REVIEW_AND_CONVERGENCE.md).
+Follow DCI-046–049 and DCI-134–135: review evidence is independent, authors do not self-verify, and durable finding/closure state—not conversational claims—controls convergence. The owning process is [docs/REVIEW_AND_CONVERGENCE.md](docs/REVIEW_AND_CONVERGENCE.md); do not duplicate its state machine in agent prompts.
 
 ## 9. Reviewer independence
 

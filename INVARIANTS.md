@@ -295,11 +295,13 @@ Capability/effectiveness claims are tied to role/task/access context and provena
 ### DCI-130 — Hosts and cognition drivers are orthogonal
 A human-facing host and a machine-invocable cognition/session interface are separate architectural roles even when one product exposes both.
 
+## M. Cognitive invocation and review-ledger invariants
+
 ### DCI-131 — Control-plane complexity does not imply prompt complexity
-Rules, workflow state and governance SHOULD be enforced by deterministic machinery whenever cognition does not need them for the current semantic decision. Agents receive the smallest complete task-specific projection, not an explanation of the whole DevCadence process.
+Lifecycle legality, authority checks, candidate identity, retry/budget enforcement and closure eligibility that can be decided deterministically MUST be enforced by the control plane rather than delegated to model interpretation. A cognition invocation MUST receive only the task-specific semantic obligations/state it needs, not the full DevCadence process model.
 
 ### DCI-132 — Mandatory applicability is never similarity-ranked away
-Execution-critical MUST/MUST-NOT applicability is decided by deterministic task/role/path/domain/risk/action mapping plus dependency closure. Embeddings, lexical ranking, rerankers or model judgment may improve optional retrieval but MUST NOT remove an applicable mandatory clause.
+Execution-critical MUST/MUST-NOT applicability is decided by deterministic admission class plus task/role/path/domain/risk/action mapping and dependency closure. Every mandatory clause MUST have a deterministic admission path; embeddings, lexical ranking, rerankers or model judgment may improve optional retrieval but MUST NOT remove an applicable mandatory clause.
 
 ### DCI-133 — Operative obligations are resident; rationale is retrievable
 A model-visible execution-critical obligation must be present as exact revision-pinned content, not only a reference handle. Supporting rationale and large evidence remain progressively retrievable unless required for the current decision.
