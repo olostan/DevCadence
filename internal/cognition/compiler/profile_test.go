@@ -10,7 +10,10 @@ import (
 )
 
 func TestDefaultProvisionalProfile(t *testing.T) {
-	prof := compiler.DefaultProvisionalProfile("test-ep", "test-chan", "qwen2.5-coder", 32768)
+	prof, err := compiler.DefaultProvisionalProfile("test-ep", "test-chan", "qwen2.5-coder", 32768)
+	if err != nil {
+		t.Fatalf("DefaultProvisionalProfile failed: %v", err)
+	}
 	if err := prof.Validate(); err != nil {
 		t.Fatalf("DefaultProvisionalProfile failed protocol validation: %v", err)
 	}
@@ -35,11 +38,14 @@ func TestDefaultProvisionalProfile(t *testing.T) {
 		t.Errorf("expected provisional confidence level on workload envelope")
 	}
 
-	// Test profile with explicit observed capabilities
-	customProf := compiler.DefaultProvisionalProfileWithCapabilities(
+	// Test profile with explicit observed capabilities and calibration date
+	customProf, err := compiler.DefaultProvisionalProfileWithCapabilities(
 		"test-ep-2", "test-chan-2", "model-2", 65536, 30000,
-		protocol.ContextControlExactStateless, protocol.PrefixCacheExplicit,
+		protocol.ContextControlExactStateless, protocol.PrefixCacheExplicit, "2026-10-02T12:00:00Z",
 	)
+	if err != nil {
+		t.Fatalf("DefaultProvisionalProfileWithCapabilities failed: %v", err)
+	}
 	if err := customProf.Validate(); err != nil {
 		t.Fatalf("custom profile failed validation: %v", err)
 	}
@@ -52,10 +58,18 @@ func TestDefaultProvisionalProfile(t *testing.T) {
 	if customProf.TargetResidentTokens != 30000 {
 		t.Errorf("expected custom TargetResidentTokens 30000, got %d", customProf.TargetResidentTokens)
 	}
+
+	// Test fail-closed on invalid runtimeWindow <= 0 (Finding 6)
+	if _, err := compiler.DefaultProvisionalProfile("test-ep", "test-chan", "model", 0); !errors.Is(err, errs.ErrInvalidArgument) {
+		t.Errorf("expected ErrInvalidArgument for runtimeWindow=0, got %v", err)
+	}
+	if _, err := compiler.DefaultProvisionalProfile("test-ep", "test-chan", "model", -100); !errors.Is(err, errs.ErrInvalidArgument) {
+		t.Errorf("expected ErrInvalidArgument for runtimeWindow=-100, got %v", err)
+	}
 }
 
 func TestEnforceProfileBounds(t *testing.T) {
-	prof := compiler.DefaultProvisionalProfile("test-ep", "test-chan", "qwen2.5-coder", 32768)
+	prof := compiler.MustDefaultProvisionalProfile("test-ep", "test-chan", "qwen2.5-coder", 32768)
 
 	t.Run("within bounds succeeds", func(t *testing.T) {
 		pack := validTestPack()

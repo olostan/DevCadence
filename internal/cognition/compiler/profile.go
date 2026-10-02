@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"strings"
+	"time"
 	"unicode"
 
 	"github.com/olostan/DevCadence/internal/errs"
@@ -14,15 +15,25 @@ import (
 // all protocol constraints in internal/protocol/context.go and PROTOCOLS §10B.
 // It reflects conservative default reserves and token limits before M4 empirical calibration.
 // Epistemic Honesty (Finding 6, PROTOCOLS §10B):
-//   - Observed capabilities default to protocol.ContextControlUnknown and protocol.PrefixCacheUnknown
-//     rather than synthesizing unobserved facts.
-//   - Accounting method defaults to protocol.AccountingApproximateEstimate.
+//   - Requires explicit positive runtimeWindow; does NOT manufacture unobserved window capacity.
+//   - CalibrationDate defaults to current UTC timestamp if not explicitly provided.
+//   - Observed capabilities default to protocol.ContextControlUnknown and protocol.PrefixCacheUnknown.
 //   - TargetResidentTokens provides provisional soft packing guidance (ADR-0020 §2); hard ceiling is fail-closed.
-func DefaultProvisionalProfile(endpointID, channelID, modelRef string, runtimeWindow int) *protocol.ContextProfile {
+func DefaultProvisionalProfile(endpointID, channelID, modelRef string, runtimeWindow int) (*protocol.ContextProfile, error) {
 	return DefaultProvisionalProfileWithCapabilities(
 		endpointID, channelID, modelRef, runtimeWindow, 0,
-		protocol.ContextControlUnknown, protocol.PrefixCacheUnknown,
+		protocol.ContextControlUnknown, protocol.PrefixCacheUnknown, "",
 	)
+}
+
+// MustDefaultProvisionalProfile is a convenience helper for tests and callers with statically known valid parameters.
+// It panics if runtimeWindow <= 0.
+func MustDefaultProvisionalProfile(endpointID, channelID, modelRef string, runtimeWindow int) *protocol.ContextProfile {
+	prof, err := DefaultProvisionalProfile(endpointID, channelID, modelRef, runtimeWindow)
+	if err != nil {
+		panic(err)
+	}
+	return prof
 }
 
 // DefaultProvisionalProfileWithCapabilities creates a provisional profile with explicit observed capabilities.
@@ -32,10 +43,15 @@ func DefaultProvisionalProfileWithCapabilities(
 	targetResident int,
 	ctrl protocol.ContextControl,
 	cache protocol.PrefixCache,
-) *protocol.ContextProfile {
+	calibrationDate string,
+) (*protocol.ContextProfile, error) {
 	if runtimeWindow <= 0 {
-		runtimeWindow = 32768
+		return nil, errs.New(errs.CategoryInvalidArgument, "DefaultProvisionalProfile: runtimeWindow must be > 0, got %d", runtimeWindow)
 	}
+	if strings.TrimSpace(calibrationDate) == "" {
+		calibrationDate = time.Now().UTC().Format(time.RFC3339)
+	}
+
 	outputReserve := 4096
 	toolTailReserve := 2048
 	if runtimeWindow < (outputReserve + toolTailReserve + 4096) {
@@ -78,7 +94,7 @@ func DefaultProvisionalProfileWithCapabilities(
 				Workload:        protocol.WorkloadImplementation,
 				EffectiveTokens: effectiveTokens,
 				CalibrationTask: "provisional_conservative_allocation",
-				CalibrationDate: "2026-10-02T00:00:00Z",
+				CalibrationDate: calibrationDate,
 				ConfidenceLevel: "provisional",
 			},
 		},
@@ -93,7 +109,7 @@ func DefaultProvisionalProfileWithCapabilities(
 		EstimateUncertaintyRatio:  0.05,
 		ObservedContextControl:    ctrl,
 		ObservedPrefixCache:       cache,
-	}
+	}, nil
 }
 
 // EnforceProfileBounds enforces that a ContextPack strictly fits the provided ContextProfile.

@@ -58,8 +58,20 @@ func TestCanonicalRuleRegistry_FullCoverageAndFrozen(t *testing.T) {
 	if reg.CatalogVersion() != compiler.CanonicalCatalogVersion {
 		t.Errorf("catalog version = %q, want %q", reg.CatalogVersion(), compiler.CanonicalCatalogVersion)
 	}
+	if reg.SourceRevision() != compiler.CanonicalSourceRevision {
+		t.Errorf("source revision = %q, want %q", reg.SourceRevision(), compiler.CanonicalSourceRevision)
+	}
+	if reg.MappingRevision() != compiler.CanonicalMappingRevision {
+		t.Errorf("mapping revision = %q, want %q", reg.MappingRevision(), compiler.CanonicalMappingRevision)
+	}
 	if reg.CatalogRevision() != compiler.CanonicalCatalogRevision {
 		t.Errorf("catalog revision = %q, want %q", reg.CatalogRevision(), compiler.CanonicalCatalogRevision)
+	}
+	if !strings.HasPrefix(reg.NormativeSourceDigest(), "sha256:") || len(reg.NormativeSourceDigest()) != 71 {
+		t.Errorf("normative source digest invalid: %q", reg.NormativeSourceDigest())
+	}
+	if !strings.HasPrefix(reg.AuthorityProjectionDigest(), "sha256:") || len(reg.AuthorityProjectionDigest()) != 71 {
+		t.Errorf("authority projection digest invalid: %q", reg.AuthorityProjectionDigest())
 	}
 	if !strings.HasPrefix(reg.CatalogDigest(), "sha256:") || len(reg.CatalogDigest()) != 71 {
 		t.Errorf("catalog digest invalid: %q", reg.CatalogDigest())
@@ -82,9 +94,97 @@ func TestCanonicalRuleRegistry_FullCoverageAndFrozen(t *testing.T) {
 		t.Errorf("expected ErrConflict registering on frozen registry, got: %v", err)
 	}
 
-	err = reg.SetCatalogMeta("new-id", "v2.0", "new-rev", "new-digest")
+	err = reg.SetCatalogMeta("new-id", "v2.0", "new-rev", "new-map-rev")
 	if err == nil || !errors.Is(err, errs.ErrConflict) {
 		t.Errorf("expected ErrConflict setting catalog meta on frozen registry, got: %v", err)
+	}
+}
+
+func TestCatalogDigest_AuthenticatesMappingSemantics(t *testing.T) {
+	// Baseline rule
+	r1 := compiler.Rule{
+		ID:             "DCI-030",
+		AdmissionClass: compiler.AdmissionClassCapabilityDefault,
+		Capability:     "write",
+		SourceDoc:      "INVARIANTS.md",
+		Revision:       "v1.0",
+		Content:        "Autonomous work is isolated in dedicated branches or worktrees.",
+	}
+
+	buildRegistry := func(r compiler.Rule) *compiler.RuleRegistry {
+		reg := compiler.NewRuleRegistry()
+		_ = reg.RegisterKnownDomain("test")
+		if err := reg.Register(r); err != nil {
+			t.Fatalf("register failed: %v", err)
+		}
+		_ = reg.SetCatalogMeta("test-cat", "1.0", "rev-1", "map-1")
+		if err := reg.Freeze(); err != nil {
+			t.Fatalf("freeze failed: %v", err)
+		}
+		return reg
+	}
+
+	baseReg := buildRegistry(r1)
+	baseSrcDigest := baseReg.NormativeSourceDigest()
+	baseProjDigest := baseReg.AuthorityProjectionDigest()
+	baseCatDigest := baseReg.CatalogDigest()
+
+	// 1. Changing AdmissionClass MUST change AuthorityProjectionDigest and CatalogDigest,
+	// but NormativeSourceDigest MUST remain unchanged.
+	rChangedClass := r1
+	rChangedClass.AdmissionClass = compiler.AdmissionClassMapped
+	rChangedClass.Domains = []string{"test"}
+	regClass := buildRegistry(rChangedClass)
+
+	if regClass.NormativeSourceDigest() != baseSrcDigest {
+		t.Errorf("expected NormativeSourceDigest to be unchanged, got %s vs %s",
+			regClass.NormativeSourceDigest(), baseSrcDigest)
+	}
+	if regClass.AuthorityProjectionDigest() == baseProjDigest {
+		t.Errorf("expected AuthorityProjectionDigest to change when AdmissionClass changes")
+	}
+	if regClass.CatalogDigest() == baseCatDigest {
+		t.Errorf("expected CatalogDigest to change when AdmissionClass changes")
+	}
+
+	// 2. Changing Capability MUST change AuthorityProjectionDigest and CatalogDigest.
+	rChangedCap := r1
+	rChangedCap.Capability = "credentials"
+	regCap := buildRegistry(rChangedCap)
+
+	if regCap.NormativeSourceDigest() != baseSrcDigest {
+		t.Errorf("expected NormativeSourceDigest to be unchanged")
+	}
+	if regCap.AuthorityProjectionDigest() == baseProjDigest {
+		t.Errorf("expected AuthorityProjectionDigest to change when Capability changes")
+	}
+	if regCap.CatalogDigest() == baseCatDigest {
+		t.Errorf("expected CatalogDigest to change when Capability changes")
+	}
+
+	// 3. Adding Domains MUST change AuthorityProjectionDigest and CatalogDigest.
+	rChangedDomain := r1
+	rChangedDomain.Domains = []string{"test"}
+	regDomain := buildRegistry(rChangedDomain)
+
+	if regDomain.AuthorityProjectionDigest() == baseProjDigest {
+		t.Errorf("expected AuthorityProjectionDigest to change when Domains change")
+	}
+	if regDomain.CatalogDigest() == baseCatDigest {
+		t.Errorf("expected CatalogDigest to change when Domains change")
+	}
+
+	// 4. Changing rule content MUST change NormativeSourceDigest and CatalogDigest.
+	rChangedContent := r1
+	rChangedContent.Content = "Autonomous work is isolated in dedicated branches or worktrees with strict sandbox."
+	rChangedContent.ContentDigest = "" // Will be recomputed
+	regContent := buildRegistry(rChangedContent)
+
+	if regContent.NormativeSourceDigest() == baseSrcDigest {
+		t.Errorf("expected NormativeSourceDigest to change when Content changes")
+	}
+	if regContent.CatalogDigest() == baseCatDigest {
+		t.Errorf("expected CatalogDigest to change when Content changes")
 	}
 }
 

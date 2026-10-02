@@ -8,12 +8,12 @@ import (
 
 func validRefactoringProposal() *protocol.RefactoringProposal {
 	return &protocol.RefactoringProposal{
-		SchemaVersion:          protocol.SchemaVersion1,
-		ProposalID:             "prop_1",
-		CreatedAt:              "2026-09-30T00:00:00Z",
-		SourceWorkPackageID:    "WP-M3C-2",
-		TargetWorkPackageID:    "WP-M3C-1",
-		ArchitecturalTension:   "Adapter controllability tension",
+		SchemaVersion:        protocol.SchemaVersion1,
+		ProposalID:           "prop_1",
+		CreatedAt:            "2026-09-30T00:00:00Z",
+		SourceWorkPackageID:  "WP-M3C-2",
+		TargetWorkPackageID:  "WP-M3C-1",
+		ArchitecturalTension: "Adapter controllability tension",
 		ContradictionEvidence: []protocol.EvidenceRef{
 			{
 				ID:      "ev_1",

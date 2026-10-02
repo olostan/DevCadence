@@ -193,7 +193,10 @@ func (r *JSONRenderer) Render(pack *protocol.ContextPack) (PromptProjection, err
 		return PromptProjection{}, errs.Wrap(errs.CategoryValidationFailed, err, "%s: pack failed validation", kind)
 	}
 
-	payload, err := json.MarshalIndent(pack, "", "  ")
+	packCopy := *pack
+	packCopy.InvocationDigest = ""
+
+	payload, err := json.MarshalIndent(&packCopy, "", "  ")
 	if err != nil {
 		return PromptProjection{}, errs.Wrap(errs.CategoryInternal, err, "%s: failed to marshal pack to json", kind)
 	}

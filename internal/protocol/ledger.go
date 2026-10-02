@@ -155,13 +155,13 @@ func (p ExecutionFinishedPayload) Validate() error {
 }
 
 type EventPayload struct {
-	ExecutionCreated        *ExecutionCreatedPayload        `json:"execution_created,omitempty"`
-	PlanApproved            *PlanApprovedPayload            `json:"plan_approved,omitempty"`
-	ActionStarting          *ActionStartingPayload          `json:"action_starting,omitempty"`
-	ActionProcessCompleted  *ActionProcessCompletedPayload  `json:"action_process_completed,omitempty"`
-	PostconditionVerified   *PostconditionVerifiedPayload   `json:"postcondition_verified,omitempty"`
-	ActionTerminated        *ActionTerminatedPayload        `json:"action_terminated,omitempty"`
-	ExecutionFinished       *ExecutionFinishedPayload       `json:"execution_finished,omitempty"`
+	ExecutionCreated       *ExecutionCreatedPayload       `json:"execution_created,omitempty"`
+	PlanApproved           *PlanApprovedPayload           `json:"plan_approved,omitempty"`
+	ActionStarting         *ActionStartingPayload         `json:"action_starting,omitempty"`
+	ActionProcessCompleted *ActionProcessCompletedPayload `json:"action_process_completed,omitempty"`
+	PostconditionVerified  *PostconditionVerifiedPayload  `json:"postcondition_verified,omitempty"`
+	ActionTerminated       *ActionTerminatedPayload       `json:"action_terminated,omitempty"`
+	ExecutionFinished      *ExecutionFinishedPayload      `json:"execution_finished,omitempty"`
 }
 
 func (p EventPayload) Validate(expectedType SetupEventType) error {
@@ -262,9 +262,9 @@ type setupLedgerEventDigestView struct {
 	Payload             EventPayload   `json:"payload"`
 }
 
-func (e *SetupLedgerEvent) RecordKind() string         { return "SetupLedgerEvent" }
-func (e *SetupLedgerEvent) RecordID() string           { return e.EventID }
-func (e *SetupLedgerEvent) SchemaVer() SchemaVersion   { return e.SchemaVersion }
+func (e *SetupLedgerEvent) RecordKind() string       { return "SetupLedgerEvent" }
+func (e *SetupLedgerEvent) RecordID() string         { return e.EventID }
+func (e *SetupLedgerEvent) SchemaVer() SchemaVersion { return e.SchemaVersion }
 
 func (e *SetupLedgerEvent) Validate() error {
 	const kind = "SetupLedgerEvent"

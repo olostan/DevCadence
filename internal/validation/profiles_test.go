@@ -276,4 +276,3 @@ func TestValidateDirContainment(t *testing.T) {
 		t.Errorf("expected CategoryPolicyDenied, got %v", errs.CategoryOf(err))
 	}
 }
-

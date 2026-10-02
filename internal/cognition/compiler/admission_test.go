@@ -16,7 +16,7 @@ import (
 
 const testBaseCommit = "d99e40c2107965b5af53a8c429aa6286f430ff8f"
 
-func setupTestRegistry(t *testing.T) *compiler.RuleRegistry {
+func setupTestRegistryUnfrozen(t *testing.T) *compiler.RuleRegistry {
 	t.Helper()
 	reg := compiler.NewRuleRegistry()
 
@@ -86,6 +86,29 @@ func setupTestRegistry(t *testing.T) *compiler.RuleRegistry {
 	}
 
 	return reg
+}
+
+func setupTestRegistry(t *testing.T) *compiler.RuleRegistry {
+	t.Helper()
+	reg := setupTestRegistryUnfrozen(t)
+
+	if err := reg.SetCatalogMeta("test_catalog", "v1.0", testBaseCommit, "v1.0"); err != nil {
+		t.Fatalf("failed to set test catalog meta: %v", err)
+	}
+	if err := reg.Freeze(); err != nil {
+		t.Fatalf("failed to freeze test registry: %v", err)
+	}
+
+	return reg
+}
+
+func mustNewCompiler(t *testing.T, registry *compiler.RuleRegistry, leaseMgr *compiler.EvidenceLeaseManager, capsuleMgr *compiler.CapsuleManager) *compiler.Compiler {
+	t.Helper()
+	c, err := compiler.NewCompiler(registry, leaseMgr, capsuleMgr)
+	if err != nil {
+		t.Fatalf("NewCompiler failed: %v", err)
+	}
+	return c
 }
 
 func TestRuleRegistry_ValidationAndDuplicate(t *testing.T) {
@@ -160,7 +183,7 @@ func TestRuleRegistry_ReverseCoverageValidation(t *testing.T) {
 	})
 
 	t.Run("orphaned rule fails reverse coverage", func(t *testing.T) {
-		reg := setupTestRegistry(t)
+		reg := setupTestRegistryUnfrozen(t)
 		err := reg.Register(compiler.Rule{
 			ID:             "ORPHAN-001",
 			AdmissionClass: compiler.AdmissionClassMapped,
@@ -438,9 +461,9 @@ func TestCompiler_CompileContextPackAndManifest(t *testing.T) {
 	reg := setupTestRegistry(t)
 	leaseMgr := compiler.NewEvidenceLeaseManager()
 	capsuleMgr := compiler.NewCapsuleManager()
-	c := compiler.NewCompiler(reg, leaseMgr, capsuleMgr)
+	c := mustNewCompiler(t, reg, leaseMgr, capsuleMgr)
 
-	profile := compiler.DefaultProvisionalProfile("ep_1", "chan_1", "qwen2.5-coder", 32768)
+	profile := compiler.MustDefaultProvisionalProfile("ep_1", "chan_1", "qwen2.5-coder", 32768)
 	req := validCompileRequest(profile)
 
 	manifest, pack, err := c.Compile(context.Background(), req)
@@ -517,7 +540,7 @@ func TestCompiler_PolicyDeniedOnOutOfScopeLease(t *testing.T) {
 	reg := setupTestRegistry(t)
 	leaseMgr := compiler.NewEvidenceLeaseManager()
 	capsuleMgr := compiler.NewCapsuleManager()
-	c := compiler.NewCompiler(reg, leaseMgr, capsuleMgr)
+	c := mustNewCompiler(t, reg, leaseMgr, capsuleMgr)
 
 	lease, err := leaseMgr.CreateLease(compiler.CreateLeaseParams{
 		EvidenceKind:        protocol.LeaseKindSourceSnippet,
@@ -533,7 +556,7 @@ func TestCompiler_PolicyDeniedOnOutOfScopeLease(t *testing.T) {
 		t.Fatalf("failed to create lease: %v", err)
 	}
 
-	profile := compiler.DefaultProvisionalProfile("ep_1", "chan_1", "qwen", 32768)
+	profile := compiler.MustDefaultProvisionalProfile("ep_1", "chan_1", "qwen", 32768)
 	req := validCompileRequest(profile)
 	req.ReadEnvelope = []string{"internal/*"} // secrets/ is NOT in read envelope!
 	req.ActiveLeaseIDs = []string{lease.LeaseID}
@@ -551,9 +574,9 @@ func TestCompiler_ContextUnfitOnBudgetExceeded(t *testing.T) {
 	reg := setupTestRegistry(t)
 	leaseMgr := compiler.NewEvidenceLeaseManager()
 	capsuleMgr := compiler.NewCapsuleManager()
-	c := compiler.NewCompiler(reg, leaseMgr, capsuleMgr)
+	c := mustNewCompiler(t, reg, leaseMgr, capsuleMgr)
 
-	tinyProfile := compiler.DefaultProvisionalProfile("ep_tiny", "chan_tiny", "tiny-model", 500)
+	tinyProfile := compiler.MustDefaultProvisionalProfile("ep_tiny", "chan_tiny", "tiny-model", 500)
 	req := validCompileRequest(tinyProfile)
 	req.ContextProfile = tinyProfile
 	req.ExecutionContract = strings.Repeat("Long contract requirement text exceeding tiny budget. ", 100)
@@ -584,9 +607,9 @@ func TestCompiler_RejectStaleOrInvalidatedLease(t *testing.T) {
 	reg := setupTestRegistry(t)
 	leaseMgr := compiler.NewEvidenceLeaseManager()
 	capsuleMgr := compiler.NewCapsuleManager()
-	c := compiler.NewCompiler(reg, leaseMgr, capsuleMgr)
+	c := mustNewCompiler(t, reg, leaseMgr, capsuleMgr)
 
-	profile := compiler.DefaultProvisionalProfile("ep_1", "chan_1", "qwen", 32768)
+	profile := compiler.MustDefaultProvisionalProfile("ep_1", "chan_1", "qwen", 32768)
 
 	// Create and then invalidate lease
 	lease, err := leaseMgr.CreateLease(compiler.CreateLeaseParams{
@@ -622,9 +645,9 @@ func TestCompiler_RejectExpiredLease(t *testing.T) {
 	reg := setupTestRegistry(t)
 	leaseMgr := compiler.NewEvidenceLeaseManager()
 	capsuleMgr := compiler.NewCapsuleManager()
-	c := compiler.NewCompiler(reg, leaseMgr, capsuleMgr)
+	c := mustNewCompiler(t, reg, leaseMgr, capsuleMgr)
 
-	profile := compiler.DefaultProvisionalProfile("ep_1", "chan_1", "qwen", 32768)
+	profile := compiler.MustDefaultProvisionalProfile("ep_1", "chan_1", "qwen", 32768)
 
 	// Create lease with imminent expiry timestamp and sleep past it
 	exp := time.Now().UTC().Add(10 * time.Millisecond).Format(time.RFC3339Nano)
@@ -662,9 +685,9 @@ func TestCompiler_RejectMismatchedSourceRevision(t *testing.T) {
 	reg := setupTestRegistry(t)
 	leaseMgr := compiler.NewEvidenceLeaseManager()
 	capsuleMgr := compiler.NewCapsuleManager()
-	c := compiler.NewCompiler(reg, leaseMgr, capsuleMgr)
+	c := mustNewCompiler(t, reg, leaseMgr, capsuleMgr)
 
-	profile := compiler.DefaultProvisionalProfile("ep_1", "chan_1", "qwen", 32768)
+	profile := compiler.MustDefaultProvisionalProfile("ep_1", "chan_1", "qwen", 32768)
 
 	lease, err := leaseMgr.CreateLease(compiler.CreateLeaseParams{
 		EvidenceKind:        protocol.LeaseKindSourceSnippet,
@@ -697,9 +720,9 @@ func TestCompiler_FailClosedOnMissingProvenance(t *testing.T) {
 	reg := setupTestRegistry(t)
 	leaseMgr := compiler.NewEvidenceLeaseManager()
 	capsuleMgr := compiler.NewCapsuleManager()
-	c := compiler.NewCompiler(reg, leaseMgr, capsuleMgr)
+	c := mustNewCompiler(t, reg, leaseMgr, capsuleMgr)
 
-	profile := compiler.DefaultProvisionalProfile("ep_1", "chan_1", "qwen", 32768)
+	profile := compiler.MustDefaultProvisionalProfile("ep_1", "chan_1", "qwen", 32768)
 
 	// Missing WorkPackageDigest
 	reqNoDigest := validCompileRequest(profile)
@@ -741,16 +764,19 @@ func TestCompiler_EnforceProjectionBounds(t *testing.T) {
 	reg := setupTestRegistry(t)
 	leaseMgr := compiler.NewEvidenceLeaseManager()
 	capsuleMgr := compiler.NewCapsuleManager()
-	c := compiler.NewCompiler(reg, leaseMgr, capsuleMgr)
+	c := mustNewCompiler(t, reg, leaseMgr, capsuleMgr)
 
 	// Profile with tight ceiling
-	tightProfile := compiler.DefaultProvisionalProfile("ep_tight", "chan_tight", "model", 2000)
+	tightProfile := compiler.MustDefaultProvisionalProfile("ep_tight", "chan_tight", "model", 2000)
 
 	req := validCompileRequest(tightProfile)
 	req.ContextProfile = tightProfile
 	// Add huge tool schemas to exceed projection fit (Finding 4)
 	req.ToolSchemas = []string{
 		strings.Repeat("tool schema declaration description parameters ", 200),
+	}
+	req.DeclaredTools = []compiler.ToolCapabilityInfo{
+		{Name: "large_tool"},
 	}
 
 	_, pack, err := c.Compile(context.Background(), req)
@@ -821,8 +847,8 @@ func TestCanonicalRuleRegistry(t *testing.T) {
 
 func TestCompiler_InvalidWorkPackageRevisionFailsClosed(t *testing.T) {
 	reg := setupTestRegistry(t)
-	c := compiler.NewCompiler(reg, nil, nil)
-	profile := compiler.DefaultProvisionalProfile("ep_1", "chan_1", "model", 32768)
+	c := mustNewCompiler(t, reg, nil, nil)
+	profile := compiler.MustDefaultProvisionalProfile("ep_1", "chan_1", "model", 32768)
 
 	req0 := validCompileRequest(profile)
 	req0.WorkPackageRevision = 0
@@ -841,8 +867,8 @@ func TestCompiler_CognitiveStateExpiredDependencyRejection(t *testing.T) {
 	reg := setupTestRegistry(t)
 	leaseMgr := compiler.NewEvidenceLeaseManager()
 	capsuleMgr := compiler.NewCapsuleManager()
-	c := compiler.NewCompiler(reg, leaseMgr, capsuleMgr)
-	profile := compiler.DefaultProvisionalProfile("ep_1", "chan_1", "model", 32768)
+	c := mustNewCompiler(t, reg, leaseMgr, capsuleMgr)
+	profile := compiler.MustDefaultProvisionalProfile("ep_1", "chan_1", "model", 32768)
 
 	// Create a lease that expires in 10ms
 	exp := time.Now().UTC().Add(10 * time.Millisecond).Format(time.RFC3339Nano)
@@ -887,32 +913,44 @@ func TestCompiler_TypedCapabilitiesDerivation(t *testing.T) {
 		{Name: "bash"},
 		{Name: "edit_file"},
 	}
-	caps := compiler.DeriveActiveCapabilities(nil, toolsNoMeta, nil)
+	caps, err := compiler.DeriveActiveCapabilities(nil, toolsNoMeta, nil)
+	if err != nil {
+		t.Fatalf("unexpected error deriving capabilities: %v", err)
+	}
 	if len(caps) != 0 {
 		t.Errorf("expected 0 capabilities from un-annotated tool names, got %v", caps)
 	}
 
 	// 2. Typed annotations grant exact capabilities
 	toolsTyped := []compiler.ToolCapabilityInfo{
-		{Name: "bash", RequiredCapabilities: []string{"exec"}},
+		{Name: "bash", RequiredCapabilities: []compiler.CapabilityClass{compiler.CapabilityClassExec}},
 		{Name: "editor", MutatesFiles: true},
 	}
-	caps = compiler.DeriveActiveCapabilities(nil, toolsTyped, []string{"network"})
-	expected := map[string]bool{"exec": true, "write": true, "network": true}
+	caps, err = compiler.DeriveActiveCapabilities(nil, toolsTyped, []string{"network"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	expected := map[string]bool{"exec": true, "write": true, "filesystem": true, "network": true}
 	for _, c := range caps {
 		if !expected[c] {
 			t.Errorf("unexpected capability derived: %q", c)
 		}
 	}
-	if len(caps) != 3 {
-		t.Errorf("expected 3 capabilities, got %v", caps)
+	if len(caps) != 4 {
+		t.Errorf("expected 4 capabilities (exec, write, filesystem, network), got %v", caps)
+	}
+
+	// 3. Unrecognized capability string fails closed
+	_, err = compiler.DeriveActiveCapabilities(nil, toolsTyped, []string{"unrecognized_magic_capability"})
+	if err == nil || !errors.Is(err, errs.ErrInvalidArgument) {
+		t.Errorf("expected ErrInvalidArgument for unrecognized capability string, got %v", err)
 	}
 }
 
 func TestCompiler_InvocationDigestVsPackDigest(t *testing.T) {
 	reg := setupTestRegistry(t)
-	c := compiler.NewCompiler(reg, nil, nil)
-	profile := compiler.DefaultProvisionalProfile("ep_1", "chan_1", "model", 32768)
+	c := mustNewCompiler(t, reg, nil, nil)
+	profile := compiler.MustDefaultProvisionalProfile("ep_1", "chan_1", "model", 32768)
 
 	req1 := validCompileRequest(profile)
 	req1.Renderer = compiler.NewTaggedMarkdownRenderer()
@@ -944,6 +982,7 @@ func TestCompiler_InvocationDigestVsPackDigest(t *testing.T) {
 	req3 := validCompileRequest(profile)
 	req3.Renderer = compiler.NewTaggedMarkdownRenderer()
 	req3.ToolSchemas = []string{`{"type": "function", "name": "do_task"}`}
+	req3.DeclaredTools = []compiler.ToolCapabilityInfo{{Name: "do_task"}}
 
 	_, pack3, err3 := c.Compile(context.Background(), req3)
 	if err3 != nil {
@@ -955,6 +994,91 @@ func TestCompiler_InvocationDigestVsPackDigest(t *testing.T) {
 	}
 	if pack1.InvocationDigest == pack3.InvocationDigest {
 		t.Errorf("expected different InvocationDigest when tool schemas differ, got identical %q", pack1.InvocationDigest)
+	}
+}
+
+func TestNewCompiler_RequiresFrozenAndIdentifiedRegistry(t *testing.T) {
+	// 1. Nil registry
+	if _, err := compiler.NewCompiler(nil, nil, nil); !errors.Is(err, errs.ErrInvalidArgument) {
+		t.Errorf("expected ErrInvalidArgument for nil registry, got %v", err)
+	}
+
+	// 2. Mutable (unfrozen) registry
+	unfrozenReg := compiler.NewRuleRegistry()
+	if _, err := compiler.NewCompiler(unfrozenReg, nil, nil); !errors.Is(err, errs.ErrInvalidArgument) {
+		t.Errorf("expected ErrInvalidArgument for unfrozen registry, got %v", err)
+	}
+
+	// 3. Missing catalog ID
+	regNoID := compiler.NewRuleRegistry()
+	_ = regNoID.SetCatalogMeta("", "1.0", "rev", "map")
+	_ = regNoID.Freeze()
+	if _, err := compiler.NewCompiler(regNoID, nil, nil); !errors.Is(err, errs.ErrInvalidArgument) {
+		t.Errorf("expected ErrInvalidArgument for empty catalog ID, got %v", err)
+	}
+
+	// 4. Missing catalog revision
+	regNoRev := compiler.NewRuleRegistry()
+	_ = regNoRev.SetCatalogMeta("id", "1.0", "", "map")
+	_ = regNoRev.Freeze()
+	if _, err := compiler.NewCompiler(regNoRev, nil, nil); !errors.Is(err, errs.ErrInvalidArgument) {
+		t.Errorf("expected ErrInvalidArgument for empty catalog revision, got %v", err)
+	}
+}
+
+func TestCompiler_JSONRenderer_InvocationDigestSelfConsistency(t *testing.T) {
+	// Regression test for Finding 4:
+	// Compile with JSON renderer -> re-render returned pack -> assert actual invocation projection == projection measured and hashed
+	reg := setupTestRegistry(t)
+	c := mustNewCompiler(t, reg, nil, nil)
+	profile := compiler.MustDefaultProvisionalProfile("ep_1", "chan_1", "model", 32768)
+
+	req := validCompileRequest(profile)
+	jsonRenderer := compiler.NewJSONRenderer()
+	req.Renderer = jsonRenderer
+
+	inv, err := c.CompileInvocation(context.Background(), req)
+	if err != nil {
+		t.Fatalf("compile invocation failed: %v", err)
+	}
+
+	measuredProj := inv.Projection
+
+	// Now re-render the returned pack (which has pack.InvocationDigest set)
+	reRenderedProj, err := jsonRenderer.Render(inv.Pack)
+	if err != nil {
+		t.Fatalf("re-render failed: %v", err)
+	}
+
+	if reRenderedProj.UserPrompt != measuredProj.UserPrompt {
+		t.Errorf("re-rendered UserPrompt differs from measured prompt projection!\nMeasured:\n%s\nRe-rendered:\n%s",
+			measuredProj.UserPrompt, reRenderedProj.UserPrompt)
+	}
+	if reRenderedProj.Digest != measuredProj.Digest {
+		t.Errorf("re-rendered Digest %q differs from measured Digest %q",
+			reRenderedProj.Digest, measuredProj.Digest)
+	}
+}
+
+func TestCompiler_UnknownToolAuthority_FailsClosed(t *testing.T) {
+	reg := setupTestRegistry(t)
+	c := mustNewCompiler(t, reg, nil, nil)
+	profile := compiler.MustDefaultProvisionalProfile("ep_1", "chan_1", "model", 32768)
+
+	// 1. Tool schemas provided without declared tools fails closed (Finding 5)
+	reqNoDeclared := validCompileRequest(profile)
+	reqNoDeclared.ToolSchemas = []string{`{"name": "fetch"}`}
+	reqNoDeclared.DeclaredTools = nil
+	if _, _, err := c.Compile(context.Background(), reqNoDeclared); !errors.Is(err, errs.ErrInvalidArgument) {
+		t.Errorf("expected ErrInvalidArgument when tool schemas are provided without DeclaredTools, got %v", err)
+	}
+
+	// 2. Legacy req.Tools with undeclared tool fails closed
+	reqUndeclaredLegacy := validCompileRequest(profile)
+	reqUndeclaredLegacy.Tools = []string{"legacy_untyped_tool"}
+	reqUndeclaredLegacy.DeclaredTools = []compiler.ToolCapabilityInfo{{Name: "other_tool"}}
+	if _, _, err := c.Compile(context.Background(), reqUndeclaredLegacy); !errors.Is(err, errs.ErrInvalidArgument) {
+		t.Errorf("expected ErrInvalidArgument for undeclared legacy tool, got %v", err)
 	}
 }
 

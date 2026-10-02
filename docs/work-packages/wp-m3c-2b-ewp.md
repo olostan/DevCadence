@@ -194,7 +194,7 @@ Build the deterministic **Cognitive Invocation Compiler** (`internal/cognition/c
    - `Compiler`: synthesizes `protocol.ContextManifest` and `protocol.ContextPack`.
 2. **`profile.go`**:
    - `EnforceProfileBounds(pack *protocol.ContextPack, profile *protocol.ContextProfile) error`.
-   - Token accounting estimators for BPE, provider API, and approximate estimation with uncertainty margins.
+   - Deterministic token accounting enforcing epistemic honesty (strictly requiring `AccountingApproximateEstimate` with conservative uncertainty margins when an exact BPE tokenizer or provider API counter is not attached).
    - Default provisional profile builder (`DefaultProvisionalProfile`).
 3. **`strategy.go`**:
    - `ContextStrategy` abstraction mapping `protocol.ContextControl`.

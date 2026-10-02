@@ -12,8 +12,8 @@ import (
 
 // Default limits for artifact pagination.
 const (
-	DefaultPageLimit      = 20
-	DefaultFetchMaxBytes  = 64 * 1024 // 64 KiB response cap (Finding 9)
+	DefaultPageLimit     = 20
+	DefaultFetchMaxBytes = 64 * 1024 // 64 KiB response cap (Finding 9)
 )
 
 // FetchContentOptions configures universal artifact pagination (ADR-0016).

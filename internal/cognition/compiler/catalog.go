@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"regexp"
-	"sort"
 	"strings"
 
 	devcadence "github.com/olostan/DevCadence"
@@ -18,8 +17,14 @@ const CanonicalCatalogID = "canonical-dci-invariants"
 // CanonicalCatalogVersion identifies the frozen catalog specification version.
 const CanonicalCatalogVersion = "v1.0"
 
-// CanonicalCatalogRevision pins the git commit of the canonical rules baseline.
-const CanonicalCatalogRevision = "d99e40c2107965b5af53a8c429aa6286f430ff8f"
+// CanonicalSourceRevision pins the git commit of the canonical INVARIANTS.md baseline.
+const CanonicalSourceRevision = "d99e40c2107965b5af53a8c429aa6286f430ff8f"
+
+// CanonicalMappingRevision pins the revision of the canonical invariant applicability mappings.
+const CanonicalMappingRevision = "v1.0.0-m3c-2b"
+
+// CanonicalCatalogRevision pins the git commit of the canonical rules baseline (backwards-compatible alias for CanonicalSourceRevision).
+const CanonicalCatalogRevision = CanonicalSourceRevision
 
 // CanonicalDomains lists the standard domain vocabulary recognized by DevCadence.
 var CanonicalDomains = []string{
@@ -296,40 +301,51 @@ func NewCanonicalRuleRegistry() (*RuleRegistry, error) {
 	}
 
 	// 2. Parse all 94 invariants from embedded INVARIANTS.md
-	rules, err := ParseInvariantsFromDoc(devcadence.InvariantsDoc, CanonicalCatalogRevision)
+	rules, err := ParseInvariantsFromDoc(devcadence.InvariantsDoc, CanonicalSourceRevision)
 	if err != nil {
 		return nil, errs.Wrap(errs.CategoryInternal, err, "parse canonical invariants")
 	}
 
-	// 3. Register all extracted rules
+	// 3. Verify runtime bidirectional set-equality between parsed rules and CanonicalInvariantMappings
+	if len(rules) != len(CanonicalInvariantMappings) {
+		return nil, errs.New(errs.CategoryValidationFailed,
+			"bidirectional set equality failure: %d rules parsed from INVARIANTS.md, but %d entries in CanonicalInvariantMappings",
+			len(rules), len(CanonicalInvariantMappings))
+	}
+	parsedSet := make(map[string]bool, len(rules))
+	for _, r := range rules {
+		parsedSet[r.ID] = true
+	}
+	for mappingID := range CanonicalInvariantMappings {
+		if !parsedSet[mappingID] {
+			return nil, errs.New(errs.CategoryValidationFailed,
+				"bidirectional set equality failure: mapping entry %q has no corresponding parsed invariant in INVARIANTS.md",
+				mappingID)
+		}
+	}
+
+	// 4. Register all extracted rules
 	for _, r := range rules {
 		if err := reg.Register(r); err != nil {
 			return nil, errs.Wrap(errs.CategoryInternal, err, "register rule %s", r.ID)
 		}
 	}
 
-	// 4. Verify 100% deterministic reverse coverage
+	// 5. Verify 100% deterministic reverse coverage
 	if err := reg.VerifyReverseCoverage(); err != nil {
 		return nil, errs.Wrap(errs.CategoryValidationFailed, err, "verify reverse coverage")
 	}
 
-	// 5. Compute deterministic CatalogDigest over sorted registered rules
-	sort.Slice(rules, func(i, j int) bool {
-		return rules[i].ID < rules[j].ID
-	})
-	hasher := sha256.New()
-	for _, r := range rules {
-		hasher.Write([]byte(r.ID + ":" + r.ContentDigest + "\n"))
-	}
-	catalogDigest := "sha256:" + hex.EncodeToString(hasher.Sum(nil))
-
-	// 6. Set first-class catalog metadata
-	if err := reg.SetCatalogMeta(CanonicalCatalogID, CanonicalCatalogVersion, CanonicalCatalogRevision, catalogDigest); err != nil {
+	// 6. Set first-class catalog provenance metadata (SourceRevision and MappingRevision separated)
+	if err := reg.SetCatalogMeta(CanonicalCatalogID, CanonicalCatalogVersion, CanonicalSourceRevision, CanonicalMappingRevision); err != nil {
 		return nil, errs.Wrap(errs.CategoryInternal, err, "set catalog metadata")
 	}
 
-	// 7. Freeze registry to ensure absolute immutability
-	reg.Freeze()
+	// 7. Freeze registry to compute deterministic NormativeSourceDigest, AuthorityProjectionDigest,
+	// and CatalogDigest, and ensure absolute immutability.
+	if err := reg.Freeze(); err != nil {
+		return nil, errs.Wrap(errs.CategoryInternal, err, "freeze canonical rule registry")
+	}
 
 	return reg, nil
 }

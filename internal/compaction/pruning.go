@@ -80,9 +80,9 @@ func PruneToolResults(ctx context.Context, session *ExecutionSession, store *art
 // ValidateAtomicToolGroups verifies that an assistant message with tool calls has all
 // its matching tool results present, and that no tool result is orphaned without its assistant message.
 // It checks both directions:
-// 1. Every tool result must have a corresponding assistant tool call.
-// 2. Every assistant tool call must have its matching tool result, unless it is a legitimately
-//    pending call at the end of the message sequence (no subsequent user/assistant turns).
+//  1. Every tool result must have a corresponding assistant tool call.
+//  2. Every assistant tool call must have its matching tool result, unless it is a legitimately
+//     pending call at the end of the message sequence (no subsequent user/assistant turns).
 func ValidateAtomicToolGroups(messages []Message) error {
 	assistantToolCalls := make(map[string]bool)
 	toolResults := make(map[string]bool)

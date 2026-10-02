@@ -391,4 +391,3 @@ func TestServiceReadinessVerification(t *testing.T) {
 		t.Errorf("Expected CategoryProbeTimeout, got: %v", err)
 	}
 }
-

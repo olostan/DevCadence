@@ -127,51 +127,101 @@ func (e CapabilityExclusion) Validate() error {
 	return nil
 }
 
-// ToolCapabilityInfo defines typed capability metadata for a tool (Finding 6, ADR-0020 §2).
-type ToolCapabilityInfo struct {
-	Name                 string   `json:"name"`
-	RequiredCapabilities []string `json:"required_capabilities,omitempty"`
-	MutatesFiles         bool     `json:"mutates_files,omitempty"`
+// CapabilityClass represents a recognized authority or execution capability dimension (ADR-0020, AGENTS.md §2).
+type CapabilityClass string
+
+const (
+	CapabilityClassWrite                CapabilityClass = "write"
+	CapabilityClassRepositoryMutation   CapabilityClass = "repository_mutation"
+	CapabilityClassExec                 CapabilityClass = "exec"
+	CapabilityClassProcessExecution     CapabilityClass = "process_execution"
+	CapabilityClassNetwork              CapabilityClass = "network"
+	CapabilityClassNetworkAccess        CapabilityClass = "network_access"
+	CapabilityClassCredentials          CapabilityClass = "credentials"
+	CapabilityClassSpending             CapabilityClass = "spending"
+	CapabilityClassDurableStateMutation CapabilityClass = "durable_state_mutation"
+	CapabilityClassFilesystem           CapabilityClass = "filesystem"
+	CapabilityClassTools                CapabilityClass = "tools"
+)
+
+// Valid reports whether the capability class is recognized.
+func (c CapabilityClass) Valid() bool {
+	switch c {
+	case CapabilityClassWrite, CapabilityClassRepositoryMutation,
+		CapabilityClassExec, CapabilityClassProcessExecution,
+		CapabilityClassNetwork, CapabilityClassNetworkAccess,
+		CapabilityClassCredentials, CapabilityClassSpending,
+		CapabilityClassDurableStateMutation, CapabilityClassFilesystem,
+		CapabilityClassTools:
+		return true
+	}
+	return false
 }
 
-// DeriveActiveCapabilities deterministically derives active capabilities from session, tool, and channel facts (Finding 1, Finding 6).
-// Substring matching on tool names is eliminated; capabilities must be derived from typed metadata.
-func DeriveActiveCapabilities(channel *protocol.AccessChannel, tools []ToolCapabilityInfo, declaredCaps []string) []string {
+// ToolCapabilityInfo defines typed capability metadata for a tool (Finding 5, ADR-0020 §2).
+type ToolCapabilityInfo struct {
+	Name                 string            `json:"name"`
+	RequiredCapabilities []CapabilityClass `json:"required_capabilities,omitempty"`
+	MutatesFiles         bool              `json:"mutates_files,omitempty"`
+}
+
+// Validate checks that the tool capability declaration is valid and typed.
+func (t ToolCapabilityInfo) Validate() error {
+	if strings.TrimSpace(t.Name) == "" {
+		return errs.New(errs.CategoryInvalidArgument, "tool name cannot be empty")
+	}
+	for _, capClass := range t.RequiredCapabilities {
+		if !capClass.Valid() {
+			return errs.New(errs.CategoryInvalidArgument, "tool %q declares invalid capability %q", t.Name, capClass)
+		}
+	}
+	return nil
+}
+
+// DeriveActiveCapabilities deterministically derives active capabilities from session, tool, and channel facts (Finding 5).
+// Substring matching on tool names is eliminated; capabilities must be derived from typed metadata and fail closed on unknown inputs.
+func DeriveActiveCapabilities(channel *protocol.AccessChannel, tools []ToolCapabilityInfo, declaredCaps []string) ([]string, error) {
 	seen := make(map[string]bool)
 
 	if channel != nil {
 		if channel.NativeWorktreeAccess {
-			seen["write"] = true
-			seen["filesystem"] = true
+			seen[string(CapabilityClassWrite)] = true
+			seen[string(CapabilityClassFilesystem)] = true
 		}
 		if channel.CredentialRefID != nil && *channel.CredentialRefID != "" {
-			seen["credentials"] = true
+			seen[string(CapabilityClassCredentials)] = true
 		}
 		if channel.Kind == protocol.ChannelDirectHTTPAPI || channel.Kind == protocol.ChannelRemoteAgentProxy {
-			seen["network"] = true
+			seen[string(CapabilityClassNetwork)] = true
 		}
 		if channel.SupportsTools {
-			seen["tools"] = true
+			seen[string(CapabilityClassTools)] = true
 		}
 	}
 
 	for _, tool := range tools {
-		for _, capName := range tool.RequiredCapabilities {
-			c := strings.ToLower(strings.TrimSpace(capName))
-			if c != "" {
-				seen[c] = true
-			}
+		if err := tool.Validate(); err != nil {
+			return nil, err
+		}
+		for _, capClass := range tool.RequiredCapabilities {
+			seen[string(capClass)] = true
 		}
 		if tool.MutatesFiles {
-			seen["write"] = true
+			seen[string(CapabilityClassWrite)] = true
+			seen[string(CapabilityClassFilesystem)] = true
 		}
 	}
 
 	for _, capName := range declaredCaps {
 		c := strings.ToLower(strings.TrimSpace(capName))
-		if c != "" {
-			seen[c] = true
+		if c == "" {
+			continue
 		}
+		capClass := CapabilityClass(c)
+		if !capClass.Valid() {
+			return nil, errs.New(errs.CategoryInvalidArgument, "unrecognized active capability %q", capName)
+		}
+		seen[c] = true
 	}
 
 	result := make([]string, 0, len(seen))
@@ -179,7 +229,7 @@ func DeriveActiveCapabilities(channel *protocol.AccessChannel, tools []ToolCapab
 		result = append(result, c)
 	}
 	sort.Strings(result)
-	return result
+	return result, nil
 }
 
 // RuleRegistry stores and validates the canonical corpus of normative rules.
@@ -189,10 +239,13 @@ type RuleRegistry struct {
 	knownDomains map[string]struct{}
 	frozen       bool
 
-	catalogID       string
-	catalogVersion  string
-	catalogRevision string
-	catalogDigest   string
+	catalogID                 string
+	catalogVersion            string
+	sourceRevision            string
+	mappingRevision           string
+	normativeSourceDigest     string
+	authorityProjectionDigest string
+	catalogDigest             string
 }
 
 // CatalogID returns the frozen catalog identifier.
@@ -209,14 +262,45 @@ func (reg *RuleRegistry) CatalogVersion() string {
 	return reg.catalogVersion
 }
 
-// CatalogRevision returns the git commit revision the catalog is pinned to.
-func (reg *RuleRegistry) CatalogRevision() string {
+// SourceRevision returns the git commit revision of the normative source document (e.g. INVARIANTS.md).
+func (reg *RuleRegistry) SourceRevision() string {
 	reg.mu.RLock()
 	defer reg.mu.RUnlock()
-	return reg.catalogRevision
+	return reg.sourceRevision
 }
 
-// CatalogDigest returns the cryptographic SHA-256 digest of the catalog content.
+// MappingRevision returns the revision of the canonical invariant applicability mappings.
+func (reg *RuleRegistry) MappingRevision() string {
+	reg.mu.RLock()
+	defer reg.mu.RUnlock()
+	return reg.mappingRevision
+}
+
+// CatalogRevision returns the git commit revision the catalog is pinned to (backwards-compatible alias for SourceRevision).
+func (reg *RuleRegistry) CatalogRevision() string {
+	return reg.SourceRevision()
+}
+
+// NormativeSourceDigest returns the cryptographic SHA-256 digest of all verbatim normative clauses.
+func (reg *RuleRegistry) NormativeSourceDigest() string {
+	reg.mu.RLock()
+	defer reg.mu.RUnlock()
+	return reg.normativeSourceDigest
+}
+
+// AuthorityProjectionDigest returns the cryptographic SHA-256 digest of all mapping semantics.
+func (reg *RuleRegistry) AuthorityProjectionDigest() string {
+	reg.mu.RLock()
+	defer reg.mu.RUnlock()
+	return reg.authorityProjectionDigest
+}
+
+// MappingDigest is an alias for AuthorityProjectionDigest.
+func (reg *RuleRegistry) MappingDigest() string {
+	return reg.AuthorityProjectionDigest()
+}
+
+// CatalogDigest returns the cryptographic SHA-256 digest authenticating both normative source and authority projection.
 func (reg *RuleRegistry) CatalogDigest() string {
 	reg.mu.RLock()
 	defer reg.mu.RUnlock()
@@ -224,7 +308,7 @@ func (reg *RuleRegistry) CatalogDigest() string {
 }
 
 // SetCatalogMeta records catalog provenance metadata before the registry is frozen.
-func (reg *RuleRegistry) SetCatalogMeta(id, version, revision, digest string) error {
+func (reg *RuleRegistry) SetCatalogMeta(id, version, sourceRevision, mappingRevision string) error {
 	reg.mu.Lock()
 	defer reg.mu.Unlock()
 	if reg.frozen {
@@ -232,8 +316,8 @@ func (reg *RuleRegistry) SetCatalogMeta(id, version, revision, digest string) er
 	}
 	reg.catalogID = id
 	reg.catalogVersion = version
-	reg.catalogRevision = revision
-	reg.catalogDigest = digest
+	reg.sourceRevision = sourceRevision
+	reg.mappingRevision = mappingRevision
 	return nil
 }
 
@@ -335,7 +419,8 @@ func (reg *RuleRegistry) All() []Rule {
 	return result
 }
 
-// Freeze validates reverse-coverage and marks the registry immutable (Finding 2, 3).
+// Freeze validates reverse-coverage, computes deterministic cryptographic digests
+// (NormativeSourceDigest, AuthorityProjectionDigest, CatalogDigest), and marks the registry immutable (Finding 1, 2, 3).
 func (reg *RuleRegistry) Freeze() error {
 	reg.mu.Lock()
 	defer reg.mu.Unlock()
@@ -345,8 +430,64 @@ func (reg *RuleRegistry) Freeze() error {
 	if err := reg.validateReverseCoverageLocked(); err != nil {
 		return err
 	}
+
+	ids := make([]string, 0, len(reg.rules))
+	for id := range reg.rules {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+
+	// 1. NormativeSourceDigest: authenticates exact normative clause text & content digests
+	srcHasher := sha256.New()
+	for _, id := range ids {
+		r := reg.rules[id]
+		srcHasher.Write([]byte(r.ID + ":" + r.ContentDigest + "\n"))
+	}
+	reg.normativeSourceDigest = "sha256:" + hex.EncodeToString(srcHasher.Sum(nil))
+
+	// 2. AuthorityProjectionDigest: authenticates exact mapping semantics (admission class, capabilities, domains, roles, etc.)
+	projHasher := sha256.New()
+	for _, id := range ids {
+		r := reg.rules[id]
+		projHasher.Write([]byte(canonicalRuleMappingSerialization(r) + "\n"))
+	}
+	reg.authorityProjectionDigest = "sha256:" + hex.EncodeToString(projHasher.Sum(nil))
+
+	// 3. CatalogDigest: cryptographically authenticates BOTH normative source and authority projection
+	catHasher := sha256.New()
+	catHasher.Write([]byte(reg.normativeSourceDigest + ":" + reg.authorityProjectionDigest))
+	reg.catalogDigest = "sha256:" + hex.EncodeToString(catHasher.Sum(nil))
+
 	reg.frozen = true
 	return nil
+}
+
+func canonicalRuleMappingSerialization(r Rule) string {
+	domains := append([]string(nil), r.Domains...)
+	sort.Strings(domains)
+	roles := append([]string(nil), r.Roles...)
+	sort.Strings(roles)
+	risks := append([]string(nil), r.RiskTags...)
+	sort.Strings(risks)
+	actions := append([]string(nil), r.Actions...)
+	sort.Strings(actions)
+	paths := append([]string(nil), r.PathPatterns...)
+	sort.Strings(paths)
+	deps := append([]string(nil), r.DependsOn...)
+	sort.Strings(deps)
+
+	return fmt.Sprintf("id=%s|class=%s|cap=%s|domains=%s|roles=%s|risks=%s|actions=%s|paths=%s|deps=%s|rev=%s",
+		r.ID,
+		r.AdmissionClass,
+		r.Capability,
+		strings.Join(domains, ","),
+		strings.Join(roles, ","),
+		strings.Join(risks, ","),
+		strings.Join(actions, ","),
+		strings.Join(paths, ","),
+		strings.Join(deps, ","),
+		r.Revision,
+	)
 }
 
 // IsFrozen reports whether the registry has been frozen.
@@ -716,12 +857,38 @@ type Compiler struct {
 }
 
 // NewCompiler constructs a Compiler with required registries and managers.
-func NewCompiler(registry *RuleRegistry, leaseMgr *EvidenceLeaseManager, capsuleMgr *CapsuleManager) *Compiler {
+// It strictly requires a non-nil, frozen RuleRegistry with validated provenance (Finding 3).
+func NewCompiler(registry *RuleRegistry, leaseMgr *EvidenceLeaseManager, capsuleMgr *CapsuleManager) (*Compiler, error) {
+	const kind = "CognitiveCompiler"
+	if registry == nil {
+		return nil, errs.New(errs.CategoryInvalidArgument, "%s: rule registry cannot be nil", kind)
+	}
+	if !registry.IsFrozen() {
+		return nil, errs.New(errs.CategoryInvalidArgument, "%s: rule registry must be frozen before compiler construction", kind)
+	}
+	if strings.TrimSpace(registry.CatalogID()) == "" {
+		return nil, errs.New(errs.CategoryInvalidArgument, "%s: rule registry has empty catalog_id", kind)
+	}
+	if strings.TrimSpace(registry.CatalogRevision()) == "" {
+		return nil, errs.New(errs.CategoryInvalidArgument, "%s: rule registry has empty catalog_revision", kind)
+	}
+	if strings.TrimSpace(registry.CatalogDigest()) == "" || !strings.HasPrefix(registry.CatalogDigest(), "sha256:") || len(registry.CatalogDigest()) != 71 {
+		return nil, errs.New(errs.CategoryInvalidArgument, "%s: rule registry has invalid or empty catalog_digest %q", kind, registry.CatalogDigest())
+	}
 	return &Compiler{
 		registry:   registry,
 		leaseMgr:   leaseMgr,
 		capsuleMgr: capsuleMgr,
-	}
+	}, nil
+}
+
+// CompiledInvocation represents the complete, immutable result of compiling a ContextPack
+// along with its exact endpoint projection and invocation identity (Finding 4, ADR-0020 §5).
+type CompiledInvocation struct {
+	Manifest         *protocol.ContextManifest `json:"manifest"`
+	Pack             *protocol.ContextPack     `json:"pack"`
+	Projection       PromptProjection          `json:"projection"`
+	InvocationDigest string                    `json:"invocation_digest"`
 }
 
 // Compile compiles a validated ContextManifest and ContextPack.
@@ -729,48 +896,61 @@ func NewCompiler(registry *RuleRegistry, leaseMgr *EvidenceLeaseManager, capsule
 // it marks status as PackStatusContextUnfit and returns errs.CategoryContextUnfit
 // without truncating mandatory requirements (DCI-019).
 func (c *Compiler) Compile(ctx context.Context, req CompileRequest) (*protocol.ContextManifest, *protocol.ContextPack, error) {
+	inv, err := c.CompileInvocation(ctx, req)
+	if err != nil {
+		if inv != nil {
+			return inv.Manifest, inv.Pack, err
+		}
+		return nil, nil, err
+	}
+	return inv.Manifest, inv.Pack, nil
+}
+
+// CompileInvocation compiles a ContextPack and returns the complete, immutable CompiledInvocation
+// containing the manifest, pack, exact rendered prompt projection, and InvocationDigest (Finding 4).
+func (c *Compiler) CompileInvocation(ctx context.Context, req CompileRequest) (*CompiledInvocation, error) {
 	const kind = "CognitiveCompiler"
 
 	// 1. Fail-closed request parameter validation (Finding 11, Finding 8)
 	if strings.TrimSpace(req.TaskID) == "" {
-		return nil, nil, errs.New(errs.CategoryInvalidArgument, "%s: task_id cannot be empty", kind)
+		return nil, errs.New(errs.CategoryInvalidArgument, "%s: task_id cannot be empty", kind)
 	}
 	if strings.TrimSpace(req.WorkPackageID) == "" {
-		return nil, nil, errs.New(errs.CategoryInvalidArgument, "%s: work_package_id cannot be empty", kind)
+		return nil, errs.New(errs.CategoryInvalidArgument, "%s: work_package_id cannot be empty", kind)
 	}
 	if req.WorkPackageRevision < 1 {
-		return nil, nil, errs.New(errs.CategoryInvalidArgument, "%s: work_package_revision must be >= 1, got %d", kind, req.WorkPackageRevision)
+		return nil, errs.New(errs.CategoryInvalidArgument, "%s: work_package_revision must be >= 1, got %d", kind, req.WorkPackageRevision)
 	}
 	if strings.TrimSpace(req.WorkPackageDigest) == "" {
-		return nil, nil, errs.New(errs.CategoryInvalidArgument, "%s: work_package_digest cannot be empty", kind)
+		return nil, errs.New(errs.CategoryInvalidArgument, "%s: work_package_digest cannot be empty", kind)
 	}
 	if !strings.HasPrefix(req.WorkPackageDigest, "sha256:") || len(req.WorkPackageDigest) != 71 {
-		return nil, nil, errs.New(errs.CategoryInvalidArgument,
+		return nil, errs.New(errs.CategoryInvalidArgument,
 			"%s: work_package_digest must be sha256:<64 hex chars>, got %q", kind, req.WorkPackageDigest)
 	}
 	if strings.TrimSpace(req.Role) == "" {
-		return nil, nil, errs.New(errs.CategoryInvalidArgument, "%s: role cannot be empty", kind)
+		return nil, errs.New(errs.CategoryInvalidArgument, "%s: role cannot be empty", kind)
 	}
 	if len(req.BaseCommit) < 7 {
-		return nil, nil, errs.New(errs.CategoryInvalidArgument, "%s: base_commit must be >= 7 characters, got %q", kind, req.BaseCommit)
+		return nil, errs.New(errs.CategoryInvalidArgument, "%s: base_commit must be >= 7 characters, got %q", kind, req.BaseCommit)
 	}
 	if strings.TrimSpace(req.ExecutionContract) == "" {
-		return nil, nil, errs.New(errs.CategoryInvalidArgument, "%s: execution_contract cannot be empty", kind)
+		return nil, errs.New(errs.CategoryInvalidArgument, "%s: execution_contract cannot be empty", kind)
 	}
 	if req.ContextProfile == nil {
-		return nil, nil, errs.New(errs.CategoryInvalidArgument, "%s: context_profile cannot be nil", kind)
+		return nil, errs.New(errs.CategoryInvalidArgument, "%s: context_profile cannot be nil", kind)
 	}
 	if strings.TrimSpace(req.BudgetPoolID) == "" {
-		return nil, nil, errs.New(errs.CategoryInvalidArgument, "%s: budget_pool_id cannot be empty", kind)
+		return nil, errs.New(errs.CategoryInvalidArgument, "%s: budget_pool_id cannot be empty", kind)
 	}
 	if strings.TrimSpace(req.ProjectStateRevision) == "" {
-		return nil, nil, errs.New(errs.CategoryInvalidArgument, "%s: project_state_revision cannot be empty", kind)
+		return nil, errs.New(errs.CategoryInvalidArgument, "%s: project_state_revision cannot be empty", kind)
 	}
 
 	// Validate domain mapping presence
 	for i, d := range req.Domains {
 		if strings.TrimSpace(d) == "" {
-			return nil, nil, errs.New(errs.CategoryInvalidArgument, "%s: domains[%d] cannot be empty", kind, i)
+			return nil, errs.New(errs.CategoryInvalidArgument, "%s: domains[%d] cannot be empty", kind, i)
 		}
 	}
 
@@ -779,26 +959,45 @@ func (c *Compiler) Compile(ctx context.Context, req CompileRequest) (*protocol.C
 	catalogRevision := c.registry.CatalogRevision()
 	catalogDigest := c.registry.CatalogDigest()
 
-	mappingVersion := c.registry.CatalogVersion()
-	if mappingVersion == "" {
-		mappingVersion = req.MappingVersion
-	}
+	mappingVersion := req.MappingVersion
 	if strings.TrimSpace(mappingVersion) == "" {
-		return nil, nil, errs.New(errs.CategoryInvalidArgument, "%s: mapping_version cannot be empty", kind)
+		return nil, errs.New(errs.CategoryInvalidArgument, "%s: mapping_version cannot be empty", kind)
+	}
+	if c.registry.CatalogVersion() != "" && mappingVersion != c.registry.CatalogVersion() && mappingVersion != c.registry.MappingRevision() {
+		return nil, errs.New(errs.CategoryInvalidArgument,
+			"%s: request mapping_version %q does not match registry version/revision (%q / %q)",
+			kind, mappingVersion, c.registry.CatalogVersion(), c.registry.MappingRevision())
 	}
 
+	// Strictly require explicit source_revision without falling back to catalog revision (Finding 2)
+	if strings.TrimSpace(req.SourceRevision) == "" {
+		return nil, errs.New(errs.CategoryInvalidArgument, "%s: source_revision cannot be empty", kind)
+	}
 	sourceRevision := req.SourceRevision
-	if strings.TrimSpace(sourceRevision) == "" {
-		sourceRevision = c.registry.CatalogRevision()
+
+	// Validate tools and declared capabilities (Finding 5)
+	if len(req.Tools) > 0 {
+		declaredNames := make(map[string]bool)
+		for _, dt := range req.DeclaredTools {
+			declaredNames[dt.Name] = true
+		}
+		for _, t := range req.Tools {
+			if !declaredNames[t] {
+				return nil, errs.New(errs.CategoryInvalidArgument,
+					"%s: legacy tool %q lacks corresponding typed ToolCapabilityInfo declaration", kind, t)
+			}
+		}
 	}
-	if strings.TrimSpace(sourceRevision) == "" {
-		return nil, nil, errs.New(errs.CategoryInvalidArgument, "%s: source_revision cannot be empty", kind)
+	if len(req.ToolSchemas) > 0 && len(req.DeclaredTools) == 0 {
+		return nil, errs.New(errs.CategoryInvalidArgument,
+			"%s: tool schemas enabled in request but no typed ToolCapabilityInfo declarations provided; cannot resolve capability applicability safely", kind)
 	}
 
-	// Derive active capabilities from channel and typed tool facts if present (Finding 1, Finding 6)
-	if req.AccessChannel != nil || len(req.DeclaredTools) > 0 {
-		req.ActiveCapabilities = DeriveActiveCapabilities(req.AccessChannel, req.DeclaredTools, req.ActiveCapabilities)
+	derivedCaps, err := DeriveActiveCapabilities(req.AccessChannel, req.DeclaredTools, req.ActiveCapabilities)
+	if err != nil {
+		return nil, errs.Wrap(errs.CategoryInvalidArgument, err, "%s: capability derivation failed", kind)
 	}
+	req.ActiveCapabilities = derivedCaps
 
 	// 2. Deterministic rule admission & closure
 	allPaths := append(append([]string(nil), req.ReadEnvelope...), req.WriteScope...)
@@ -814,7 +1013,7 @@ func (c *Compiler) Compile(ctx context.Context, req CompileRequest) (*protocol.C
 		ExplicitRuleIDs:      req.ExplicitRuleIDs,
 	})
 	if err != nil {
-		return nil, nil, errs.Wrap(errs.CategoryOf(err), err, "%s: failed to resolve admitted rules", kind)
+		return nil, errs.Wrap(errs.CategoryOf(err), err, "%s: failed to resolve admitted rules", kind)
 	}
 
 	mandatoryRefs := make([]protocol.MandatoryClauseRef, len(admittedRules))
@@ -876,14 +1075,14 @@ func (c *Compiler) Compile(ctx context.Context, req CompileRequest) (*protocol.C
 		for _, lid := range req.ActiveLeaseIDs {
 			lease, ok := c.leaseMgr.GetLease(lid)
 			if !ok {
-				return nil, nil, errs.New(errs.CategoryNotFound, "%s: active lease %q not found", kind, lid)
+				return nil, errs.New(errs.CategoryNotFound, "%s: active lease %q not found", kind, lid)
 			}
 			if err := validateLeaseFreshness(lease, sourceRevision, now, kind); err != nil {
-				return nil, nil, err
+				return nil, err
 			}
 			// Verify read authorization against read envelope
 			if len(req.ReadEnvelope) > 0 && !IsPathAuthorized(lease.FilePath, req.ReadEnvelope) {
-				return nil, nil, errs.New(errs.CategoryPolicyDenied,
+				return nil, errs.New(errs.CategoryPolicyDenied,
 					"%s: lease %q path %q is outside authorized read envelope", kind, lease.LeaseID, lease.FilePath)
 			}
 			evidenceWorkingSet = append(evidenceWorkingSet, lease)
@@ -896,7 +1095,7 @@ func (c *Compiler) Compile(ctx context.Context, req CompileRequest) (*protocol.C
 	})
 
 	if err := manifest.Validate(); err != nil {
-		return nil, nil, errs.Wrap(errs.CategoryInvalidArgument, err, "%s: generated manifest failed validation", kind)
+		return nil, errs.Wrap(errs.CategoryInvalidArgument, err, "%s: generated manifest failed validation", kind)
 	}
 
 	// 5. Gather Cognitive State Capsule with dependency freshness check (Finding 7)
@@ -908,11 +1107,11 @@ func (c *Compiler) Compile(ctx context.Context, req CompileRequest) (*protocol.C
 			for _, depID := range cognitiveState.EvidenceDependencies {
 				depLease, ok := c.leaseMgr.GetLease(depID)
 				if !ok {
-					return nil, nil, errs.New(errs.CategoryValidationFailed,
+					return nil, errs.New(errs.CategoryValidationFailed,
 						"%s: cognitive state references missing evidence lease %q", kind, depID)
 				}
 				if err := validateLeaseFreshness(depLease, sourceRevision, now, fmt.Sprintf("%s: cognitive state", kind)); err != nil {
-					return nil, nil, err
+					return nil, err
 				}
 			}
 		}
@@ -934,7 +1133,7 @@ func (c *Compiler) Compile(ctx context.Context, req CompileRequest) (*protocol.C
 	uncertainty := req.ContextProfile.EstimateUncertaintyRatio
 
 	if accountingMethod != protocol.AccountingApproximateEstimate {
-		return nil, nil, errs.New(errs.CategoryInvalidArgument,
+		return nil, errs.New(errs.CategoryInvalidArgument,
 			"%s: profile accounting method %q requires a verified tokenizer engine; only %q is supported by the heuristic compiler estimator",
 			kind, accountingMethod, protocol.AccountingApproximateEstimate)
 	}
@@ -1012,7 +1211,7 @@ func (c *Compiler) Compile(ctx context.Context, req CompileRequest) (*protocol.C
 		AdmittedObjectDigests: admittedObjectDigests,
 	})
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	packID := fmt.Sprintf("pack-%s-%s", req.TaskID, packDigest[7:19])
@@ -1040,7 +1239,7 @@ func (c *Compiler) Compile(ctx context.Context, req CompileRequest) (*protocol.C
 	boundsErr := EnforceProfileBounds(pack, req.ContextProfile)
 	if boundsErr != nil {
 		pack.Status = protocol.PackStatusContextUnfit
-		return manifest, pack, boundsErr
+		return &CompiledInvocation{Manifest: manifest, Pack: pack}, boundsErr
 	}
 
 	// 10. Enforce Final Endpoint Prompt Projection Bounds (Finding 4, PROTOCOLS §10B)
@@ -1050,7 +1249,7 @@ func (c *Compiler) Compile(ctx context.Context, req CompileRequest) (*protocol.C
 	}
 	projection, err := renderer.Render(pack)
 	if err != nil {
-		return nil, nil, errs.Wrap(errs.CategoryInternal, err, "%s: failed to render prompt projection for bounds checking", kind)
+		return nil, errs.Wrap(errs.CategoryInternal, err, "%s: failed to render prompt projection for bounds checking", kind)
 	}
 
 	additionalTokens := 0
@@ -1063,7 +1262,7 @@ func (c *Compiler) Compile(ctx context.Context, req CompileRequest) (*protocol.C
 
 	if projErr := EnforceProjectionBounds(projection, req.ContextProfile, additionalTokens); projErr != nil {
 		pack.Status = protocol.PackStatusContextUnfit
-		return manifest, pack, projErr
+		return &CompiledInvocation{Manifest: manifest, Pack: pack, Projection: projection}, projErr
 	}
 
 	// 11. Compute InvocationDigest (Finding 5: true endpoint invocation identity)
@@ -1080,16 +1279,21 @@ func (c *Compiler) Compile(ctx context.Context, req CompileRequest) (*protocol.C
 		req.ContextProfile,
 	)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	pack.InvocationDigest = invocationDigest
 
 	// 12. Validate complete pack
 	if err := pack.Validate(); err != nil {
-		return nil, nil, errs.Wrap(errs.CategoryInvalidArgument, err, "%s: generated context pack failed validation", kind)
+		return nil, errs.Wrap(errs.CategoryInvalidArgument, err, "%s: generated context pack failed validation", kind)
 	}
 
-	return manifest, pack, nil
+	return &CompiledInvocation{
+		Manifest:         manifest,
+		Pack:             pack,
+		Projection:       projection,
+		InvocationDigest: invocationDigest,
+	}, nil
 }
 
 // CanonicalRoleCore returns the standard role core instructions for recognized roles.
