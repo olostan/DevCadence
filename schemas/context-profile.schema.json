@@ -129,7 +129,7 @@
     },
     "target_resident_tokens": {
       "type": "integer",
-      "minimum": 1
+      "minimum": 0
     },
     "hard_resident_ceiling_tokens": {
       "type": "integer",

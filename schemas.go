@@ -12,3 +12,8 @@ import "embed"
 //
 //go:embed schemas/*.json
 var SchemaFS embed.FS
+
+// InvariantsDoc exposes the verbatim text of INVARIANTS.md at the repository root.
+//
+//go:embed INVARIANTS.md
+var InvariantsDoc string

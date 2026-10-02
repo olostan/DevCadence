@@ -89,11 +89,11 @@ func (m *EvidenceLeaseManager) CreateLease(params CreateLeaseParams) (protocol.E
 
 	// 4. Token estimation
 	method := params.AccountingMethod
-	if !method.Valid() {
+	if method != protocol.AccountingApproximateEstimate {
 		method = protocol.AccountingApproximateEstimate
 	}
-	tokenCount := EstimateTokens(params.Content, method, 0.05)
-	if tokenCount < 1 {
+	tokenCount, err := EstimateTokens(params.Content, method, 0.05)
+	if err != nil || tokenCount < 1 {
 		tokenCount = 1
 	}
 
@@ -102,10 +102,15 @@ func (m *EvidenceLeaseManager) CreateLease(params CreateLeaseParams) (protocol.E
 		evidenceKind = protocol.LeaseKindSourceSnippet
 	}
 
-	// 5. Deterministic lease ID
+	// 5. Deterministic lease ID binding worktree, path, locator, revision, and content digest
+	cleanWorktree := strings.ReplaceAll(params.WorktreeID, "/", "_")
 	cleanPath := strings.ReplaceAll(params.FilePath, "/", "_")
 	cleanLocator := strings.ReplaceAll(params.Locator, ":", "_")
-	leaseID := fmt.Sprintf("lease-%s-%s-%s", cleanPath, cleanLocator, digest[7:15])
+	revShort := params.SourceRevision
+	if len(revShort) > 8 {
+		revShort = revShort[:8]
+	}
+	leaseID := fmt.Sprintf("lease-%s-%s-%s-%s-%s", cleanWorktree, cleanPath, cleanLocator, revShort, digest[7:15])
 
 	acquiredAt := time.Now().UTC().Format(time.RFC3339Nano)
 
@@ -227,6 +232,10 @@ func (m *EvidenceLeaseManager) EvictToFit(targetTokens int, currentTokens int) (
 	var active []protocol.EvidenceLease
 	for _, l := range m.leases {
 		if l.Status == protocol.LeaseStatusActive {
+			// Protect normative clause leases from eviction (Finding 9, ADR-0020 §2)
+			if l.EvidenceKind == protocol.LeaseKindNormativeClause {
+				continue
+			}
 			active = append(active, l)
 		}
 	}

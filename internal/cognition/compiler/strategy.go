@@ -110,7 +110,7 @@ func (s *AppendOnlyStrategy) PrepareTurnPrompt(pack *protocol.ContextPack, proje
 		tailBuilder.WriteString("  </recent_tool_exchanges>\n")
 	}
 	tailBuilder.WriteString(fmt.Sprintf("  <current_action>%s</current_action>\n",
-		pack.EphemeralTail.CurrentAction))
+		EscapeEvidenceDelimiters(pack.EphemeralTail.CurrentAction)))
 	tailBuilder.WriteString("</ephemeral_tail>\n")
 
 	return TurnPrompts{

@@ -128,23 +128,34 @@ func TestEnforceProfileBounds(t *testing.T) {
 
 func TestEstimateTokens(t *testing.T) {
 	text := "func RunEngine(ctx context.Context) error { return nil }"
-	tokensBPE := compiler.EstimateTokens(text, protocol.AccountingExactBPE, 0.05)
-	if tokensBPE <= 0 {
-		t.Fatalf("expected positive token estimate, got %d", tokensBPE)
+
+	// Exact BPE and Provider API must be rejected by heuristic estimator (Finding 3)
+	if _, err := compiler.EstimateTokens(text, protocol.AccountingExactBPE, 0.05); err == nil {
+		t.Fatal("expected error for exact_bpe heuristic estimate, got nil")
 	}
 
-	tokensAPI := compiler.EstimateTokens(text, protocol.AccountingProviderAPI, 0.05)
-	if tokensAPI <= 0 {
-		t.Fatalf("expected positive token estimate, got %d", tokensAPI)
+	if _, err := compiler.EstimateTokens(text, protocol.AccountingProviderAPI, 0.05); err == nil {
+		t.Fatal("expected error for provider_api heuristic estimate, got nil")
 	}
 
-	tokensApprox := compiler.EstimateTokens(text, protocol.AccountingApproximateEstimate, 0.05)
+	// Approximate estimate succeeds
+	tokensApprox, err := compiler.EstimateTokens(text, protocol.AccountingApproximateEstimate, 0.05)
+	if err != nil {
+		t.Fatalf("unexpected error for approximate estimate: %v", err)
+	}
 	if tokensApprox <= 0 {
 		t.Fatalf("expected positive token estimate, got %d", tokensApprox)
 	}
 
+	// Helper EstimateTokensApprox succeeds
+	helperTokens := compiler.EstimateTokensApprox(text, 0.05)
+	if helperTokens != tokensApprox {
+		t.Fatalf("helper returned %d, want %d", helperTokens, tokensApprox)
+	}
+
 	// Empty text returns 0
-	if zero := compiler.EstimateTokens("", protocol.AccountingExactBPE, 0.05); zero != 0 {
-		t.Fatalf("expected 0 for empty text, got %d", zero)
+	zero, err := compiler.EstimateTokens("", protocol.AccountingApproximateEstimate, 0.05)
+	if err != nil || zero != 0 {
+		t.Fatalf("expected (0, nil) for empty text, got (%d, %v)", zero, err)
 	}
 }

@@ -49,6 +49,12 @@ func (r *TaggedMarkdownRenderer) Render(pack *protocol.ContextPack) (PromptProje
 	if pack == nil {
 		return PromptProjection{}, errs.New(errs.CategoryInvalidArgument, "%s: pack cannot be nil", kind)
 	}
+	if pack.Status != protocol.PackStatusReady {
+		return PromptProjection{}, errs.New(errs.CategoryValidationFailed, "%s: cannot render pack with non-ready status %q", kind, pack.Status)
+	}
+	if err := pack.Validate(); err != nil {
+		return PromptProjection{}, errs.Wrap(errs.CategoryValidationFailed, err, "%s: pack failed validation", kind)
+	}
 
 	// 1. System Prompt encapsulates Role Core and high-level behavioral boundaries
 	var sysBuilder strings.Builder
@@ -179,6 +185,12 @@ func (r *JSONRenderer) Render(pack *protocol.ContextPack) (PromptProjection, err
 	const kind = "JSONRenderer"
 	if pack == nil {
 		return PromptProjection{}, errs.New(errs.CategoryInvalidArgument, "%s: pack cannot be nil", kind)
+	}
+	if pack.Status != protocol.PackStatusReady {
+		return PromptProjection{}, errs.New(errs.CategoryValidationFailed, "%s: cannot render pack with non-ready status %q", kind, pack.Status)
+	}
+	if err := pack.Validate(); err != nil {
+		return PromptProjection{}, errs.Wrap(errs.CategoryValidationFailed, err, "%s: pack failed validation", kind)
 	}
 
 	payload, err := json.MarshalIndent(pack, "", "  ")

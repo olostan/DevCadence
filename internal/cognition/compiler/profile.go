@@ -44,11 +44,11 @@ func DefaultProvisionalProfileWithCapabilities(
 	}
 	hardCeiling := runtimeWindow - outputReserve - toolTailReserve
 	// Target residency is soft packing and eviction guidance, not a universal fixed percentage.
-	if targetResident <= 0 || targetResident > hardCeiling {
-		targetResident = int(float64(hardCeiling) * 0.70)
-	}
-	if targetResident < 1 {
-		targetResident = 1
+	// Target residency must come from explicit policy configuration; if unconfigured/0, leave it as 0/unconfigured (ADR-0020 §2).
+	if targetResident < 0 {
+		targetResident = 0
+	} else if targetResident > hardCeiling {
+		targetResident = hardCeiling
 	}
 
 	if !ctrl.Valid() {
@@ -56,6 +56,11 @@ func DefaultProvisionalProfileWithCapabilities(
 	}
 	if !cache.Valid() {
 		cache = protocol.PrefixCacheUnknown
+	}
+
+	effectiveTokens := targetResident
+	if effectiveTokens < 1 {
+		effectiveTokens = hardCeiling
 	}
 
 	return &protocol.ContextProfile{
@@ -71,7 +76,7 @@ func DefaultProvisionalProfileWithCapabilities(
 		WorkloadEnvelopes: []protocol.WorkloadEnvelope{
 			{
 				Workload:        protocol.WorkloadImplementation,
-				EffectiveTokens: targetResident,
+				EffectiveTokens: effectiveTokens,
 				CalibrationTask: "provisional_conservative_allocation",
 				CalibrationDate: "2026-10-02T00:00:00Z",
 				ConfidenceLevel: "provisional",
@@ -168,8 +173,14 @@ func EnforceProjectionBounds(proj PromptProjection, profile *protocol.ContextPro
 	method := profile.AccountingMethod
 	uncertainty := profile.EstimateUncertaintyRatio
 
-	sysTokens := EstimateTokens(proj.SystemPrompt, method, uncertainty)
-	userTokens := EstimateTokens(proj.UserPrompt, method, uncertainty)
+	sysTokens, err := EstimateTokens(proj.SystemPrompt, method, uncertainty)
+	if err != nil {
+		return err
+	}
+	userTokens, err := EstimateTokens(proj.UserPrompt, method, uncertainty)
+	if err != nil {
+		return err
+	}
 	residentTokens := sysTokens + userTokens + additionalTokens
 
 	totalRequired := residentTokens + profile.OutputReserveTokens + profile.ToolTailReserveTokens
@@ -190,35 +201,28 @@ func EnforceProjectionBounds(proj PromptProjection, profile *protocol.ContextPro
 
 // EstimateTokens provides a deterministic token count estimate for text based on the
 // accounting method and conservative uncertainty margin.
-func EstimateTokens(text string, method protocol.TokenizerAccountingMethod, uncertainty float64) int {
+// Epistemic Honesty (Finding 3, PROTOCOLS §10B):
+// Reject specifying AccountingExactBPE or AccountingProviderAPI when using heuristic character ratios.
+// If a real model tokenizer or provider API counter is not attached, the method must strictly be
+// AccountingApproximateEstimate.
+func EstimateTokens(text string, method protocol.TokenizerAccountingMethod, uncertainty float64) (int, error) {
 	if text == "" {
-		return 0
+		return 0, nil
+	}
+	if method == protocol.AccountingExactBPE || method == protocol.AccountingProviderAPI {
+		return 0, errs.New(errs.CategoryInvalidArgument,
+			"heuristic token estimation cannot claim %q without a verified tokenizer or provider API counter; use %q",
+			method, protocol.AccountingApproximateEstimate)
+	}
+	if method != protocol.AccountingApproximateEstimate {
+		return 0, errs.New(errs.CategoryInvalidArgument, "unsupported token accounting method %q", method)
 	}
 	if uncertainty < 0.0 {
 		uncertainty = 0.0
 	}
 
-	var baseTokens float64
-	switch method {
-	case protocol.AccountingExactBPE:
-		// Exact BPE approximation: blend of character ratio and word tokenization.
-		// Standard English/code averages ~3.6 - 4.0 characters per token.
-		charCount := len(text)
-		words := countWords(text)
-		// Code and punctuation often create more tokens than simple whitespace word splitting.
-		// Formula blends (charCount / 3.7) with (wordCount * 1.3)
-		byChars := float64(charCount) / 3.7
-		byWords := float64(words) * 1.3
-		baseTokens = math.Max(byChars, byWords)
-	case protocol.AccountingProviderAPI:
-		// Provider API estimate: slightly more conservative
-		baseTokens = float64(len(text)) / 3.5
-	case protocol.AccountingApproximateEstimate:
-		fallthrough
-	default:
-		// Approximate estimate: 4 chars/token
-		baseTokens = float64(len(text)) / 4.0
-	}
+	// Approximate estimate: 4 chars/token
+	baseTokens := float64(len(text)) / 4.0
 
 	// Apply conservative uncertainty margin (PROTOCOLS §10B)
 	withMargin := baseTokens * (1.0 + uncertainty)
@@ -226,7 +230,13 @@ func EstimateTokens(text string, method protocol.TokenizerAccountingMethod, unce
 	if estimated < 1 {
 		estimated = 1
 	}
-	return estimated
+	return estimated, nil
+}
+
+// EstimateTokensApprox provides token estimation strictly using AccountingApproximateEstimate.
+func EstimateTokensApprox(text string, uncertainty float64) int {
+	count, _ := EstimateTokens(text, protocol.AccountingApproximateEstimate, uncertainty)
+	return count
 }
 
 func countWords(s string) int {

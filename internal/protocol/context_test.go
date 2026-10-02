@@ -12,15 +12,15 @@ func stringPtr(s string) *string {
 
 func validContextProfile() *protocol.ContextProfile {
 	return &protocol.ContextProfile{
-		SchemaVersion:             protocol.SchemaVersion1,
-		ProfileID:                 "prof_1",
-		EndpointID:                "ep_1",
-		ChannelID:                 "chan_1",
-		Runtime:                   "ollama",
-		ModelRef:                  "qwen2.5-coder:32b",
-		Revision:                  1,
-		DeclaredWindowTokens:      32768,
-		RuntimeWindowTokens:       32768,
+		SchemaVersion:        protocol.SchemaVersion1,
+		ProfileID:            "prof_1",
+		EndpointID:           "ep_1",
+		ChannelID:            "chan_1",
+		Runtime:              "ollama",
+		ModelRef:             "qwen2.5-coder:32b",
+		Revision:             1,
+		DeclaredWindowTokens: 32768,
+		RuntimeWindowTokens:  32768,
 		WorkloadEnvelopes: []protocol.WorkloadEnvelope{
 			{
 				Workload:               protocol.WorkloadImplementation,
@@ -110,13 +110,13 @@ func validContextManifest() *protocol.ContextManifest {
 func validContextPack() *protocol.ContextPack {
 	lease := *validEvidenceLease()
 	return &protocol.ContextPack{
-		SchemaVersion:      protocol.SchemaVersion1,
-		PackID:             "pack_1",
-		ManifestID:         "manifest_1",
-		ManifestRevision:   1,
-		RoleCore:           "Role core",
-		ExecutionContract:  "Execution contract",
-		NormativeClauses:   []string{"DCI-018"},
+		SchemaVersion:     protocol.SchemaVersion1,
+		PackID:            "pack_1",
+		ManifestID:        "manifest_1",
+		ManifestRevision:  1,
+		RoleCore:          "Role core",
+		ExecutionContract: "Execution contract",
+		NormativeClauses:  []string{"DCI-018"},
 		CognitiveState: protocol.CognitiveStateCapsule{
 			Hypotheses:            []string{"H1"},
 			ActiveTODOs:           []string{"T1"},

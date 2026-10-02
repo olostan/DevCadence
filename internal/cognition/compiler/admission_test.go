@@ -2,6 +2,8 @@ package compiler_test
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"strings"
 	"testing"
@@ -814,5 +816,178 @@ func TestCanonicalRuleRegistry(t *testing.T) {
 	}
 	if !foundPrincipal {
 		t.Error("expected DCI-004 admitted for principal_engineer role")
+	}
+}
+
+func TestCompiler_InvalidWorkPackageRevisionFailsClosed(t *testing.T) {
+	reg := setupTestRegistry(t)
+	c := compiler.NewCompiler(reg, nil, nil)
+	profile := compiler.DefaultProvisionalProfile("ep_1", "chan_1", "model", 32768)
+
+	req0 := validCompileRequest(profile)
+	req0.WorkPackageRevision = 0
+	if _, _, err := c.Compile(context.Background(), req0); !errors.Is(err, errs.ErrInvalidArgument) {
+		t.Errorf("expected ErrInvalidArgument for WorkPackageRevision=0, got %v", err)
+	}
+
+	reqNeg := validCompileRequest(profile)
+	reqNeg.WorkPackageRevision = -2
+	if _, _, err := c.Compile(context.Background(), reqNeg); !errors.Is(err, errs.ErrInvalidArgument) {
+		t.Errorf("expected ErrInvalidArgument for WorkPackageRevision=-2, got %v", err)
+	}
+}
+
+func TestCompiler_CognitiveStateExpiredDependencyRejection(t *testing.T) {
+	reg := setupTestRegistry(t)
+	leaseMgr := compiler.NewEvidenceLeaseManager()
+	capsuleMgr := compiler.NewCapsuleManager()
+	c := compiler.NewCompiler(reg, leaseMgr, capsuleMgr)
+	profile := compiler.DefaultProvisionalProfile("ep_1", "chan_1", "model", 32768)
+
+	// Create a lease that expires in 10ms
+	exp := time.Now().UTC().Add(10 * time.Millisecond).Format(time.RFC3339Nano)
+	lease, err := leaseMgr.CreateLease(compiler.CreateLeaseParams{
+		EvidenceKind:        protocol.LeaseKindSourceSnippet,
+		SourceRevision:      testBaseCommit,
+		WorktreeID:          "wt_1",
+		FilePath:            "internal/setup/doctor.go",
+		Locator:             "L1-L10",
+		AcquisitionQuestion: "Check?",
+		AcquisitionReason:   "Safety",
+		Content:             "func check() {}",
+		AccountingMethod:    protocol.AccountingApproximateEstimate,
+		ExpiresAt:           &exp,
+	})
+	if err != nil {
+		t.Fatalf("failed to create lease: %v", err)
+	}
+
+	// Add lease as dependency in cognitive state
+	capsuleMgr.TrackEvidenceDependency(lease.LeaseID)
+
+	// Sleep 25ms to ensure lease is expired
+	time.Sleep(25 * time.Millisecond)
+
+	req := validCompileRequest(profile)
+	// ActiveLeaseIDs does NOT include the lease, but cognitive state does!
+	req.ActiveLeaseIDs = nil
+
+	_, _, err = c.Compile(context.Background(), req)
+	if err == nil {
+		t.Fatal("expected failure on expired cognitive state dependency, got nil")
+	}
+	if errs.CategoryOf(err) != errs.CategoryValidationFailed {
+		t.Errorf("expected CategoryValidationFailed, got %v", err)
+	}
+}
+
+func TestCompiler_TypedCapabilitiesDerivation(t *testing.T) {
+	// 1. Tool name substring matching is eliminated: "bash" does NOT grant "write" or "exec" automatically
+	toolsNoMeta := []compiler.ToolCapabilityInfo{
+		{Name: "bash"},
+		{Name: "edit_file"},
+	}
+	caps := compiler.DeriveActiveCapabilities(nil, toolsNoMeta, nil)
+	if len(caps) != 0 {
+		t.Errorf("expected 0 capabilities from un-annotated tool names, got %v", caps)
+	}
+
+	// 2. Typed annotations grant exact capabilities
+	toolsTyped := []compiler.ToolCapabilityInfo{
+		{Name: "bash", RequiredCapabilities: []string{"exec"}},
+		{Name: "editor", MutatesFiles: true},
+	}
+	caps = compiler.DeriveActiveCapabilities(nil, toolsTyped, []string{"network"})
+	expected := map[string]bool{"exec": true, "write": true, "network": true}
+	for _, c := range caps {
+		if !expected[c] {
+			t.Errorf("unexpected capability derived: %q", c)
+		}
+	}
+	if len(caps) != 3 {
+		t.Errorf("expected 3 capabilities, got %v", caps)
+	}
+}
+
+func TestCompiler_InvocationDigestVsPackDigest(t *testing.T) {
+	reg := setupTestRegistry(t)
+	c := compiler.NewCompiler(reg, nil, nil)
+	profile := compiler.DefaultProvisionalProfile("ep_1", "chan_1", "model", 32768)
+
+	req1 := validCompileRequest(profile)
+	req1.Renderer = compiler.NewTaggedMarkdownRenderer()
+
+	req2 := validCompileRequest(profile)
+	req2.Renderer = compiler.NewJSONRenderer()
+
+	_, pack1, err1 := c.Compile(context.Background(), req1)
+	if err1 != nil {
+		t.Fatalf("compile 1 failed: %v", err1)
+	}
+
+	_, pack2, err2 := c.Compile(context.Background(), req2)
+	if err2 != nil {
+		t.Fatalf("compile 2 failed: %v", err2)
+	}
+
+	// Semantic PackDigest must be identical (same semantic content)
+	if pack1.PackDigest != pack2.PackDigest {
+		t.Errorf("expected identical PackDigest across renderers, got %q vs %q", pack1.PackDigest, pack2.PackDigest)
+	}
+
+	// True InvocationDigest must differ (different endpoint projection)
+	if pack1.InvocationDigest == pack2.InvocationDigest {
+		t.Errorf("expected different InvocationDigest across renderers, got identical %q", pack1.InvocationDigest)
+	}
+
+	// Changing tool schemas must alter InvocationDigest while preserving PackDigest
+	req3 := validCompileRequest(profile)
+	req3.Renderer = compiler.NewTaggedMarkdownRenderer()
+	req3.ToolSchemas = []string{`{"type": "function", "name": "do_task"}`}
+
+	_, pack3, err3 := c.Compile(context.Background(), req3)
+	if err3 != nil {
+		t.Fatalf("compile 3 failed: %v", err3)
+	}
+
+	if pack1.PackDigest != pack3.PackDigest {
+		t.Errorf("expected identical PackDigest when only tool schemas differ, got %q vs %q", pack1.PackDigest, pack3.PackDigest)
+	}
+	if pack1.InvocationDigest == pack3.InvocationDigest {
+		t.Errorf("expected different InvocationDigest when tool schemas differ, got identical %q", pack1.InvocationDigest)
+	}
+}
+
+func TestEvidenceLease_StrictRFC3339Validation(t *testing.T) {
+	lease := protocol.EvidenceLease{
+		SchemaVersion:       protocol.SchemaVersion1,
+		LeaseID:             "lease-1",
+		EvidenceKind:        protocol.LeaseKindSourceSnippet,
+		SourceRevision:      testBaseCommit,
+		WorktreeID:          "wt_1",
+		FilePath:            "internal/test.go",
+		Locator:             "L1-L5",
+		Content:             "test content",
+		TokenCount:          5,
+		AccountingMethod:    protocol.AccountingApproximateEstimate,
+		Status:              protocol.LeaseStatusActive,
+		AcquisitionQuestion: "Q",
+		AcquisitionReason:   "R",
+		AcquiredAt:          "not-a-valid-timestamp",
+	}
+	hasher := sha256.New()
+	hasher.Write([]byte(lease.Content))
+	lease.ContentDigest = "sha256:" + hex.EncodeToString(hasher.Sum(nil))
+
+	if err := lease.Validate(); err == nil {
+		t.Error("expected validation failure for non-RFC3339 AcquiredAt, got nil")
+	}
+
+	lease.AcquiredAt = "2026-10-02T00:00:00Z"
+	badExp := "invalid-exp"
+	lease.ExpiresAt = &badExp
+
+	if err := lease.Validate(); err == nil {
+		t.Error("expected validation failure for non-RFC3339 ExpiresAt, got nil")
 	}
 }
