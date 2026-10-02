@@ -51,7 +51,8 @@ type ProjectState struct {
 	Capabilities          *Capabilities    `json:"capabilities,omitempty"`
 	Discovery             *DiscoveryState  `json:"discovery,omitempty"`
 	// Review is the bounded review campaign projection (ADR-0010). Shape
-	// only in M1; nothing reduces into it until M6.
+	// only in M1; M3C-5 adds durable finding/resolution/verification primitives,
+	// while M7 owns campaign reduction/orchestration into this projection.
 	Review *ReviewConvergenceState `json:"review,omitempty"`
 }
 
@@ -325,7 +326,7 @@ type ModelCapability struct {
 // ConsultantCapability reports a configured frontier consultant adapter.
 //
 // Deprecated: superseded by CognitionEndpointSummary (ADR-0011, ADR-0013).
-// Consultant selection is an M6 policy over discovered endpoints, not a
+// Consultant selection is an M7 policy over discovered endpoints, not a
 // separate capability list.
 type ConsultantCapability struct {
 	Name      string `json:"name"`
@@ -682,8 +683,9 @@ func (p ReviewPhase) Valid() bool {
 // campaign (docs/REVIEW_AND_CONVERGENCE.md, ADR-0010).
 //
 // M1 defines the shape only. No event reduces into it and the control plane
-// never populates it: campaigns, finding dispositions and closure decisions
-// are M6. The type exists here because `project-state.schema.json` publishes
+// never populates it today: M3C-5 adds minimal durable ledger primitives and
+// M7 owns campaign orchestration/projection reduction. The type exists here
+// because `project-state.schema.json` publishes
 // the field, and a schema property with no counterpart on its Go twin would
 // mean strict decoding refuses a document the schema calls valid (DCI-092).
 //

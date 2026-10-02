@@ -444,9 +444,9 @@ Under ADR-0016:
 - **Response Yield Threshold:** Commands taking longer than 10 seconds yield `status: "running"` with an `OperationID`. The operation proceeds uninterrupted; upon completion, hosts receive event-driven wakeups without token-wasting busy-loops.
 - **Universal Pagination (`fetch_content`):** Process outputs are decoupled via injected output sinks. Models page through immutable content-addressed artifacts with strict byte limits and contiguous offsets using `fetch_content(content_ref, offset, limit, unit)`. Full daemon-level live streaming into artifact storage with 4 KiB inline previews is scheduled with the background runner milestone.
 
-## 10B. Adaptive Context Architecture and Evidence Working Set [Proposed - M3C]
+## 10B. Adaptive Context Architecture and Evidence Working Set [Partially Implemented - M3C]
 
-**Status:** planned M3C runtime/types/schemas; manual admission discipline is effective now. Existing `internal/compaction` and bounded tools under ADR-0016 remain implemented mechanisms, not a complete Context Resolver. The following are proposed semantic field sets, not current serialized records. M3C must define exact versions/enums/validation and schema/Go parity before emission. ADR-0019 owns the decision; this section owns protocol semantics.
+**Status:** merged WP-M3C-1 implements the core ContextProfile/Manifest/Pack/EvidenceLease Go/schema shapes; runtime compilation/admission remains planned in WP-M3C-2. Existing `internal/compaction` and bounded tools under ADR-0016 remain useful mechanisms but are not the Cognitive Invocation Compiler. ADR-0019 owns context-layer rationale; ADR-0020 owns deterministic applicability, retrieval authority boundaries, prompt projection and review-ledger integration; this section owns protocol semantics.
 
 ### ContextProfile
 
@@ -459,11 +459,52 @@ Endpoint/access-path and workload-specific capability/budget evidence:
 
 Targets are defaults; hard endpoint/policy ceilings are enforced. Model/runtime/configuration changes invalidate calibration applicability. Admission counts all model-visible system/host/tool-schema, contract, normative, state, evidence and tail tokens plus reserves; estimated counts include conservative margin. Hidden tokens in opaque sessions are not reported as exact zero.
 
+Before M4 empirical calibration, an endpoint may use a **provisional** profile: hard fit comes from runtime/declared capacity plus configured policy ceilings, explicit output/reasoning/tool reserves, and conservative accounting uncertainty. Any provisional target ceiling is versioned configuration, not a claim of measured effectiveness; DevCadence does not hard-code a universal percentage of the nominal window. A policy that requires verified effectiveness may declare the provisional endpoint ineligible.
+
+### Rule applicability and retrieval plan
+
+The compiler derives mandatory admission from deterministic metadata rather than ranking:
+
+- task/role/action identity;
+- EWP revision/digest;
+- touched/read/write paths and package/domain mapping;
+- declared and discovered risk tags;
+- explicit requirement/invariant/ADR dependency edges;
+- project/runtime state that activates conditional policy.
+
+The resulting mandatory clause set is dependency-closed and revision-pinned. Unknown applicability is an error state, not a low score.
+
+Every execution-critical clause declares one admission class:
+- `always`: admitted to every cognition invocation;
+- `capability_default`: admitted whenever the invocation can exercise the named authority class; exclusion requires an explicit revision-pinned not-applicable mapping;
+- `mapped`: admitted through normal task/role/action/path/domain/risk rules and dependency closure.
+
+A reverse-coverage check rejects a mandatory clause with no deterministic admission path. This detects **orphaned authority only**: it does not prove that a `mapped` clause is attached to every domain/action where it belongs. Mapping correctness is a separate concern, checked by Contract Completeness Review plus M4's independently established/seeded applicability ground truth. Runtime admission therefore fails closed on unknown/orphaned applicability, while known-but-wrong mappings are treated as a specification defect to be falsified by those independent checks.
+
+Optional retrieval may use exact/lexical search and graph traversal. Dense embeddings/reranking are optional M4 experiments rather than an M3C baseline requirement. Retrieval results carry provenance, revision/freshness and admission reason. Dense similarity MAY expand recall but MUST NOT delete or override a mandatory clause.
+
+The compiler may internally maintain richer indexes than the model sees. Index metadata is navigation/provenance, never a substitute for exact operative clause text.
+
+### PromptProjection
+
+Canonical ContextPack semantics are renderer-neutral. A PromptProjection is an ephemeral endpoint-specific serialization of one validated pack. Renderers may choose compact tagged Markdown/XML-like sections, JSON, YAML or another format supported by the endpoint.
+
+Projection MUST preserve:
+
+- task/current action;
+- exact operative obligations;
+- relevant state identity;
+- admitted evidence and provenance handles;
+- output contract;
+- boundary between instructions and evidence.
+
+Projection format does not grant authority and is calibrated empirically per endpoint/configuration. A renderer MUST preserve instruction/data boundaries under adversarial evidence content: snippets containing apparent closing tags, Markdown fences, JSON-like control fields, or other delimiter text cannot escape their evidence container or become instructions. Strict structured output SHOULD use schema-constrained decoding where supported.
+
 ### ContextManifest
 
 Compiled task intent and provenance: role, task/EWP revision/digest, base/candidate/state identity; allowed read envelope and distinct allowed write paths; domains/risk tags; mandatory normative clause IDs with revision/digest; initial/deferred evidence refs; mapping/source versions; explicit questions, assumptions and expansion/re-resolution triggers; selected ContextProfile and budget.
 
-The Principal declares intent; the deterministic resolver adds applicable role/path/domain/risk rules. No semantic-search ranking decides whether MUST clauses apply. Unknown applicability blocks the affected action pending resolution. The manifest records why every substantial admitted object is required and how it was selected.
+The Principal declares intent; the Cognitive Invocation Compiler's deterministic resolver phase adds applicable role/action/path/domain/risk rules and admission-floor clauses. No semantic-search ranking decides whether MUST clauses apply. Unknown applicability blocks the affected action pending resolution. The manifest records why every substantial admitted object is required and how it was selected.
 
 ### ContextPack
 
@@ -479,7 +520,7 @@ Evidence is evictable; protected requirements are not. If required evidence chan
 
 ### Expansion and state transition
 
-A small request records the explicit question, required IDs/symbols/ranges and reason. The resolver authorizes retrieval, resolves exact references, measures the enlarged pack and atomically either admits it (with optional evidence eviction), rejects with a typed cause or suspends for decomposition/routing/approval under existing policy. Fetching larger sections/full files is legitimate when justified and fit; permission to investigate is not permission to expand authority.
+A small request records the explicit question, required IDs/symbols/ranges and reason. The Cognitive Invocation Compiler authorizes retrieval, resolves exact references, measures the enlarged pack and atomically either admits it (with optional evidence eviction), rejects with a typed cause or suspends for decomposition/routing/approval under existing policy. Fetching larger sections/full files is legitimate when justified and fit; permission to investigate is not permission to expand authority.
 
 New domains, risk tags or proposed write paths require context re-resolution before modification; write-scope changes also require EWP authorization. Required normative clauses cannot be evicted to accommodate expansion. Request/release evidence through the existing proposed working-memory operation shape; this is not a second durable request table:
 
@@ -735,40 +776,84 @@ Avoid:
 
 ## ReviewCampaign and convergence protocols
 
-Review convergence is represented by three durable objects.
+ADR-0020 and [REVIEW_AND_CONVERGENCE.md](REVIEW_AND_CONVERGENCE.md) define the authority model. Conversation transcripts are evidence, not canonical campaign state.
 
 ### ReviewCampaign
-A bounded campaign around one immutable candidate lineage. It records candidate commit, Work Package/attempt identity, required review dimensions, thresholds, repair round, finding/disposition references, residual risks, and closure state.
 
-### FindingDisposition
-The principal's adjudication of one reviewer finding. Every adjudicated finding carries a `materiality` classification of `blocking`, `material_non_blocking`, or `opportunistic`, then receives exactly one disposition: FIX_NOW, REJECT, DEFER, HUMAN_DECISION, or DUPLICATE.
+A bounded campaign anchored to immutable candidate identity and contract revision. It references required review dimensions/lenses, normalized finding IDs, repair/verification state, deterministic evidence, residual risk and closure outcome.
 
-A FIX_NOW disposition must answer why the issue belongs in the current milestone/campaign.
+### ReviewFinding
+
+A normalized stable material claim produced from one or more existing `ReviewResult.findings` observations. It supplies the stable identity referenced by `ReviewCampaign.finding_refs` and `FindingDisposition.finding_id`. It records at least:
+
+- finding ID and candidate/contract identity;
+- canonical severity compatible with FindingDisposition (`info | low | medium | high | critical`);
+- canonical materiality compatible with FindingDisposition (`blocking | material_non_blocking | opportunistic`);
+- optional epistemic confidence (`high | medium | low`);
+- claim and evidence;
+- requirement/invariant references when applicable;
+- impact / why-now;
+- independent verification method;
+- source reviewer/lens;
+- durable producer provenance sufficient to distinguish logical producer and invocation across clean sessions (producer identity/reference, role, invocation reference, and endpoint/channel/session/model provenance when cognition-produced);
+- status.
+
+Multiple reviewer observations may support one normalized ReviewFinding. Severity means harm if true; materiality means current-campaign significance; confidence means evidence strength. FindingDisposition copies the normalized finding's severity/materiality; reclassification occurs during normalization/adjudication with explicit rationale, not implicitly during repair.
+
+### FindingDisposition (existing compatibility record)
+
+The existing FindingDisposition remains the Principal/Human adjudication record for a normalized finding: `fix_now | reject | defer | human_decision | duplicate`. ADR-0020 does not replace it. A `fix_now` disposition admits the finding into the consolidated repair packet; other dispositions retain their current schema semantics.
+
+### FindingResolution
+
+The implementer/author response to one accepted finding:
+
+- `fix_attempted`: identify candidate commit/files/evidence; or
+- `challenge`: provide reason/evidence that the finding is false, inapplicable or belongs at another boundary.
+
+The durable record MUST identify its logical producer and invocation provenance (producer reference/role plus invocation reference, with endpoint/channel/session/model provenance where cognition-produced). A FindingResolution is never self-verification.
+
+### ResolutionVerification
+
+An independent decision over one finding + attempted resolution/challenge + focused evidence. The durable record MUST identify verifier/invocation provenance sufficient for the control plane to compare it with the ReviewFinding/FindingResolution producer provenance and mechanically reject self-verification across clean sessions. The cognitive verifier is blinded by default to reviewer/challenger identity and model/provider; the control plane separately checks required independence and exposes identity only when it is materially relevant evidence.
+
+Conceptual outcomes are:
+- `verified_fixed` — the accepted repair is independently established;
+- `verified_dismissed` — the challenge is independently established and the finding no longer requires repair;
+- `re_adjudication_required` — verification produced evidence that the current disposition should change (including a possible deferral), but the verifier does **not** exercise Principal/Human risk-acceptance authority.
+
+A proposed deferral remains open until a Principal/Human writes a new/superseding `FindingDisposition{disposition=defer}` satisfying the existing deferred-target, reconsideration-trigger and accepted-risk requirements. Only that authorized disposition can make deferral eligible for closure.
+
+The exact v1 enum/schema may be smaller if needed, but it MUST preserve the authority split: author attempts; independent verification establishes facts; Principal/Human adjudication alone accepts risk/deferral; deterministic closure consumes those durable records.
 
 ### ClosureDecision
-The evidence-backed termination decision. Closure checks deterministic validation, required reviews, blocking findings, unadjudicated material findings, repair regressions, contract review, and bounded residual risk.
 
-A FROZEN outcome terminates the active ReviewCampaign. Below-threshold later observations become new work; reopening requires materially new evidence under the Reopen Rule.
+The evidence-backed termination decision. Closure checks deterministic validation, required reviews, unresolved blockers, unverified material dispositions, repair regressions, contract changes and bounded residual risk.
+
+A FROZEN outcome terminates the active campaign. Equivalent later opinion does not reopen it; reopening requires materially new evidence, changed contract, deterministic failure or repair regression.
 
 ~~~mermaid
 flowchart LR
-    C["Candidate"]
-    R["Parallel broad reviews"]
-    A["Principal adjudication"]
-    D["FindingDisposition"]
-    W["Repair Work Package"]
-    F["Focused revalidation"]
+    C["Immutable candidate"]
+    R["Parallel review"]
+    N["Normalize findings"]
+    L["Review Ledger"]
+    W["Repair packet"]
+    X["Fix attempt / challenge"]
+    V["Independent verification"]
     CD["ClosureDecision"]
     Z["Frozen"]
 
-    C --> R --> A --> D
-    D -->|"FIX_NOW"| W --> F --> CD
-    D -->|"no current repair"| CD
+    C --> R --> N --> L
+    L -->|"accepted repairs"| W --> X --> V --> L
+    L --> CD
     CD -->|"frozen"| Z
-    CD -->|"repair required"| W
+    CD -->|"threshold finding"| W
 ~~~
 
-See [REVIEW_AND_CONVERGENCE.md](REVIEW_AND_CONVERGENCE.md) and schemas/review-campaign.schema.json, finding-disposition.schema.json, closure-decision.schema.json.
+The model-facing projection for each role contains only the state needed for that action. The runtime owns lifecycle legality, required-response completeness and self-verification prevention.
+
+Existing durable compatibility schemas are already implemented: `schemas/review-result.schema.json`, `schemas/review-campaign.schema.json`, `schemas/finding-disposition.schema.json`, and `schemas/closure-decision.schema.json`. The new `ReviewFinding`, `FindingResolution`, and `ResolutionVerification` records are planned for WP-M3C-5 and do not yet have committed Go/schema twins. Do not infer those new records are implemented from this semantic contract.
 
 ## 20. Credential references and authentication evidence
 

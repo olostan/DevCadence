@@ -216,7 +216,7 @@ carries `max_attempts` and every attempt carries an `Ordinal`, so the journal
 holds both the bound and the count. The reducer does not yet refuse an attempt
 that exceeds the bound, because the projected task does not carry the limit and
 because what *should* happen at the bound — escalation rather than another
-attempt (DCI-045, DCI-049) — is the campaign behaviour ADR-0010 assigns to M6.
+attempt (DCI-045, DCI-049) — is the campaign behaviour ADR-0010 assigns to M7.
 
 This is a gap, not a decision that bounds do not matter: until M6 closes it,
 nothing in the domain stops a caller appending attempt *n+1* past a recorded

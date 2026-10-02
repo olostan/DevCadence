@@ -53,13 +53,13 @@ All execution roles:
 
 Effective now: each role starts from a Context Manifest, its role template, the complete bounded Execution Contract (or scoped InvestigationRequest for scouts), exact mandatory clauses and relevant initial evidence. Do not load whole reference docs or EWP rationale by default. Small 20–30k endpoints are first-class workers when complete obligations fit their demonstrated capability. Unknown capabilities use conservative provisional profiles, not assumed universal limits.
 
-Planned M3C: resolver and ContextProfile enforce target/hard residency, reserves, clause mappings and lease bounds. Count role/system/host/tool schemas, contract, normative, state, evidence and tail, with accounting uncertainty. A typical uncalibrated 24–32k endpoint may begin around 8–12k **total**; this is a target hypothesis, not a hard 12k law. Required constraints are never dropped to meet it.
+Planned M3C: the Cognitive Invocation Compiler and ContextProfile enforce target/hard residency, reserves, deterministic mandatory-clause mapping and lease bounds. Count role/system/host/tool schemas, contract, normative, state, evidence and tail with accounting uncertainty. Required constraints are never dropped to meet a target; effective envelopes and renderer/retrieval choices are calibrated in M4 rather than copied here as universal token heuristics.
 
 When a question needs more evidence, request exact clause/symbol/hunk/range with reason. Release resolved optional evidence while retaining handles and derived state dependencies. Full sections/files are legitimate when required and admitted. If the complete protected contract cannot fit, return `CONTEXT_UNFIT` and request decomposition, authorized endpoint routing or escalation. Default targets permit justified expansion under hard ceilings; admission cannot expand tool/write/privacy/spending authority.
 
 New risk/domain or proposed paths require re-resolution before modification; an incomplete mapping is not “no constraints.” A changed contract/normative source rebuilds the pack; changed evidence invalidates leases and dependent state. Exact drivers can evict, append-only drivers may need restart, opaque drivers report uncertainty and may be ineligible for strict-bound policies. Cached prefixes improve reuse without making obsolete material harmless.
 
-PROTOCOLS §10B owns planned structures and telemetry. Until implemented, record manual manifest/evidence decisions and do not claim exact automatic pruning or hidden provider-token measurements.
+PROTOCOLS §10B and ADR-0020 own planned compiler/projection semantics. Until implemented, record manual manifest/evidence decisions and do not claim exact automatic rule admission, pruning or hidden provider-token measurements.
 
 ## 3. Repository Scout
 

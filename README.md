@@ -169,7 +169,7 @@ A local coding model should receive more than a task title. For non-trivial work
 
 The Work Package is a compiled form of frontier reasoning. It has a small authoritative **Execution Contract** and retrievable design/rationale. Workers initially receive the complete contract plus exact applicable normative clauses; no execution-critical requirement may be hidden in rationale. Context is admitted by role, domain and risk, then expanded with question-driven evidence leases. Durable documentation authority does not imply whole-corpus prompt residency. Small 20–30k endpoints are first-class targets when a complete task contract fits their effective context; larger models remain available under policy.
 
-This process applies now through manual manifests; automatic Context Resolver admission, endpoint profiles and linting are planned for M3C, with quality/cost calibration in M4. See [ADR-0019](docs/adr/0019-non-conversational-cognition-and-adaptive-review.md#context-working-set-contract).
+This process applies now through manual manifests; the M3C **Cognitive Invocation Compiler** will deterministically admit mandatory clauses, retrieve optional evidence/rationale, and render endpoint-specific bounded prompts without asking models to understand the entire DevCadence process. Similarity/embeddings may improve optional recall but never decide whether a MUST applies. M4 calibrates effective context/load and renderer/retrieval strategies. See [ADR-0019](docs/adr/0019-non-conversational-cognition-and-adaptive-review.md#context-working-set-contract) and [ADR-0020](docs/adr/0020-cognitive-invocation-compiler-and-review-ledger.md).
 
 ## Canonical project state
 

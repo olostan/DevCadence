@@ -4,7 +4,7 @@
 - **Date:** 2026-09-21
 - **Decision owner:** Principal + Human
 - **Related invariants:** DCI-040–DCI-049
-- **Related milestone:** M7, with normative rules effective immediately
+- **Related milestones:** WP-M3C-5 for durable finding/resolution/verification primitives; M7 for campaign orchestration/policy enforcement; normative rules effective immediately
 
 ## Context
 
@@ -71,4 +71,4 @@ Durable contracts:
 - FindingDisposition;
 - ClosureDecision.
 
-M7 implements orchestration/policy enforcement; earlier milestone agents follow the normative stopping/reopen rules immediately.
+WP-M3C-5 implements the minimal durable ReviewFinding/FindingResolution/ResolutionVerification layer without campaign automation. M7 implements orchestration/policy enforcement; earlier milestone agents follow the normative stopping/reopen rules immediately.

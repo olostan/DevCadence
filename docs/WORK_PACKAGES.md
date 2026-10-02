@@ -314,6 +314,14 @@ does not yet let AI choose the portfolio.
 
 Branch: `feat/m3c-cognition-substrate`.
 
+Dependency/completion graph:
+- WP-M3C-1 is the protocol/schema foundation.
+- WP-M3C-2 (drivers/compiler) and WP-M3C-5 (review-ledger primitives) may proceed independently after WP-M3C-1.
+- WP-M3C-3 depends on the protocol foundation and the execution-side capabilities it validates.
+- WP-M3C-4 is the execution-substrate integration gate for WP-M3C-1..3; it does not substitute for WP-M3C-5 verification.
+- **M3C completes only when both WP-M3C-4 and WP-M3C-5 are accepted.**
+
+
 ### WP-M3C-1 — Portfolio protocol, economics, context capabilities and refactoring proposals
 
 **Objective:** define the provider-neutral deterministic protocol and schema types for access channels, economic regimes, context-control capabilities, and bottom-up living work package challenges.
@@ -331,23 +339,33 @@ Branch: `feat/m3c-cognition-substrate`.
 
 **Acceptance criteria:** all protocol shapes serialize to JSON matching strict JSON schemas (`additionalProperties: false`); `ContextControl` and `PrefixCache` enumerations are validated; `RefactoringProposal` passes schema/Go twin parity tests; no credential or billing leaks.
 
-### WP-M3C-2 — Session-driver abstraction and working-memory context mediation
+### WP-M3C-2 — Session drivers and Cognitive Invocation Compiler
 
-**Objective:** build the session-driver abstraction across heterogeneous cognition endpoints and implement the Adaptive Context Architecture runtime mediation.
+**Planning size / split:** the umbrella is intentionally delivered as two separately reviewable implementation slices rather than one monolithic PR:
+- **WP-M3C-2A — Session execution substrate (medium):** driver interface, two real driver shapes + fake adapter contract, cancellation/resume/tool capability normalization, and silent resource metering.
+- **WP-M3C-2B — Cognitive Invocation Compiler (large):** deterministic admission/mapping/dependency closure, prompt renderers, ContextPack/ContextProfile enforcement, Cognitive State Capsule, Evidence Working Set leases, expansion/restart behavior, and lexical/graph optional-context retrieval.
+
+2A and 2B share WP-M3C-1 protocol contracts but are independently acceptable; neither may silently absorb the other's unfinished scope. M4's compiler/context experiments require 2B acceptance, so the compiler does **not** silently slip past the evidence gate. If either slice expands beyond its stated boundary, the Principal must split it again before implementation rather than enlarge the EWP.
+
+
+**Objective:** build the session-driver abstraction across heterogeneous cognition endpoints and compile bounded, complete model invocations without requiring agents to understand DevCadence's full rule/process corpus.
 
 **Deliverables:**
 - Session-driver interface (`internal/cognition/drivers`) normalizing model selection, structured/streaming events, resume, cancellation, and worktree/tool/MCP access across direct APIs, local runtimes, and authenticated CLIs.
-- Deterministic Context Resolver combining role, complete Execution Contract, path/domain/risk mappings, revision-pinned normative clauses and endpoint profile; context linting for role/contract/pack budgets, missing/stale references and complete mandatory admission.
-- Atomic expansion/re-resolution and eviction: never remove mandatory clauses to fit evidence; unknown mapping or unavailable required clause blocks the affected action; append-only/opaque drivers restart or checkpoint where eviction is not enforceable.
+- Deterministic **Cognitive Invocation Compiler** combining role, complete Execution Contract, action/path/domain/risk mappings, revision-pinned mandatory clauses, project state and endpoint ContextProfile into ContextManifest/ContextPack projections.
+- Applicability/dependency mapping with freshness ownership: mandatory MUST/MUST-NOT clauses are admitted by deterministic mapping/closure; unknown applicability or missing required content fails closed.
+- Retrieval baseline for optional context: exact/lexical search plus explicit dependency-graph traversal. Dense embeddings/reranking are not WP-M3C-2 deliverables; M4 may prototype them behind the same authority-neutral retrieval boundary.
+- Endpoint-specific prompt-renderer interface separating canonical typed state from model-facing serialization; renderers preserve task/contract/evidence/action boundaries and are calibratable by endpoint profile.
+- Atomic expansion/re-resolution and eviction: never remove mandatory clauses to fit evidence; append-only/opaque drivers restart or checkpoint where eviction is not enforceable.
 - Context strategy mapper mapping endpoint `ContextControl` capabilities to concrete context layouts (exact stateless prefix, append-only prompt, or opaque session).
 - `Cognitive State Capsule` state manager maintaining non-authoritative derived hypotheses, active TODOs, intermediate decisions, and evidence references across turns.
-- `Evidence Working Set` lease manager with content-addressed provenance `(file_path, content_digest, start_line, end_line)`, automatic freshness invalidation upon worktree file mutation, and server-side path authorization bounds.
+- `Evidence Working Set` lease manager with content-addressed provenance, freshness invalidation on mutation, and server-side path authorization bounds.
 - Runtime enforcement of silent multi-dimensional metering (cumulative tokens, wall clock, tool-call count, semantic loop detection) pausing with `PAUSED_BUDGET_EXCEEDED` on budget exhaustion.
-- At least two materially different driver implementations (e.g. direct API / local runtime and authenticated CLI wrapper) plus a fake third-adapter contract test.
+- At least two materially different driver implementations plus a fake third-adapter contract test.
 
-**MUST:** prompts must never contain artificial turn countdowns; code snippets must be verbatim (no lossy summaries); snippets must be validated against worktree path authorization and content digests.
+**MUST:** control-plane rules that can be enforced deterministically are not repeated as model instructions; similarity/ranking never decides mandatory applicability; every mandatory clause has a deterministic admission class/path; operative mandatory clauses are exact revision-pinned model-visible content; prompts never contain artificial turn countdowns; code/normative evidence leases are verbatim and content-addressed; prompt renderers cannot let evidence delimiters escape into instruction space.
 
-**Acceptance criteria:** drivers correctly report `ContextControl` and `PrefixCache` capabilities; modifying a file in an active attempt invalidates dependent snippet leases; out-of-scope snippet paths fail closed; silent budget exhaustion pauses execution without crashing; two distinct driver implementations pass the driver contract test suite.
+**Acceptance criteria:** drivers correctly report context/cache capabilities; compiler produces reproducible bounded packs from the same inputs; omitted/unknown mandatory applicability fails closed; mandatory-clause reverse coverage rejects orphan mappings; optional retrieval cannot evict mandatory clauses; an uncalibrated endpoint uses an explicit provisional profile rather than pretending to be verified; `CONTEXT_UNFIT` is returned rather than truncating the contract; renderer output preserves required obligations and contains adversarial delimiter text safely; stale/out-of-scope evidence fails closed; silent budget exhaustion pauses without crashing; two distinct driver implementations pass the contract suite.
 
 ### WP-M3C-3 — Deterministic portfolio validator and activation
 
@@ -370,6 +388,9 @@ Branch: `feat/m3c-cognition-substrate`.
 - End-to-end integration test suite in `tests/m3c_substrate_test.go` covering:
   - Exact stateless vs. opaque session driver behavior;
   - Oversized contract/pack rejection without truncation; stale normative projection rejection; unmapped-domain re-resolution; output reserve accounting; independent read/write authority; expansion within policy and honest unknown opaque-session usage;
+  - Mandatory rule admission unaffected by low semantic similarity; always/capability-default/mapped admission classes have reverse coverage; optional ranking cannot remove mandatory clauses;
+  - Provisional uncalibrated ContextProfiles use hard/runtime bounds + explicit reserves/uncertainty and never claim verified effectiveness;
+  - Endpoint prompt projection preserves the same canonical task/contract/evidence semantics across at least two renderers/driver shapes, including hostile evidence containing apparent closing tags/fences;
   - Stale snippet invalidation upon worktree modification;
   - Path authorization blocking access to out-of-scope paths and credentials;
   - Local, subscription, metered, and mixed candidate portfolios;
@@ -379,7 +400,24 @@ Branch: `feat/m3c-cognition-substrate`.
 
 **MUST:** tests must run deterministically without requiring external API tokens or real GPUs.
 
-**Acceptance criteria:** all integration scenarios pass cleanly; `go test -count=1 ./...` and `go test -race ./...` pass; schema/Go parity holds for all new M3C protocol records.
+**Acceptance criteria:** all WP-M3C-1..3 execution-substrate integration scenarios pass cleanly; `go test -count=1 ./...` and `go test -race ./...` pass; schema/Go parity holds for the execution-substrate records under test. WP-M3C-5 has its own parity/closure acceptance and is separately required for M3C milestone completion.
+
+### WP-M3C-5 — Durable review-ledger primitives
+
+**Objective:** implement the minimal backward-compatible review state needed to carry findings and repair verification across clean sessions without coupling that work to session-driver/compiler delivery.
+
+**Dependency/boundary:** this WP builds on the existing ReviewResult / ReviewCampaign / FindingDisposition / ClosureDecision contracts and M3C protocol conventions. It is deliberately numbered after the existing M3C-3/4 cards to avoid renumbering accepted roadmap identities, but it may proceed independently of WP-M3C-2/3/4 once WP-M3C-1 is accepted. Rich multi-review fan-out, lenses, falsification, aggregation policy and campaign automation remain M7.
+
+**Deliverables:**
+- `ReviewFinding` Go/schema twin with stable finding identity, raw ReviewResult observation refs, candidate/contract identity, canonical severity, canonical materiality, optional confidence, claim/evidence/requirement refs, verification method, and durable reviewer/producer provenance.
+- `FindingResolution` Go/schema twin representing author/implementer `fix_attempted | challenge` plus candidate/evidence and mandatory logical producer + invocation provenance.
+- `ResolutionVerification` Go/schema twin representing independent verification with mandatory verifier + invocation provenance; verifier-facing cognition is identity-blinded by default while the control plane compares durable provenance to enforce reviewer/author independence. Verification may return `re_adjudication_required`, but cannot itself create an authorized deferral.
+- Backward-compatible links to existing FindingDisposition and ClosureDecision semantics; a blocking `fix_attempted` remains open for closure until independent verification succeeds.
+- Focused role-specific projection tests proving clean-session reconstruction does not require the reviewer/author chat transcript.
+
+**MUST:** author/implementer self-verification is structurally rejected from durable producer/verifier provenance, including across clean sessions; severity/materiality vocabularies stay compatible with existing FindingDisposition; challenge verification is blind to producer identity unless identity is materially required evidence; verification cannot accept deferred risk; no new record grants closure authority by itself.
+
+**Acceptance criteria:** strict Go/schema parity and valid/invalid fixtures; normalized finding references and producer/verifier provenance round-trip; same-producer/self-verification is rejected after a clean-session handoff; an attempted blocking fix cannot satisfy ClosureDecision until verified; a verifier's deferral recommendation cannot satisfy ClosureDecision until an authorized superseding `FindingDisposition=defer` exists; challenge verification can reconstruct from durable state/evidence in a clean session; existing ReviewCampaign/FindingDisposition/ClosureDecision records retain compatibility.
 
 ## M3D — Adaptive portfolio and workflow synthesis
 

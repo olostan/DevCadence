@@ -284,13 +284,35 @@ Stores versioned frontier-authored implementation blueprints. Work Packages serv
 ### 6.6 Evidence service
 Stores structured claims and references to raw artifacts without forcing raw artifacts into every model context.
 
-### 6.6A Context Resolver and active working set [Planned - M3C]
+### 6.6A Cognitive Invocation Compiler and active working set [Planned - M3C]
 
-Durable documentation is machine-addressable external memory, not a mandatory resident corpus (DCI-018). The resolver compiles role + complete EWP Execution Contract + versioned path/domain/risk rules + endpoint ContextProfile into a revision-pinned ContextManifest/ContextPack. Exact mandatory clauses are deterministically admitted; evidence is progressively leased for explicit questions. An invariant index is navigation, not normative payload. Unknown mappings or missing clauses block the affected action; `CONTEXT_UNFIT` requests decomposition/authorized routing/escalation without truncation.
+Durable documentation is machine-addressable external memory, not a mandatory resident corpus (DCI-018). The **Cognitive Invocation Compiler** converts task/role/EWP/project state plus endpoint ContextProfile into a revision-pinned ContextManifest/ContextPack. It is a control-plane compiler, not an LLM prompt that asks the model to rediscover DevCadence policy.
 
-The Principal owns contract completeness; the deterministic resolver owns resolution, freshness, authorization and admission. Evidence leases are evictable, required constraints are not. Derived state tracks evidence dependencies. Domain/scope changes require re-resolution before modification, and admission cannot increase write/spending authority. Profiles reserve output/reasoning/tool capacity and count host/schema overhead. Driver capability determines whether eviction is exact or requires checkpoint/restart; opaque state must remain honestly unknown.
+Compilation has two distinct paths:
 
-This is planned runtime machinery, beyond ADR-0016's implemented bounded tools and history compaction. New work uses manual manifests/contracts now. PROTOCOLS §10B owns proposed fields; ADR-0019 owns rationale and tradeoffs. M4 calibrates workload-specific envelopes and tests quality against simpler baselines.
+1. **Deterministic authority admission:** role/path/domain/risk/action mappings and explicit dependency edges decide applicable MUST/MUST-NOT clauses. Unknown applicability or unavailable required clauses fail closed. Similarity scores never remove mandatory authority (DCI-132).
+2. **Retrieval-assisted evidence/rationale:** exact lexical search, graph edges, dense retrieval and optional reranking may discover useful non-mandatory material. Optional content is redundancy/token-budgeted against the selected endpoint's empirical workload envelope.
+
+Operative obligations are admitted as exact revision-pinned text plus IDs/digests; supporting rationale may remain a reference; large code/log/document evidence is progressively leased for explicit questions (DCI-133). Required constraints are never evicted to make evidence fit. If the complete mandatory pack plus reserves is too large, `CONTEXT_UNFIT` requests decomposition, authorized rerouting or escalation.
+
+The compiler also renders model-facing prompts through endpoint-specific renderers. Canonical state remains typed/provider-neutral; Markdown/XML-like sections, JSON, YAML or another projection are renderer choices to benchmark rather than normative semantics. System sophistication therefore does not imply equivalent prompt sophistication (DCI-131).
+
+The Principal owns semantic contract completeness. Deterministic machinery owns applicability resolution, freshness, budget/authority checks and pack construction. Driver capability determines whether eviction is exact or requires checkpoint/restart; opaque state remains honestly unknown.
+
+This builds on ADR-0016's bounded tools/history compaction and ADR-0019's context layers. ADR-0020 owns compiler/retrieval authority boundaries and review-ledger integration. M4 calibrates effective workload/cognitive envelopes, renderer formats and retrieval strategies against simpler baselines.
+
+### 6.6B Review Ledger and role-specific projections [Planned - M3C/M7]
+
+Review findings, attempted resolutions, challenges and independent verification are canonical control-plane state rather than accumulated reviewer/author conversation (DCI-135). Reviewers and implementers receive role-specific projections compiled from the same candidate/contract identity:
+
+- reviewer: candidate + contract + exact applicable clauses + lens + bounded evidence;
+- implementer: normalized accepted findings + repair authority;
+- verifier: one finding + attempted resolution/challenge + focused diff/evidence;
+- closure: structured campaign state + deterministic validation + residual-risk evidence.
+
+The author may report a fix attempt or challenge but cannot self-verify closure (DCI-134). WP-M3C-5 provides compact persistence/projection primitives independently of the session/compiler WP; M7 expands them into multi-review fan-out, dynamic lenses, falsification and automated aggregation.
+
+See [REVIEW_AND_CONVERGENCE.md](REVIEW_AND_CONVERGENCE.md) and [ADR-0020](adr/0020-cognitive-invocation-compiler-and-review-ledger.md).
 
 ### 6.7 Cognition resource plane
 
@@ -349,11 +371,14 @@ Provides controlled repository reads, isolated mutations, commits, diffs and int
 Executes deterministic commands and normalizes their evidence.
 
 ### 6.10 Review coordinator
-Runs bounded ReviewCampaigns without conversational chat inflation (ADR-0019). It coordinates:
-- **Adaptive Context Architecture**: Reviewers operate with a bounded lens-specific baseline (complete Execution Contract, exact applicable clauses and diff/validation manifests; prefix-cached where supported), a compact Cognitive State Capsule, and an Evidence Working Set (leased snippets with content-addressed provenance and freshness checks), preventing token explosion while inspecting verbatim code.
-- **Dynamic review lenses & active falsification**: Dispatches specialized cognitive lenses based on risk (Anti-Rabbit Hole, Anti-Drift, Anti-Hallucination, Architecture & Invariants) and executes deterministic mutation probes (`FalsificationProbe`) in isolated worktrees to verify assertions fail when code is broken.
-- **Dual Independent Review & Adjudication Fast-Path**: Dispatches parallel reviews across distinct model families for high-risk work; enables the "Double-Green" adjudication fast-path for rapid Principal acceptance when independent reviews and deterministic validation pass, subject to Asymmetric Veto for security and invariant blockers.
-- **Adjudication and repair**: The Principal—not individual reviewers—adjudicates findings into standard `FindingDisposition` records and compiles at most one single consolidated Repair Work Package per round. The coordinator never permits unmoderated conversational debate between implementers and reviewers.
+Runs bounded ReviewCampaigns over a **Review Ledger**, not reviewer/author chat history (ADR-0020). It coordinates:
+- role-specific ContextPack projections for reviewer, implementer, verifier and closure actions;
+- stable ReviewFinding identity plus normalization/deduplication before repair;
+- one consolidated repair packet whose responses are fix attempts or challenges, never self-verification;
+- independent ResolutionVerification and thresholded closure/reopen behavior;
+- M7 extensions for dynamic lenses, dual-review fan-out, active falsification and aggregation.
+
+The coordinator enforces lifecycle legality mechanically. Models receive the smallest semantic projection needed for their role rather than the campaign state machine itself.
 
 ### 6.11 Consultant service
 Normalizes frontier consultant requests and results.
@@ -393,7 +418,7 @@ flowchart LR
     Closure -->|"frozen"| Frozen
 ~~~
 
-The control plane owns campaign state, thresholds, bounded rounds, and freeze/reopen policy. Reviewer models only produce evidence.
+The control plane owns finding identity, resolution/verification authority, campaign state, thresholds, bounded rounds and freeze/reopen policy. Reviewer models produce findings/evidence; implementers produce attempts/challenges; neither self-authorizes closure.
 
 See [REVIEW_AND_CONVERGENCE.md](REVIEW_AND_CONVERGENCE.md).
 

@@ -68,11 +68,11 @@ Start with [AGENTS.md](../AGENTS.md), the applicable [role template](../prompts/
 | Brownfield readiness or inherited authority | [PROJECT_ADOPTION.md](PROJECT_ADOPTION.md), [ADR-0012](adr/0012-mandatory-brownfield-adoption-baseline.md) |
 | Component boundary or dependency change | [ARCHITECTURE.md](ARCHITECTURE.md), applicable accepted ADR clauses |
 | EWP expansion or delegation | [WORK_PACKAGES.md](WORK_PACKAGES.md#execution-contract-and-context-manifest), [PROTOCOLS.md §7](PROTOCOLS.md#7-engineering-work-package), [PRINCIPAL_ENGINEER.md](PRINCIPAL_ENGINEER.md) |
-| Agent context, evidence or driver capability | [ADR-0019](adr/0019-non-conversational-cognition-and-adaptive-review.md#context-working-set-contract), [PROTOCOLS.md §10B](PROTOCOLS.md#10b-adaptive-context-architecture-and-evidence-working-set-proposed---m3c), [LOCAL_AGENTS.md](LOCAL_AGENTS.md#context-admission-and-endpoint-envelopes) |
+| Agent context, rule admission, retrieval, prompt projection or driver capability | [ADR-0019](adr/0019-non-conversational-cognition-and-adaptive-review.md#context-working-set-contract), [ADR-0020](adr/0020-cognitive-invocation-compiler-and-review-ledger.md), [PROTOCOLS.md §10B](PROTOCOLS.md#10b-adaptive-context-architecture-and-evidence-working-set-partially-implemented---m3c), [LOCAL_AGENTS.md](LOCAL_AGENTS.md#context-admission-and-endpoint-envelopes) |
 | Tool output/history compaction or supervised process | [ADR-0016](adr/0016-validation-services-bounded-tools-and-context-compaction.md), [SECURITY.md](SECURITY.md) |
 | Machine, setup, credentials, runtime or routing | [ENVIRONMENT_INTELLIGENCE_AND_ONBOARDING.md](ENVIRONMENT_INTELLIGENCE_AND_ONBOARDING.md), [MODEL_RUNTIME.md](MODEL_RUNTIME.md), [SETUP.md](SETUP.md), [COGNITION_PORTFOLIO.md](COGNITION_PORTFOLIO.md), ADRs 0013/0014/0018, [SECURITY.md](SECURITY.md) |
 | State, persistence or wire/schema compatibility | [PROJECT_STATE.md](PROJECT_STATE.md), [PROTOCOLS.md](PROTOCOLS.md), [schemas/README.md](../schemas/README.md), ADRs 0002–0006, affected schema/type |
-| Review, repair, closure or acceptance | [REVIEW_AND_CONVERGENCE.md](REVIEW_AND_CONVERGENCE.md#14-context-and-token-discipline), [VERIFICATION.md](VERIFICATION.md), ADR-0010 and ADR-0019 review clauses |
+| Review, findings, repair, verification, closure or acceptance | [REVIEW_AND_CONVERGENCE.md](REVIEW_AND_CONVERGENCE.md), [ADR-0020](adr/0020-cognitive-invocation-compiler-and-review-ledger.md), [VERIFICATION.md](VERIFICATION.md), ADR-0010 |
 | Principal host or semantic MCP boundary | [PRINCIPAL_HOSTS.md](PRINCIPAL_HOSTS.md), [MCP_API.md](MCP_API.md), relevant host integration |
 | Health, lessons, telemetry or milestone status | [REFACTORING_AND_HEALTH.md](REFACTORING_AND_HEALTH.md), [LEARNING.md](LEARNING.md), [OBSERVABILITY.md](OBSERVABILITY.md), [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) |
 
@@ -108,6 +108,7 @@ hierarchy below.
 | [0017](adr/0017-external-research-evidence-acquisition.md) | External research as a bounded evidence-acquisition service |
 | [0018](adr/0018-adaptive-cognition-portfolio-and-workflow-synthesis.md) | Adaptive cognition portfolios, economics/budget pools, AI-assisted recommendation and adaptive workflow topology |
 | [0019](adr/0019-non-conversational-cognition-and-adaptive-review.md) | Context Working-Set Architecture, deterministic admission, dynamic review lenses, living work packages, and dual independent review |
+| [0020](adr/0020-cognitive-invocation-compiler-and-review-ledger.md) | Cognitive Invocation Compiler, fail-safe mandatory admission, prompt projection, and durable review ledger |
 
 ## Normative hierarchy
 

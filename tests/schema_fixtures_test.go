@@ -76,9 +76,9 @@ func TestEveryRecordKindHasASchema(t *testing.T) {
 // a schema added without a type still fails unless someone says, here, which
 // milestone will pick it up.
 var awaitingImplementation = map[schema.Name]string{
-	"review-campaign":     "M6 — bounded review convergence (ADR-0010)",
-	"finding-disposition": "M6 — bounded review convergence (ADR-0010)",
-	"closure-decision":    "M6 — bounded review convergence (ADR-0010)",
+	"review-campaign":     "M7 — bounded review convergence (ADR-0010)",
+	"finding-disposition": "M7 — bounded review convergence (ADR-0010)",
+	"closure-decision":    "M7 — bounded review convergence (ADR-0010)",
 }
 
 // TestValidFixturesValidate is the positive half of the corpus contract.

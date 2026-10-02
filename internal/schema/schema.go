@@ -85,8 +85,9 @@ const (
 	NameWorkflowPlan            Name = "workflow-plan"
 )
 
-// Names of the review-convergence schemas published ahead of their M6 Go
-// implementation.
+// Names of the review-convergence schemas published ahead of full M7 campaign
+// orchestration. WP-M3C-5 adds companion ReviewFinding / FindingResolution /
+// ResolutionVerification Go+schema records without claiming full campaign runtime.
 const (
 	NameReviewCampaign     Name = "review-campaign"
 	NameFindingDisposition Name = "finding-disposition"
