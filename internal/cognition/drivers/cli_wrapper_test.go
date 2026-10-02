@@ -12,6 +12,7 @@ import (
 
 	"github.com/olostan/DevCadence/internal/errs"
 	"github.com/olostan/DevCadence/internal/process"
+	"github.com/olostan/DevCadence/internal/protocol"
 	"github.com/olostan/DevCadence/internal/tools"
 )
 
@@ -559,5 +560,122 @@ func TestProcessRunner_Direct(t *testing.T) {
 	}
 	if !bytes.Contains(res.Stdout, []byte("hello-devcadence")) {
 		t.Errorf("expected stdout containing 'hello-devcadence', got %s", string(res.Stdout))
+	}
+}
+
+func TestCLIWrapperDriver_StreamTurnCapturesBackendHandle(t *testing.T) {
+	runner := &mockCommandRunner{}
+	driver := MustNewCLIWrapperDriver("cli-stream-handle-driver", runner, CLIWrapperOptions{
+		Binary:     "test-cli",
+		PromptFlag: "-p",
+		ModelFlag:  "--model",
+		ResumeFlag: "--resume",
+	})
+
+	ctx := context.Background()
+	session, err := driver.StartSession(ctx, SessionConfig{
+		SessionID: "sess-stream-backend-test",
+		ModelID:   "test-model",
+	})
+	if err != nil {
+		t.Fatalf("StartSession failed: %v", err)
+	}
+
+	stream, err := session.StreamTurn(ctx, TurnInput{
+		TurnID: "turn-1",
+		Prompt: "hello stream",
+	})
+	if err != nil {
+		t.Fatalf("StreamTurn failed: %v", err)
+	}
+
+	// Drain the stream
+	for {
+		_, recvErr := stream.Recv()
+		if recvErr != nil {
+			break
+		}
+	}
+
+	cliSess, ok := session.(*cliSession)
+	if !ok {
+		t.Fatalf("expected session to be *cliSession")
+	}
+
+	// Assert backend session handle was captured from the streaming turn
+	backendHandle := cliSess.BackendSessionHandle()
+	if backendHandle != "cli-opaque-backend-123" {
+		t.Errorf("expected backendSessionHandle to be 'cli-opaque-backend-123', got %q", backendHandle)
+	}
+
+	// Assert config options contains the captured handle
+	cfg := session.Config()
+	if cfg.Options["backend_session_handle"] != "cli-opaque-backend-123" {
+		t.Errorf("expected config.Options['backend_session_handle'] to be 'cli-opaque-backend-123', got %q", cfg.Options["backend_session_handle"])
+	}
+
+	// Now run a second turn and verify runner received --resume cli-opaque-backend-123
+	_, err = session.ExecuteTurn(ctx, TurnInput{
+		TurnID: "turn-2",
+		Prompt: "second turn",
+	})
+	if err != nil {
+		t.Fatalf("ExecuteTurn failed: %v", err)
+	}
+
+	runner.mu.Lock()
+	lastArgs := runner.lastArgs
+	runner.mu.Unlock()
+
+	foundResume := false
+	for i, arg := range lastArgs {
+		if arg == "--resume" && i+1 < len(lastArgs) && lastArgs[i+1] == "cli-opaque-backend-123" {
+			foundResume = true
+			break
+		}
+	}
+	if !foundResume {
+		t.Errorf("expected --resume cli-opaque-backend-123 in args, got %v", lastArgs)
+	}
+}
+
+func TestCLIWrapperDriver_StreamTurnRejectsWhenStreamingUnsupported(t *testing.T) {
+	runner := &mockCommandRunner{}
+	noStreamCaps := DriverCapabilities{
+		Kind:                  protocol.ChannelCLISubprocess,
+		SessionMode:           protocol.SessionResumableHandle,
+		ContextControl:        protocol.ContextControlOpaqueSession,
+		PrefixCache:           protocol.PrefixCacheNone,
+		SupportsStreaming:     false,
+		SupportsTools:         true,
+		NativeWorktreeAccess:  false,
+		MaxConcurrentRequests: 1,
+	}
+
+	driver := MustNewCLIWrapperDriver("cli-no-stream-driver", runner, CLIWrapperOptions{
+		Binary:       "test-cli",
+		PromptFlag:   "-p",
+		ModelFlag:    "--model",
+		Capabilities: &noStreamCaps,
+	})
+
+	ctx := context.Background()
+	session, err := driver.StartSession(ctx, SessionConfig{
+		SessionID: "sess-no-stream-test",
+		ModelID:   "test-model",
+	})
+	if err != nil {
+		t.Fatalf("StartSession failed: %v", err)
+	}
+
+	_, err = session.StreamTurn(ctx, TurnInput{
+		TurnID: "turn-1",
+		Prompt: "hello",
+	})
+	if err == nil {
+		t.Fatalf("expected error when streaming is unsupported, got nil")
+	}
+	if errs.CategoryOf(err) != errs.CategoryUnsupported {
+		t.Errorf("expected CategoryUnsupported, got %v", err)
 	}
 }

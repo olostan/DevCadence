@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -296,5 +297,92 @@ func TestDirectAPIDriver_StreamingEvents(t *testing.T) {
 
 	if len(deltas) == 0 {
 		t.Errorf("expected content deltas in stream, got 0")
+	}
+}
+
+type trackingStreamClient struct {
+	streamClosed    bool
+	contextCanceled bool
+	mu              sync.Mutex
+}
+
+func (c *trackingStreamClient) Complete(ctx context.Context, req DirectAPIRequest) (DirectAPIResponse, error) {
+	return DirectAPIResponse{}, nil
+}
+
+func (c *trackingStreamClient) Stream(ctx context.Context, req DirectAPIRequest) (EventStream, error) {
+	stream := NewChannelEventStream(8)
+	stream.SetOnClose(func() {
+		c.mu.Lock()
+		c.streamClosed = true
+		c.mu.Unlock()
+	})
+
+	go func() {
+		defer stream.Close()
+		// Send initial event
+		stream.Send(DriverEvent{
+			Kind:  EventContentDelta,
+			Delta: "first word",
+		})
+
+		// Block waiting for context cancellation or stream close
+		<-ctx.Done()
+		c.mu.Lock()
+		c.contextCanceled = true
+		c.mu.Unlock()
+	}()
+
+	return stream, nil
+}
+
+func TestDirectAPIDriver_StreamEarlyCloseCancelsUnderlyingStream(t *testing.T) {
+	client := &trackingStreamClient{}
+	driver := MustNewDirectAPIDriver("direct-api-cancel-stream", client)
+
+	ctx := context.Background()
+	session, err := driver.StartSession(ctx, SessionConfig{
+		SessionID: "sess-api-cancel-stream",
+		ModelID:   "direct-model-v1",
+	})
+	if err != nil {
+		t.Fatalf("StartSession failed: %v", err)
+	}
+
+	stream, err := session.StreamTurn(ctx, TurnInput{
+		TurnID: "turn-cancel",
+		Prompt: "hello",
+	})
+	if err != nil {
+		t.Fatalf("StreamTurn failed: %v", err)
+	}
+
+	// Read 1 event
+	ev, err := stream.Recv()
+	if err != nil {
+		t.Fatalf("expected first event, got err: %v", err)
+	}
+	if ev.Delta != "first word" {
+		t.Errorf("expected 'first word', got %q", ev.Delta)
+	}
+
+	// Close stream early
+	if err := stream.Close(); err != nil {
+		t.Fatalf("stream.Close failed: %v", err)
+	}
+
+	// Wait briefly for goroutine to receive cancellation / close hook
+	time.Sleep(50 * time.Millisecond)
+
+	client.mu.Lock()
+	closed := client.streamClosed
+	canceled := client.contextCanceled
+	client.mu.Unlock()
+
+	if !closed {
+		t.Errorf("expected underlying stream.Close() to be called on consumer early close")
+	}
+	if !canceled {
+		t.Errorf("expected stream context to be canceled on consumer early close")
 	}
 }

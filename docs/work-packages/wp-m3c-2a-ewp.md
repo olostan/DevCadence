@@ -223,7 +223,8 @@ type EventStream interface {
 
 Mediation intercepts tool invocations before execution, validating path containment using `tools.Scope.ResolvePath`. Symlink escapes and `..` traversals are rejected with `errs.CategoryPolicyDenied`.
 - **Structural Path Policy:** Path arguments are identified via custom `ToolDefinition.PathExtractor`, declared `PathParameters`, or robust recursive JSON inspection.
-- **Session Isolation:** `ScopedToolMediator.ForSession` creates session-isolated mediators to prevent cross-session state mutation or duplicate listener accumulation.
+- **Mutation Semantics:** Tools declare `ToolDefinition.MutatesFiles bool`. Read-only tools (`MutatesFiles: false`) are validated for containment but never trigger `FileEditListener`, preventing false-positive oscillating edit loops on read operations.
+- **Session Isolation & Listener Idempotency:** `ScopedToolMediator.ForSession` creates session-isolated mediators to prevent cross-session state mutation. `AttachMeterListeners(meterID, ...)` ensures listener registration is strictly idempotent across session resumes.
 - **Tool Execution Observers:** Mediated executions notify `ToolExecutionListener` so that driver-internal tool calls are accurately metered and evaluated for semantic loops.
 
 ### 3.3 Silent Multi-Dimensional Metering Runtime (`metering.go`, `loop_detector.go`)

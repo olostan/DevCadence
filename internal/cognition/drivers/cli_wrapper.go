@@ -182,10 +182,16 @@ func (d *CLIWrapperDriver) StartSession(ctx context.Context, cfg SessionConfig) 
 		}
 	}
 
+	var backendHandle string
+	if cfg.Options != nil {
+		backendHandle = cfg.Options["backend_session_handle"]
+	}
+
 	s := &cliSession{
-		driver: d,
-		config: cfg.DeepCopy(),
-		status: SessionStatusActive,
+		driver:               d,
+		config:               cfg.DeepCopy(),
+		status:               SessionStatusActive,
+		backendSessionHandle: backendHandle,
 	}
 	d.sessions[cfg.SessionID] = s
 	return s, nil
@@ -292,6 +298,26 @@ func (s *cliSession) Close(ctx context.Context) error {
 	s.driver.mu.Unlock()
 
 	return nil
+}
+
+// BackendSessionHandle returns the opaque backend session handle, if captured.
+func (s *cliSession) BackendSessionHandle() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.backendSessionHandle
+}
+
+func (s *cliSession) setBackendSessionHandle(handle string) {
+	if handle == "" {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.backendSessionHandle = handle
+	if s.config.Options == nil {
+		s.config.Options = make(map[string]string)
+	}
+	s.config.Options["backend_session_handle"] = handle
 }
 
 func (s *cliSession) buildArgs(input TurnInput) ([]string, error) {
@@ -413,11 +439,9 @@ func (s *cliSession) ExecuteTurn(ctx context.Context, input TurnInput) (TurnResu
 	// Parse stdout
 	content, toolCalls, usage, backendHandle := parseCLIStdout(res.Stdout)
 
-	s.mu.Lock()
-	if backendHandle != "" {
-		s.backendSessionHandle = backendHandle
+	if backendHandle != "" && backendHandle != s.ID() {
+		s.setBackendSessionHandle(backendHandle)
 	}
-	s.mu.Unlock()
 
 	// If tools were called and mediator is available, execute them
 	if len(toolCalls) > 0 && s.config.Mediator != nil {
@@ -456,6 +480,10 @@ func (b *safeBuffer) String() string {
 func (s *cliSession) StreamTurn(ctx context.Context, input TurnInput) (EventStream, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
+	}
+
+	if !s.driver.capabilities.SupportsStreaming {
+		return nil, errs.New(errs.CategoryUnsupported, "cli driver %q does not support streaming", s.driver.id)
 	}
 
 	if len(input.ToolResults) > 0 && s.driver.opts.ToolResultsFlag == "" && s.driver.opts.InvocationMapper == nil {
@@ -541,6 +569,9 @@ func (s *cliSession) StreamTurn(ctx context.Context, input TurnInput) (EventStre
 			line := scanner.Text()
 			var ev DriverEvent
 			if jsonErr := json.Unmarshal([]byte(line), &ev); jsonErr == nil && ev.Kind != "" {
+				if ev.SessionID != "" && ev.SessionID != s.ID() {
+					s.setBackendSessionHandle(ev.SessionID)
+				}
 				ev.SessionID = s.ID()
 				ev.TurnID = input.TurnID
 				if ev.Timestamp.IsZero() {

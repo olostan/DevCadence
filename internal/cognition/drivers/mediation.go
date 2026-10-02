@@ -30,6 +30,8 @@ type ToolMediator interface {
 	OnFileEdit(listener FileEditListener)
 	// OnToolExecution registers a listener for all executed tools (used by metering for loop detection).
 	OnToolExecution(listener ToolExecutionListener)
+	// AttachMeterListeners registers or updates file edit and tool execution listeners for a specific meter ID idempotently.
+	AttachMeterListeners(meterID string, onEdit FileEditListener, onExec ToolExecutionListener)
 }
 
 // WorktreeMediator extends ToolMediator with worktree path validation.
@@ -44,25 +46,29 @@ type WorktreeMediator interface {
 // ScopedToolMediator implements WorktreeMediator with strict path containment checks,
 // declared-tool filtering, and registered tool handlers.
 type ScopedToolMediator struct {
-	scope         *tools.Scope
-	handlers      map[string]ToolHandler
-	toolDefs      map[string]ToolDefinition
-	declaredTools map[string]ToolDefinition
-	editListeners []FileEditListener
-	execListeners []ToolExecutionListener
-	sessions      map[string]*SessionScopedMediator
-	mu            sync.RWMutex
+	scope              *tools.Scope
+	handlers           map[string]ToolHandler
+	toolDefs           map[string]ToolDefinition
+	declaredTools      map[string]ToolDefinition
+	editListeners      []FileEditListener
+	execListeners      []ToolExecutionListener
+	meterEditListeners map[string]FileEditListener
+	meterExecListeners map[string]ToolExecutionListener
+	sessions           map[string]*SessionScopedMediator
+	mu                 sync.RWMutex
 }
 
 // NewScopedToolMediator creates a new ScopedToolMediator.
 func NewScopedToolMediator(scope *tools.Scope) *ScopedToolMediator {
 	return &ScopedToolMediator{
-		scope:         scope,
-		handlers:      make(map[string]ToolHandler),
-		toolDefs:      make(map[string]ToolDefinition),
-		editListeners: make([]FileEditListener, 0),
-		execListeners: make([]ToolExecutionListener, 0),
-		sessions:      make(map[string]*SessionScopedMediator),
+		scope:              scope,
+		handlers:           make(map[string]ToolHandler),
+		toolDefs:           make(map[string]ToolDefinition),
+		editListeners:      make([]FileEditListener, 0),
+		execListeners:      make([]ToolExecutionListener, 0),
+		meterEditListeners: make(map[string]FileEditListener),
+		meterExecListeners: make(map[string]ToolExecutionListener),
+		sessions:           make(map[string]*SessionScopedMediator),
 	}
 }
 
@@ -93,7 +99,7 @@ func (m *ScopedToolMediator) ForSession(sessionID string, declaredTools []ToolDe
 
 	toolsMap := make(map[string]ToolDefinition, len(declaredTools))
 	for _, t := range declaredTools {
-		// Inherit path definitions from registered definitions if not explicitly provided
+		// Inherit path definitions and mutation flag from registered definitions if not explicitly provided
 		if def, ok := m.toolDefs[t.Name]; ok {
 			if len(t.PathParameters) == 0 {
 				t.PathParameters = def.PathParameters
@@ -101,16 +107,28 @@ func (m *ScopedToolMediator) ForSession(sessionID string, declaredTools []ToolDe
 			if t.PathExtractor == nil {
 				t.PathExtractor = def.PathExtractor
 			}
+			if !t.MutatesFiles && def.MutatesFiles {
+				t.MutatesFiles = def.MutatesFiles
+			}
 		}
 		toolsMap[t.Name] = t
 	}
 
+	if existing, ok := m.sessions[sessionID]; ok {
+		existing.mu.Lock()
+		existing.declaredTools = toolsMap
+		existing.mu.Unlock()
+		return existing
+	}
+
 	sessionMediator := &SessionScopedMediator{
-		parent:        m,
-		sessionID:     sessionID,
-		declaredTools: toolsMap,
-		editListeners: make([]FileEditListener, 0),
-		execListeners: make([]ToolExecutionListener, 0),
+		parent:             m,
+		sessionID:          sessionID,
+		declaredTools:      toolsMap,
+		editListeners:      make([]FileEditListener, 0),
+		execListeners:      make([]ToolExecutionListener, 0),
+		meterEditListeners: make(map[string]FileEditListener),
+		meterExecListeners: make(map[string]ToolExecutionListener),
 	}
 	m.sessions[sessionID] = sessionMediator
 	return sessionMediator
@@ -122,6 +140,17 @@ func (m *ScopedToolMediator) SetDeclaredTools(tools []ToolDefinition) {
 	defer m.mu.Unlock()
 	m.declaredTools = make(map[string]ToolDefinition, len(tools))
 	for _, t := range tools {
+		if def, ok := m.toolDefs[t.Name]; ok {
+			if len(t.PathParameters) == 0 {
+				t.PathParameters = def.PathParameters
+			}
+			if t.PathExtractor == nil {
+				t.PathExtractor = def.PathExtractor
+			}
+			if !t.MutatesFiles && def.MutatesFiles {
+				t.MutatesFiles = def.MutatesFiles
+			}
+		}
 		m.declaredTools[t.Name] = t
 	}
 }
@@ -138,6 +167,18 @@ func (m *ScopedToolMediator) OnToolExecution(listener ToolExecutionListener) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.execListeners = append(m.execListeners, listener)
+}
+
+// AttachMeterListeners registers or updates file edit and tool execution listeners for a specific meter ID idempotently.
+func (m *ScopedToolMediator) AttachMeterListeners(meterID string, onEdit FileEditListener, onExec ToolExecutionListener) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if onEdit != nil {
+		m.meterEditListeners[meterID] = onEdit
+	}
+	if onExec != nil {
+		m.meterExecListeners[meterID] = onExec
+	}
 }
 
 // ValidatePath ensures that relPath does not escape the worktree scope.
@@ -181,6 +222,9 @@ func (m *ScopedToolMediator) ExecuteTool(ctx context.Context, call ToolCall) (To
 func (m *ScopedToolMediator) notifyEdit(path string, content []byte) {
 	m.mu.RLock()
 	listeners := append([]FileEditListener(nil), m.editListeners...)
+	for _, l := range m.meterEditListeners {
+		listeners = append(listeners, l)
+	}
 	var childSessions []*SessionScopedMediator
 	for _, s := range m.sessions {
 		childSessions = append(childSessions, s)
@@ -198,6 +242,9 @@ func (m *ScopedToolMediator) notifyEdit(path string, content []byte) {
 func (m *ScopedToolMediator) notifyExecution(call ToolCall, res ToolResult) {
 	m.mu.RLock()
 	listeners := append([]ToolExecutionListener(nil), m.execListeners...)
+	for _, l := range m.meterExecListeners {
+		listeners = append(listeners, l)
+	}
 	var childSessions []*SessionScopedMediator
 	for _, s := range m.sessions {
 		childSessions = append(childSessions, s)
@@ -215,6 +262,9 @@ func (m *ScopedToolMediator) notifyExecution(call ToolCall, res ToolResult) {
 func (m *ScopedToolMediator) notifyEditParentOnly(path string, content []byte) {
 	m.mu.RLock()
 	listeners := append([]FileEditListener(nil), m.editListeners...)
+	for _, l := range m.meterEditListeners {
+		listeners = append(listeners, l)
+	}
 	m.mu.RUnlock()
 	for _, l := range listeners {
 		l(path, content)
@@ -224,6 +274,9 @@ func (m *ScopedToolMediator) notifyEditParentOnly(path string, content []byte) {
 func (m *ScopedToolMediator) notifyExecutionParentOnly(call ToolCall, res ToolResult) {
 	m.mu.RLock()
 	listeners := append([]ToolExecutionListener(nil), m.execListeners...)
+	for _, l := range m.meterExecListeners {
+		listeners = append(listeners, l)
+	}
 	m.mu.RUnlock()
 	for _, l := range listeners {
 		l(call, res)
@@ -232,12 +285,14 @@ func (m *ScopedToolMediator) notifyExecutionParentOnly(call ToolCall, res ToolRe
 
 // SessionScopedMediator provides session-isolated tool execution, declared tools, and listeners.
 type SessionScopedMediator struct {
-	parent        *ScopedToolMediator
-	sessionID     string
-	declaredTools map[string]ToolDefinition
-	editListeners []FileEditListener
-	execListeners []ToolExecutionListener
-	mu            sync.RWMutex
+	parent             *ScopedToolMediator
+	sessionID          string
+	declaredTools      map[string]ToolDefinition
+	editListeners      []FileEditListener
+	execListeners      []ToolExecutionListener
+	meterEditListeners map[string]FileEditListener
+	meterExecListeners map[string]ToolExecutionListener
+	mu                 sync.RWMutex
 }
 
 // Scope returns the underlying worktree scope.
@@ -263,6 +318,9 @@ func (s *SessionScopedMediator) SetDeclaredTools(tools []ToolDefinition) {
 			if t.PathExtractor == nil {
 				t.PathExtractor = def.PathExtractor
 			}
+			if !t.MutatesFiles && def.MutatesFiles {
+				t.MutatesFiles = def.MutatesFiles
+			}
 		}
 		s.declaredTools[t.Name] = t
 	}
@@ -280,6 +338,18 @@ func (s *SessionScopedMediator) OnToolExecution(listener ToolExecutionListener) 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.execListeners = append(s.execListeners, listener)
+}
+
+// AttachMeterListeners registers or updates session-scoped file edit and tool execution listeners for a meter ID idempotently.
+func (s *SessionScopedMediator) AttachMeterListeners(meterID string, onEdit FileEditListener, onExec ToolExecutionListener) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if onEdit != nil {
+		s.meterEditListeners[meterID] = onEdit
+	}
+	if onExec != nil {
+		s.meterExecListeners[meterID] = onExec
+	}
 }
 
 // ExecuteTool validates declared tools, path containment, and executes the tool.
@@ -320,6 +390,9 @@ func (s *SessionScopedMediator) notifyEdit(path string, content []byte) {
 func (s *SessionScopedMediator) notifyEditLocal(path string, content []byte) {
 	s.mu.RLock()
 	listeners := append([]FileEditListener(nil), s.editListeners...)
+	for _, l := range s.meterEditListeners {
+		listeners = append(listeners, l)
+	}
 	s.mu.RUnlock()
 	for _, l := range listeners {
 		l(path, content)
@@ -334,6 +407,9 @@ func (s *SessionScopedMediator) notifyExecution(call ToolCall, res ToolResult) {
 func (s *SessionScopedMediator) notifyExecutionLocal(call ToolCall, res ToolResult) {
 	s.mu.RLock()
 	listeners := append([]ToolExecutionListener(nil), s.execListeners...)
+	for _, l := range s.meterExecListeners {
+		listeners = append(listeners, l)
+	}
 	s.mu.RUnlock()
 	for _, l := range listeners {
 		l(call, res)
@@ -422,13 +498,16 @@ func (m *ScopedToolMediator) executeInternal(
 	}
 
 	// 3. If mutation occurred, notify edit listeners for semantic loop detection
-	paths, _ := extractPathsFromArgs(call.Arguments, toolDef)
-	if len(paths) > 0 {
-		editBytes, hasContent := extractContentFromArgs(call.Arguments)
-		if !hasContent {
-			editBytes = []byte(content)
+	// Only tools declaring MutatesFiles: true trigger file edit listeners (ADR-0019 §2)
+	if toolDef != nil && toolDef.MutatesFiles {
+		paths, _ := extractPathsFromArgs(call.Arguments, toolDef)
+		if len(paths) > 0 {
+			editBytes, hasContent := extractContentFromArgs(call.Arguments)
+			if !hasContent {
+				editBytes = []byte(content)
+			}
+			notifyEdit(paths[0], editBytes)
 		}
-		notifyEdit(paths[0], editBytes)
 	}
 
 	notifyExecution(call, res)

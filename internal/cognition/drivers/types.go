@@ -85,6 +85,7 @@ type ToolDefinition struct {
 	Parameters     json.RawMessage `json:"parameters,omitempty"`
 	PathParameters []string        `json:"path_parameters,omitempty"` // Explicit parameter names that contain paths
 	PathExtractor  PathExtractor   `json:"-"`                         // Optional custom path extractor
+	MutatesFiles   bool            `json:"mutates_files,omitempty"`   // Declares whether this tool modifies files in the worktree
 }
 
 // LoopDetectorSnapshot preserves the internal state of SemanticLoopDetector across checkpoints.
@@ -213,6 +214,7 @@ func (cfg SessionConfig) DeepCopy() SessionConfig {
 				Parameters:     append([]byte(nil), t.Parameters...),
 				PathParameters: pathParams,
 				PathExtractor:  t.PathExtractor,
+				MutatesFiles:   t.MutatesFiles,
 			}
 		}
 	}

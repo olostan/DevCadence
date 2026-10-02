@@ -3,6 +3,7 @@ package drivers
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -169,6 +170,11 @@ func TestMetering_OscillatingEditsViaMediator(t *testing.T) {
 	fakeDriver := NewFakeDriver("fake-meter-oscillate")
 	mediator := NewScopedToolMediator(nil)
 
+	mediator.RegisterToolDefinition(ToolDefinition{
+		Name:         "write_file",
+		Description:  "write file",
+		MutatesFiles: true,
+	})
 	mediator.RegisterHandler("write_file", func(ctx context.Context, args json.RawMessage) (string, error) {
 		return "ok", nil
 	})
@@ -183,7 +189,7 @@ func TestMetering_OscillatingEditsViaMediator(t *testing.T) {
 		SessionID: "sess-oscillate-test",
 		ModelID:   "test-model",
 		Tools: []ToolDefinition{
-			{Name: "write_file", Description: "write file"},
+			{Name: "write_file", Description: "write file", MutatesFiles: true},
 		},
 		Mediator: mediator,
 	}
@@ -606,5 +612,157 @@ func TestScopedToolMediator_StructuralContainmentAndExtraction(t *testing.T) {
 	})
 	if err == nil || errs.CategoryOf(err) != errs.CategoryPolicyDenied {
 		t.Errorf("expected CategoryPolicyDenied from recursive inspection escape, got %v", err)
+	}
+}
+
+func TestMetering_ResumeDoesNotDuplicateListeners(t *testing.T) {
+	fakeDriver := NewFakeDriver("fake-resume-listeners")
+	mediator := NewScopedToolMediator(nil)
+
+	mediator.RegisterToolDefinition(ToolDefinition{
+		Name:        "failing_tool",
+		Description: "always fails",
+	})
+	mediator.RegisterHandler("failing_tool", func(ctx context.Context, args json.RawMessage) (string, error) {
+		return "", errs.New(errs.CategoryInternal, "persistent tool failure")
+	})
+
+	meteredDriver := NewMeteredDriver(fakeDriver, MeterLimits{
+		LoopConfig: LoopDetectorConfig{
+			MaxConsecutiveFailedCalls: 5,
+		},
+	})
+
+	ctx := context.Background()
+	cfg := SessionConfig{
+		SessionID: "sess-resume-listener-test",
+		ModelID:   "test-model",
+		Tools: []ToolDefinition{
+			{Name: "failing_tool", Description: "always fails"},
+		},
+		Mediator: mediator,
+	}
+
+	session, err := meteredDriver.StartSession(ctx, cfg)
+	if err != nil {
+		t.Fatalf("StartSession failed: %v", err)
+	}
+
+	// Resume the same session 3 times
+	for i := 0; i < 3; i++ {
+		resumed, resumeErr := meteredDriver.ResumeSession(ctx, cfg.SessionID, cfg)
+		if resumeErr != nil {
+			t.Fatalf("ResumeSession[%d] failed: %v", i, resumeErr)
+		}
+		session = resumed
+	}
+
+	// Execute 1 failing mediated tool call
+	ms, ok := session.(*MeteredSession)
+	if !ok {
+		t.Fatalf("expected session to be *MeteredSession")
+	}
+
+	// Execute the tool call via the session's mediator
+	sessionMediator := session.Config().Mediator
+	if sessionMediator == nil {
+		t.Fatalf("expected non-nil session mediator")
+	}
+	_, _ = sessionMediator.ExecuteTool(ctx, ToolCall{
+		ID:        "c1",
+		Name:      "failing_tool",
+		Arguments: []byte(`{}`),
+	})
+
+	// Assert consecutiveFailedCount in SemanticLoopDetector advances by exactly 1, not 3 or 4
+	snap := ms.Meter().Checkpoint()
+	if snap.LoopSnapshot.ConsecutiveFailedCount != 1 {
+		t.Fatalf("expected ConsecutiveFailedCount to be exactly 1, got %d", snap.LoopSnapshot.ConsecutiveFailedCount)
+	}
+}
+
+func TestScopedToolMediator_ReadOnlyToolsDoNotTriggerEditListeners(t *testing.T) {
+	scope := &tools.Scope{
+		ProjectID:    "proj-readonly",
+		WorktreePath: t.TempDir(),
+	}
+	mediator := NewScopedToolMediator(scope)
+
+	mediator.RegisterToolDefinition(ToolDefinition{
+		Name:           "read_file",
+		Description:    "reads a file without mutating",
+		PathParameters: []string{"path"},
+		MutatesFiles:   false,
+	})
+	mediator.RegisterHandler("read_file", func(ctx context.Context, args json.RawMessage) (string, error) {
+		return "file contents", nil
+	})
+
+	var editCount int
+	mediator.OnFileEdit(func(path string, content []byte) {
+		editCount++
+	})
+
+	ctx := context.Background()
+	sessMediator := mediator.ForSession("session-ro", []ToolDefinition{
+		{Name: "read_file"},
+	})
+	sessMediator.OnFileEdit(func(path string, content []byte) {
+		editCount++
+	})
+
+	// Execute read_file multiple times with alternating paths
+	for i := 0; i < 5; i++ {
+		path := "a.txt"
+		if i%2 == 1 {
+			path = "b.txt"
+		}
+		_, err := sessMediator.ExecuteTool(ctx, ToolCall{
+			ID:        fmt.Sprintf("read-%d", i),
+			Name:      "read_file",
+			Arguments: []byte(fmt.Sprintf(`{"path":%q}`, path)),
+		})
+		if err != nil {
+			t.Fatalf("unexpected error executing read_file: %v", err)
+		}
+	}
+
+	if editCount != 0 {
+		t.Errorf("expected 0 file edit notifications for read-only tool, got %d", editCount)
+	}
+}
+
+func TestSilentMeter_SnapshotAndRestorePreservesToolCallState(t *testing.T) {
+	meter := NewSilentMeter("sess-snap-test", MeterLimits{})
+	call := ToolCall{
+		ID:        "tc-101",
+		Name:      "inspect_tool",
+		Arguments: []byte(`{"arg":"val"}`),
+	}
+	res := ToolResult{
+		ToolCallID: "tc-101",
+		Name:       "inspect_tool",
+		Content:    "result 101",
+	}
+	meter.RecordToolResult(call, res)
+
+	snap := meter.Checkpoint()
+	if len(snap.ProcessedToolCallIDs) != 1 || snap.ProcessedToolCallIDs[0] != "tc-101" {
+		t.Errorf("expected ProcessedToolCallIDs to contain 'tc-101', got %v", snap.ProcessedToolCallIDs)
+	}
+	if len(snap.RecentToolCalls) != 1 || snap.RecentToolCalls[0].ID != "tc-101" {
+		t.Errorf("expected RecentToolCalls to contain 'tc-101', got %v", snap.RecentToolCalls)
+	}
+
+	// Restore into brand-new meter
+	restoredMeter := NewSilentMeter("sess-snap-test", MeterLimits{})
+	restoredMeter.RestoreFromSnapshot(snap)
+
+	restoredSnap := restoredMeter.Checkpoint()
+	if len(restoredSnap.ProcessedToolCallIDs) != 1 || restoredSnap.ProcessedToolCallIDs[0] != "tc-101" {
+		t.Errorf("restored: expected ProcessedToolCallIDs to contain 'tc-101', got %v", restoredSnap.ProcessedToolCallIDs)
+	}
+	if len(restoredSnap.RecentToolCalls) != 1 || restoredSnap.RecentToolCalls[0].ID != "tc-101" {
+		t.Errorf("restored: expected RecentToolCalls to contain 'tc-101', got %v", restoredSnap.RecentToolCalls)
 	}
 }

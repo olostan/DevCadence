@@ -333,14 +333,24 @@ func (s *directAPISession) StreamTurn(ctx context.Context, input TurnInput) (Eve
 	}
 	s.mu.Unlock()
 
-	rawStream, err := s.driver.client.Stream(ctx, req)
+	streamCtx, cancelStream := context.WithCancel(ctx)
+	rawStream, err := s.driver.client.Stream(streamCtx, req)
 	if err != nil {
+		cancelStream()
 		return nil, err
 	}
 
 	outStream := NewChannelEventStream(16)
+	outStream.SetOnClose(func() {
+		cancelStream()
+		_ = rawStream.Close()
+	})
+
 	go func() {
-		defer rawStream.Close()
+		defer func() {
+			cancelStream()
+			_ = rawStream.Close()
+		}()
 		var fullContent string
 		var toolCalls []ToolCall
 

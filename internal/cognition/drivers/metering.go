@@ -31,18 +31,20 @@ type MeterLimits struct {
 
 // MeterSnapshot represents an immutable checkpoint of metering metrics and suspension state.
 type MeterSnapshot struct {
-	SessionID           string               `json:"session_id"`
-	TurnCount           int                  `json:"turn_count"`
-	CumulativeUsage     TokenUsage           `json:"cumulative_usage"`
-	CumulativeDuration  time.Duration        `json:"cumulative_duration"`
-	LastOpDuration      time.Duration        `json:"last_op_duration"`
-	CumulativeToolCalls int                  `json:"cumulative_tool_calls"`
-	Status              SessionStatus        `json:"status"`
-	PausedReason        string               `json:"paused_reason,omitempty"`
-	ExceededDimension   string               `json:"exceeded_dimension,omitempty"`
-	EscalationRequired  bool                 `json:"escalation_required"`
-	LoopSnapshot        LoopDetectorSnapshot `json:"loop_snapshot"`
-	CheckpointTimestamp time.Time            `json:"checkpoint_timestamp"`
+	SessionID            string               `json:"session_id"`
+	TurnCount            int                  `json:"turn_count"`
+	CumulativeUsage      TokenUsage           `json:"cumulative_usage"`
+	CumulativeDuration   time.Duration        `json:"cumulative_duration"`
+	LastOpDuration       time.Duration        `json:"last_op_duration"`
+	CumulativeToolCalls  int                  `json:"cumulative_tool_calls"`
+	Status               SessionStatus        `json:"status"`
+	PausedReason         string               `json:"paused_reason,omitempty"`
+	ExceededDimension    string               `json:"exceeded_dimension,omitempty"`
+	EscalationRequired   bool                 `json:"escalation_required"`
+	LoopSnapshot         LoopDetectorSnapshot `json:"loop_snapshot"`
+	ProcessedToolCallIDs []string             `json:"processed_tool_call_ids,omitempty"`
+	RecentToolCalls      []ToolCall           `json:"recent_tool_calls,omitempty"`
+	CheckpointTimestamp  time.Time            `json:"checkpoint_timestamp"`
 }
 
 // SilentMeter tracks multi-dimensional cognitive resource consumption and enforces
@@ -101,6 +103,14 @@ func (m *SilentMeter) RestoreFromSnapshot(snap MeterSnapshot) {
 	m.exceededDimension = snap.ExceededDimension
 	m.escalationRequired = snap.EscalationRequired
 	m.loopDetector.Restore(snap.LoopSnapshot)
+	m.processedToolCallIDs = make(map[string]struct{}, len(snap.ProcessedToolCallIDs))
+	for _, id := range snap.ProcessedToolCallIDs {
+		m.processedToolCallIDs[id] = struct{}{}
+	}
+	m.recentToolCalls = make(map[string]ToolCall, len(snap.RecentToolCalls))
+	for _, tc := range snap.RecentToolCalls {
+		m.recentToolCalls[tc.ID] = tc
+	}
 }
 
 // SetNowFunc overrides time source for deterministic testing.
@@ -235,6 +245,12 @@ func (m *SilentMeter) RecordToolResult(call ToolCall, res ToolResult) (bool, Met
 		m.processedToolCallIDs[call.ID] = struct{}{}
 		m.cumulativeToolCalls++
 	}
+	if m.recentToolCalls == nil {
+		m.recentToolCalls = make(map[string]ToolCall)
+	}
+	if call.ID != "" {
+		m.recentToolCalls[call.ID] = call
+	}
 
 	if loopDetected, reason := m.loopDetector.RecordToolCall(call, res.IsError); loopDetected {
 		m.tripPause("semantic_loop_repeated_tool_failures", reason)
@@ -271,19 +287,35 @@ func (m *SilentMeter) tripPause(dimension, detail string) {
 }
 
 func (m *SilentMeter) snapshotLocked() MeterSnapshot {
+	var processedIDs []string
+	if len(m.processedToolCallIDs) > 0 {
+		processedIDs = make([]string, 0, len(m.processedToolCallIDs))
+		for id := range m.processedToolCallIDs {
+			processedIDs = append(processedIDs, id)
+		}
+	}
+	var recentCalls []ToolCall
+	if len(m.recentToolCalls) > 0 {
+		recentCalls = make([]ToolCall, 0, len(m.recentToolCalls))
+		for _, tc := range m.recentToolCalls {
+			recentCalls = append(recentCalls, tc)
+		}
+	}
 	return MeterSnapshot{
-		SessionID:           m.sessionID,
-		TurnCount:           m.turnCount,
-		CumulativeUsage:     m.cumulativeUsage,
-		CumulativeDuration:  m.cumulativeDuration,
-		LastOpDuration:      m.lastOpDuration,
-		CumulativeToolCalls: m.cumulativeToolCalls,
-		Status:              m.status,
-		PausedReason:        m.pausedReason,
-		ExceededDimension:   m.exceededDimension,
-		EscalationRequired:  m.escalationRequired,
-		LoopSnapshot:        m.loopDetector.Snapshot(),
-		CheckpointTimestamp: m.nowFn(),
+		SessionID:            m.sessionID,
+		TurnCount:            m.turnCount,
+		CumulativeUsage:      m.cumulativeUsage,
+		CumulativeDuration:   m.cumulativeDuration,
+		LastOpDuration:       m.lastOpDuration,
+		CumulativeToolCalls:  m.cumulativeToolCalls,
+		Status:               m.status,
+		PausedReason:         m.pausedReason,
+		ExceededDimension:    m.exceededDimension,
+		EscalationRequired:   m.escalationRequired,
+		LoopSnapshot:         m.loopDetector.Snapshot(),
+		ProcessedToolCallIDs: processedIDs,
+		RecentToolCalls:      recentCalls,
+		CheckpointTimestamp:  m.nowFn(),
 	}
 }
 
@@ -339,12 +371,14 @@ func (s *MeteredSession) attachListeners() {
 		return
 	}
 	if mediator := s.session.Config().Mediator; mediator != nil {
-		mediator.OnFileEdit(func(path string, content []byte) {
-			s.meter.RecordFileEdit(path, content)
-		})
-		mediator.OnToolExecution(func(call ToolCall, res ToolResult) {
-			s.meter.RecordToolResult(call, res)
-		})
+		mediator.AttachMeterListeners(s.meter.sessionID,
+			func(path string, content []byte) {
+				s.meter.RecordFileEdit(path, content)
+			},
+			func(call ToolCall, res ToolResult) {
+				s.meter.RecordToolResult(call, res)
+			},
+		)
 		s.listenersAttached = true
 	}
 }
