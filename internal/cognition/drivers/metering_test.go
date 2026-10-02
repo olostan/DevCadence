@@ -766,3 +766,77 @@ func TestSilentMeter_SnapshotAndRestorePreservesToolCallState(t *testing.T) {
 		t.Errorf("restored: expected RecentToolCalls to contain 'tc-101', got %v", restoredSnap.RecentToolCalls)
 	}
 }
+
+func TestScopedToolMediator_MultiPathMutatingTools(t *testing.T) {
+	scope := &tools.Scope{
+		ProjectID:    "proj-multipath",
+		WorktreePath: t.TempDir(),
+	}
+	mediator := NewScopedToolMediator(scope)
+
+	mediator.RegisterToolDefinition(ToolDefinition{
+		Name:         "multi_edit",
+		Description:  "modifies multiple files",
+		MutatesFiles: true,
+	})
+	mediator.RegisterHandler("multi_edit", func(ctx context.Context, args json.RawMessage) (string, error) {
+		return "ok", nil
+	})
+
+	var editedPaths []string
+	mediator.OnFileEdit(func(path string, content []byte) {
+		editedPaths = append(editedPaths, path)
+	})
+
+	ctx := context.Background()
+	_, err := mediator.ExecuteTool(ctx, ToolCall{
+		ID:        "c-multi",
+		Name:      "multi_edit",
+		Arguments: []byte(`{"files":["f1.go","f2.go","f3.go"]}`),
+	})
+	if err != nil {
+		t.Fatalf("ExecuteTool failed: %v", err)
+	}
+
+	if len(editedPaths) != 3 {
+		t.Fatalf("expected 3 edited paths notified, got %d: %v", len(editedPaths), editedPaths)
+	}
+	expected := map[string]bool{"f1.go": true, "f2.go": true, "f3.go": true}
+	for _, p := range editedPaths {
+		if !expected[p] {
+			t.Errorf("unexpected path notified: %q", p)
+		}
+	}
+}
+
+func TestSilentMeter_DeterministicSnapshotOrdering(t *testing.T) {
+	meter := NewSilentMeter("sess-order-test", MeterLimits{})
+
+	// Add out of order IDs
+	calls := []ToolCall{
+		{ID: "z-call", Name: "z_tool"},
+		{ID: "a-call", Name: "a_tool"},
+		{ID: "m-call", Name: "m_tool"},
+	}
+	for _, c := range calls {
+		meter.RecordToolResult(c, ToolResult{ToolCallID: c.ID, Name: c.Name})
+	}
+
+	snap := meter.Checkpoint()
+
+	// Check ProcessedToolCallIDs is sorted
+	if len(snap.ProcessedToolCallIDs) != 3 ||
+		snap.ProcessedToolCallIDs[0] != "a-call" ||
+		snap.ProcessedToolCallIDs[1] != "m-call" ||
+		snap.ProcessedToolCallIDs[2] != "z-call" {
+		t.Errorf("expected ProcessedToolCallIDs to be sorted [a-call, m-call, z-call], got %v", snap.ProcessedToolCallIDs)
+	}
+
+	// Check RecentToolCalls is sorted by ID
+	if len(snap.RecentToolCalls) != 3 ||
+		snap.RecentToolCalls[0].ID != "a-call" ||
+		snap.RecentToolCalls[1].ID != "m-call" ||
+		snap.RecentToolCalls[2].ID != "z-call" {
+		t.Errorf("expected RecentToolCalls to be sorted by ID [a-call, m-call, z-call], got %v", snap.RecentToolCalls)
+	}
+}

@@ -3,9 +3,12 @@ package drivers
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/olostan/DevCadence/internal/errs"
 	"github.com/olostan/DevCadence/internal/tools"
@@ -113,5 +116,104 @@ func TestToolMediation_ContextCancelled(t *testing.T) {
 	_, err := mediator.ExecuteTool(ctx, call)
 	if err == nil {
 		t.Errorf("expected error with cancelled context, got nil")
+	}
+}
+
+func TestSessionScopedMediator_ConcurrentForSessionAndExecuteTool(t *testing.T) {
+	mediator := NewScopedToolMediator(nil)
+	mediator.RegisterToolDefinition(ToolDefinition{
+		Name:        "ping",
+		Description: "ping tool",
+	})
+	mediator.RegisterHandler("ping", func(ctx context.Context, args json.RawMessage) (string, error) {
+		return "pong", nil
+	})
+
+	const sessionID = "sess-concurrent-test"
+	declaredTools := []ToolDefinition{{Name: "ping"}}
+	sessionMediator := mediator.ForSession(sessionID, declaredTools)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	var wg sync.WaitGroup
+	const workers = 20
+	const iterations = 100
+
+	// 20 workers concurrently calling ForSession on the same session
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := 0; j < iterations; j++ {
+				select {
+				case <-ctx.Done():
+					return
+				default:
+				}
+				s := mediator.ForSession(sessionID, declaredTools)
+				if s == nil {
+					t.Errorf("ForSession returned nil")
+					return
+				}
+			}
+		}()
+	}
+
+	// 20 workers concurrently calling ExecuteTool on the session mediator
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func(workerID int) {
+			defer wg.Done()
+			for j := 0; j < iterations; j++ {
+				select {
+				case <-ctx.Done():
+					return
+				default:
+				}
+				res, err := sessionMediator.ExecuteTool(ctx, ToolCall{
+					ID:        fmt.Sprintf("call-%d-%d", workerID, j),
+					Name:      "ping",
+					Arguments: []byte(`{}`),
+				})
+				if err != nil {
+					t.Errorf("ExecuteTool returned error: %v", err)
+					return
+				}
+				if res.Content != "pong" {
+					t.Errorf("expected 'pong', got %q", res.Content)
+					return
+				}
+			}
+		}(i)
+	}
+
+	// 5 workers concurrently calling SetDeclaredTools
+	for i := 0; i < 5; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := 0; j < iterations; j++ {
+				select {
+				case <-ctx.Done():
+					return
+				default:
+				}
+				sessionMediator.SetDeclaredTools(declaredTools)
+			}
+		}()
+	}
+
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		// Success
+	case <-ctx.Done():
+		t.Fatalf("test deadlocked or timed out under concurrent ForSession and ExecuteTool: %v", ctx.Err())
 	}
 }

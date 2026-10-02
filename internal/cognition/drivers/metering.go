@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"sort"
 	"sync"
 	"time"
 
@@ -293,6 +294,7 @@ func (m *SilentMeter) snapshotLocked() MeterSnapshot {
 		for id := range m.processedToolCallIDs {
 			processedIDs = append(processedIDs, id)
 		}
+		sort.Strings(processedIDs)
 	}
 	var recentCalls []ToolCall
 	if len(m.recentToolCalls) > 0 {
@@ -300,6 +302,9 @@ func (m *SilentMeter) snapshotLocked() MeterSnapshot {
 		for _, tc := range m.recentToolCalls {
 			recentCalls = append(recentCalls, tc)
 		}
+		sort.Slice(recentCalls, func(i, j int) bool {
+			return recentCalls[i].ID < recentCalls[j].ID
+		})
 	}
 	return MeterSnapshot{
 		SessionID:            m.sessionID,

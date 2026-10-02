@@ -95,7 +95,6 @@ func (m *ScopedToolMediator) RegisterHandler(name string, handler ToolHandler) {
 // listeners, and session scope, preventing shared mutable state across sessions.
 func (m *ScopedToolMediator) ForSession(sessionID string, declaredTools []ToolDefinition) *SessionScopedMediator {
 	m.mu.Lock()
-	defer m.mu.Unlock()
 
 	toolsMap := make(map[string]ToolDefinition, len(declaredTools))
 	for _, t := range declaredTools {
@@ -114,7 +113,9 @@ func (m *ScopedToolMediator) ForSession(sessionID string, declaredTools []ToolDe
 		toolsMap[t.Name] = t
 	}
 
-	if existing, ok := m.sessions[sessionID]; ok {
+	existing, ok := m.sessions[sessionID]
+	if ok {
+		m.mu.Unlock()
 		existing.mu.Lock()
 		existing.declaredTools = toolsMap
 		existing.mu.Unlock()
@@ -131,6 +132,7 @@ func (m *ScopedToolMediator) ForSession(sessionID string, declaredTools []ToolDe
 		meterExecListeners: make(map[string]ToolExecutionListener),
 	}
 	m.sessions[sessionID] = sessionMediator
+	m.mu.Unlock()
 	return sessionMediator
 }
 
@@ -307,11 +309,20 @@ func (s *SessionScopedMediator) ValidatePath(relPath string) (string, error) {
 
 // SetDeclaredTools restricts tool execution to declared tools.
 func (s *SessionScopedMediator) SetDeclaredTools(tools []ToolDefinition) {
+	s.parent.mu.RLock()
+	parentDefs := make(map[string]ToolDefinition, len(tools))
+	for _, t := range tools {
+		if def, ok := s.parent.toolDefs[t.Name]; ok {
+			parentDefs[t.Name] = def
+		}
+	}
+	s.parent.mu.RUnlock()
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.declaredTools = make(map[string]ToolDefinition, len(tools))
 	for _, t := range tools {
-		if def, ok := s.parent.toolDefs[t.Name]; ok {
+		if def, ok := parentDefs[t.Name]; ok {
 			if len(t.PathParameters) == 0 {
 				t.PathParameters = def.PathParameters
 			}
@@ -358,7 +369,8 @@ func (s *SessionScopedMediator) ExecuteTool(ctx context.Context, call ToolCall) 
 	var toolDef *ToolDefinition
 	if s.declaredTools != nil {
 		if def, authorized := s.declaredTools[call.Name]; authorized {
-			toolDef = &def
+			toolDefCopy := def
+			toolDef = &toolDefCopy
 		} else {
 			s.mu.RUnlock()
 			err := errs.New(errs.CategoryPolicyDenied, "mediator: tool %q is not declared or authorized in session configuration", call.Name)
@@ -372,12 +384,18 @@ func (s *SessionScopedMediator) ExecuteTool(ctx context.Context, call ToolCall) 
 			return res, err
 		}
 	}
+	s.mu.RUnlock()
 
 	s.parent.mu.RLock()
+	if toolDef == nil {
+		if def, exists := s.parent.toolDefs[call.Name]; exists {
+			toolDefCopy := def
+			toolDef = &toolDefCopy
+		}
+	}
 	handler, ok := s.parent.handlers[call.Name]
 	scope := s.parent.scope
 	s.parent.mu.RUnlock()
-	s.mu.RUnlock()
 
 	return s.parent.executeInternal(ctx, call, toolDef, handler, ok, scope, s.notifyEdit, s.notifyExecution)
 }
@@ -506,7 +524,9 @@ func (m *ScopedToolMediator) executeInternal(
 			if !hasContent {
 				editBytes = []byte(content)
 			}
-			notifyEdit(paths[0], editBytes)
+			for _, p := range paths {
+				notifyEdit(p, editBytes)
+			}
 		}
 	}
 
@@ -566,10 +586,12 @@ func isPathKey(key string) bool {
 	switch k {
 	case "path", "file", "filepath", "file_path", "rel_path",
 		"target_file", "source_file", "target", "destination", "dest",
-		"directory", "dir", "root", "folder", "base_dir":
+		"directory", "dir", "root", "folder", "base_dir",
+		"paths", "files", "filepaths", "file_paths":
 		return true
 	}
-	if strings.HasSuffix(k, "_path") || strings.HasSuffix(k, "_file") || strings.HasSuffix(k, "_dir") {
+	if strings.HasSuffix(k, "_path") || strings.HasSuffix(k, "_file") || strings.HasSuffix(k, "_dir") ||
+		strings.HasSuffix(k, "_paths") || strings.HasSuffix(k, "_files") {
 		return true
 	}
 	return false
