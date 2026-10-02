@@ -4,49 +4,28 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io"
+	"os"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/olostan/DevCadence/internal/process"
 	"github.com/olostan/DevCadence/internal/tools"
 )
 
-type mockProcessHandle struct {
-	stdout  *io.PipeReader
-	stderr  *io.PipeReader
-	waitErr error
-	killed  bool
-	mu      sync.Mutex
-}
-
-func (h *mockProcessHandle) Stdout() io.ReadCloser { return h.stdout }
-func (h *mockProcessHandle) Stderr() io.ReadCloser { return h.stderr }
-func (h *mockProcessHandle) Kill() error {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	h.killed = true
-	h.stdout.Close()
-	h.stderr.Close()
-	return nil
-}
-func (h *mockProcessHandle) Wait() (*CommandOutput, error) {
-	return &CommandOutput{ExitCode: 0}, h.waitErr
-}
-
 type mockCommandRunner struct {
 	delay      time.Duration
-	lastSpec   CommandSpec
+	lastSpec   process.Spec
 	lastDir    string
 	lastArgs   []string
 	killedLast bool
 	mu         sync.Mutex
 }
 
-func (r *mockCommandRunner) Run(ctx context.Context, spec CommandSpec) (*CommandOutput, error) {
+func (r *mockCommandRunner) Run(ctx context.Context, spec process.Spec) (process.Result, error) {
 	if err := ctx.Err(); err != nil {
-		return nil, err
+		return process.Result{Status: process.StatusCancelled}, err
 	}
 
 	r.mu.Lock()
@@ -58,12 +37,15 @@ func (r *mockCommandRunner) Run(ctx context.Context, spec CommandSpec) (*Command
 	if r.delay > 0 {
 		select {
 		case <-ctx.Done():
-			return nil, ctx.Err()
+			r.mu.Lock()
+			r.killedLast = true
+			r.mu.Unlock()
+			return process.Result{Status: process.StatusCancelled}, ctx.Err()
 		case <-time.After(r.delay):
 		}
 	}
 
-	// Look at args to see prompt
+	// Extract prompt from args
 	prompt := ""
 	for i, arg := range spec.Args {
 		if arg == "-p" && i+1 < len(spec.Args) {
@@ -82,58 +64,22 @@ func (r *mockCommandRunner) Run(ctx context.Context, spec CommandSpec) (*Command
 	}
 	stdout.WriteString(`{"kind":"turn_completed","usage":{"input_tokens":15,"output_tokens":30}}` + "\n")
 
-	return &CommandOutput{
-		Stdout:   []byte(stdout.String()),
+	outBytes := []byte(stdout.String())
+	if spec.StdoutSink != nil {
+		_, _ = spec.StdoutSink.Write(outBytes)
+	}
+
+	// Emit some stderr to test concurrent draining
+	if spec.StderrSink != nil {
+		_, _ = spec.StderrSink.Write([]byte("diagnostic stderr line\n"))
+	}
+
+	return process.Result{
+		Status:   process.StatusCompleted,
 		ExitCode: 0,
+		Stdout:   outBytes,
+		Stderr:   []byte("diagnostic stderr line\n"),
 	}, nil
-}
-
-func (r *mockCommandRunner) Start(ctx context.Context, spec CommandSpec) (ProcessHandle, error) {
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-
-	r.mu.Lock()
-	r.lastSpec = spec
-	r.mu.Unlock()
-
-	stdoutR, stdoutW := io.Pipe()
-	stderrR, stderrW := io.Pipe()
-
-	handle := &mockProcessHandle{
-		stdout: stdoutR,
-		stderr: stderrR,
-	}
-
-	go func() {
-		defer stdoutW.Close()
-		defer stderrW.Close()
-
-		if r.delay > 0 {
-			select {
-			case <-ctx.Done():
-				r.mu.Lock()
-				r.killedLast = true
-				r.mu.Unlock()
-				return
-			case <-time.After(r.delay):
-			}
-		}
-
-		prompt := ""
-		for i, arg := range spec.Args {
-			if arg == "-p" && i+1 < len(spec.Args) {
-				prompt = spec.Args[i+1]
-				break
-			}
-		}
-
-		_, _ = stdoutW.Write([]byte(fmt.Sprintf("Stream line 1: %s\n", prompt)))
-		_, _ = stdoutW.Write([]byte(fmt.Sprintf("Stream line 2\n")))
-		_, _ = stdoutW.Write([]byte(`{"kind":"turn_completed","usage":{"input_tokens":10,"output_tokens":20}}` + "\n"))
-	}()
-
-	return handle, nil
 }
 
 func TestCLIWrapperDriverContract(t *testing.T) {
@@ -149,6 +95,12 @@ func TestCLIWrapperDriverContract(t *testing.T) {
 
 func TestCLIWrapperDriver_WorktreeDirBinding(t *testing.T) {
 	runner := &mockCommandRunner{}
+	tmpDir, err := os.MkdirTemp("", "cli-worktree-dir-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
 	driver := NewCLIWrapperDriver("cli-worktree-driver", runner, CLIWrapperOptions{
 		Binary:     "test-cli",
 		PromptFlag: "-p",
@@ -156,7 +108,7 @@ func TestCLIWrapperDriver_WorktreeDirBinding(t *testing.T) {
 
 	scope := &tools.Scope{
 		ProjectID:    "proj-1",
-		WorktreePath: "/tmp/fake-worktree",
+		WorktreePath: tmpDir,
 	}
 
 	session, err := driver.StartSession(context.Background(), SessionConfig{
@@ -167,6 +119,7 @@ func TestCLIWrapperDriver_WorktreeDirBinding(t *testing.T) {
 	if err != nil {
 		t.Fatalf("StartSession failed: %v", err)
 	}
+	defer session.Close(context.Background())
 
 	_, err = session.ExecuteTurn(context.Background(), TurnInput{
 		TurnID: "turn-dir-check",
@@ -176,8 +129,8 @@ func TestCLIWrapperDriver_WorktreeDirBinding(t *testing.T) {
 		t.Fatalf("ExecuteTurn failed: %v", err)
 	}
 
-	if runner.lastDir != "/tmp/fake-worktree" {
-		t.Errorf("expected working dir '/tmp/fake-worktree', got %q", runner.lastDir)
+	if runner.lastDir != tmpDir {
+		t.Errorf("expected working dir %q, got %q", tmpDir, runner.lastDir)
 	}
 }
 
@@ -198,6 +151,7 @@ func TestCLIWrapperDriver_CancellationKillsProcess(t *testing.T) {
 	if err != nil {
 		t.Fatalf("StartSession failed: %v", err)
 	}
+	defer session.Close(context.Background())
 
 	_, err = session.ExecuteTurn(ctx, TurnInput{
 		TurnID: "turn-cancel-cli",
@@ -223,6 +177,7 @@ func TestCLIWrapperDriver_ResumeArguments(t *testing.T) {
 	if err != nil {
 		t.Fatalf("StartSession failed: %v", err)
 	}
+	defer session.Close(context.Background())
 
 	// First turn: not resumed yet
 	_, _ = session.ExecuteTurn(context.Background(), TurnInput{
@@ -248,18 +203,81 @@ func TestCLIWrapperDriver_ResumeArguments(t *testing.T) {
 	}
 }
 
-func TestOSCommandRunner_Basic(t *testing.T) {
-	runner := &OSCommandRunner{}
-	ctx := context.Background()
+func TestCLIWrapperDriver_LargeTokenOutput(t *testing.T) {
+	// Tests scanner handling of large output lines exceeding 64KB
+	largeOutputRunner := &largeOutputCommandRunner{
+		lineSize: 200 * 1024, // 200 KB line
+	}
+	driver := NewCLIWrapperDriver("cli-large-output", largeOutputRunner, CLIWrapperOptions{
+		Binary:     "test-cli",
+		PromptFlag: "-p",
+	})
 
-	out, err := runner.Run(ctx, CommandSpec{
-		Binary: "echo",
-		Args:   []string{"hello-devcadence"},
+	session, err := driver.StartSession(context.Background(), SessionConfig{
+		SessionID: "sess-large-output",
+		ModelID:   "test-model",
 	})
 	if err != nil {
-		t.Fatalf("OSCommandRunner failed: %v", err)
+		t.Fatalf("StartSession failed: %v", err)
 	}
-	if !bytes.Contains(out.Stdout, []byte("hello-devcadence")) {
-		t.Errorf("expected stdout containing 'hello-devcadence', got %s", string(out.Stdout))
+	defer session.Close(context.Background())
+
+	stream, err := session.StreamTurn(context.Background(), TurnInput{
+		TurnID: "turn-large",
+		Prompt: "generate large",
+	})
+	if err != nil {
+		t.Fatalf("StreamTurn failed: %v", err)
+	}
+	defer stream.Close()
+
+	recvd := 0
+	for {
+		ev, err := stream.Recv()
+		if err != nil {
+			break
+		}
+		recvd += len(ev.Delta)
+	}
+	if recvd < 200*1024 {
+		t.Errorf("expected at least 200KB streamed, got %d", recvd)
+	}
+}
+
+type largeOutputCommandRunner struct {
+	lineSize int
+}
+
+func (r *largeOutputCommandRunner) Run(ctx context.Context, spec process.Spec) (process.Result, error) {
+	largeLine := strings.Repeat("A", r.lineSize) + "\n"
+	if spec.StdoutSink != nil {
+		_, _ = spec.StdoutSink.Write([]byte(largeLine))
+	}
+	return process.Result{
+		Status:   process.StatusCompleted,
+		ExitCode: 0,
+		Stdout:   []byte(largeLine),
+	}, nil
+}
+
+func TestProcessRunner_Direct(t *testing.T) {
+	runner := process.NewRunner()
+	ctx := context.Background()
+
+	tmpDir := os.TempDir()
+	spec := process.Spec{
+		Executable: "echo",
+		Args:       []string{"hello-devcadence"},
+		Dir:        tmpDir,
+		Env:        process.BaseEnv(),
+		Timeout:    5 * time.Second,
+	}
+
+	res, err := runner.Run(ctx, spec)
+	if err != nil {
+		t.Fatalf("process.Runner failed: %v", err)
+	}
+	if !bytes.Contains(res.Stdout, []byte("hello-devcadence")) {
+		t.Errorf("expected stdout containing 'hello-devcadence', got %s", string(res.Stdout))
 	}
 }

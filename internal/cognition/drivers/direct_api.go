@@ -92,6 +92,10 @@ func (d *DirectAPIDriver) StartSession(ctx context.Context, cfg SessionConfig) (
 		return nil, err
 	}
 
+	if len(cfg.Tools) > 0 && !d.capabilities.SupportsTools {
+		return nil, errs.New(errs.CategoryUnsupported, "direct api driver %q does not support tools", d.id)
+	}
+
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
@@ -99,9 +103,13 @@ func (d *DirectAPIDriver) StartSession(ctx context.Context, cfg SessionConfig) (
 		return nil, errs.New(errs.CategoryConflict, "session %q already exists", cfg.SessionID)
 	}
 
+	if cfg.Mediator != nil && len(cfg.Tools) > 0 {
+		cfg.Mediator.SetDeclaredTools(cfg.Tools)
+	}
+
 	s := &directAPISession{
 		driver:   d,
-		config:   cfg,
+		config:   cfg.DeepCopy(),
 		status:   SessionStatusActive,
 		messages: make([]DirectMessage, 0),
 	}
@@ -109,7 +117,7 @@ func (d *DirectAPIDriver) StartSession(ctx context.Context, cfg SessionConfig) (
 	return s, nil
 }
 
-// ResumeSession resumes an existing session or restores from configuration.
+// ResumeSession resumes an existing session without wiping its message history.
 func (d *DirectAPIDriver) ResumeSession(ctx context.Context, sessionID string, cfg SessionConfig) (Session, error) {
 	if sessionID == "" {
 		return nil, errs.New(errs.CategoryInvalidArgument, "sessionID cannot be empty")
@@ -127,15 +135,18 @@ func (d *DirectAPIDriver) ResumeSession(ctx context.Context, sessionID string, c
 		if err := cfg.Validate(); err != nil {
 			return nil, err
 		}
+		if cfg.Mediator != nil && len(cfg.Tools) > 0 {
+			cfg.Mediator.SetDeclaredTools(cfg.Tools)
+		}
 		s = &directAPISession{
 			driver:   d,
-			config:   cfg,
+			config:   cfg.DeepCopy(),
 			status:   SessionStatusActive,
 			messages: make([]DirectMessage, 0),
 		}
 		d.sessions[sessionID] = s
 	} else if s.status == SessionStatusClosed {
-		// Reopen closed session
+		// Reopen closed session while preserving existing messages
 		s.status = SessionStatusActive
 	}
 
@@ -154,7 +165,12 @@ func (s *directAPISession) ID() string { return s.config.SessionID }
 
 func (s *directAPISession) DriverID() string { return s.driver.ID() }
 
-func (s *directAPISession) Config() SessionConfig { return s.config }
+// Config returns an immutable deep copy of session configuration.
+func (s *directAPISession) Config() SessionConfig {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.config.DeepCopy()
+}
 
 func (s *directAPISession) Status() SessionStatus {
 	s.mu.Lock()
@@ -164,8 +180,15 @@ func (s *directAPISession) Status() SessionStatus {
 
 func (s *directAPISession) Close(ctx context.Context) error {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	s.status = SessionStatusClosed
+	sessID := s.config.SessionID
+	s.mu.Unlock()
+
+	// Clean up from driver registry
+	s.driver.mu.Lock()
+	delete(s.driver.sessions, sessID)
+	s.driver.mu.Unlock()
+
 	return nil
 }
 
@@ -255,6 +278,10 @@ func (s *directAPISession) ExecuteTurn(ctx context.Context, input TurnInput) (Tu
 func (s *directAPISession) StreamTurn(ctx context.Context, input TurnInput) (EventStream, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
+	}
+
+	if !s.driver.capabilities.SupportsStreaming {
+		return nil, errs.New(errs.CategoryUnsupported, "direct api driver %q does not support streaming", s.driver.id)
 	}
 
 	s.mu.Lock()

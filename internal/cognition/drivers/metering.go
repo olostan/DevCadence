@@ -83,6 +83,22 @@ func NewSilentMeter(sessionID string, limits MeterLimits) *SilentMeter {
 	}
 }
 
+// RestoreFromSnapshot hydrates meter metrics from an existing durable snapshot.
+func (m *SilentMeter) RestoreFromSnapshot(snap MeterSnapshot) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.sessionID = snap.SessionID
+	m.turnCount = snap.TurnCount
+	m.cumulativeUsage = snap.CumulativeUsage
+	m.cumulativeDuration = snap.CumulativeDuration
+	m.lastOpDuration = snap.LastOpDuration
+	m.cumulativeToolCalls = snap.CumulativeToolCalls
+	m.status = snap.Status
+	m.pausedReason = snap.PausedReason
+	m.exceededDimension = snap.ExceededDimension
+	m.escalationRequired = snap.EscalationRequired
+}
+
 // SetNowFunc overrides time source for deterministic testing.
 func (m *SilentMeter) SetNowFunc(fn func() time.Time) {
 	m.mu.Lock()
@@ -256,10 +272,23 @@ type MeteredSession struct {
 
 // NewMeteredSession wraps a session with metering.
 func NewMeteredSession(session Session, limits MeterLimits) *MeteredSession {
-	return &MeteredSession{
+	meter := NewSilentMeter(session.ID(), limits)
+	return NewMeteredSessionWithMeter(session, meter)
+}
+
+// NewMeteredSessionWithMeter wraps a session using a pre-existing or restored meter.
+func NewMeteredSessionWithMeter(session Session, meter *SilentMeter) *MeteredSession {
+	ms := &MeteredSession{
 		session: session,
-		meter:   NewSilentMeter(session.ID(), limits),
+		meter:   meter,
 	}
+	// Wire file edit listener on mediator if present so oscillating edits are actively tracked
+	if mediator := session.Config().Mediator; mediator != nil {
+		mediator.OnFileEdit(func(path string, content []byte) {
+			meter.RecordFileEdit(path, content)
+		})
+	}
+	return ms
 }
 
 // ID returns the session ID.
@@ -268,14 +297,17 @@ func (s *MeteredSession) ID() string { return s.session.ID() }
 // DriverID returns the driver ID.
 func (s *MeteredSession) DriverID() string { return s.session.DriverID() }
 
-// Config returns the session configuration.
-func (s *MeteredSession) Config() SessionConfig { return s.session.Config() }
+// Config returns an immutable deep copy of session configuration.
+func (s *MeteredSession) Config() SessionConfig { return s.session.Config().DeepCopy() }
 
 // Meter returns the underlying SilentMeter.
 func (s *MeteredSession) Meter() *SilentMeter { return s.meter }
 
-// Status returns the session status, honoring meter pause state.
+// Status returns the session status, honoring closed status before paused state.
 func (s *MeteredSession) Status() SessionStatus {
+	if s.session.Status() == SessionStatusClosed {
+		return SessionStatusClosed
+	}
 	if s.meter.IsPaused() {
 		return SessionStatusPausedBudgetExceeded
 	}
@@ -287,28 +319,41 @@ func (s *MeteredSession) Close(ctx context.Context) error {
 	return s.session.Close(ctx)
 }
 
-// ExecuteTurn executes a turn while tracking metrics and enforcing bounds.
-// Note: Prompt is passed through untouched without countdown injection.
-func (s *MeteredSession) ExecuteTurn(ctx context.Context, input TurnInput) (TurnResult, error) {
-	start, err := s.meter.RecordOperationStart(ctx)
-	if err != nil {
+// ExecuteTurn executes a turn while tracking metrics and actively enforcing bounds.
+func (s *MeteredSession) ExecuteTurn(ctx context.Context, input TurnInput) (res TurnResult, err error) {
+	start, startErr := s.meter.RecordOperationStart(ctx)
+	if startErr != nil {
 		return TurnResult{
 			TurnID:       input.TurnID,
 			PausedReason: PauseReasonBudgetExceeded,
-		}, err
+		}, startErr
 	}
 
-	result, turnErr := s.session.ExecuteTurn(ctx, input)
-	if turnErr != nil {
-		return result, turnErr
+	// Actively enforce MaxDurationPerOp via context timeout
+	opCtx := ctx
+	var cancelOp context.CancelFunc
+	if s.meter.limits.MaxDurationPerOp > 0 {
+		opCtx, cancelOp = context.WithTimeout(ctx, s.meter.limits.MaxDurationPerOp)
+		defer cancelOp()
 	}
 
-	paused, _ := s.meter.RecordOperationEnd(start, result.Usage, result.ToolCalls, input.ToolResults)
-	if paused {
-		result.PausedReason = PauseReasonBudgetExceeded
+	// Ensure RecordOperationEnd is called on EVERY terminal path
+	defer func() {
+		paused, _ := s.meter.RecordOperationEnd(start, res.Usage, res.ToolCalls, input.ToolResults)
+		if paused {
+			res.PausedReason = PauseReasonBudgetExceeded
+		}
+	}()
+
+	res, err = s.session.ExecuteTurn(opCtx, input)
+	if err != nil {
+		if opCtx.Err() != nil && ctx.Err() == nil {
+			err = errs.New(errs.CategoryProbeTimeout, "operation exceeded MaxDurationPerOp %v", s.meter.limits.MaxDurationPerOp)
+		}
+		return res, err
 	}
 
-	return result, nil
+	return res, nil
 }
 
 // StreamTurn performs a streaming turn wrapped with silent metering.
@@ -318,32 +363,50 @@ func (s *MeteredSession) StreamTurn(ctx context.Context, input TurnInput) (Event
 		return nil, err
 	}
 
-	rawStream, streamErr := s.session.StreamTurn(ctx, input)
+	// Actively enforce MaxDurationPerOp via context timeout
+	opCtx := ctx
+	var cancelOp context.CancelFunc
+	if s.meter.limits.MaxDurationPerOp > 0 {
+		opCtx, cancelOp = context.WithTimeout(ctx, s.meter.limits.MaxDurationPerOp)
+	}
+
+	rawStream, streamErr := s.session.StreamTurn(opCtx, input)
 	if streamErr != nil {
+		if cancelOp != nil {
+			cancelOp()
+		}
+		s.meter.RecordOperationEnd(start, TokenUsage{}, nil, input.ToolResults)
 		return nil, streamErr
 	}
 
-	outStream := NewChannelEventStream(16)
+	outStream := NewChannelEventStream(32)
 	go func() {
 		defer rawStream.Close()
+		if cancelOp != nil {
+			defer cancelOp()
+		}
+
 		var cumulativeTurnUsage TokenUsage
 		var emittedToolCalls []ToolCall
+
+		// Guarantee RecordOperationEnd on ALL exit paths (EOF, cancellation, stream error, consumer early close)
+		defer func() {
+			paused, _ := s.meter.RecordOperationEnd(start, cumulativeTurnUsage, emittedToolCalls, input.ToolResults)
+			if paused {
+				outStream.Send(DriverEvent{
+					Kind:      EventSessionPaused,
+					SessionID: s.ID(),
+					TurnID:    input.TurnID,
+					Delta:     PauseReasonBudgetExceeded,
+					Timestamp: time.Now(),
+				})
+			}
+		}()
 
 		for {
 			ev, recvErr := rawStream.Recv()
 			if recvErr != nil {
 				if recvErr == io.EOF {
-					// Turn ended normally
-					paused, _ := s.meter.RecordOperationEnd(start, cumulativeTurnUsage, emittedToolCalls, input.ToolResults)
-					if paused {
-						outStream.Send(DriverEvent{
-							Kind:      EventSessionPaused,
-							SessionID: s.ID(),
-							TurnID:    input.TurnID,
-							Delta:     PauseReasonBudgetExceeded,
-							Timestamp: time.Now(),
-						})
-					}
 					outStream.CloseWithError(nil)
 					return
 				}
@@ -367,10 +430,13 @@ func (s *MeteredSession) StreamTurn(ctx context.Context, input TurnInput) (Event
 	return outStream, nil
 }
 
-// MeteredDriver wraps any SessionDriver with silent metering.
+// MeteredDriver wraps any SessionDriver with silent metering and persists
+// meters across session resumptions and checkpoints.
 type MeteredDriver struct {
 	driver SessionDriver
 	limits MeterLimits
+	meters map[string]*SilentMeter
+	mu     sync.RWMutex
 }
 
 // NewMeteredDriver wraps a SessionDriver with outer budget limits.
@@ -378,6 +444,7 @@ func NewMeteredDriver(driver SessionDriver, limits MeterLimits) *MeteredDriver {
 	return &MeteredDriver{
 		driver: driver,
 		limits: limits,
+		meters: make(map[string]*SilentMeter),
 	}
 }
 
@@ -387,20 +454,54 @@ func (d *MeteredDriver) ID() string { return d.driver.ID() }
 // Capabilities returns driver capabilities.
 func (d *MeteredDriver) Capabilities() DriverCapabilities { return d.driver.Capabilities() }
 
+// RestoreCheckpoint rehydrates a session meter from a durable checkpoint snapshot.
+func (d *MeteredDriver) RestoreCheckpoint(snap MeterSnapshot) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	meter := NewSilentMeter(snap.SessionID, d.limits)
+	meter.RestoreFromSnapshot(snap)
+	d.meters[snap.SessionID] = meter
+}
+
+// GetMeter returns the meter for a given session ID, if present.
+func (d *MeteredDriver) GetMeter(sessionID string) *SilentMeter {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	return d.meters[sessionID]
+}
+
 // StartSession creates a metered session.
 func (d *MeteredDriver) StartSession(ctx context.Context, cfg SessionConfig) (Session, error) {
 	session, err := d.driver.StartSession(ctx, cfg)
 	if err != nil {
 		return nil, err
 	}
-	return NewMeteredSession(session, d.limits), nil
+
+	d.mu.Lock()
+	meter, exists := d.meters[cfg.SessionID]
+	if !exists {
+		meter = NewSilentMeter(cfg.SessionID, d.limits)
+		d.meters[cfg.SessionID] = meter
+	}
+	d.mu.Unlock()
+
+	return NewMeteredSessionWithMeter(session, meter), nil
 }
 
-// ResumeSession resumes a metered session.
+// ResumeSession resumes a metered session, preserving cumulative meter state.
 func (d *MeteredDriver) ResumeSession(ctx context.Context, sessionID string, cfg SessionConfig) (Session, error) {
 	session, err := d.driver.ResumeSession(ctx, sessionID, cfg)
 	if err != nil {
 		return nil, err
 	}
-	return NewMeteredSession(session, d.limits), nil
+
+	d.mu.Lock()
+	meter, exists := d.meters[sessionID]
+	if !exists {
+		meter = NewSilentMeter(sessionID, d.limits)
+		d.meters[sessionID] = meter
+	}
+	d.mu.Unlock()
+
+	return NewMeteredSessionWithMeter(session, meter), nil
 }

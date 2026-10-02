@@ -2,7 +2,7 @@
 
 - **Milestone:** M3C — Cognition Resource and Session Substrate
 - **Scope card:** [docs/WORK_PACKAGES.md#wp-m3c-2--session-drivers-and-cognitive-invocation-compiler](../WORK_PACKAGES.md#wp-m3c-2--session-drivers-and-cognitive-invocation-compiler)
-- **Base commit:** `248032c8e3176d6537cefe8c886df7658797f1f5` (origin/main, merge of PR #17 — Cognitive Invocation Compiler & Review Ledger)
+- **Base commit:** `248032c71453546ee355c1fe7d80f84849e2cb12` (origin/main, merge of PR #17 — Cognitive Invocation Compiler & Review Ledger)
 - **Branch:** `feat/m3c-2a-session-substrate`
 - **Task ID:** `task-m3c-2a-session-substrate-and-metering`
 - **Work Package ID:** `WP-M3C-2A`
@@ -20,7 +20,7 @@
   "work_package_id": "WP-M3C-2A",
   "work_package_revision": 1,
   "role": "principal_engineer",
-  "base_commit": "248032c8e3176d6537cefe8c886df7658797f1f5",
+  "base_commit": "248032c71453546ee355c1fe7d80f84849e2cb12",
   "project_state_revision": "bootstrap-m3c-1-closed",
   "read_envelope": [
     "AGENTS.md",

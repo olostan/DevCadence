@@ -88,11 +88,9 @@ func (d *SemanticLoopDetector) RecordToolCall(call ToolCall, isError bool) (bool
 				call.Name, d.consecutiveFailedCount)
 		}
 	} else {
-		// A successful tool call resets consecutive failure counter
-		if d.consecutiveFailedKey == key {
-			d.consecutiveFailedKey = ""
-			d.consecutiveFailedCount = 0
-		}
+		// Any intervening successful operation breaks the consecutive failure streak
+		d.consecutiveFailedKey = ""
+		d.consecutiveFailedCount = 0
 	}
 
 	return false, ""

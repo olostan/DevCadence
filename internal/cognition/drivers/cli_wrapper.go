@@ -6,157 +6,48 @@ import (
 	"context"
 	"encoding/json"
 	"io"
-	"os/exec"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/olostan/DevCadence/internal/errs"
+	"github.com/olostan/DevCadence/internal/process"
 	"github.com/olostan/DevCadence/internal/protocol"
 )
 
-// CommandSpec defines the parameters for executing an external CLI subprocess.
-type CommandSpec struct {
-	Binary string
-	Args   []string
-	Dir    string
-	Env    []string
-	Stdin  io.Reader
-}
+// DefaultCLITimeout is the default wall-clock timeout for CLI execution.
+const DefaultCLITimeout = 2 * time.Minute
 
-// CommandOutput captures the exit output of a CLI command.
-type CommandOutput struct {
-	Stdout   []byte
-	Stderr   []byte
-	ExitCode int
-}
-
-// ProcessHandle provides control over a running subprocess.
-type ProcessHandle interface {
-	Stdout() io.ReadCloser
-	Stderr() io.ReadCloser
-	Wait() (*CommandOutput, error)
-	Kill() error
-}
-
-// CommandRunner abstracts subprocess execution for deterministic testing and OS isolation.
+// CommandRunner abstracts execution of controlled processes, matching process.Runner.
 type CommandRunner interface {
-	Run(ctx context.Context, spec CommandSpec) (*CommandOutput, error)
-	Start(ctx context.Context, spec CommandSpec) (ProcessHandle, error)
-}
-
-// OSCommandRunner executes real OS commands via os/exec.
-type OSCommandRunner struct{}
-
-func (r *OSCommandRunner) Run(ctx context.Context, spec CommandSpec) (*CommandOutput, error) {
-	cmd := exec.CommandContext(ctx, spec.Binary, spec.Args...)
-	if spec.Dir != "" {
-		cmd.Dir = spec.Dir
-	}
-	if len(spec.Env) > 0 {
-		cmd.Env = spec.Env
-	}
-	if spec.Stdin != nil {
-		cmd.Stdin = spec.Stdin
-	}
-
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-
-	err := cmd.Run()
-	exitCode := 0
-	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			exitCode = exitErr.ExitCode()
-		} else {
-			return nil, err
-		}
-	}
-
-	return &CommandOutput{
-		Stdout:   stdout.Bytes(),
-		Stderr:   stderr.Bytes(),
-		ExitCode: exitCode,
-	}, nil
-}
-
-type osProcessHandle struct {
-	cmd    *exec.Cmd
-	stdout io.ReadCloser
-	stderr io.ReadCloser
-}
-
-func (h *osProcessHandle) Stdout() io.ReadCloser { return h.stdout }
-func (h *osProcessHandle) Stderr() io.ReadCloser { return h.stderr }
-func (h *osProcessHandle) Kill() error {
-	if h.cmd.Process != nil {
-		return h.cmd.Process.Kill()
-	}
-	return nil
-}
-func (h *osProcessHandle) Wait() (*CommandOutput, error) {
-	err := h.cmd.Wait()
-	exitCode := 0
-	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			exitCode = exitErr.ExitCode()
-		} else {
-			return nil, err
-		}
-	}
-	return &CommandOutput{
-		ExitCode: exitCode,
-	}, nil
-}
-
-func (r *OSCommandRunner) Start(ctx context.Context, spec CommandSpec) (ProcessHandle, error) {
-	cmd := exec.CommandContext(ctx, spec.Binary, spec.Args...)
-	if spec.Dir != "" {
-		cmd.Dir = spec.Dir
-	}
-	if len(spec.Env) > 0 {
-		cmd.Env = spec.Env
-	}
-	if spec.Stdin != nil {
-		cmd.Stdin = spec.Stdin
-	}
-
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		return nil, err
-	}
-	stderr, err := cmd.StderrPipe()
-	if err != nil {
-		stdout.Close()
-		return nil, err
-	}
-
-	if err := cmd.Start(); err != nil {
-		stdout.Close()
-		stderr.Close()
-		return nil, err
-	}
-
-	return &osProcessHandle{
-		cmd:    cmd,
-		stdout: stdout,
-		stderr: stderr,
-	}, nil
+	Run(ctx context.Context, spec process.Spec) (process.Result, error)
 }
 
 // CLIWrapperOptions configures the CLI wrapper driver.
 type CLIWrapperOptions struct {
-	Binary       string
-	BaseArgs     []string
-	Env          []string
-	ResumeFlag   string // e.g. "--resume" or "--session-id"
-	PromptFlag   string // e.g. "-p" or "exec"
-	Capabilities *DriverCapabilities
+	Binary           string
+	BaseArgs         []string
+	SafeEnv          map[string]string // Non-secret environment overrides merged with process.BaseEnv()
+	DefaultDir       string            // Fallback absolute directory if WorktreeScope is absent
+	Timeout          time.Duration     // Wall-clock command timeout
+	ResumeFlag       string            // e.g. "--resume" or "--session-id"
+	PromptFlag       string            // e.g. "-p" or "exec"
+	ModelFlag        string            // e.g. "--model"
+	SystemPromptFlag string            // e.g. "--system"
+	ToolsFlag        string            // e.g. "--tools"
+	Capabilities     *DriverCapabilities
 }
 
 // CLIWrapperDriver normalizes external coding CLIs (e.g. Codex CLI, Claude Code)
-// into the unified SessionDriver interface.
+// into the unified SessionDriver interface, executing under the controlled process boundary
+// of internal/process.Runner (docs/SECURITY.md §5, DCI-033, DCI-055).
+//
+// Native Filesystem Policy:
+// When NativeWorktreeAccess is declared, the CLI subprocess is confined by setting
+// process.Spec.Dir strictly to Scope.WorktreePath and executing within the non-inherited
+// environment (process.BaseEnv()), preventing directory traversal or ambient secret leakage.
 type CLIWrapperDriver struct {
 	id           string
 	runner       CommandRunner
@@ -169,13 +60,22 @@ type CLIWrapperDriver struct {
 // NewCLIWrapperDriver constructs a CLI wrapper driver.
 func NewCLIWrapperDriver(id string, runner CommandRunner, opts CLIWrapperOptions) *CLIWrapperDriver {
 	if runner == nil {
-		runner = &OSCommandRunner{}
+		runner = process.NewRunner()
 	}
 	if opts.Binary == "" {
 		opts.Binary = "mock-cli"
 	}
 	if opts.ResumeFlag == "" {
 		opts.ResumeFlag = "--resume"
+	}
+	if opts.Timeout <= 0 {
+		opts.Timeout = DefaultCLITimeout
+	}
+	if opts.DefaultDir == "" {
+		opts.DefaultDir = os.TempDir()
+	}
+	if abs, err := filepath.Abs(opts.DefaultDir); err == nil {
+		opts.DefaultDir = abs
 	}
 
 	caps := DriverCapabilities{
@@ -214,6 +114,11 @@ func (d *CLIWrapperDriver) StartSession(ctx context.Context, cfg SessionConfig) 
 		return nil, err
 	}
 
+	// Validate capability constraints: reject unsupported tool declaration
+	if len(cfg.Tools) > 0 && !d.capabilities.SupportsTools {
+		return nil, errs.New(errs.CategoryUnsupported, "cli driver %q does not support tools", d.id)
+	}
+
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
@@ -221,11 +126,15 @@ func (d *CLIWrapperDriver) StartSession(ctx context.Context, cfg SessionConfig) 
 		return nil, errs.New(errs.CategoryConflict, "session %q already exists", cfg.SessionID)
 	}
 
+	if cfg.Mediator != nil && len(cfg.Tools) > 0 {
+		cfg.Mediator.SetDeclaredTools(cfg.Tools)
+	}
+
 	s := &cliSession{
-		driver:    d,
-		config:    cfg,
-		status:    SessionStatusActive,
-		isResumed: false,
+		driver:               d,
+		config:               cfg.DeepCopy(),
+		status:               SessionStatusActive,
+		backendSessionHandle: "", // initially unset; recorded from backend on first turn
 	}
 	d.sessions[cfg.SessionID] = s
 	return s, nil
@@ -248,36 +157,49 @@ func (d *CLIWrapperDriver) ResumeSession(ctx context.Context, sessionID string, 
 		if err := cfg.Validate(); err != nil {
 			return nil, err
 		}
+		if cfg.Mediator != nil && len(cfg.Tools) > 0 {
+			cfg.Mediator.SetDeclaredTools(cfg.Tools)
+		}
+		// If caller provided a backend session handle in options, honor it
+		backendHandle := ""
+		if cfg.Options != nil {
+			backendHandle = cfg.Options["backend_session_handle"]
+		}
+		if backendHandle == "" {
+			backendHandle = sessionID
+		}
 		s = &cliSession{
-			driver:    d,
-			config:    cfg,
-			status:    SessionStatusActive,
-			isResumed: true,
+			driver:               d,
+			config:               cfg.DeepCopy(),
+			status:               SessionStatusActive,
+			backendSessionHandle: backendHandle,
 		}
 		d.sessions[sessionID] = s
-	} else {
-		s.isResumed = true
-		if s.status == SessionStatusClosed {
-			s.status = SessionStatusActive
-		}
+	} else if s.status == SessionStatusClosed {
+		s.status = SessionStatusActive
 	}
 
 	return s, nil
 }
 
 type cliSession struct {
-	driver    *CLIWrapperDriver
-	config    SessionConfig
-	status    SessionStatus
-	isResumed bool
-	mu        sync.Mutex
+	driver               *CLIWrapperDriver
+	config               SessionConfig
+	status               SessionStatus
+	backendSessionHandle string
+	mu                   sync.Mutex
 }
 
 func (s *cliSession) ID() string { return s.config.SessionID }
 
 func (s *cliSession) DriverID() string { return s.driver.ID() }
 
-func (s *cliSession) Config() SessionConfig { return s.config }
+// Config returns an immutable deep copy of session configuration.
+func (s *cliSession) Config() SessionConfig {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.config.DeepCopy()
+}
 
 func (s *cliSession) Status() SessionStatus {
 	s.mu.Lock()
@@ -287,16 +209,43 @@ func (s *cliSession) Status() SessionStatus {
 
 func (s *cliSession) Close(ctx context.Context) error {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	s.status = SessionStatusClosed
+	sessID := s.config.SessionID
+	s.mu.Unlock()
+
+	// Clean up from driver registry
+	s.driver.mu.Lock()
+	delete(s.driver.sessions, sessID)
+	s.driver.mu.Unlock()
+
 	return nil
 }
 
 func (s *cliSession) buildArgs(prompt string) []string {
 	args := append([]string(nil), s.driver.opts.BaseArgs...)
-	if s.isResumed {
-		args = append(args, s.driver.opts.ResumeFlag, s.config.SessionID)
+
+	// Convey model ID if flag configured
+	if s.driver.opts.ModelFlag != "" && s.config.ModelID != "" {
+		args = append(args, s.driver.opts.ModelFlag, s.config.ModelID)
 	}
+
+	// Convey system prompt if flag configured
+	if s.driver.opts.SystemPromptFlag != "" && s.config.SystemPrompt != "" {
+		args = append(args, s.driver.opts.SystemPromptFlag, s.config.SystemPrompt)
+	}
+
+	// Convey declared tools if flag configured
+	if s.driver.opts.ToolsFlag != "" && len(s.config.Tools) > 0 {
+		if toolsJSON, err := json.Marshal(s.config.Tools); err == nil {
+			args = append(args, s.driver.opts.ToolsFlag, string(toolsJSON))
+		}
+	}
+
+	// Resume using backend opaque session handle if available
+	if s.backendSessionHandle != "" && s.driver.opts.ResumeFlag != "" {
+		args = append(args, s.driver.opts.ResumeFlag, s.backendSessionHandle)
+	}
+
 	if s.driver.opts.PromptFlag != "" {
 		args = append(args, s.driver.opts.PromptFlag)
 	}
@@ -310,7 +259,20 @@ func (s *cliSession) workingDir() string {
 	if s.config.WorktreeScope != nil && s.config.WorktreeScope.WorktreePath != "" {
 		return s.config.WorktreeScope.WorktreePath
 	}
-	return ""
+	return s.driver.opts.DefaultDir
+}
+
+func (s *cliSession) buildSpec(args []string, timeout time.Duration) process.Spec {
+	if timeout <= 0 {
+		timeout = s.driver.opts.Timeout
+	}
+	return process.Spec{
+		Executable: s.driver.opts.Binary,
+		Args:       args,
+		Dir:        s.workingDir(),
+		Env:        process.MergeEnv(process.BaseEnv(), s.driver.opts.SafeEnv),
+		Timeout:    timeout,
+	}
 }
 
 func (s *cliSession) ExecuteTurn(ctx context.Context, input TurnInput) (TurnResult, error) {
@@ -323,32 +285,39 @@ func (s *cliSession) ExecuteTurn(ctx context.Context, input TurnInput) (TurnResu
 		s.mu.Unlock()
 		return TurnResult{}, errs.New(errs.CategoryInvalidTransition, "session is closed")
 	}
+	args := s.buildArgs(input.Prompt)
 	s.mu.Unlock()
 
-	spec := CommandSpec{
-		Binary: s.driver.opts.Binary,
-		Args:   s.buildArgs(input.Prompt),
-		Dir:    s.workingDir(),
-		Env:    s.driver.opts.Env,
-	}
+	spec := s.buildSpec(args, s.driver.opts.Timeout)
 
 	start := time.Now()
-	out, err := s.driver.runner.Run(ctx, spec)
+	res, err := s.driver.runner.Run(ctx, spec)
 	duration := time.Since(start)
+
 	if err != nil {
 		return TurnResult{}, err
 	}
-	if out.ExitCode != 0 {
-		return TurnResult{}, errs.New(errs.CategoryInternal, "cli process exited with code %d: %s", out.ExitCode, string(out.Stderr))
+	if res.Status == process.StatusCancelled {
+		return TurnResult{}, ctx.Err()
+	}
+	if res.Status == process.StatusTimeout {
+		return TurnResult{}, errs.New(errs.CategoryProbeTimeout, "cli process timed out after %v", spec.Timeout)
+	}
+	if res.ExitCode != 0 {
+		return TurnResult{}, errs.New(errs.CategoryInternal, "cli process exited with code %d: %s", res.ExitCode, string(res.Stderr))
 	}
 
-	// Session is now in resumed state for subsequent turns
-	s.mu.Lock()
-	s.isResumed = true
-	s.mu.Unlock()
+	// Parse stdout
+	content, toolCalls, usage, backendHandle := parseCLIStdout(res.Stdout)
 
-	// Parse stdout: could be JSON event stream or raw text
-	content, toolCalls, usage := parseCLIStdout(out.Stdout)
+	s.mu.Lock()
+	if backendHandle != "" {
+		s.backendSessionHandle = backendHandle
+	} else if s.backendSessionHandle == "" {
+		// Default to session ID if backend does not emit a distinct handle
+		s.backendSessionHandle = s.config.SessionID
+	}
+	s.mu.Unlock()
 
 	// If tools were called and mediator is available, execute them
 	if len(toolCalls) > 0 && s.config.Mediator != nil {
@@ -366,9 +335,31 @@ func (s *cliSession) ExecuteTurn(ctx context.Context, input TurnInput) (TurnResu
 	}, nil
 }
 
+// safeBuffer is a concurrency-safe bytes buffer.
+type safeBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *safeBuffer) Write(p []byte) (n int, err error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *safeBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
+}
+
 func (s *cliSession) StreamTurn(ctx context.Context, input TurnInput) (EventStream, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
+	}
+
+	if !s.driver.capabilities.SupportsStreaming {
+		return nil, errs.New(errs.CategoryUnsupported, "cli driver %q does not support streaming", s.driver.id)
 	}
 
 	s.mu.Lock()
@@ -376,41 +367,61 @@ func (s *cliSession) StreamTurn(ctx context.Context, input TurnInput) (EventStre
 		s.mu.Unlock()
 		return nil, errs.New(errs.CategoryInvalidTransition, "session is closed")
 	}
+	args := s.buildArgs(input.Prompt)
 	s.mu.Unlock()
 
-	spec := CommandSpec{
-		Binary: s.driver.opts.Binary,
-		Args:   s.buildArgs(input.Prompt),
-		Dir:    s.workingDir(),
-		Env:    s.driver.opts.Env,
-	}
+	spec := s.buildSpec(args, s.driver.opts.Timeout)
 
-	handle, err := s.driver.runner.Start(ctx, spec)
-	if err != nil {
-		return nil, err
-	}
+	stdoutR, stdoutW := io.Pipe()
+	stderrBuf := &safeBuffer{}
 
-	outStream := NewChannelEventStream(16)
+	spec.StdoutSink = stdoutW
+	spec.StderrSink = stderrBuf
 
+	outStream := NewChannelEventStream(32)
+
+	// runCtx is cancelled when stream is closed or parent context cancels,
+	// triggering process group killing and tree reaping in process.Runner
+	runCtx, cancelRun := context.WithCancel(ctx)
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+
+	// Goroutine executing controlled process
 	go func() {
-		defer handle.Stdout().Close()
-		defer handle.Stderr().Close()
+		defer wg.Done()
+		res, err := s.driver.runner.Run(runCtx, spec)
+		if err != nil {
+			_ = stdoutW.CloseWithError(err)
+			return
+		}
+		if res.Status == process.StatusCancelled {
+			_ = stdoutW.CloseWithError(runCtx.Err())
+			return
+		}
+		if res.Status == process.StatusTimeout {
+			_ = stdoutW.CloseWithError(errs.New(errs.CategoryProbeTimeout, "cli process timed out after %v", spec.Timeout))
+			return
+		}
+		if res.ExitCode != 0 {
+			_ = stdoutW.CloseWithError(errs.New(errs.CategoryInternal, "cli process exited with code %d: %s", res.ExitCode, stderrBuf.String()))
+			return
+		}
+		_ = stdoutW.Close()
+	}()
 
-		// Goroutine to monitor context cancellation and kill process
-		stopKill := make(chan struct{})
-		go func() {
-			select {
-			case <-ctx.Done():
-				_ = handle.Kill()
-			case <-stopKill:
-			}
-		}()
-		defer close(stopKill)
+	// Scanner goroutine consuming stdout with large buffer (up to 10MB tokens)
+	go func() {
+		defer stdoutR.Close()
+		defer cancelRun()
 
-		scanner := bufio.NewScanner(handle.Stdout())
+		scanner := bufio.NewScanner(stdoutR)
+		// Support lines up to 10 MiB to prevent scanner buffer overflow on large tool responses
+		const maxLineSize = 10 * 1024 * 1024
+		scanner.Buffer(make([]byte, 64*1024), maxLineSize)
+
 		for scanner.Scan() {
 			line := scanner.Text()
-			// Attempt to parse as structured DriverEvent JSON
 			var ev DriverEvent
 			if jsonErr := json.Unmarshal([]byte(line), &ev); jsonErr == nil && ev.Kind != "" {
 				ev.SessionID = s.ID()
@@ -419,10 +430,9 @@ func (s *cliSession) StreamTurn(ctx context.Context, input TurnInput) (EventStre
 					ev.Timestamp = time.Now()
 				}
 				if !outStream.Send(ev) {
-					return
+					break
 				}
 			} else {
-				// Treat as plain text delta
 				if !outStream.Send(DriverEvent{
 					Kind:      EventContentDelta,
 					SessionID: s.ID(),
@@ -430,37 +440,40 @@ func (s *cliSession) StreamTurn(ctx context.Context, input TurnInput) (EventStre
 					Delta:     line + "\n",
 					Timestamp: time.Now(),
 				}) {
-					return
+					break
 				}
 			}
 		}
 
-		out, waitErr := handle.Wait()
-		if waitErr != nil {
-			outStream.CloseWithError(waitErr)
-			return
+		if scanErr := scanner.Err(); scanErr != nil {
+			outStream.CloseWithError(scanErr)
+		} else {
+			outStream.CloseWithError(nil)
 		}
-		if out != nil && out.ExitCode != 0 {
-			outStream.CloseWithError(errs.New(errs.CategoryInternal, "cli process exited with code %d", out.ExitCode))
-			return
-		}
+
+		// Ensure runner process has terminated and reaped
+		wg.Wait()
 
 		s.mu.Lock()
-		s.isResumed = true
+		if s.backendSessionHandle == "" {
+			s.backendSessionHandle = s.config.SessionID
+		}
 		s.mu.Unlock()
-
-		outStream.CloseWithError(nil)
 	}()
 
 	return outStream, nil
 }
 
-// parseCLIStdout parses process output into content, tool calls, and usage.
-func parseCLIStdout(output []byte) (string, []ToolCall, TokenUsage) {
+// parseCLIStdout parses process output into content, tool calls, usage, and backend session handle.
+func parseCLIStdout(output []byte) (string, []ToolCall, TokenUsage, string) {
 	scanner := bufio.NewScanner(bytes.NewReader(output))
+	// Allow scanning up to 10MB lines
+	scanner.Buffer(make([]byte, 64*1024), 10*1024*1024)
+
 	var contentBuilder strings.Builder
 	var toolCalls []ToolCall
 	var usage TokenUsage
+	var backendHandle string
 
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -476,6 +489,15 @@ func parseCLIStdout(output []byte) (string, []ToolCall, TokenUsage) {
 				usage = usage.Add(*ev.Usage)
 			}
 		} else {
+			// Check for backend session handle announcement
+			var rawObj map[string]any
+			if json.Unmarshal([]byte(line), &rawObj) == nil {
+				if val, ok := rawObj["backend_session_id"].(string); ok && val != "" {
+					backendHandle = val
+				} else if val, ok := rawObj["session_id"].(string); ok && val != "" {
+					backendHandle = val
+				}
+			}
 			contentBuilder.WriteString(line)
 			contentBuilder.WriteString("\n")
 		}
@@ -483,9 +505,8 @@ func parseCLIStdout(output []byte) (string, []ToolCall, TokenUsage) {
 
 	content := strings.TrimRight(contentBuilder.String(), "\n")
 	if usage.Total() == 0 && len(content) > 0 {
-		// Provide basic token estimation if CLI does not report usage
 		usage.OutputTokens = int64(len(strings.Fields(content)))
 	}
 
-	return content, toolCalls, usage
+	return content, toolCalls, usage, backendHandle
 }

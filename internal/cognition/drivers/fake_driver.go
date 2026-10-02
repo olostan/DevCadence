@@ -84,6 +84,10 @@ func (d *FakeDriver) StartSession(ctx context.Context, cfg SessionConfig) (Sessi
 		return nil, err
 	}
 
+	if len(cfg.Tools) > 0 && !d.capabilities.SupportsTools {
+		return nil, errs.New(errs.CategoryUnsupported, "fake driver %q does not support tools", d.id)
+	}
+
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
@@ -91,9 +95,13 @@ func (d *FakeDriver) StartSession(ctx context.Context, cfg SessionConfig) (Sessi
 		return nil, errs.New(errs.CategoryConflict, "session %q already exists", cfg.SessionID)
 	}
 
+	if cfg.Mediator != nil && len(cfg.Tools) > 0 {
+		cfg.Mediator.SetDeclaredTools(cfg.Tools)
+	}
+
 	s := &fakeSession{
 		driver:    d,
-		config:    cfg,
+		config:    cfg.DeepCopy(),
 		status:    SessionStatusActive,
 		turnCount: 0,
 	}
@@ -118,9 +126,12 @@ func (d *FakeDriver) ResumeSession(ctx context.Context, sessionID string, cfg Se
 		if err := cfg.Validate(); err != nil {
 			return nil, err
 		}
+		if cfg.Mediator != nil && len(cfg.Tools) > 0 {
+			cfg.Mediator.SetDeclaredTools(cfg.Tools)
+		}
 		s = &fakeSession{
 			driver:    d,
-			config:    cfg,
+			config:    cfg.DeepCopy(),
 			status:    SessionStatusActive,
 			turnCount: 0,
 		}
@@ -144,7 +155,12 @@ func (s *fakeSession) ID() string { return s.config.SessionID }
 
 func (s *fakeSession) DriverID() string { return s.driver.ID() }
 
-func (s *fakeSession) Config() SessionConfig { return s.config }
+// Config returns an immutable deep copy of session configuration.
+func (s *fakeSession) Config() SessionConfig {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.config.DeepCopy()
+}
 
 func (s *fakeSession) Status() SessionStatus {
 	s.mu.Lock()
@@ -154,8 +170,15 @@ func (s *fakeSession) Status() SessionStatus {
 
 func (s *fakeSession) Close(ctx context.Context) error {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	s.status = SessionStatusClosed
+	sessID := s.config.SessionID
+	s.mu.Unlock()
+
+	// Clean up from driver registry
+	s.driver.mu.Lock()
+	delete(s.driver.sessions, sessID)
+	s.driver.mu.Unlock()
+
 	return nil
 }
 
@@ -225,6 +248,10 @@ func (s *fakeSession) ExecuteTurn(ctx context.Context, input TurnInput) (TurnRes
 func (s *fakeSession) StreamTurn(ctx context.Context, input TurnInput) (EventStream, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
+	}
+
+	if !s.driver.capabilities.SupportsStreaming {
+		return nil, errs.New(errs.CategoryUnsupported, "fake driver %q does not support streaming", s.driver.id)
 	}
 
 	s.mu.Lock()

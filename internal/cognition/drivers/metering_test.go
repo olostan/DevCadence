@@ -2,6 +2,7 @@ package drivers
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -69,49 +70,196 @@ func TestMetering_TokenBudgets(t *testing.T) {
 	}
 }
 
-func TestMetering_WallClockLimits(t *testing.T) {
-	fakeDriver := NewFakeDriver("fake-metering-clock")
+func TestMetering_ResumePreservesMeterState(t *testing.T) {
+	fakeDriver := NewFakeDriver("fake-meter-resume")
 
 	meteredDriver := NewMeteredDriver(fakeDriver, MeterLimits{
-		MaxDurationPerOp: 50 * time.Millisecond,
+		MaxCumulativeInputTokens: 100,
+	})
+
+	ctx := context.Background()
+	cfg := SessionConfig{
+		SessionID: "sess-continuity-1",
+		ModelID:   "test-model",
+	}
+
+	session1, err := meteredDriver.StartSession(ctx, cfg)
+	if err != nil {
+		t.Fatalf("StartSession failed: %v", err)
+	}
+
+	// Turn 1: 30 chars input
+	_, err = session1.ExecuteTurn(ctx, TurnInput{TurnID: "t1", Prompt: "Thirty characters long prompt."})
+	if err != nil {
+		t.Fatalf("turn 1 failed: %v", err)
+	}
+
+	snap1 := session1.(*MeteredSession).Meter().Checkpoint()
+	if snap1.CumulativeUsage.InputTokens != 30 {
+		t.Errorf("expected 30 input tokens, got %d", snap1.CumulativeUsage.InputTokens)
+	}
+
+	// Resume session
+	session2, err := meteredDriver.ResumeSession(ctx, cfg.SessionID, cfg)
+	if err != nil {
+		t.Fatalf("ResumeSession failed: %v", err)
+	}
+
+	snap2 := session2.(*MeteredSession).Meter().Checkpoint()
+	if snap2.CumulativeUsage.InputTokens != 30 {
+		t.Errorf("expected resumed session to retain 30 cumulative input tokens, got %d", snap2.CumulativeUsage.InputTokens)
+	}
+
+	// Turn 2: another 30 chars
+	_, err = session2.ExecuteTurn(ctx, TurnInput{TurnID: "t2", Prompt: "Another thirty chars of prompt"})
+	if err != nil {
+		t.Fatalf("turn 2 failed: %v", err)
+	}
+
+	snap3 := session2.(*MeteredSession).Meter().Checkpoint()
+	if snap3.CumulativeUsage.InputTokens != 60 {
+		t.Errorf("expected 60 cumulative input tokens after resumed turn, got %d", snap3.CumulativeUsage.InputTokens)
+	}
+}
+
+func TestMetering_ActiveMaxDurationPerOpTimeout(t *testing.T) {
+	fakeDriver := NewFakeDriver("fake-timeout-driver", FakeDriverOptions{
+		Delay: 200 * time.Millisecond,
+	})
+
+	// Set MaxDurationPerOp to 40ms, so execution must actively time out
+	meteredDriver := NewMeteredDriver(fakeDriver, MeterLimits{
+		MaxDurationPerOp: 40 * time.Millisecond,
 	})
 
 	ctx := context.Background()
 	session, err := meteredDriver.StartSession(ctx, SessionConfig{
-		SessionID: "sess-meter-clock",
+		SessionID: "sess-op-timeout",
+		ModelID:   "test-model",
+	})
+	if err != nil {
+		t.Fatalf("StartSession failed: %v", err)
+	}
+	defer session.Close(ctx)
+
+	start := time.Now()
+	_, err = session.ExecuteTurn(ctx, TurnInput{TurnID: "t-timeout", Prompt: "slow op"})
+	elapsed := time.Since(start)
+
+	if err == nil {
+		t.Errorf("expected timeout error when turn exceeds MaxDurationPerOp, got nil")
+	}
+	if elapsed >= 180*time.Millisecond {
+		t.Errorf("operation was not cancelled actively by deadline, took %v", elapsed)
+	}
+
+	snap := session.(*MeteredSession).Meter().Checkpoint()
+	if snap.Status != SessionStatusPausedBudgetExceeded {
+		t.Errorf("expected paused status after timeout, got %s", snap.Status)
+	}
+	if snap.ExceededDimension != "max_duration_per_op" {
+		t.Errorf("expected exceeded dimension 'max_duration_per_op', got %s", snap.ExceededDimension)
+	}
+}
+
+func TestMetering_OscillatingEditsViaMediator(t *testing.T) {
+	fakeDriver := NewFakeDriver("fake-meter-oscillate")
+	mediator := NewScopedToolMediator(nil)
+
+	mediator.RegisterHandler("write_file", func(ctx context.Context, args json.RawMessage) (string, error) {
+		return "ok", nil
+	})
+
+	meteredDriver := NewMeteredDriver(fakeDriver, MeterLimits{
+		LoopConfig: LoopDetectorConfig{
+			MaxOscillatingEdits: 2,
+		},
+	})
+
+	cfg := SessionConfig{
+		SessionID: "sess-oscillate-test",
+		ModelID:   "test-model",
+		Tools: []ToolDefinition{
+			{Name: "write_file", Description: "write file"},
+		},
+		Mediator: mediator,
+	}
+
+	session, err := meteredDriver.StartSession(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("StartSession failed: %v", err)
+	}
+
+	// Turn 1: edit A
+	_, _ = session.ExecuteTurn(context.Background(), TurnInput{
+		TurnID: "t1",
+		Prompt: "write A",
+	})
+	_, _ = mediator.ExecuteTool(context.Background(), ToolCall{
+		ID:        "c1",
+		Name:      "write_file",
+		Arguments: []byte(`{"path":"main.go","content":"code A"}`),
+	})
+
+	// Turn 2: edit B
+	_, _ = mediator.ExecuteTool(context.Background(), ToolCall{
+		ID:        "c2",
+		Name:      "write_file",
+		Arguments: []byte(`{"path":"main.go","content":"code B"}`),
+	})
+
+	// Turn 3: edit A (1st oscillation)
+	_, _ = mediator.ExecuteTool(context.Background(), ToolCall{
+		ID:        "c3",
+		Name:      "write_file",
+		Arguments: []byte(`{"path":"main.go","content":"code A"}`),
+	})
+
+	// Turn 4: edit B (2nd oscillation -> trigger loop!)
+	_, _ = mediator.ExecuteTool(context.Background(), ToolCall{
+		ID:        "c4",
+		Name:      "write_file",
+		Arguments: []byte(`{"path":"main.go","content":"code B"}`),
+	})
+
+	if session.Status() != SessionStatusPausedBudgetExceeded {
+		t.Errorf("expected session paused on oscillating edits, got %s", session.Status())
+	}
+	snap := session.(*MeteredSession).Meter().Checkpoint()
+	if snap.ExceededDimension != "semantic_loop_oscillating_edits" {
+		t.Errorf("expected 'semantic_loop_oscillating_edits', got %q", snap.ExceededDimension)
+	}
+}
+
+func TestMetering_ClosedSessionStatus(t *testing.T) {
+	fakeDriver := NewFakeDriver("fake-meter-close")
+	meteredDriver := NewMeteredDriver(fakeDriver, MeterLimits{
+		MaxCumulativeInputTokens: 10,
+	})
+
+	session, err := meteredDriver.StartSession(context.Background(), SessionConfig{
+		SessionID: "sess-close-check",
 		ModelID:   "test-model",
 	})
 	if err != nil {
 		t.Fatalf("StartSession failed: %v", err)
 	}
 
-	meteredSess := session.(*MeteredSession)
-	meter := meteredSess.Meter()
-
-	// Inject custom simulated clock
-	currentTime := time.Now()
-	meter.SetNowFunc(func() time.Time {
-		return currentTime
+	// Exceed limit so it enters paused state
+	_, _ = session.ExecuteTurn(context.Background(), TurnInput{
+		TurnID: "t1",
+		Prompt: "Prompt exceeding ten chars easily",
 	})
-
-	// Simulate op start
-	start, err := meter.RecordOperationStart(ctx)
-	if err != nil {
-		t.Fatalf("RecordOperationStart failed: %v", err)
+	if session.Status() != SessionStatusPausedBudgetExceeded {
+		t.Fatalf("expected paused status, got %s", session.Status())
 	}
 
-	// Advance clock past 50ms limit (e.g. 80ms)
-	currentTime = currentTime.Add(80 * time.Millisecond)
+	// Now close the session
+	_ = session.Close(context.Background())
 
-	paused, snap := meter.RecordOperationEnd(start, TokenUsage{InputTokens: 5, OutputTokens: 5}, nil, nil)
-	if !paused {
-		t.Fatalf("expected pause when duration exceeds limit")
-	}
-	if snap.Status != SessionStatusPausedBudgetExceeded {
-		t.Errorf("expected status %q, got %q", SessionStatusPausedBudgetExceeded, snap.Status)
-	}
-	if snap.ExceededDimension != "max_duration_per_op" {
-		t.Errorf("expected exceeded dimension 'max_duration_per_op', got %q", snap.ExceededDimension)
+	// Status must report closed, not stuck in paused
+	if session.Status() != SessionStatusClosed {
+		t.Errorf("expected status 'closed' after Close(), got %s", session.Status())
 	}
 }
 

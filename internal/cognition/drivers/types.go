@@ -178,3 +178,29 @@ func (cfg SessionConfig) Validate() error {
 	}
 	return nil
 }
+
+// DeepCopy returns an immutable, detached deep copy of SessionConfig.
+func (cfg SessionConfig) DeepCopy() SessionConfig {
+	cp := cfg
+	if cfg.Tools != nil {
+		cp.Tools = make([]ToolDefinition, len(cfg.Tools))
+		for i, t := range cfg.Tools {
+			cp.Tools[i] = ToolDefinition{
+				Name:        t.Name,
+				Description: t.Description,
+				Parameters:  append([]byte(nil), t.Parameters...),
+			}
+		}
+	}
+	if cfg.WorktreeScope != nil {
+		scopeCp := *cfg.WorktreeScope
+		cp.WorktreeScope = &scopeCp
+	}
+	if cfg.Options != nil {
+		cp.Options = make(map[string]string, len(cfg.Options))
+		for k, v := range cfg.Options {
+			cp.Options[k] = v
+		}
+	}
+	return cp
+}

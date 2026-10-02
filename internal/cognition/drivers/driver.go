@@ -45,12 +45,15 @@ type EventStream interface {
 	Close() error
 }
 
-// ChannelEventStream is an in-memory channel-backed implementation of EventStream.
+// ChannelEventStream is a thread-safe, strictly FIFO implementation of EventStream.
+// It guarantees that all buffered events are delivered before any terminal error or EOF,
+// and prevents any send-on-closed panic under concurrent Close/CloseWithError calls.
 type ChannelEventStream struct {
-	events chan DriverEvent
-	errCh  chan error
-	done   chan struct{}
-	once   sync.Once
+	mu      sync.Mutex
+	cond    *sync.Cond
+	queue   []DriverEvent
+	termErr error
+	closed  bool
 }
 
 // NewChannelEventStream creates an event stream with the specified buffer capacity.
@@ -58,62 +61,61 @@ func NewChannelEventStream(buffer int) *ChannelEventStream {
 	if buffer < 1 {
 		buffer = 1
 	}
-	return &ChannelEventStream{
-		events: make(chan DriverEvent, buffer),
-		errCh:  make(chan error, 1),
-		done:   make(chan struct{}),
+	s := &ChannelEventStream{
+		queue: make([]DriverEvent, 0, buffer),
 	}
+	s.cond = sync.NewCond(&s.mu)
+	return s
 }
 
-// Send emits an event to the stream, blocking if full until closed.
+// Send emits an event to the stream in strictly FIFO order.
+// Returns false if the stream has already been closed.
 func (s *ChannelEventStream) Send(event DriverEvent) bool {
-	select {
-	case <-s.done:
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed {
 		return false
-	case s.events <- event:
-		return true
 	}
+	s.queue = append(s.queue, event)
+	s.cond.Signal()
+	return true
 }
 
 // CloseWithError closes the event stream reporting an error (or nil for clean EOF).
+// Any already-buffered events remain receivable by Recv() before the error or EOF is reported.
 func (s *ChannelEventStream) CloseWithError(err error) {
-	s.once.Do(func() {
-		if err != nil {
-			select {
-			case s.errCh <- err:
-			default:
-			}
-		}
-		close(s.done)
-		close(s.events)
-	})
-}
-
-// Recv receives the next event from the stream.
-func (s *ChannelEventStream) Recv() (DriverEvent, error) {
-	select {
-	case ev, ok := <-s.events:
-		if !ok {
-			// Check if there was a terminal error
-			select {
-			case err := <-s.errCh:
-				if err != nil {
-					return DriverEvent{}, err
-				}
-			default:
-			}
-			return DriverEvent{}, io.EOF
-		}
-		return ev, nil
-	case err := <-s.errCh:
-		if err != nil {
-			return DriverEvent{}, err
-		}
-		return DriverEvent{}, io.EOF
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed {
+		return
 	}
+	s.closed = true
+	s.termErr = err
+	s.cond.Broadcast()
 }
 
-// Close closes the stream early.
+// Recv receives the next event from the stream in strictly FIFO order.
+func (s *ChannelEventStream) Recv() (DriverEvent, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for len(s.queue) == 0 && !s.closed {
+		s.cond.Wait()
+	}
+
+	if len(s.queue) > 0 {
+		ev := s.queue[0]
+		s.queue = s.queue[1:]
+		return ev, nil
+	}
+
+	if s.termErr != nil {
+		return DriverEvent{}, s.termErr
+	}
+	return DriverEvent{}, io.EOF
+}
+
+// Close closes the stream early without error.
 func (s *ChannelEventStream) Close() error {
 	s.CloseWithError(nil)
 	return nil
