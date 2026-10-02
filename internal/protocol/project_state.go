@@ -52,7 +52,7 @@ type ProjectState struct {
 	Discovery             *DiscoveryState  `json:"discovery,omitempty"`
 	// Review is the bounded review campaign projection (ADR-0010). Shape
 	// only in M1; M3C-5 adds durable finding/resolution/verification primitives,
-// while M7 owns campaign reduction/orchestration into this projection.
+	// while M7 owns campaign reduction/orchestration into this projection.
 	Review *ReviewConvergenceState `json:"review,omitempty"`
 }
 

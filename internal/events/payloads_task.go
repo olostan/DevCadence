@@ -487,7 +487,7 @@ func (p *ChangeAccepted) Validate() error {
 	// DCI-032: a candidate change has, at minimum, validation results,
 	// review results and a decision. Accepting with no review evidence at
 	// all would make REVIEWING ceremonial, so the domain requires at least
-	// one review. *Which* reviews and how many remain an M6 policy decision
+	// one review. *Which* reviews and how many remain an M7 policy decision
 	// that varies by change class and risk; the lineage of every cited
 	// review is checked by the reducer.
 	if len(p.ReviewIDs) == 0 {

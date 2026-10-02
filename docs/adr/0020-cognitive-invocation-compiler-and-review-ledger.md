@@ -1,12 +1,12 @@
 # ADR-0020 — Cognitive Invocation Compiler, Deterministic Rule Admission, and Review Ledger
 
-- **Status:** Proposed while PR #17 is open; Accepted automatically by merge after review closure
+- **Status:** Accepted
 - **Date:** 2026-09-30
 - **Owners:** DevCadence architecture / cognition substrate
 - **Related:** ADR-0016, ADR-0018, ADR-0019
 - **Related invariants:** DCI-014, DCI-018, DCI-019, DCI-046–049, DCI-104, DCI-120–130
 - **Primary implementation milestones:** M3C, M4, M7
-- **Normative effect:** DCI-131–135 and this ADR become normative only when PR #17 is accepted/merged; review of the open PR must not treat that future acceptance as already established.
+- **Normative effect:** DCI-131–135 and this ADR are the accepted candidate architecture; merging PR #17 publishes that accepted state to `main`.
 
 ## Context
 

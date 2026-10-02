@@ -199,7 +199,7 @@ func tasksBlockedReasonWithoutAuthority() tasks.BlockedReason {
 // implementation candidate must cite deterministic validation *and*
 // independent review. Without the review requirement a task could pass
 // through REVIEWING without any review having happened, making the state
-// ceremonial. How many reviews, and along which dimensions, is M6 policy;
+// ceremonial. How many reviews, and along which dimensions, is M7 policy;
 // zero is not a policy choice the domain permits.
 func TestAcceptanceRequiresReviewEvidence(t *testing.T) {
 	complete := func() *events.ChangeAccepted {

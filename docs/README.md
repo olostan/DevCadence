@@ -108,7 +108,7 @@ hierarchy below.
 | [0017](adr/0017-external-research-evidence-acquisition.md) | External research as a bounded evidence-acquisition service |
 | [0018](adr/0018-adaptive-cognition-portfolio-and-workflow-synthesis.md) | Adaptive cognition portfolios, economics/budget pools, AI-assisted recommendation and adaptive workflow topology |
 | [0019](adr/0019-non-conversational-cognition-and-adaptive-review.md) | Context Working-Set Architecture, deterministic admission, dynamic review lenses, living work packages, and dual independent review |
-| [0020](adr/0020-cognitive-invocation-compiler-and-review-ledger.md) | Cognitive Invocation Compiler, fail-safe mandatory admission, prompt projection, and durable review ledger — acceptance takes effect when PR #17 is merged after review closure |
+| [0020](adr/0020-cognitive-invocation-compiler-and-review-ledger.md) | Cognitive Invocation Compiler, fail-safe mandatory admission, prompt projection, and durable review ledger |
 
 ## Normative hierarchy
 
