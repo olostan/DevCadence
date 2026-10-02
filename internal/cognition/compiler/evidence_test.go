@@ -16,14 +16,14 @@ func TestEvidenceLeaseManager_Lifecycle(t *testing.T) {
 	// 1. Successful lease creation
 	lease, err := mgr.CreateLease(compiler.CreateLeaseParams{
 		EvidenceKind:        protocol.LeaseKindSourceSnippet,
-		SourceRevision:      "d99e40c79ebf3747b4d32a934446b3f9408e001c",
+		SourceRevision:      "d99e40c2107965b5af53a8c429aa6286f430ff8f",
 		WorktreeID:          "wt_main",
 		FilePath:            "internal/setup/doctor.go",
 		Locator:             "L100-L120",
 		AcquisitionQuestion: "What doctor checks exist?",
 		AcquisitionReason:   "Ensuring environment safety",
 		Content:             "func runDoctor() error {\n  return nil\n}",
-		AccountingMethod:    protocol.AccountingExactBPE,
+		AccountingMethod:    protocol.AccountingApproximateEstimate,
 		ReadEnvelope:        []string{"internal/*"},
 	})
 	if err != nil {
@@ -40,7 +40,7 @@ func TestEvidenceLeaseManager_Lifecycle(t *testing.T) {
 	// 2. Read envelope authorization failure (DCI-014, DCI-018)
 	_, err = mgr.CreateLease(compiler.CreateLeaseParams{
 		EvidenceKind:        protocol.LeaseKindSourceSnippet,
-		SourceRevision:      "d99e40c79ebf3747b4d32a934446b3f9408e001c",
+		SourceRevision:      "d99e40c2107965b5af53a8c429aa6286f430ff8f",
 		WorktreeID:          "wt_main",
 		FilePath:            "config/credentials.json",
 		Locator:             "L1-L5",

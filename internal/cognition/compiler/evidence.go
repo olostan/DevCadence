@@ -90,7 +90,7 @@ func (m *EvidenceLeaseManager) CreateLease(params CreateLeaseParams) (protocol.E
 	// 4. Token estimation
 	method := params.AccountingMethod
 	if !method.Valid() {
-		method = protocol.AccountingExactBPE
+		method = protocol.AccountingApproximateEstimate
 	}
 	tokenCount := EstimateTokens(params.Content, method, 0.05)
 	if tokenCount < 1 {

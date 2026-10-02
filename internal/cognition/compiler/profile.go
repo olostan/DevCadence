@@ -13,7 +13,26 @@ import (
 // DefaultProvisionalProfile synthesizes a valid provisional ContextProfile adhering to
 // all protocol constraints in internal/protocol/context.go and PROTOCOLS §10B.
 // It reflects conservative default reserves and token limits before M4 empirical calibration.
+// Epistemic Honesty (Finding 6, PROTOCOLS §10B):
+//   - Observed capabilities default to protocol.ContextControlUnknown and protocol.PrefixCacheUnknown
+//     rather than synthesizing unobserved facts.
+//   - Accounting method defaults to protocol.AccountingApproximateEstimate.
+//   - TargetResidentTokens provides provisional soft packing guidance (ADR-0020 §2); hard ceiling is fail-closed.
 func DefaultProvisionalProfile(endpointID, channelID, modelRef string, runtimeWindow int) *protocol.ContextProfile {
+	return DefaultProvisionalProfileWithCapabilities(
+		endpointID, channelID, modelRef, runtimeWindow, 0,
+		protocol.ContextControlUnknown, protocol.PrefixCacheUnknown,
+	)
+}
+
+// DefaultProvisionalProfileWithCapabilities creates a provisional profile with explicit observed capabilities.
+func DefaultProvisionalProfileWithCapabilities(
+	endpointID, channelID, modelRef string,
+	runtimeWindow int,
+	targetResident int,
+	ctrl protocol.ContextControl,
+	cache protocol.PrefixCache,
+) *protocol.ContextProfile {
 	if runtimeWindow <= 0 {
 		runtimeWindow = 32768
 	}
@@ -24,9 +43,19 @@ func DefaultProvisionalProfile(endpointID, channelID, modelRef string, runtimeWi
 		toolTailReserve = runtimeWindow / 10
 	}
 	hardCeiling := runtimeWindow - outputReserve - toolTailReserve
-	targetResident := int(float64(hardCeiling) * 0.75)
+	// Target residency is soft packing and eviction guidance, not a universal fixed percentage.
+	if targetResident <= 0 || targetResident > hardCeiling {
+		targetResident = int(float64(hardCeiling) * 0.70)
+	}
 	if targetResident < 1 {
 		targetResident = 1
+	}
+
+	if !ctrl.Valid() {
+		ctrl = protocol.ContextControlUnknown
+	}
+	if !cache.Valid() {
+		cache = protocol.PrefixCacheUnknown
 	}
 
 	return &protocol.ContextProfile{
@@ -55,10 +84,10 @@ func DefaultProvisionalProfile(endpointID, channelID, modelRef string, runtimeWi
 		MaxSingleLeaseTokens:      hardCeiling / 3,
 		OutputReserveTokens:       outputReserve,
 		ToolTailReserveTokens:     toolTailReserve,
-		AccountingMethod:          protocol.AccountingExactBPE,
+		AccountingMethod:          protocol.AccountingApproximateEstimate,
 		EstimateUncertaintyRatio:  0.05,
-		ObservedContextControl:    protocol.ContextControlExactStateless,
-		ObservedPrefixCache:       protocol.PrefixCacheSessionKV,
+		ObservedContextControl:    ctrl,
+		ObservedPrefixCache:       cache,
 	}
 }
 
@@ -119,6 +148,41 @@ func EnforceProfileBounds(pack *protocol.ContextPack, profile *protocol.ContextP
 					kind, lease.LeaseID, i, lease.TokenCount, profile.MaxSingleLeaseTokens)
 			}
 		}
+	}
+
+	return nil
+}
+
+// EnforceProjectionBounds checks that a rendered PromptProjection (including system prompt,
+// user prompt, and any additional overhead like tool schemas and host framing) strictly fits
+// within the hard limits of the ContextProfile (Finding 4, PROTOCOLS §10B).
+func EnforceProjectionBounds(proj PromptProjection, profile *protocol.ContextProfile, additionalTokens int) error {
+	const kind = "PromptProjectionBoundsEnforcement"
+	if profile == nil {
+		return errs.New(errs.CategoryInvalidArgument, "%s: profile cannot be nil", kind)
+	}
+	if err := profile.Validate(); err != nil {
+		return errs.Wrap(errs.CategoryInvalidArgument, err, "%s: invalid profile", kind)
+	}
+
+	method := profile.AccountingMethod
+	uncertainty := profile.EstimateUncertaintyRatio
+
+	sysTokens := EstimateTokens(proj.SystemPrompt, method, uncertainty)
+	userTokens := EstimateTokens(proj.UserPrompt, method, uncertainty)
+	residentTokens := sysTokens + userTokens + additionalTokens
+
+	totalRequired := residentTokens + profile.OutputReserveTokens + profile.ToolTailReserveTokens
+	if totalRequired > profile.RuntimeWindowTokens {
+		return errs.New(errs.CategoryContextUnfit,
+			"%s: required projection window tokens (%d = resident %d + output %d + tool tail %d) exceeds runtime window (%d)",
+			kind, totalRequired, residentTokens, profile.OutputReserveTokens, profile.ToolTailReserveTokens, profile.RuntimeWindowTokens)
+	}
+
+	if residentTokens > profile.HardResidentCeilingTokens {
+		return errs.New(errs.CategoryContextUnfit,
+			"%s: total projection resident tokens (%d) exceeds hard resident ceiling (%d)",
+			kind, residentTokens, profile.HardResidentCeilingTokens)
 	}
 
 	return nil

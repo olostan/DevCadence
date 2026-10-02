@@ -37,6 +37,27 @@ func (item OptionalItem) Validate() error {
 	return nil
 }
 
+func (item OptionalItem) deepCopy() OptionalItem {
+	out := item
+	if item.Symbols != nil {
+		out.Symbols = make([]string, len(item.Symbols))
+		copy(out.Symbols, item.Symbols)
+	}
+	if item.Paths != nil {
+		out.Paths = make([]string, len(item.Paths))
+		copy(out.Paths, item.Paths)
+	}
+	if item.Keywords != nil {
+		out.Keywords = make([]string, len(item.Keywords))
+		copy(out.Keywords, item.Keywords)
+	}
+	if item.Dependencies != nil {
+		out.Dependencies = make([]string, len(item.Dependencies))
+		copy(out.Dependencies, item.Dependencies)
+	}
+	return out
+}
+
 // OptionalRetrievalEngine provides exact, lexical, and graph-traversal discovery
 // for non-mandatory background knowledge (ADR-0020 §3).
 //
@@ -56,19 +77,31 @@ func NewOptionalRetrievalEngine() *OptionalRetrievalEngine {
 }
 
 // RegisterItem registers an optional knowledge item into the engine.
+// It verifies the SHA-256 digest and rejects duplicates and invalid items (Finding 9, 11).
 func (e *OptionalRetrievalEngine) RegisterItem(item OptionalItem) error {
 	if err := item.Validate(); err != nil {
 		return err
 	}
+
+	hasher := sha256.New()
+	hasher.Write([]byte(item.Content))
+	expectedDigest := "sha256:" + hex.EncodeToString(hasher.Sum(nil))
 	if item.ContentDigest == "" {
-		hasher := sha256.New()
-		hasher.Write([]byte(item.Content))
-		item.ContentDigest = "sha256:" + hex.EncodeToString(hasher.Sum(nil))
+		item.ContentDigest = expectedDigest
+	} else if item.ContentDigest != expectedDigest {
+		return errs.New(errs.CategoryInvalidArgument,
+			"OptionalItem %q: content_digest (%q) does not match sha256 of content (%q)",
+			item.ID, item.ContentDigest, expectedDigest)
 	}
 
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	e.items[item.ID] = item
+
+	if _, exists := e.items[item.ID]; exists {
+		return errs.New(errs.CategoryConflict, "OptionalItem %q already registered", item.ID)
+	}
+
+	e.items[item.ID] = item.deepCopy()
 	return nil
 }
 
@@ -77,7 +110,7 @@ func (e *OptionalRetrievalEngine) LookupByID(id string) (OptionalItem, bool) {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 	item, ok := e.items[id]
-	return item, ok
+	return item.deepCopy(), ok
 }
 
 // LookupBySymbol finds all items associated with a given code symbol or identifier.
@@ -94,7 +127,7 @@ func (e *OptionalRetrievalEngine) LookupBySymbol(symbol string) []OptionalItem {
 	for _, item := range e.items {
 		for _, s := range item.Symbols {
 			if strings.ToLower(s) == target {
-				matched = append(matched, item)
+				matched = append(matched, item.deepCopy())
 				break
 			}
 		}
@@ -119,7 +152,7 @@ func (e *OptionalRetrievalEngine) LookupByPath(filePath string) []OptionalItem {
 	for _, item := range e.items {
 		for _, p := range item.Paths {
 			if strings.ToLower(p) == target || strings.Contains(strings.ToLower(p), target) {
-				matched = append(matched, item)
+				matched = append(matched, item.deepCopy())
 				break
 			}
 		}
@@ -171,7 +204,7 @@ func (e *OptionalRetrievalEngine) LexicalSearch(query string, limit int) []Optio
 		}
 
 		if score > 0 {
-			scored = append(scored, scoredItem{item: item, score: score})
+			scored = append(scored, scoredItem{item: item.deepCopy(), score: score})
 		}
 	}
 
@@ -223,7 +256,7 @@ func (e *OptionalRetrievalEngine) TraverseGraph(startID string, maxDepth int) []
 				continue
 			}
 			if currID != startID {
-				result = append(result, item)
+				result = append(result, item.deepCopy())
 			}
 
 			for _, depID := range item.Dependencies {

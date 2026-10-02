@@ -21,6 +21,37 @@ func TestDefaultProvisionalProfile(t *testing.T) {
 		t.Errorf("TargetResidentTokens (%d) cannot exceed HardResidentCeilingTokens (%d)",
 			prof.TargetResidentTokens, prof.HardResidentCeilingTokens)
 	}
+	// Epistemic honesty checks (Finding 5, 6)
+	if prof.AccountingMethod != protocol.AccountingApproximateEstimate {
+		t.Errorf("expected AccountingApproximateEstimate, got %s", prof.AccountingMethod)
+	}
+	if prof.ObservedContextControl != protocol.ContextControlUnknown {
+		t.Errorf("expected ContextControlUnknown, got %s", prof.ObservedContextControl)
+	}
+	if prof.ObservedPrefixCache != protocol.PrefixCacheUnknown {
+		t.Errorf("expected PrefixCacheUnknown, got %s", prof.ObservedPrefixCache)
+	}
+	if len(prof.WorkloadEnvelopes) == 0 || prof.WorkloadEnvelopes[0].ConfidenceLevel != "provisional" {
+		t.Errorf("expected provisional confidence level on workload envelope")
+	}
+
+	// Test profile with explicit observed capabilities
+	customProf := compiler.DefaultProvisionalProfileWithCapabilities(
+		"test-ep-2", "test-chan-2", "model-2", 65536, 30000,
+		protocol.ContextControlExactStateless, protocol.PrefixCacheExplicit,
+	)
+	if err := customProf.Validate(); err != nil {
+		t.Fatalf("custom profile failed validation: %v", err)
+	}
+	if customProf.ObservedContextControl != protocol.ContextControlExactStateless {
+		t.Errorf("expected ContextControlExactStateless, got %s", customProf.ObservedContextControl)
+	}
+	if customProf.ObservedPrefixCache != protocol.PrefixCacheExplicit {
+		t.Errorf("expected PrefixCacheExplicit, got %s", customProf.ObservedPrefixCache)
+	}
+	if customProf.TargetResidentTokens != 30000 {
+		t.Errorf("expected custom TargetResidentTokens 30000, got %d", customProf.TargetResidentTokens)
+	}
 }
 
 func TestEnforceProfileBounds(t *testing.T) {

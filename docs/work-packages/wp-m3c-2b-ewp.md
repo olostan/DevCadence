@@ -2,7 +2,7 @@
 
 - **Milestone:** M3C — Cognition Resource and Session Substrate
 - **Scope card:** [docs/WORK_PACKAGES.md#wp-m3c-2--session-drivers-and-cognitive-invocation-compiler](../WORK_PACKAGES.md#wp-m3c-2--session-drivers-and-cognitive-invocation-compiler)
-- **Base commit:** `d99e40c79ebf3747b4d32a934446b3f9408e001c` (origin/main, merge of PR #18 — Session Execution Substrate)
+- **Base commit:** `d99e40c2107965b5af53a8c429aa6286f430ff8f` (origin/main, merge of PR #18 — Session Execution Substrate)
 - **Branch:** `feat/m3c-2b-cognitive-compiler`
 - **Task ID:** `task-m3c-2b-cognitive-compiler`
 - **Work Package ID:** `WP-M3C-2B`
@@ -20,7 +20,7 @@
   "work_package_id": "WP-M3C-2B",
   "work_package_revision": 1,
   "role": "principal_engineer",
-  "base_commit": "d99e40c79ebf3747b4d32a934446b3f9408e001c",
+  "base_commit": "d99e40c2107965b5af53a8c429aa6286f430ff8f",
   "project_state_revision": "bootstrap-m3c-2a-closed",
   "read_envelope": [
     "AGENTS.md",
@@ -171,7 +171,7 @@ Build the deterministic **Cognitive Invocation Compiler** (`internal/cognition/c
 - **MUST fail closed on missing or unknown mandatory rules or unmapped required domains (ADR-0020 §2, PROTOCOLS §10B):**
   Missing rule definitions, unknown dependencies, or unmapped required domains must return typed errors (`errs.CategoryInvalidArgument` or `errs.CategoryNotFound`).
 - **MUST enforce ContextProfile bounds and return `CONTEXT_UNFIT` / `errs.CategoryContextUnfit` on overflow (DCI-019, ADR-0020 §2, PROTOCOLS §10B):**
-  When token counts exceed the profile's hard resident ceiling, target ceiling, or protected reserves, the compiler must return `errs.CategoryContextUnfit` (`CONTEXT_UNFIT`) and MUST NOT silently truncate or drop mandatory obligations.
+  When token counts exceed the profile's hard resident ceiling, runtime window, or protected core reserves (with target resident tokens serving as soft packing and eviction guidance rather than a hard failure ceiling), the compiler must return `errs.CategoryContextUnfit` (`CONTEXT_UNFIT`) and MUST NOT silently truncate or drop mandatory obligations.
 - **MUST NOT allow similarity, ranking, or optional retrieval to evict or override mandatory clauses (DCI-132, ADR-0020 §2, §3):**
   Optional retrieval (lexical, identifier, or graph) may suggest candidate evidence or supporting rationale, but mandatory clauses are inviolable.
 - **MUST enforce delimiter safety in prompt renderers (DCI-133, ADR-0020 §5, PROTOCOLS §10B):**

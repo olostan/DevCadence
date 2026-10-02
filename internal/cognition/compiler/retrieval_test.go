@@ -122,3 +122,54 @@ func TestEnsureMandatoryInviolability(t *testing.T) {
 		t.Fatalf("EnsureMandatoryInviolability failed: got %v, want only ADR-0019", safe)
 	}
 }
+
+func TestOptionalRetrievalEngine_DeepCopyAndIntegrity(t *testing.T) {
+	engine := compiler.NewOptionalRetrievalEngine()
+
+	symbols := []string{"SymA"}
+	paths := []string{"path/a.go"}
+	item := compiler.OptionalItem{
+		ID:       "OPT-1",
+		Kind:     "doc",
+		Title:    "Title",
+		Content:  "Content for testing deep copy",
+		Symbols:  symbols,
+		Paths:    paths,
+		Keywords: []string{"kw"},
+	}
+
+	if err := engine.RegisterItem(item); err != nil {
+		t.Fatalf("failed to register item: %v", err)
+	}
+
+	// Mutate caller slice
+	symbols[0] = "MutatedSym"
+	paths[0] = "mutated/path.go"
+
+	retrieved, ok := engine.LookupByID("OPT-1")
+	if !ok {
+		t.Fatal("expected item to be found")
+	}
+	if retrieved.Symbols[0] != "SymA" {
+		t.Errorf("Symbols slice was mutated in backing storage! got %q, want SymA", retrieved.Symbols[0])
+	}
+	if retrieved.Paths[0] != "path/a.go" {
+		t.Errorf("Paths slice was mutated in backing storage! got %q, want path/a.go", retrieved.Paths[0])
+	}
+
+	// Duplicate registration fails with ErrConflict
+	if err := engine.RegisterItem(item); err == nil {
+		t.Error("expected ErrConflict for duplicate registration, got nil")
+	}
+
+	// Mismatched content digest fails with ErrInvalidArgument
+	badItem := compiler.OptionalItem{
+		ID:            "OPT-BAD",
+		Title:         "Bad",
+		Content:       "Actual content",
+		ContentDigest: "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+	}
+	if err := engine.RegisterItem(badItem); err == nil {
+		t.Error("expected ErrInvalidArgument for mismatched content digest, got nil")
+	}
+}

@@ -102,7 +102,7 @@ type ContextProfile struct {
 	Runtime                   string                    `json:"runtime"`
 	ModelRef                  string                    `json:"model_ref"`
 	Quantization              *string                   `json:"quantization,omitempty"`
-	ContextConfiguration     map[string]string         `json:"context_configuration,omitempty"`
+	ContextConfiguration      map[string]string         `json:"context_configuration,omitempty"`
 	Revision                  int                       `json:"revision"`
 	DeclaredWindowTokens      int                       `json:"declared_window_tokens"`
 	RuntimeWindowTokens       int                       `json:"runtime_window_tokens"`
@@ -199,21 +199,22 @@ func (c *ContextProfile) Validate() error {
 	}
 	if !c.ObservedContextControl.Valid() {
 		return enumError(kind, "observed_context_control", string(c.ObservedContextControl),
-			string(ContextControlExactStateless), string(ContextControlAppendOnly), string(ContextControlOpaqueSession))
+			string(ContextControlExactStateless), string(ContextControlAppendOnly), string(ContextControlOpaqueSession), string(ContextControlUnknown))
 	}
 	if !c.ObservedPrefixCache.Valid() {
 		return enumError(kind, "observed_prefix_cache", string(c.ObservedPrefixCache),
-			string(PrefixCacheExplicit), string(PrefixCacheImplicit), string(PrefixCacheSessionKV), string(PrefixCacheNone))
+			string(PrefixCacheExplicit), string(PrefixCacheImplicit), string(PrefixCacheSessionKV), string(PrefixCacheNone), string(PrefixCacheUnknown))
 	}
 	return nil
 }
 
 // MandatoryClauseRef identifies an exact normative clause deterministically admitted.
 type MandatoryClauseRef struct {
-	ClauseID      string `json:"clause_id"`
-	SourceDoc     string `json:"source_doc"`
-	Revision      string `json:"revision"`
-	ContentDigest string `json:"content_digest"`
+	ClauseID           string `json:"clause_id"`
+	SourceDoc          string `json:"source_doc"`
+	Revision           string `json:"revision"`
+	ContentDigest      string `json:"content_digest"`
+	SelectionRationale string `json:"selection_rationale,omitempty"`
 }
 
 // Validate checks MandatoryClauseRef fields.

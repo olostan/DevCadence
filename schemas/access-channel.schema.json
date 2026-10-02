@@ -47,7 +47,8 @@
       "enum": [
         "exact_stateless",
         "append_only",
-        "opaque_session"
+        "opaque_session",
+        "unknown"
       ]
     },
     "prefix_cache": {
@@ -55,7 +56,8 @@
         "explicit",
         "implicit",
         "session_kv",
-        "none"
+        "none",
+        "unknown"
       ]
     },
     "supports_streaming": { "type": "boolean" },

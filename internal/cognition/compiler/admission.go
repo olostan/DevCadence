@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/olostan/DevCadence/internal/errs"
 	"github.com/olostan/DevCadence/internal/protocol"
@@ -38,19 +39,20 @@ func (c AdmissionClass) Valid() bool {
 
 // Rule defines an operative normative requirement or invariant.
 type Rule struct {
-	ID             string         `json:"id"`
-	AdmissionClass AdmissionClass `json:"admission_class"`
-	SourceDoc      string         `json:"source_doc"`
-	Revision       string         `json:"revision"`
-	Content        string         `json:"content"`
-	ContentDigest  string         `json:"content_digest"`
-	Capability     string         `json:"capability,omitempty"`    // Required if class is capability_default (e.g., "write", "network", "credentials")
-	Domains        []string       `json:"domains,omitempty"`       // Mapped domains
-	RiskTags       []string       `json:"risk_tags,omitempty"`     // Mapped risk tags
-	Roles          []string       `json:"roles,omitempty"`         // Mapped roles
-	Actions        []string       `json:"actions,omitempty"`       // Mapped actions
-	PathPatterns   []string       `json:"path_patterns,omitempty"` // Mapped file paths / globs
-	DependsOn      []string       `json:"depends_on,omitempty"`    // Mandatory dependency edges
+	ID                 string         `json:"id"`
+	AdmissionClass     AdmissionClass `json:"admission_class"`
+	SourceDoc          string         `json:"source_doc"`
+	Revision           string         `json:"revision"`
+	Content            string         `json:"content"`
+	ContentDigest      string         `json:"content_digest"`
+	Capability         string         `json:"capability,omitempty"`          // Required if class is capability_default (e.g., "write", "exec", "network")
+	Domains            []string       `json:"domains,omitempty"`             // Mapped domains
+	RiskTags           []string       `json:"risk_tags,omitempty"`           // Mapped risk tags
+	Roles              []string       `json:"roles,omitempty"`               // Mapped roles
+	Actions            []string       `json:"actions,omitempty"`             // Mapped actions
+	PathPatterns       []string       `json:"path_patterns,omitempty"`       // Mapped file paths / globs
+	DependsOn          []string       `json:"depends_on,omitempty"`          // Mandatory dependency edges
+	SelectionRationale string         `json:"selection_rationale,omitempty"` // Explicit rationale populated upon admission (PROTOCOLS §10B)
 }
 
 // Validate checks Rule field constraints.
@@ -77,20 +79,142 @@ func (r Rule) Validate() error {
 	return nil
 }
 
+func (r Rule) deepCopy() Rule {
+	out := r
+	out.Domains = copyStringSlice(r.Domains)
+	out.RiskTags = copyStringSlice(r.RiskTags)
+	out.Roles = copyStringSlice(r.Roles)
+	out.Actions = copyStringSlice(r.Actions)
+	out.PathPatterns = copyStringSlice(r.PathPatterns)
+	out.DependsOn = copyStringSlice(r.DependsOn)
+	return out
+}
+
+func copyStringSlice(in []string) []string {
+	if in == nil {
+		return nil
+	}
+	out := make([]string, len(in))
+	copy(out, in)
+	return out
+}
+
+// CapabilityExclusion represents an explicit, revision-pinned decision that a capability
+// does not apply to an invocation (Finding 1, ADR-0020 §2).
+type CapabilityExclusion struct {
+	Capability string `json:"capability"`
+	DecisionID string `json:"decision_id"`
+	Revision   string `json:"revision"`
+	Rationale  string `json:"rationale"`
+}
+
+// Validate checks CapabilityExclusion fields.
+func (e CapabilityExclusion) Validate() error {
+	const kind = "CapabilityExclusion"
+	if strings.TrimSpace(e.Capability) == "" {
+		return errs.New(errs.CategoryInvalidArgument, "%s: capability cannot be empty", kind)
+	}
+	if strings.TrimSpace(e.DecisionID) == "" {
+		return errs.New(errs.CategoryInvalidArgument, "%s: decision_id cannot be empty", kind)
+	}
+	if strings.TrimSpace(e.Revision) == "" {
+		return errs.New(errs.CategoryInvalidArgument, "%s: revision cannot be empty", kind)
+	}
+	if strings.TrimSpace(e.Rationale) == "" {
+		return errs.New(errs.CategoryInvalidArgument, "%s: rationale cannot be empty", kind)
+	}
+	return nil
+}
+
+// DeriveActiveCapabilities deterministically derives active capabilities from session, tool, and channel facts (Finding 1).
+func DeriveActiveCapabilities(channel *protocol.AccessChannel, tools []string, declaredCaps []string) []string {
+	seen := make(map[string]bool)
+
+	if channel != nil {
+		if channel.NativeWorktreeAccess {
+			seen["write"] = true
+			seen["filesystem"] = true
+		}
+		if channel.CredentialRefID != nil && *channel.CredentialRefID != "" {
+			seen["credentials"] = true
+		}
+		if channel.Kind == protocol.ChannelDirectHTTPAPI || channel.Kind == protocol.ChannelRemoteAgentProxy {
+			seen["network"] = true
+		}
+		if channel.SupportsTools {
+			seen["tools"] = true
+		}
+	}
+
+	for _, tool := range tools {
+		t := strings.ToLower(tool)
+		if strings.Contains(t, "bash") || strings.Contains(t, "exec") || strings.Contains(t, "command") || strings.Contains(t, "terminal") {
+			seen["exec"] = true
+		}
+		if strings.Contains(t, "write") || strings.Contains(t, "replace") || strings.Contains(t, "edit") || strings.Contains(t, "create") {
+			seen["write"] = true
+		}
+		if strings.Contains(t, "fetch") || strings.Contains(t, "http") || strings.Contains(t, "web") || strings.Contains(t, "curl") {
+			seen["network"] = true
+		}
+	}
+
+	for _, capName := range declaredCaps {
+		c := strings.ToLower(strings.TrimSpace(capName))
+		if c != "" {
+			seen[c] = true
+		}
+	}
+
+	result := make([]string, 0, len(seen))
+	for c := range seen {
+		result = append(result, c)
+	}
+	sort.Strings(result)
+	return result
+}
+
 // RuleRegistry stores and validates the canonical corpus of normative rules.
 type RuleRegistry struct {
-	mu    sync.RWMutex
-	rules map[string]Rule
+	mu           sync.RWMutex
+	rules        map[string]Rule
+	knownDomains map[string]struct{}
+	frozen       bool
 }
 
 // NewRuleRegistry creates an empty RuleRegistry.
 func NewRuleRegistry() *RuleRegistry {
 	return &RuleRegistry{
-		rules: make(map[string]Rule),
+		rules:        make(map[string]Rule),
+		knownDomains: make(map[string]struct{}),
 	}
 }
 
-// Register adds a rule to the registry after computing its digest and validating constraints.
+// RegisterKnownDomain adds a recognized domain identifier to the registry vocabulary.
+func (reg *RuleRegistry) RegisterKnownDomain(domain string) error {
+	clean := strings.ToLower(strings.TrimSpace(domain))
+	if clean == "" {
+		return errs.New(errs.CategoryInvalidArgument, "domain cannot be empty")
+	}
+	reg.mu.Lock()
+	defer reg.mu.Unlock()
+	if reg.frozen {
+		return errs.New(errs.CategoryConflict, "RuleRegistry is frozen; cannot register new domain")
+	}
+	reg.knownDomains[clean] = struct{}{}
+	return nil
+}
+
+// IsDomainKnown reports whether the domain is part of the known domain vocabulary.
+func (reg *RuleRegistry) IsDomainKnown(domain string) bool {
+	reg.mu.RLock()
+	defer reg.mu.RUnlock()
+	clean := strings.ToLower(strings.TrimSpace(domain))
+	_, ok := reg.knownDomains[clean]
+	return ok
+}
+
+// Register adds a rule to the registry after computing its digest and validating constraints (Finding 9: deep copy).
 func (reg *RuleRegistry) Register(r Rule) error {
 	if err := r.Validate(); err != nil {
 		return err
@@ -110,29 +234,45 @@ func (reg *RuleRegistry) Register(r Rule) error {
 	reg.mu.Lock()
 	defer reg.mu.Unlock()
 
+	if reg.frozen {
+		return errs.New(errs.CategoryConflict, "RuleRegistry is frozen; cannot register new rule")
+	}
+
 	if _, exists := reg.rules[r.ID]; exists {
 		return errs.New(errs.CategoryConflict, "Rule %q already registered", r.ID)
 	}
-	reg.rules[r.ID] = r
+
+	// Add domains to known domains set
+	for _, d := range r.Domains {
+		clean := strings.ToLower(strings.TrimSpace(d))
+		if clean != "" {
+			reg.knownDomains[clean] = struct{}{}
+		}
+	}
+
+	reg.rules[r.ID] = r.deepCopy()
 	return nil
 }
 
-// Get retrieves a rule by ID.
+// Get retrieves a rule by ID (Finding 9: deep copy on egress).
 func (reg *RuleRegistry) Get(id string) (Rule, bool) {
 	reg.mu.RLock()
 	defer reg.mu.RUnlock()
 	r, ok := reg.rules[id]
-	return r, ok
+	if !ok {
+		return Rule{}, false
+	}
+	return r.deepCopy(), true
 }
 
-// All returns all registered rules sorted deterministically by ID.
+// All returns all registered rules sorted deterministically by ID (Finding 9: deep copy on egress).
 func (reg *RuleRegistry) All() []Rule {
 	reg.mu.RLock()
 	defer reg.mu.RUnlock()
 
 	result := make([]Rule, 0, len(reg.rules))
 	for _, r := range reg.rules {
-		result = append(result, r)
+		result = append(result, r.deepCopy())
 	}
 	sort.Slice(result, func(i, j int) bool {
 		return result[i].ID < result[j].ID
@@ -140,14 +280,37 @@ func (reg *RuleRegistry) All() []Rule {
 	return result
 }
 
+// Freeze validates reverse-coverage and marks the registry immutable (Finding 2, 3).
+func (reg *RuleRegistry) Freeze() error {
+	reg.mu.Lock()
+	defer reg.mu.Unlock()
+	if reg.frozen {
+		return nil
+	}
+	if err := reg.validateReverseCoverageLocked(); err != nil {
+		return err
+	}
+	reg.frozen = true
+	return nil
+}
+
+// IsFrozen reports whether the registry has been frozen.
+func (reg *RuleRegistry) IsFrozen() bool {
+	reg.mu.RLock()
+	defer reg.mu.RUnlock()
+	return reg.frozen
+}
+
 // ValidateReverseCoverage performs reverse-coverage validation (ADR-0020 §2, DCI-132).
 // It verifies that EVERY registered mandatory clause has a deterministic admission path
-// (i.e. is not orphaned). An orphan rule cannot be reached via 'always', 'capability_default',
-// direct mappings, or transitive dependency closure.
+// (i.e. is not orphaned).
 func (reg *RuleRegistry) ValidateReverseCoverage() error {
 	reg.mu.RLock()
 	defer reg.mu.RUnlock()
+	return reg.validateReverseCoverageLocked()
+}
 
+func (reg *RuleRegistry) validateReverseCoverageLocked() error {
 	// 1. Identify directly reachable rules
 	directlyReachable := make(map[string]bool)
 	for id, r := range reg.rules {
@@ -211,19 +374,82 @@ type AdmissionParams struct {
 	RiskTags             []string
 	Paths                []string
 	ActiveCapabilities   []string
-	ExcludedCapabilities []string
+	CapabilityExclusions []CapabilityExclusion
+	ExcludedCapabilities []string // Deprecated / unprovenanced strings: requires typed decision in CapabilityExclusions
 	ExplicitRuleIDs      []string
 }
 
 // ResolveAdmittedRules deterministically admits rules matching criteria and computes
 // full dependency closure over all transitive dependencies (ADR-0020 §2, DCI-132).
+// Invariants enforced (Findings 1, 2, 3, 9):
+// - Enforces reverse-coverage validation on the rule registry.
+// - Unknown required domains fail closed with errs.CategoryInvalidArgument.
+// - Capability exclusion requires typed revision-pinned decision (CapabilityExclusion).
+// - Contradictory "active + excluded" fails closed with errs.CategoryInvalidArgument.
+// - Records explicit selection rationale for each admitted rule (SelectionRationale).
 func (reg *RuleRegistry) ResolveAdmittedRules(params AdmissionParams) ([]Rule, error) {
 	reg.mu.RLock()
 	defer reg.mu.RUnlock()
 
-	admittedMap := make(map[string]Rule)
+	// 1. Enforce reverse-coverage on the registry (Finding 2)
+	if !reg.frozen {
+		if err := reg.validateReverseCoverageLocked(); err != nil {
+			return nil, err
+		}
+	}
 
-	// Set lookups
+	// 2. Validate domain vocabulary: unknown domains fail closed (Finding 2)
+	if len(reg.knownDomains) > 0 {
+		for i, d := range params.Domains {
+			clean := strings.ToLower(strings.TrimSpace(d))
+			if clean == "" {
+				return nil, errs.New(errs.CategoryInvalidArgument, "domains[%d] cannot be empty", i)
+			}
+			if _, known := reg.knownDomains[clean]; !known {
+				return nil, errs.New(errs.CategoryInvalidArgument, "unknown or unmapped required domain %q", d)
+			}
+		}
+	}
+
+	// 3. Process active and excluded capabilities (Finding 1)
+	activeCapsSet := make(map[string]bool, len(params.ActiveCapabilities))
+	for _, c := range params.ActiveCapabilities {
+		activeCapsSet[strings.ToLower(strings.TrimSpace(c))] = true
+	}
+
+	// Excluded capabilities must have typed provenance
+	exclusions := make(map[string]CapabilityExclusion)
+	for _, excl := range params.CapabilityExclusions {
+		if err := excl.Validate(); err != nil {
+			return nil, err
+		}
+		capLower := strings.ToLower(strings.TrimSpace(excl.Capability))
+		// Fail closed on contradictory active + excluded
+		if activeCapsSet[capLower] {
+			return nil, errs.New(errs.CategoryInvalidArgument,
+				"contradictory capability %q is both active and excluded (decision %s)", excl.Capability, excl.DecisionID)
+		}
+		exclusions[capLower] = excl
+	}
+
+	// If legacy unprovenanced ExcludedCapabilities strings are supplied, verify they have typed decisions or fail closed
+	if len(params.ExcludedCapabilities) > 0 {
+		for _, capName := range params.ExcludedCapabilities {
+			capLower := strings.ToLower(strings.TrimSpace(capName))
+			if activeCapsSet[capLower] {
+				return nil, errs.New(errs.CategoryInvalidArgument,
+					"contradictory capability %q is both active and excluded", capName)
+			}
+			if _, hasTyped := exclusions[capLower]; !hasTyped {
+				return nil, errs.New(errs.CategoryInvalidArgument,
+					"unprovenanced exclusion of capability %q: exclusion requires typed, revision-pinned CapabilityExclusion", capName)
+			}
+		}
+	}
+
+	admittedMap := make(map[string]Rule)
+	selectionRationale := make(map[string]string)
+
 	domainsSet := make(map[string]bool, len(params.Domains))
 	for _, d := range params.Domains {
 		domainsSet[strings.ToLower(strings.TrimSpace(d))] = true
@@ -232,34 +458,34 @@ func (reg *RuleRegistry) ResolveAdmittedRules(params AdmissionParams) ([]Rule, e
 	for _, r := range params.RiskTags {
 		riskTagsSet[strings.ToLower(strings.TrimSpace(r))] = true
 	}
-	activeCapsSet := make(map[string]bool, len(params.ActiveCapabilities))
-	for _, c := range params.ActiveCapabilities {
-		activeCapsSet[strings.ToLower(strings.TrimSpace(c))] = true
-	}
-	excludedCapsSet := make(map[string]bool, len(params.ExcludedCapabilities))
-	for _, c := range params.ExcludedCapabilities {
-		excludedCapsSet[strings.ToLower(strings.TrimSpace(c))] = true
-	}
 
 	targetRole := strings.ToLower(strings.TrimSpace(params.Role))
 	targetAction := strings.ToLower(strings.TrimSpace(params.Action))
 
-	// 1. Initial admission pass
+	// 4. Initial admission pass
 	for id, rule := range reg.rules {
 		switch rule.AdmissionClass {
 		case AdmissionClassAlways:
 			admittedMap[id] = rule
+			selectionRationale[id] = "admitted by always authority floor (DCI-132)"
 		case AdmissionClassCapabilityDefault:
 			capLower := strings.ToLower(rule.Capability)
-			if activeCapsSet[capLower] && !excludedCapsSet[capLower] {
+			if _, isExcluded := exclusions[capLower]; isExcluded {
+				continue
+			}
+			if activeCapsSet[capLower] {
 				admittedMap[id] = rule
+				selectionRationale[id] = fmt.Sprintf("admitted by active capability %q", rule.Capability)
 			}
 		case AdmissionClassMapped:
-			// Check role match
 			matched := false
+			rationale := ""
+
+			// Check role match
 			for _, r := range rule.Roles {
 				if strings.ToLower(r) == targetRole {
 					matched = true
+					rationale = fmt.Sprintf("admitted by role mapping: %s", targetRole)
 					break
 				}
 			}
@@ -268,6 +494,7 @@ func (reg *RuleRegistry) ResolveAdmittedRules(params AdmissionParams) ([]Rule, e
 				for _, a := range rule.Actions {
 					if strings.ToLower(a) == targetAction {
 						matched = true
+						rationale = fmt.Sprintf("admitted by action mapping: %s", targetAction)
 						break
 					}
 				}
@@ -277,6 +504,7 @@ func (reg *RuleRegistry) ResolveAdmittedRules(params AdmissionParams) ([]Rule, e
 				for _, d := range rule.Domains {
 					if domainsSet[strings.ToLower(d)] {
 						matched = true
+						rationale = fmt.Sprintf("admitted by domain mapping: %s", d)
 						break
 					}
 				}
@@ -286,6 +514,7 @@ func (reg *RuleRegistry) ResolveAdmittedRules(params AdmissionParams) ([]Rule, e
 				for _, rt := range rule.RiskTags {
 					if riskTagsSet[strings.ToLower(rt)] {
 						matched = true
+						rationale = fmt.Sprintf("admitted by risk tag mapping: %s", rt)
 						break
 					}
 				}
@@ -295,6 +524,7 @@ func (reg *RuleRegistry) ResolveAdmittedRules(params AdmissionParams) ([]Rule, e
 				for _, p := range params.Paths {
 					if matchPathPatterns(p, rule.PathPatterns) {
 						matched = true
+						rationale = fmt.Sprintf("admitted by path pattern mapping: %s", p)
 						break
 					}
 				}
@@ -302,20 +532,22 @@ func (reg *RuleRegistry) ResolveAdmittedRules(params AdmissionParams) ([]Rule, e
 
 			if matched {
 				admittedMap[id] = rule
+				selectionRationale[id] = rationale
 			}
 		}
 	}
 
-	// 2. Explicit rule inclusions (fail-closed if missing)
+	// 5. Explicit rule inclusions (fail-closed if missing)
 	for _, explicitID := range params.ExplicitRuleIDs {
 		rule, ok := reg.rules[explicitID]
 		if !ok {
 			return nil, errs.New(errs.CategoryNotFound, "explicit mandatory rule %q not registered in rule registry", explicitID)
 		}
 		admittedMap[explicitID] = rule
+		selectionRationale[explicitID] = "admitted by explicit rule ID inclusion"
 	}
 
-	// 3. Dependency closure loop (fail-closed if dependency is missing)
+	// 6. Transitive dependency closure loop (fail-closed if dependency is missing)
 	changed := true
 	for changed {
 		changed = false
@@ -328,16 +560,19 @@ func (reg *RuleRegistry) ResolveAdmittedRules(params AdmissionParams) ([]Rule, e
 							"rule %q depends on unregistered rule %q", rule.ID, depID)
 					}
 					admittedMap[depID] = depRule
+					selectionRationale[depID] = fmt.Sprintf("admitted by transitive dependency of %s", rule.ID)
 					changed = true
 				}
 			}
 		}
 	}
 
-	// Deterministic sorting by ID
+	// Deterministic sorting by ID and attaching rationale (Finding 3, 9)
 	result := make([]Rule, 0, len(admittedMap))
 	for _, r := range admittedMap {
-		result = append(result, r)
+		ruleCopy := r.deepCopy()
+		ruleCopy.SelectionRationale = selectionRationale[r.ID]
+		result = append(result, ruleCopy)
 	}
 	sort.Slice(result, func(i, j int) bool {
 		return result[i].ID < result[j].ID
@@ -391,7 +626,10 @@ type CompileRequest struct {
 	RiskTags              []string
 	Action                string
 	ActiveCapabilities    []string
+	CapabilityExclusions  []CapabilityExclusion
 	ExcludedCapabilities  []string
+	Tools                 []string
+	AccessChannel         *protocol.AccessChannel
 	ExplicitRuleIDs       []string
 	ExecutionContract     string
 	Assumptions           []protocol.Assumption
@@ -403,6 +641,9 @@ type CompileRequest struct {
 	CandidateDiffManifest *string
 	ValidationSummaries   []string
 	ActiveLeaseIDs        []string
+	Renderer              PromptRenderer
+	ToolSchemas           []string
+	HostFraming           string
 }
 
 // Compiler executes the Cognitive Invocation Compiler pipeline (ADR-0020 §2, PROTOCOLS §10B).
@@ -422,48 +663,52 @@ func NewCompiler(registry *RuleRegistry, leaseMgr *EvidenceLeaseManager, capsule
 }
 
 // Compile compiles a validated ContextManifest and ContextPack.
-// If the compiled pack exceeds profile ceilings, it marks status as PackStatusContextUnfit
-// and returns errs.CategoryContextUnfit without truncating mandatory requirements (DCI-019).
+// If the compiled pack or rendered prompt projection exceeds profile ceilings,
+// it marks status as PackStatusContextUnfit and returns errs.CategoryContextUnfit
+// without truncating mandatory requirements (DCI-019).
 func (c *Compiler) Compile(ctx context.Context, req CompileRequest) (*protocol.ContextManifest, *protocol.ContextPack, error) {
 	const kind = "CognitiveCompiler"
 
-	// 1. Fail-closed request parameter validation
-	if req.TaskID == "" {
+	// 1. Fail-closed request parameter validation (Finding 11)
+	if strings.TrimSpace(req.TaskID) == "" {
 		return nil, nil, errs.New(errs.CategoryInvalidArgument, "%s: task_id cannot be empty", kind)
 	}
-	if req.WorkPackageID == "" {
+	if strings.TrimSpace(req.WorkPackageID) == "" {
 		return nil, nil, errs.New(errs.CategoryInvalidArgument, "%s: work_package_id cannot be empty", kind)
 	}
 	if req.WorkPackageRevision < 1 {
 		req.WorkPackageRevision = 1
 	}
-	if req.WorkPackageDigest == "" {
-		// Provide default empty sha256 if not specified
-		req.WorkPackageDigest = "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+	if strings.TrimSpace(req.WorkPackageDigest) == "" {
+		return nil, nil, errs.New(errs.CategoryInvalidArgument, "%s: work_package_digest cannot be empty", kind)
 	}
-	if req.Role == "" {
+	if !strings.HasPrefix(req.WorkPackageDigest, "sha256:") || len(req.WorkPackageDigest) != 71 {
+		return nil, nil, errs.New(errs.CategoryInvalidArgument,
+			"%s: work_package_digest must be sha256:<64 hex chars>, got %q", kind, req.WorkPackageDigest)
+	}
+	if strings.TrimSpace(req.Role) == "" {
 		return nil, nil, errs.New(errs.CategoryInvalidArgument, "%s: role cannot be empty", kind)
 	}
 	if len(req.BaseCommit) < 7 {
 		return nil, nil, errs.New(errs.CategoryInvalidArgument, "%s: base_commit must be >= 7 characters, got %q", kind, req.BaseCommit)
 	}
-	if req.ExecutionContract == "" {
+	if strings.TrimSpace(req.ExecutionContract) == "" {
 		return nil, nil, errs.New(errs.CategoryInvalidArgument, "%s: execution_contract cannot be empty", kind)
 	}
 	if req.ContextProfile == nil {
 		return nil, nil, errs.New(errs.CategoryInvalidArgument, "%s: context_profile cannot be nil", kind)
 	}
-	if req.BudgetPoolID == "" {
-		req.BudgetPoolID = "default_pool"
+	if strings.TrimSpace(req.BudgetPoolID) == "" {
+		return nil, nil, errs.New(errs.CategoryInvalidArgument, "%s: budget_pool_id cannot be empty", kind)
 	}
-	if req.MappingVersion == "" {
-		req.MappingVersion = "v1.0"
+	if strings.TrimSpace(req.MappingVersion) == "" {
+		return nil, nil, errs.New(errs.CategoryInvalidArgument, "%s: mapping_version cannot be empty", kind)
 	}
-	if req.SourceRevision == "" {
-		req.SourceRevision = req.BaseCommit
+	if strings.TrimSpace(req.SourceRevision) == "" {
+		return nil, nil, errs.New(errs.CategoryInvalidArgument, "%s: source_revision cannot be empty", kind)
 	}
-	if req.ProjectStateRevision == "" {
-		req.ProjectStateRevision = "rev-initial"
+	if strings.TrimSpace(req.ProjectStateRevision) == "" {
+		return nil, nil, errs.New(errs.CategoryInvalidArgument, "%s: project_state_revision cannot be empty", kind)
 	}
 
 	// Validate domain mapping presence
@@ -471,6 +716,11 @@ func (c *Compiler) Compile(ctx context.Context, req CompileRequest) (*protocol.C
 		if strings.TrimSpace(d) == "" {
 			return nil, nil, errs.New(errs.CategoryInvalidArgument, "%s: domains[%d] cannot be empty", kind, i)
 		}
+	}
+
+	// Derive active capabilities from channel and tool facts if present (Finding 1)
+	if req.AccessChannel != nil || len(req.Tools) > 0 {
+		req.ActiveCapabilities = DeriveActiveCapabilities(req.AccessChannel, req.Tools, req.ActiveCapabilities)
 	}
 
 	// 2. Deterministic rule admission & closure
@@ -482,6 +732,7 @@ func (c *Compiler) Compile(ctx context.Context, req CompileRequest) (*protocol.C
 		RiskTags:             req.RiskTags,
 		Paths:                allPaths,
 		ActiveCapabilities:   req.ActiveCapabilities,
+		CapabilityExclusions: req.CapabilityExclusions,
 		ExcludedCapabilities: req.ExcludedCapabilities,
 		ExplicitRuleIDs:      req.ExplicitRuleIDs,
 	})
@@ -495,16 +746,17 @@ func (c *Compiler) Compile(ctx context.Context, req CompileRequest) (*protocol.C
 
 	for i, r := range admittedRules {
 		mandatoryRefs[i] = protocol.MandatoryClauseRef{
-			ClauseID:      r.ID,
-			SourceDoc:     r.SourceDoc,
-			Revision:      r.Revision,
-			ContentDigest: r.ContentDigest,
+			ClauseID:           r.ID,
+			SourceDoc:          r.SourceDoc,
+			Revision:           r.Revision,
+			ContentDigest:      r.ContentDigest,
+			SelectionRationale: r.SelectionRationale,
 		}
 		normativeClausesText[i] = fmt.Sprintf("[%s] %s", r.ID, r.Content)
 		admittedObjectDigests[r.ID] = r.ContentDigest
 	}
 
-	// 3. Assemble ContextManifest
+	// 3. Assemble ContextManifest with selection provenance
 	manifestID := fmt.Sprintf("manifest-%s-rev%d", req.TaskID, req.WorkPackageRevision)
 	manifest := &protocol.ContextManifest{
 		SchemaVersion:        protocol.SchemaVersion1,
@@ -528,22 +780,49 @@ func (c *Compiler) Compile(ctx context.Context, req CompileRequest) (*protocol.C
 		Assumptions:          req.Assumptions,
 		ExplicitQuestions:    req.ExplicitQuestions,
 		ExpansionTriggers:    req.ExpansionTriggers,
-		AdmissionProvenance:  []string{"compiler:deterministic_rule_admission_v1"},
-		ContextProfileID:     req.ContextProfile.ProfileID,
-		BudgetPoolID:         req.BudgetPoolID,
+		AdmissionProvenance: []string{
+			"compiler:deterministic_rule_admission_v1",
+			fmt.Sprintf("mapping_version:%s", req.MappingVersion),
+			fmt.Sprintf("source_revision:%s", req.SourceRevision),
+		},
+		ContextProfileID: req.ContextProfile.ProfileID,
+		BudgetPoolID:     req.BudgetPoolID,
 	}
 
 	if err := manifest.Validate(); err != nil {
 		return nil, nil, errs.Wrap(errs.CategoryInvalidArgument, err, "%s: generated manifest failed validation", kind)
 	}
 
-	// 4. Gather Evidence Working Set leases
+	// 4. Gather Evidence Working Set leases with staleness and expiry rejection (Finding 7)
 	evidenceWorkingSet := make([]protocol.EvidenceLease, 0)
 	if c.leaseMgr != nil && len(req.ActiveLeaseIDs) > 0 {
+		now := time.Now().UTC()
 		for _, lid := range req.ActiveLeaseIDs {
 			lease, ok := c.leaseMgr.GetLease(lid)
 			if !ok {
 				return nil, nil, errs.New(errs.CategoryNotFound, "%s: active lease %q not found", kind, lid)
+			}
+			// Reject released or invalidated leases
+			if lease.Status != protocol.LeaseStatusActive {
+				return nil, nil, errs.New(errs.CategoryValidationFailed,
+					"%s: lease %q is not active (status: %q)", kind, lid, lease.Status)
+			}
+			// Reject expired leases
+			if lease.ExpiresAt != nil && *lease.ExpiresAt != "" {
+				expTime, err := time.Parse(time.RFC3339Nano, *lease.ExpiresAt)
+				if err != nil {
+					expTime, err = time.Parse(time.RFC3339, *lease.ExpiresAt)
+				}
+				if err == nil && now.After(expTime) {
+					return nil, nil, errs.New(errs.CategoryValidationFailed,
+						"%s: lease %q expired at %s", kind, lid, *lease.ExpiresAt)
+				}
+			}
+			// Reject inconsistent source revision
+			if lease.SourceRevision != "" && req.SourceRevision != "" && lease.SourceRevision != req.SourceRevision {
+				return nil, nil, errs.New(errs.CategoryValidationFailed,
+					"%s: lease %q source revision %q does not match compilation source revision %q",
+					kind, lid, lease.SourceRevision, req.SourceRevision)
 			}
 			// Verify read authorization against read envelope
 			if len(req.ReadEnvelope) > 0 && !IsPathAuthorized(lease.FilePath, req.ReadEnvelope) {
@@ -558,10 +837,24 @@ func (c *Compiler) Compile(ctx context.Context, req CompileRequest) (*protocol.C
 		return evidenceWorkingSet[i].LeaseID < evidenceWorkingSet[j].LeaseID
 	})
 
-	// 5. Gather Cognitive State Capsule
+	// 5. Gather Cognitive State Capsule with dependency validity check (Finding 7)
 	var cognitiveState protocol.CognitiveStateCapsule
 	if c.capsuleMgr != nil {
 		cognitiveState = c.capsuleMgr.Snapshot()
+		if c.leaseMgr != nil {
+			for _, depID := range cognitiveState.EvidenceDependencies {
+				depLease, ok := c.leaseMgr.GetLease(depID)
+				if !ok {
+					return nil, nil, errs.New(errs.CategoryValidationFailed,
+						"%s: cognitive state references missing evidence lease %q", kind, depID)
+				}
+				if depLease.Status != protocol.LeaseStatusActive {
+					return nil, nil, errs.New(errs.CategoryValidationFailed,
+						"%s: cognitive state references stale/invalidated evidence lease %q (status: %q)",
+						kind, depID, depLease.Status)
+				}
+			}
+		}
 	}
 
 	// 6. Assemble Ephemeral Tail Block
@@ -633,7 +926,7 @@ func (c *Compiler) Compile(ctx context.Context, req CompileRequest) (*protocol.C
 		AccountingMethod:    accountingMethod,
 	}
 
-	// 8. Compute Pack Digest
+	// 8. Compute True Invocation Identity Digest (Finding 10)
 	hasher := sha256.New()
 	hasher.Write([]byte(manifestID))
 	hasher.Write([]byte(roleCoreText))
@@ -641,9 +934,37 @@ func (c *Compiler) Compile(ctx context.Context, req CompileRequest) (*protocol.C
 	for _, nc := range normativeClausesText {
 		hasher.Write([]byte(nc))
 	}
-	for _, l := range evidenceWorkingSet {
-		hasher.Write([]byte(l.ContentDigest))
+	for _, h := range cognitiveState.Hypotheses {
+		hasher.Write([]byte("hyp:" + h))
 	}
+	for _, t := range cognitiveState.ActiveTODOs {
+		hasher.Write([]byte("todo:" + t))
+	}
+	for _, d := range cognitiveState.IntermediateDecisions {
+		hasher.Write([]byte("dec:" + d))
+	}
+	for _, q := range cognitiveState.OpenQuestions {
+		hasher.Write([]byte("q:" + q))
+	}
+	for _, dep := range cognitiveState.EvidenceDependencies {
+		hasher.Write([]byte("dep:" + dep))
+	}
+	for _, l := range evidenceWorkingSet {
+		hasher.Write([]byte(l.LeaseID + ":" + l.ContentDigest))
+	}
+	hasher.Write([]byte("action:" + ephemeralTail.CurrentAction))
+	for _, ex := range ephemeralTail.RecentToolExchanges {
+		hasher.Write([]byte("ex:" + ex))
+	}
+	if ephemeralTail.CandidateDiffManifest != nil {
+		hasher.Write([]byte("diff:" + *ephemeralTail.CandidateDiffManifest))
+	}
+	for _, vs := range ephemeralTail.ValidationSummaries {
+		hasher.Write([]byte("val:" + vs))
+	}
+	hasher.Write([]byte("profile:" + req.ContextProfile.ProfileID))
+	hasher.Write([]byte("budget:" + req.BudgetPoolID))
+
 	packDigest := "sha256:" + hex.EncodeToString(hasher.Sum(nil))
 	admittedObjectDigests["manifest"] = req.WorkPackageDigest
 
@@ -668,14 +989,37 @@ func (c *Compiler) Compile(ctx context.Context, req CompileRequest) (*protocol.C
 		Status:                protocol.PackStatusReady,
 	}
 
-	// 9. Enforce ContextProfile Bounds (DCI-019)
+	// 9. Enforce Abstract ContextProfile Bounds (DCI-019)
 	boundsErr := EnforceProfileBounds(pack, req.ContextProfile)
 	if boundsErr != nil {
 		pack.Status = protocol.PackStatusContextUnfit
 		return manifest, pack, boundsErr
 	}
 
-	// 10. Validate complete pack
+	// 10. Enforce Final Endpoint Prompt Projection Bounds (Finding 4, PROTOCOLS §10B)
+	renderer := req.Renderer
+	if renderer == nil {
+		renderer = NewTaggedMarkdownRenderer()
+	}
+	projection, err := renderer.Render(pack)
+	if err != nil {
+		return nil, nil, errs.Wrap(errs.CategoryInternal, err, "%s: failed to render prompt projection for bounds checking", kind)
+	}
+
+	additionalTokens := 0
+	for _, ts := range req.ToolSchemas {
+		additionalTokens += EstimateTokens(ts, accountingMethod, uncertainty)
+	}
+	if req.HostFraming != "" {
+		additionalTokens += EstimateTokens(req.HostFraming, accountingMethod, uncertainty)
+	}
+
+	if projErr := EnforceProjectionBounds(projection, req.ContextProfile, additionalTokens); projErr != nil {
+		pack.Status = protocol.PackStatusContextUnfit
+		return manifest, pack, projErr
+	}
+
+	// 11. Validate complete pack
 	if err := pack.Validate(); err != nil {
 		return nil, nil, errs.Wrap(errs.CategoryInvalidArgument, err, "%s: generated context pack failed validation", kind)
 	}
