@@ -55,8 +55,12 @@ type DirectAPIOptions struct {
 	Capabilities *DriverCapabilities
 }
 
-// NewDirectAPIDriver creates a new DirectAPIDriver.
-func NewDirectAPIDriver(id string, client DirectAPIClient, opts ...DirectAPIOptions) *DirectAPIDriver {
+// NewDirectAPIDriver creates a new DirectAPIDriver, failing fast on invalid client or capabilities.
+func NewDirectAPIDriver(id string, client DirectAPIClient, opts ...DirectAPIOptions) (*DirectAPIDriver, error) {
+	if client == nil {
+		return nil, errs.New(errs.CategoryInvalidArgument, "direct_api: client cannot be nil")
+	}
+
 	caps := DriverCapabilities{
 		Kind:                  protocol.ChannelDirectHTTPAPI,
 		SessionMode:           protocol.SessionStatelessPerCall,
@@ -72,12 +76,25 @@ func NewDirectAPIDriver(id string, client DirectAPIClient, opts ...DirectAPIOpti
 		caps = *opts[0].Capabilities
 	}
 
+	if err := caps.Validate(); err != nil {
+		return nil, err
+	}
+
 	return &DirectAPIDriver{
 		id:           id,
 		client:       client,
 		capabilities: caps,
 		sessions:     make(map[string]*directAPISession),
+	}, nil
+}
+
+// MustNewDirectAPIDriver creates a DirectAPIDriver or panics on invalid configuration.
+func MustNewDirectAPIDriver(id string, client DirectAPIClient, opts ...DirectAPIOptions) *DirectAPIDriver {
+	d, err := NewDirectAPIDriver(id, client, opts...)
+	if err != nil {
+		panic(err)
 	}
+	return d
 }
 
 // ID returns driver ID.
@@ -103,8 +120,12 @@ func (d *DirectAPIDriver) StartSession(ctx context.Context, cfg SessionConfig) (
 		return nil, errs.New(errs.CategoryConflict, "session %q already exists", cfg.SessionID)
 	}
 
-	if cfg.Mediator != nil && len(cfg.Tools) > 0 {
-		cfg.Mediator.SetDeclaredTools(cfg.Tools)
+	if cfg.Mediator != nil {
+		if scoped, ok := cfg.Mediator.(*ScopedToolMediator); ok {
+			cfg.Mediator = scoped.ForSession(cfg.SessionID, cfg.Tools)
+		} else {
+			cfg.Mediator.SetDeclaredTools(cfg.Tools)
+		}
 	}
 
 	s := &directAPISession{
@@ -135,8 +156,12 @@ func (d *DirectAPIDriver) ResumeSession(ctx context.Context, sessionID string, c
 		if err := cfg.Validate(); err != nil {
 			return nil, err
 		}
-		if cfg.Mediator != nil && len(cfg.Tools) > 0 {
-			cfg.Mediator.SetDeclaredTools(cfg.Tools)
+		if cfg.Mediator != nil {
+			if scoped, ok := cfg.Mediator.(*ScopedToolMediator); ok {
+				cfg.Mediator = scoped.ForSession(cfg.SessionID, cfg.Tools)
+			} else {
+				cfg.Mediator.SetDeclaredTools(cfg.Tools)
+			}
 		}
 		s = &directAPISession{
 			driver:   d,
@@ -180,15 +205,8 @@ func (s *directAPISession) Status() SessionStatus {
 
 func (s *directAPISession) Close(ctx context.Context) error {
 	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.status = SessionStatusClosed
-	sessID := s.config.SessionID
-	s.mu.Unlock()
-
-	// Clean up from driver registry
-	s.driver.mu.Lock()
-	delete(s.driver.sessions, sessID)
-	s.driver.mu.Unlock()
-
 	return nil
 }
 

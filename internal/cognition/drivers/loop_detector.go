@@ -139,3 +139,40 @@ func (d *SemanticLoopDetector) Reset() {
 	d.fileEditHashes = make(map[string][]string)
 	d.fileOscillationsCount = make(map[string]int)
 }
+
+// Snapshot captures the current loop detection state.
+func (d *SemanticLoopDetector) Snapshot() LoopDetectorSnapshot {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	snap := LoopDetectorSnapshot{
+		ConsecutiveFailedKey:   d.consecutiveFailedKey,
+		ConsecutiveFailedCount: d.consecutiveFailedCount,
+		FileEditHashes:         make(map[string][]string, len(d.fileEditHashes)),
+		FileOscillationsCount:  make(map[string]int, len(d.fileOscillationsCount)),
+	}
+	for k, v := range d.fileEditHashes {
+		snap.FileEditHashes[k] = append([]string(nil), v...)
+	}
+	for k, v := range d.fileOscillationsCount {
+		snap.FileOscillationsCount[k] = v
+	}
+	return snap
+}
+
+// Restore hydrates loop detection state from a snapshot.
+func (d *SemanticLoopDetector) Restore(snap LoopDetectorSnapshot) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	d.consecutiveFailedKey = snap.ConsecutiveFailedKey
+	d.consecutiveFailedCount = snap.ConsecutiveFailedCount
+	d.fileEditHashes = make(map[string][]string, len(snap.FileEditHashes))
+	for k, v := range snap.FileEditHashes {
+		d.fileEditHashes[k] = append([]string(nil), v...)
+	}
+	d.fileOscillationsCount = make(map[string]int, len(snap.FileOscillationsCount))
+	for k, v := range snap.FileOscillationsCount {
+		d.fileOscillationsCount[k] = v
+	}
+}

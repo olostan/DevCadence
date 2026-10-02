@@ -95,8 +95,12 @@ func (d *FakeDriver) StartSession(ctx context.Context, cfg SessionConfig) (Sessi
 		return nil, errs.New(errs.CategoryConflict, "session %q already exists", cfg.SessionID)
 	}
 
-	if cfg.Mediator != nil && len(cfg.Tools) > 0 {
-		cfg.Mediator.SetDeclaredTools(cfg.Tools)
+	if cfg.Mediator != nil {
+		if scoped, ok := cfg.Mediator.(*ScopedToolMediator); ok {
+			cfg.Mediator = scoped.ForSession(cfg.SessionID, cfg.Tools)
+		} else {
+			cfg.Mediator.SetDeclaredTools(cfg.Tools)
+		}
 	}
 
 	s := &fakeSession{
@@ -126,8 +130,12 @@ func (d *FakeDriver) ResumeSession(ctx context.Context, sessionID string, cfg Se
 		if err := cfg.Validate(); err != nil {
 			return nil, err
 		}
-		if cfg.Mediator != nil && len(cfg.Tools) > 0 {
-			cfg.Mediator.SetDeclaredTools(cfg.Tools)
+		if cfg.Mediator != nil {
+			if scoped, ok := cfg.Mediator.(*ScopedToolMediator); ok {
+				cfg.Mediator = scoped.ForSession(cfg.SessionID, cfg.Tools)
+			} else {
+				cfg.Mediator.SetDeclaredTools(cfg.Tools)
+			}
 		}
 		s = &fakeSession{
 			driver:    d,
@@ -170,15 +178,8 @@ func (s *fakeSession) Status() SessionStatus {
 
 func (s *fakeSession) Close(ctx context.Context) error {
 	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.status = SessionStatusClosed
-	sessID := s.config.SessionID
-	s.mu.Unlock()
-
-	// Clean up from driver registry
-	s.driver.mu.Lock()
-	delete(s.driver.sessions, sessID)
-	s.driver.mu.Unlock()
-
 	return nil
 }
 

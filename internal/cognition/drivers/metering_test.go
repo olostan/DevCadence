@@ -6,6 +6,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/olostan/DevCadence/internal/errs"
+	"github.com/olostan/DevCadence/internal/tools"
 )
 
 func TestMetering_TokenBudgets(t *testing.T) {
@@ -405,5 +408,203 @@ func TestMetering_NoPromptCountdownInjection(t *testing.T) {
 		strings.Contains(strings.ToLower(receivedPrompt), "countdown") ||
 		strings.Contains(strings.ToLower(receivedPrompt), "turn limit") {
 		t.Errorf("prompt contains forbidden turn countdown text: %q", receivedPrompt)
+	}
+}
+
+func TestMetering_CheckpointRestorePreservesLoopDetector(t *testing.T) {
+	limits := MeterLimits{
+		LoopConfig: LoopDetectorConfig{
+			MaxConsecutiveFailedCalls: 3,
+			MaxOscillatingEdits:       2,
+		},
+	}
+	meter := NewSilentMeter("sess-loop-restore", limits)
+
+	// Simulate 2 consecutive failed calls for key
+	call := ToolCall{
+		ID:        "c1",
+		Name:      "test_tool",
+		Arguments: []byte(`{"arg":"same"}`),
+	}
+	resError := ToolResult{
+		ToolCallID: "c1",
+		Name:       "test_tool",
+		IsError:    true,
+	}
+
+	meter.RecordToolResult(call, resError)
+	meter.RecordToolResult(call, resError)
+
+	if meter.IsPaused() {
+		t.Fatalf("meter should not be paused yet after 2 failures")
+	}
+
+	// Capture snapshot
+	snap := meter.Checkpoint()
+	if snap.LoopSnapshot.ConsecutiveFailedCount != 2 {
+		t.Fatalf("expected ConsecutiveFailedCount=2, got %d", snap.LoopSnapshot.ConsecutiveFailedCount)
+	}
+
+	// Restore into a new meter
+	newMeter := NewSilentMeter("sess-loop-restore", limits)
+	newMeter.RestoreFromSnapshot(snap)
+
+	// 3rd failure on restored meter must immediately trip loop detection!
+	paused, updatedSnap := newMeter.RecordToolResult(call, resError)
+	if !paused {
+		t.Errorf("expected 3rd failure after restore to trip loop detection")
+	}
+	if updatedSnap.PausedReason != PauseReasonBudgetExceeded {
+		t.Errorf("expected PausedReason %q, got %q", PauseReasonBudgetExceeded, updatedSnap.PausedReason)
+	}
+	if updatedSnap.ExceededDimension != "semantic_loop_repeated_tool_failures" {
+		t.Errorf("expected dimension semantic_loop_repeated_tool_failures, got %s", updatedSnap.ExceededDimension)
+	}
+}
+
+func TestMetering_DriverInternalToolExecutionTracked(t *testing.T) {
+	client := &mockDirectClient{}
+	driver := MustNewDirectAPIDriver("direct-api-metered-tools", client)
+
+	mediator := NewScopedToolMediator(nil)
+	mediator.RegisterHandler("failing_tool", func(ctx context.Context, args json.RawMessage) (string, error) {
+		return "", errs.New(errs.CategoryInternal, "persistent tool failure")
+	})
+
+	meteredDriver := NewMeteredDriver(driver, MeterLimits{
+		LoopConfig: LoopDetectorConfig{
+			MaxConsecutiveFailedCalls: 2,
+		},
+	})
+
+	ctx := context.Background()
+	session, err := meteredDriver.StartSession(ctx, SessionConfig{
+		SessionID: "sess-internal-tool-loop",
+		ModelID:   "direct-model-v1",
+		Tools: []ToolDefinition{
+			{Name: "failing_tool", Description: "always fails"},
+		},
+		Mediator: mediator,
+	})
+	if err != nil {
+		t.Fatalf("StartSession failed: %v", err)
+	}
+
+	// Turn 1: driver calls failing_tool internally -> 1 failure
+	_, err = session.ExecuteTurn(ctx, TurnInput{
+		TurnID: "t1",
+		Prompt: "CALL_TOOL: failing_tool",
+	})
+	if err != nil {
+		t.Fatalf("turn 1 failed: %v", err)
+	}
+	if session.Status() != SessionStatusActive {
+		t.Errorf("expected active after 1 failure, got %s", session.Status())
+	}
+
+	// Turn 2: driver calls failing_tool internally again -> 2nd failure -> pauses!
+	res2, err := session.ExecuteTurn(ctx, TurnInput{
+		TurnID: "t2",
+		Prompt: "CALL_TOOL: failing_tool",
+	})
+	if err != nil {
+		t.Fatalf("turn 2 returned unexpected hard error: %v", err)
+	}
+	if res2.PausedReason != PauseReasonBudgetExceeded {
+		t.Errorf("expected turn 2 to be paused with budget exceeded, got %q", res2.PausedReason)
+	}
+	if session.Status() != SessionStatusPausedBudgetExceeded {
+		t.Errorf("expected session status to be paused, got %s", session.Status())
+	}
+}
+
+func TestScopedToolMediator_StructuralContainmentAndExtraction(t *testing.T) {
+	scope := &tools.Scope{
+		ProjectID:    "proj-scope",
+		WorktreePath: "/tmp/worktree",
+	}
+	mediator := NewScopedToolMediator(scope)
+
+	// Tool with custom extractor
+	mediator.RegisterToolDefinition(ToolDefinition{
+		Name: "custom_extractor_tool",
+		PathExtractor: func(args json.RawMessage) ([]string, error) {
+			var m map[string]string
+			if err := json.Unmarshal(args, &m); err != nil {
+				return nil, err
+			}
+			if p, ok := m["custom_key"]; ok {
+				return []string{p}, nil
+			}
+			return nil, nil
+		},
+	})
+
+	// Tool with declared path parameters (nested)
+	mediator.RegisterToolDefinition(ToolDefinition{
+		Name:           "nested_param_tool",
+		PathParameters: []string{"target.rel_file"},
+	})
+
+	mediator.RegisterHandler("custom_extractor_tool", func(ctx context.Context, args json.RawMessage) (string, error) {
+		return "ok", nil
+	})
+	mediator.RegisterHandler("nested_param_tool", func(ctx context.Context, args json.RawMessage) (string, error) {
+		return "ok", nil
+	})
+	mediator.RegisterHandler("recursive_tool", func(ctx context.Context, args json.RawMessage) (string, error) {
+		return "ok", nil
+	})
+
+	ctx := context.Background()
+
+	// 1. Session-scoped mediator isolation
+	s1 := mediator.ForSession("session-1", []ToolDefinition{
+		{Name: "custom_extractor_tool"},
+	})
+	s2 := mediator.ForSession("session-2", []ToolDefinition{
+		{Name: "nested_param_tool"},
+	})
+
+	// s1 cannot execute s2's tool
+	_, err := s1.ExecuteTool(ctx, ToolCall{
+		ID:   "c1",
+		Name: "nested_param_tool",
+	})
+	if err == nil || errs.CategoryOf(err) != errs.CategoryPolicyDenied {
+		t.Errorf("expected CategoryPolicyDenied for undeclared tool on s1, got %v", err)
+	}
+
+	// 2. Custom extractor detects escaping path
+	_, err = s1.ExecuteTool(ctx, ToolCall{
+		ID:        "c2",
+		Name:      "custom_extractor_tool",
+		Arguments: []byte(`{"custom_key":"../../etc/shadow"}`),
+	})
+	if err == nil || errs.CategoryOf(err) != errs.CategoryPolicyDenied {
+		t.Errorf("expected CategoryPolicyDenied from custom extractor escape, got %v", err)
+	}
+
+	// 3. Nested declared parameter detects escaping path
+	_, err = s2.ExecuteTool(ctx, ToolCall{
+		ID:        "c3",
+		Name:      "nested_param_tool",
+		Arguments: []byte(`{"target":{"rel_file":"../escape.txt"}}`),
+	})
+	if err == nil || errs.CategoryOf(err) != errs.CategoryPolicyDenied {
+		t.Errorf("expected CategoryPolicyDenied from nested declared parameter escape, got %v", err)
+	}
+
+	// 4. Recursive baseline inspection detects deeply nested escaping path
+	s3 := mediator.ForSession("session-3", []ToolDefinition{
+		{Name: "recursive_tool"},
+	})
+	_, err = s3.ExecuteTool(ctx, ToolCall{
+		ID:        "c4",
+		Name:      "recursive_tool",
+		Arguments: []byte(`{"deep":{"sub":{"items":[{"source_file":"../../outside.txt"}]}}}`),
+	})
+	if err == nil || errs.CategoryOf(err) != errs.CategoryPolicyDenied {
+		t.Errorf("expected CategoryPolicyDenied from recursive inspection escape, got %v", err)
 	}
 }

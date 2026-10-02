@@ -46,38 +46,64 @@ type EventStream interface {
 }
 
 // ChannelEventStream is a thread-safe, strictly FIFO implementation of EventStream.
-// It guarantees that all buffered events are delivered before any terminal error or EOF,
-// and prevents any send-on-closed panic under concurrent Close/CloseWithError calls.
+// It enforces a maximum bounded buffer capacity with backpressure, guarantees that
+// all buffered events are delivered before any terminal error or EOF, and supports
+// an onClose callback for synchronous subprocess cancellation and pipe teardown.
 type ChannelEventStream struct {
-	mu      sync.Mutex
-	cond    *sync.Cond
-	queue   []DriverEvent
-	termErr error
-	closed  bool
+	mu        sync.Mutex
+	cond      *sync.Cond
+	queue     []DriverEvent
+	maxCap    int
+	termErr   error
+	closed    bool
+	onClose   func()
+	closeOnce sync.Once
 }
 
-// NewChannelEventStream creates an event stream with the specified buffer capacity.
+// NewChannelEventStream creates an event stream with the specified bounded buffer capacity.
 func NewChannelEventStream(buffer int) *ChannelEventStream {
 	if buffer < 1 {
 		buffer = 1
 	}
 	s := &ChannelEventStream{
-		queue: make([]DriverEvent, 0, buffer),
+		queue:  make([]DriverEvent, 0, buffer),
+		maxCap: buffer,
 	}
 	s.cond = sync.NewCond(&s.mu)
 	return s
 }
 
+// SetOnClose registers a callback invoked synchronously once when the stream is closed or terminated.
+// If the stream is already closed, fn is executed immediately.
+func (s *ChannelEventStream) SetOnClose(fn func()) {
+	if fn == nil {
+		return
+	}
+	s.mu.Lock()
+	if s.closed {
+		s.mu.Unlock()
+		s.closeOnce.Do(fn)
+		return
+	}
+	s.onClose = fn
+	s.mu.Unlock()
+}
+
 // Send emits an event to the stream in strictly FIFO order.
+// If the buffer has reached maxCap, Send blocks until capacity is freed by Recv or the stream is closed.
 // Returns false if the stream has already been closed.
 func (s *ChannelEventStream) Send(event DriverEvent) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	for len(s.queue) >= s.maxCap && !s.closed {
+		s.cond.Wait()
+	}
 	if s.closed {
 		return false
 	}
 	s.queue = append(s.queue, event)
-	s.cond.Signal()
+	s.cond.Broadcast()
 	return true
 }
 
@@ -85,13 +111,21 @@ func (s *ChannelEventStream) Send(event DriverEvent) bool {
 // Any already-buffered events remain receivable by Recv() before the error or EOF is reported.
 func (s *ChannelEventStream) CloseWithError(err error) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	if s.closed {
+		s.mu.Unlock()
 		return
 	}
 	s.closed = true
 	s.termErr = err
+	onClose := s.onClose
 	s.cond.Broadcast()
+	s.mu.Unlock()
+
+	s.closeOnce.Do(func() {
+		if onClose != nil {
+			onClose()
+		}
+	})
 }
 
 // Recv receives the next event from the stream in strictly FIFO order.
@@ -106,6 +140,7 @@ func (s *ChannelEventStream) Recv() (DriverEvent, error) {
 	if len(s.queue) > 0 {
 		ev := s.queue[0]
 		s.queue = s.queue[1:]
+		s.cond.Broadcast()
 		return ev, nil
 	}
 

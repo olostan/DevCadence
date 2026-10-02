@@ -31,37 +31,39 @@ type MeterLimits struct {
 
 // MeterSnapshot represents an immutable checkpoint of metering metrics and suspension state.
 type MeterSnapshot struct {
-	SessionID           string        `json:"session_id"`
-	TurnCount           int           `json:"turn_count"`
-	CumulativeUsage     TokenUsage    `json:"cumulative_usage"`
-	CumulativeDuration  time.Duration `json:"cumulative_duration"`
-	LastOpDuration      time.Duration `json:"last_op_duration"`
-	CumulativeToolCalls int           `json:"cumulative_tool_calls"`
-	Status              SessionStatus `json:"status"`
-	PausedReason        string        `json:"paused_reason,omitempty"`
-	ExceededDimension   string        `json:"exceeded_dimension,omitempty"`
-	EscalationRequired  bool          `json:"escalation_required"`
-	CheckpointTimestamp time.Time     `json:"checkpoint_timestamp"`
+	SessionID           string               `json:"session_id"`
+	TurnCount           int                  `json:"turn_count"`
+	CumulativeUsage     TokenUsage           `json:"cumulative_usage"`
+	CumulativeDuration  time.Duration        `json:"cumulative_duration"`
+	LastOpDuration      time.Duration        `json:"last_op_duration"`
+	CumulativeToolCalls int                  `json:"cumulative_tool_calls"`
+	Status              SessionStatus        `json:"status"`
+	PausedReason        string               `json:"paused_reason,omitempty"`
+	ExceededDimension   string               `json:"exceeded_dimension,omitempty"`
+	EscalationRequired  bool                 `json:"escalation_required"`
+	LoopSnapshot        LoopDetectorSnapshot `json:"loop_snapshot"`
+	CheckpointTimestamp time.Time            `json:"checkpoint_timestamp"`
 }
 
 // SilentMeter tracks multi-dimensional cognitive resource consumption and enforces
 // outer limits silently without polluting model prompts.
 type SilentMeter struct {
-	mu                  sync.Mutex
-	sessionID           string
-	limits              MeterLimits
-	turnCount           int
-	cumulativeUsage     TokenUsage
-	cumulativeDuration  time.Duration
-	lastOpDuration      time.Duration
-	cumulativeToolCalls int
-	status              SessionStatus
-	pausedReason        string
-	exceededDimension   string
-	escalationRequired  bool
-	loopDetector        *SemanticLoopDetector
-	recentToolCalls     map[string]ToolCall
-	nowFn               func() time.Time
+	mu                   sync.Mutex
+	sessionID            string
+	limits               MeterLimits
+	turnCount            int
+	cumulativeUsage      TokenUsage
+	cumulativeDuration   time.Duration
+	lastOpDuration       time.Duration
+	cumulativeToolCalls  int
+	status               SessionStatus
+	pausedReason         string
+	exceededDimension    string
+	escalationRequired   bool
+	loopDetector         *SemanticLoopDetector
+	recentToolCalls      map[string]ToolCall
+	processedToolCallIDs map[string]struct{}
+	nowFn                func() time.Time
 }
 
 // NewSilentMeter constructs a new SilentMeter for the session.
@@ -74,12 +76,13 @@ func NewSilentMeter(sessionID string, limits MeterLimits) *SilentMeter {
 		loopConfig.MaxOscillatingEdits = 2
 	}
 	return &SilentMeter{
-		sessionID:       sessionID,
-		limits:          limits,
-		status:          SessionStatusActive,
-		loopDetector:    NewSemanticLoopDetector(loopConfig),
-		recentToolCalls: make(map[string]ToolCall),
-		nowFn:           time.Now,
+		sessionID:            sessionID,
+		limits:               limits,
+		status:               SessionStatusActive,
+		loopDetector:         NewSemanticLoopDetector(loopConfig),
+		recentToolCalls:      make(map[string]ToolCall),
+		processedToolCallIDs: make(map[string]struct{}),
+		nowFn:                time.Now,
 	}
 }
 
@@ -97,6 +100,7 @@ func (m *SilentMeter) RestoreFromSnapshot(snap MeterSnapshot) {
 	m.pausedReason = snap.PausedReason
 	m.exceededDimension = snap.ExceededDimension
 	m.escalationRequired = snap.EscalationRequired
+	m.loopDetector.Restore(snap.LoopSnapshot)
 }
 
 // SetNowFunc overrides time source for deterministic testing.
@@ -132,9 +136,18 @@ func (m *SilentMeter) RecordOperationEnd(start time.Time, usage TokenUsage, tool
 	m.cumulativeDuration += opDuration
 	m.turnCount++
 	m.cumulativeUsage = m.cumulativeUsage.Add(usage)
-	m.cumulativeToolCalls += len(toolCalls)
 
-	// Check semantic loop on tool results
+	if m.processedToolCallIDs == nil {
+		m.processedToolCallIDs = make(map[string]struct{})
+	}
+	for _, tc := range toolCalls {
+		if _, already := m.processedToolCallIDs[tc.ID]; !already {
+			m.processedToolCallIDs[tc.ID] = struct{}{}
+			m.cumulativeToolCalls++
+		}
+	}
+
+	// Check semantic loop on tool results (if provided from input)
 	for _, res := range toolResults {
 		call, ok := m.recentToolCalls[res.ToolCallID]
 		if !ok {
@@ -203,6 +216,36 @@ func (m *SilentMeter) RecordOperationEnd(start time.Time, usage TokenUsage, tool
 		return true, m.snapshotLocked()
 	}
 
+	if m.status == SessionStatusPausedBudgetExceeded {
+		return true, m.snapshotLocked()
+	}
+
+	return false, m.snapshotLocked()
+}
+
+// RecordToolResult records a mediated tool execution and evaluates semantic loop detection.
+func (m *SilentMeter) RecordToolResult(call ToolCall, res ToolResult) (bool, MeterSnapshot) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if m.processedToolCallIDs == nil {
+		m.processedToolCallIDs = make(map[string]struct{})
+	}
+	if _, already := m.processedToolCallIDs[call.ID]; !already {
+		m.processedToolCallIDs[call.ID] = struct{}{}
+		m.cumulativeToolCalls++
+	}
+
+	if loopDetected, reason := m.loopDetector.RecordToolCall(call, res.IsError); loopDetected {
+		m.tripPause("semantic_loop_repeated_tool_failures", reason)
+		return true, m.snapshotLocked()
+	}
+
+	if m.limits.MaxCumulativeToolCalls > 0 && m.cumulativeToolCalls > m.limits.MaxCumulativeToolCalls {
+		m.tripPause("max_cumulative_tool_calls", fmt.Sprintf("cumulative tool calls %d exceeded limit %d", m.cumulativeToolCalls, m.limits.MaxCumulativeToolCalls))
+		return true, m.snapshotLocked()
+	}
+
 	return false, m.snapshotLocked()
 }
 
@@ -239,6 +282,7 @@ func (m *SilentMeter) snapshotLocked() MeterSnapshot {
 		PausedReason:        m.pausedReason,
 		ExceededDimension:   m.exceededDimension,
 		EscalationRequired:  m.escalationRequired,
+		LoopSnapshot:        m.loopDetector.Snapshot(),
 		CheckpointTimestamp: m.nowFn(),
 	}
 }
@@ -266,8 +310,10 @@ func (m *SilentMeter) IsPaused() bool {
 
 // MeteredSession wraps an underlying Session with silent multi-dimensional metering.
 type MeteredSession struct {
-	session Session
-	meter   *SilentMeter
+	session           Session
+	meter             *SilentMeter
+	listenersAttached bool
+	mu                sync.Mutex
 }
 
 // NewMeteredSession wraps a session with metering.
@@ -282,13 +328,25 @@ func NewMeteredSessionWithMeter(session Session, meter *SilentMeter) *MeteredSes
 		session: session,
 		meter:   meter,
 	}
-	// Wire file edit listener on mediator if present so oscillating edits are actively tracked
-	if mediator := session.Config().Mediator; mediator != nil {
-		mediator.OnFileEdit(func(path string, content []byte) {
-			meter.RecordFileEdit(path, content)
-		})
-	}
+	ms.attachListeners()
 	return ms
+}
+
+func (s *MeteredSession) attachListeners() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.listenersAttached {
+		return
+	}
+	if mediator := s.session.Config().Mediator; mediator != nil {
+		mediator.OnFileEdit(func(path string, content []byte) {
+			s.meter.RecordFileEdit(path, content)
+		})
+		mediator.OnToolExecution(func(call ToolCall, res ToolResult) {
+			s.meter.RecordToolResult(call, res)
+		})
+		s.listenersAttached = true
+	}
 }
 
 // ID returns the session ID.
@@ -380,6 +438,9 @@ func (s *MeteredSession) StreamTurn(ctx context.Context, input TurnInput) (Event
 	}
 
 	outStream := NewChannelEventStream(32)
+	outStream.SetOnClose(func() {
+		_ = rawStream.Close()
+	})
 	go func() {
 		defer rawStream.Close()
 		if cancelOp != nil {

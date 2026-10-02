@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/olostan/DevCadence/internal/credentials"
 	"github.com/olostan/DevCadence/internal/errs"
 	"github.com/olostan/DevCadence/internal/process"
 	"github.com/olostan/DevCadence/internal/protocol"
@@ -25,19 +26,28 @@ type CommandRunner interface {
 	Run(ctx context.Context, spec process.Spec) (process.Result, error)
 }
 
+// CLIInvocationMapper customizes argument and environment generation for CLI subprocess invocations.
+type CLIInvocationMapper interface {
+	BuildArgs(cfg SessionConfig, input TurnInput, backendHandle string) ([]string, error)
+}
+
 // CLIWrapperOptions configures the CLI wrapper driver.
 type CLIWrapperOptions struct {
-	Binary           string
-	BaseArgs         []string
-	SafeEnv          map[string]string // Non-secret environment overrides merged with process.BaseEnv()
-	DefaultDir       string            // Fallback absolute directory if WorktreeScope is absent
-	Timeout          time.Duration     // Wall-clock command timeout
-	ResumeFlag       string            // e.g. "--resume" or "--session-id"
-	PromptFlag       string            // e.g. "-p" or "exec"
-	ModelFlag        string            // e.g. "--model"
-	SystemPromptFlag string            // e.g. "--system"
-	ToolsFlag        string            // e.g. "--tools"
-	Capabilities     *DriverCapabilities
+	Binary                        string
+	BaseArgs                      []string
+	SafeEnv                       map[string]string // Non-secret environment overrides merged with process.BaseEnv()
+	DefaultDir                    string            // Fallback absolute directory if WorktreeScope is absent
+	Timeout                       time.Duration     // Wall-clock command timeout
+	ResumeFlag                    string            // e.g. "--resume" or "--session-id"
+	PromptFlag                    string            // e.g. "-p" or "exec"
+	ModelFlag                     string            // e.g. "--model"
+	SystemPromptFlag              string            // e.g. "--system"
+	ToolsFlag                     string            // e.g. "--tools"
+	ToolResultsFlag               string            // e.g. "--tool-results"
+	AllowLogicalSessionIDAsHandle bool              // If true, allows using DevCadence SessionID as resume handle
+	VerifiedSandbox               bool              // If true, declares NativeWorktreeAccess
+	InvocationMapper              CLIInvocationMapper
+	Capabilities                  *DriverCapabilities
 }
 
 // CLIWrapperDriver normalizes external coding CLIs (e.g. Codex CLI, Claude Code)
@@ -45,9 +55,10 @@ type CLIWrapperOptions struct {
 // of internal/process.Runner (docs/SECURITY.md §5, DCI-033, DCI-055).
 //
 // Native Filesystem Policy:
-// When NativeWorktreeAccess is declared, the CLI subprocess is confined by setting
-// process.Spec.Dir strictly to Scope.WorktreePath and executing within the non-inherited
-// environment (process.BaseEnv()), preventing directory traversal or ambient secret leakage.
+// Setting process.Spec.Dir sets execution CWD to Scope.WorktreePath, but does NOT provide
+// kernel-level filesystem containment. Unless an explicit verified sandbox provider is configured
+// (VerifiedSandbox: true), NativeWorktreeAccess is false, and write mutations must be routed through
+// mediated DevCadence tools (ToolMediator) for verified containment.
 type CLIWrapperDriver struct {
 	id           string
 	runner       CommandRunner
@@ -57,8 +68,8 @@ type CLIWrapperDriver struct {
 	sessions     map[string]*cliSession
 }
 
-// NewCLIWrapperDriver constructs a CLI wrapper driver.
-func NewCLIWrapperDriver(id string, runner CommandRunner, opts CLIWrapperOptions) *CLIWrapperDriver {
+// NewCLIWrapperDriver constructs a CLI wrapper driver, failing fast if secrets appear in configuration.
+func NewCLIWrapperDriver(id string, runner CommandRunner, opts CLIWrapperOptions) (*CLIWrapperDriver, error) {
 	if runner == nil {
 		runner = process.NewRunner()
 	}
@@ -78,6 +89,18 @@ func NewCLIWrapperDriver(id string, runner CommandRunner, opts CLIWrapperOptions
 		opts.DefaultDir = abs
 	}
 
+	// Validate BaseArgs and SafeEnv at creation boundary (Directive 6 / DCI-081)
+	for _, arg := range opts.BaseArgs {
+		if protocol.LooksLikeSecret(arg) {
+			return nil, errs.New(errs.CategoryInvalidArgument, "cli_wrapper: base argument %q looks like a secret value", arg)
+		}
+	}
+	for k, v := range opts.SafeEnv {
+		if protocol.LooksLikeSecret(k) || protocol.LooksLikeSecret(v) {
+			return nil, errs.New(errs.CategoryInvalidArgument, "cli_wrapper: safe env %s contains a secret-looking value", k)
+		}
+	}
+
 	caps := DriverCapabilities{
 		Kind:                  protocol.ChannelCLISubprocess,
 		SessionMode:           protocol.SessionResumableHandle,
@@ -85,12 +108,19 @@ func NewCLIWrapperDriver(id string, runner CommandRunner, opts CLIWrapperOptions
 		PrefixCache:           protocol.PrefixCacheNone,
 		SupportsStreaming:     true,
 		SupportsTools:         true,
-		NativeWorktreeAccess:  true,
+		NativeWorktreeAccess:  opts.VerifiedSandbox,
 		MaxConcurrentRequests: 1,
 	}
 
 	if opts.Capabilities != nil {
 		caps = *opts.Capabilities
+		if caps.NativeWorktreeAccess && !opts.VerifiedSandbox {
+			return nil, errs.New(errs.CategoryInvalidArgument, "cli_wrapper: NativeWorktreeAccess cannot be true without VerifiedSandbox")
+		}
+	}
+
+	if err := caps.Validate(); err != nil {
+		return nil, err
 	}
 
 	return &CLIWrapperDriver{
@@ -99,7 +129,16 @@ func NewCLIWrapperDriver(id string, runner CommandRunner, opts CLIWrapperOptions
 		opts:         opts,
 		capabilities: caps,
 		sessions:     make(map[string]*cliSession),
+	}, nil
+}
+
+// MustNewCLIWrapperDriver constructs a CLI wrapper driver or panics on invalid configuration.
+func MustNewCLIWrapperDriver(id string, runner CommandRunner, opts CLIWrapperOptions) *CLIWrapperDriver {
+	d, err := NewCLIWrapperDriver(id, runner, opts)
+	if err != nil {
+		panic(err)
 	}
+	return d
 }
 
 // ID returns the driver identifier.
@@ -114,7 +153,16 @@ func (d *CLIWrapperDriver) StartSession(ctx context.Context, cfg SessionConfig) 
 		return nil, err
 	}
 
-	// Validate capability constraints: reject unsupported tool declaration
+	// Validate capability and flag mappings: fail closed rather than silently ignoring
+	if cfg.ModelID != "" && d.opts.ModelFlag == "" && d.opts.InvocationMapper == nil {
+		return nil, errs.New(errs.CategoryUnsupported, "cli driver %q: model_id specified but ModelFlag is not configured", d.id)
+	}
+	if cfg.SystemPrompt != "" && d.opts.SystemPromptFlag == "" && d.opts.InvocationMapper == nil {
+		return nil, errs.New(errs.CategoryUnsupported, "cli driver %q: system_prompt specified but SystemPromptFlag is not configured", d.id)
+	}
+	if len(cfg.Tools) > 0 && d.opts.ToolsFlag == "" && d.opts.InvocationMapper == nil {
+		return nil, errs.New(errs.CategoryUnsupported, "cli driver %q: tools specified but ToolsFlag is not configured", d.id)
+	}
 	if len(cfg.Tools) > 0 && !d.capabilities.SupportsTools {
 		return nil, errs.New(errs.CategoryUnsupported, "cli driver %q does not support tools", d.id)
 	}
@@ -126,21 +174,24 @@ func (d *CLIWrapperDriver) StartSession(ctx context.Context, cfg SessionConfig) 
 		return nil, errs.New(errs.CategoryConflict, "session %q already exists", cfg.SessionID)
 	}
 
-	if cfg.Mediator != nil && len(cfg.Tools) > 0 {
-		cfg.Mediator.SetDeclaredTools(cfg.Tools)
+	if cfg.Mediator != nil {
+		if scoped, ok := cfg.Mediator.(*ScopedToolMediator); ok {
+			cfg.Mediator = scoped.ForSession(cfg.SessionID, cfg.Tools)
+		} else {
+			cfg.Mediator.SetDeclaredTools(cfg.Tools)
+		}
 	}
 
 	s := &cliSession{
-		driver:               d,
-		config:               cfg.DeepCopy(),
-		status:               SessionStatusActive,
-		backendSessionHandle: "", // initially unset; recorded from backend on first turn
+		driver: d,
+		config: cfg.DeepCopy(),
+		status: SessionStatusActive,
 	}
 	d.sessions[cfg.SessionID] = s
 	return s, nil
 }
 
-// ResumeSession resumes an existing CLI session by ID.
+// ResumeSession restores or connects to an existing CLI session.
 func (d *CLIWrapperDriver) ResumeSession(ctx context.Context, sessionID string, cfg SessionConfig) (Session, error) {
 	if sessionID == "" {
 		return nil, errs.New(errs.CategoryInvalidArgument, "sessionID cannot be empty")
@@ -157,17 +208,39 @@ func (d *CLIWrapperDriver) ResumeSession(ctx context.Context, sessionID string, 
 		if err := cfg.Validate(); err != nil {
 			return nil, err
 		}
-		if cfg.Mediator != nil && len(cfg.Tools) > 0 {
-			cfg.Mediator.SetDeclaredTools(cfg.Tools)
+
+		if cfg.ModelID != "" && d.opts.ModelFlag == "" && d.opts.InvocationMapper == nil {
+			return nil, errs.New(errs.CategoryUnsupported, "cli driver %q: model_id specified but ModelFlag is not configured", d.id)
 		}
-		// If caller provided a backend session handle in options, honor it
+		if cfg.SystemPrompt != "" && d.opts.SystemPromptFlag == "" && d.opts.InvocationMapper == nil {
+			return nil, errs.New(errs.CategoryUnsupported, "cli driver %q: system_prompt specified but SystemPromptFlag is not configured", d.id)
+		}
+		if len(cfg.Tools) > 0 && d.opts.ToolsFlag == "" && d.opts.InvocationMapper == nil {
+			return nil, errs.New(errs.CategoryUnsupported, "cli driver %q: tools specified but ToolsFlag is not configured", d.id)
+		}
+		if len(cfg.Tools) > 0 && !d.capabilities.SupportsTools {
+			return nil, errs.New(errs.CategoryUnsupported, "cli driver %q does not support tools", d.id)
+		}
+
 		backendHandle := ""
 		if cfg.Options != nil {
 			backendHandle = cfg.Options["backend_session_handle"]
 		}
-		if backendHandle == "" {
+		if backendHandle == "" && d.opts.AllowLogicalSessionIDAsHandle {
 			backendHandle = sessionID
 		}
+		if backendHandle == "" {
+			return nil, errs.New(errs.CategoryInvalidTransition, "cli driver %q: cannot resume opaque session %q without backend session handle", d.id, sessionID)
+		}
+
+		if cfg.Mediator != nil {
+			if scoped, ok := cfg.Mediator.(*ScopedToolMediator); ok {
+				cfg.Mediator = scoped.ForSession(cfg.SessionID, cfg.Tools)
+			} else {
+				cfg.Mediator.SetDeclaredTools(cfg.Tools)
+			}
+		}
+
 		s = &cliSession{
 			driver:               d,
 			config:               cfg.DeepCopy(),
@@ -221,7 +294,11 @@ func (s *cliSession) Close(ctx context.Context) error {
 	return nil
 }
 
-func (s *cliSession) buildArgs(prompt string) []string {
+func (s *cliSession) buildArgs(input TurnInput) ([]string, error) {
+	if s.driver.opts.InvocationMapper != nil {
+		return s.driver.opts.InvocationMapper.BuildArgs(s.config, input, s.backendSessionHandle)
+	}
+
 	args := append([]string(nil), s.driver.opts.BaseArgs...)
 
 	// Convey model ID if flag configured
@@ -236,9 +313,23 @@ func (s *cliSession) buildArgs(prompt string) []string {
 
 	// Convey declared tools if flag configured
 	if s.driver.opts.ToolsFlag != "" && len(s.config.Tools) > 0 {
-		if toolsJSON, err := json.Marshal(s.config.Tools); err == nil {
-			args = append(args, s.driver.opts.ToolsFlag, string(toolsJSON))
+		toolsJSON, err := json.Marshal(s.config.Tools)
+		if err != nil {
+			return nil, errs.Wrap(errs.CategoryInternal, err, "failed marshaling tools")
 		}
+		args = append(args, s.driver.opts.ToolsFlag, string(toolsJSON))
+	}
+
+	// Convey tool results if provided
+	if len(input.ToolResults) > 0 {
+		if s.driver.opts.ToolResultsFlag == "" {
+			return nil, errs.New(errs.CategoryUnsupported, "cli driver %q: tool_results provided but ToolResultsFlag is not configured", s.driver.id)
+		}
+		resultsJSON, err := json.Marshal(input.ToolResults)
+		if err != nil {
+			return nil, errs.Wrap(errs.CategoryInternal, err, "failed marshaling tool results")
+		}
+		args = append(args, s.driver.opts.ToolResultsFlag, string(resultsJSON))
 	}
 
 	// Resume using backend opaque session handle if available
@@ -249,10 +340,10 @@ func (s *cliSession) buildArgs(prompt string) []string {
 	if s.driver.opts.PromptFlag != "" {
 		args = append(args, s.driver.opts.PromptFlag)
 	}
-	if prompt != "" {
-		args = append(args, prompt)
+	if input.Prompt != "" {
+		args = append(args, input.Prompt)
 	}
-	return args
+	return args, nil
 }
 
 func (s *cliSession) workingDir() string {
@@ -280,15 +371,27 @@ func (s *cliSession) ExecuteTurn(ctx context.Context, input TurnInput) (TurnResu
 		return TurnResult{}, err
 	}
 
+	if len(input.ToolResults) > 0 && s.driver.opts.ToolResultsFlag == "" && s.driver.opts.InvocationMapper == nil {
+		return TurnResult{}, errs.New(errs.CategoryUnsupported, "cli driver %q: tool_results provided but ToolResultsFlag is not configured", s.driver.id)
+	}
+
 	s.mu.Lock()
 	if s.status == SessionStatusClosed {
 		s.mu.Unlock()
 		return TurnResult{}, errs.New(errs.CategoryInvalidTransition, "session is closed")
 	}
-	args := s.buildArgs(input.Prompt)
+	args, argErr := s.buildArgs(input)
 	s.mu.Unlock()
+	if argErr != nil {
+		return TurnResult{}, argErr
+	}
 
 	spec := s.buildSpec(args, s.driver.opts.Timeout)
+
+	// Enforce process secret boundary at execution time (Directive 6 / DCI-081)
+	if err := credentials.ValidateProcessSpecNoSecrets(spec); err != nil {
+		return TurnResult{}, err
+	}
 
 	start := time.Now()
 	res, err := s.driver.runner.Run(ctx, spec)
@@ -313,9 +416,6 @@ func (s *cliSession) ExecuteTurn(ctx context.Context, input TurnInput) (TurnResu
 	s.mu.Lock()
 	if backendHandle != "" {
 		s.backendSessionHandle = backendHandle
-	} else if s.backendSessionHandle == "" {
-		// Default to session ID if backend does not emit a distinct handle
-		s.backendSessionHandle = s.config.SessionID
 	}
 	s.mu.Unlock()
 
@@ -358,8 +458,8 @@ func (s *cliSession) StreamTurn(ctx context.Context, input TurnInput) (EventStre
 		return nil, err
 	}
 
-	if !s.driver.capabilities.SupportsStreaming {
-		return nil, errs.New(errs.CategoryUnsupported, "cli driver %q does not support streaming", s.driver.id)
+	if len(input.ToolResults) > 0 && s.driver.opts.ToolResultsFlag == "" && s.driver.opts.InvocationMapper == nil {
+		return nil, errs.New(errs.CategoryUnsupported, "cli driver %q: tool_results provided but ToolResultsFlag is not configured", s.driver.id)
 	}
 
 	s.mu.Lock()
@@ -367,22 +467,37 @@ func (s *cliSession) StreamTurn(ctx context.Context, input TurnInput) (EventStre
 		s.mu.Unlock()
 		return nil, errs.New(errs.CategoryInvalidTransition, "session is closed")
 	}
-	args := s.buildArgs(input.Prompt)
+	args, argErr := s.buildArgs(input)
 	s.mu.Unlock()
+	if argErr != nil {
+		return nil, argErr
+	}
 
 	spec := s.buildSpec(args, s.driver.opts.Timeout)
 
-	stdoutR, stdoutW := io.Pipe()
-	stderrBuf := &safeBuffer{}
+	// Enforce process secret boundary at execution time (Directive 6 / DCI-081)
+	if err := credentials.ValidateProcessSpecNoSecrets(spec); err != nil {
+		return nil, err
+	}
 
+	stdoutR, stdoutW := io.Pipe()
 	spec.StdoutSink = stdoutW
-	spec.StderrSink = stderrBuf
+
+	// Concurrently drain stderr to avoid pipe buffer deadlocks
+	var stderrBuf safeBuffer
+	spec.StderrSink = &stderrBuf
 
 	outStream := NewChannelEventStream(32)
 
 	// runCtx is cancelled when stream is closed or parent context cancels,
 	// triggering process group killing and tree reaping in process.Runner
 	runCtx, cancelRun := context.WithCancel(ctx)
+
+	// Set synchronous cancellation hook so closing outStream immediately halts subprocess
+	outStream.SetOnClose(func() {
+		cancelRun()
+		_ = stdoutR.Close()
+	})
 
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -410,13 +525,15 @@ func (s *cliSession) StreamTurn(ctx context.Context, input TurnInput) (EventStre
 		_ = stdoutW.Close()
 	}()
 
-	// Scanner goroutine consuming stdout with large buffer (up to 10MB tokens)
+	// Scanner goroutine consuming stdout with bounded buffer
 	go func() {
-		defer stdoutR.Close()
-		defer cancelRun()
+		defer func() {
+			cancelRun() // Ensure cancelled before waiting for process termination
+			wg.Wait()
+			_ = stdoutR.Close()
+		}()
 
 		scanner := bufio.NewScanner(stdoutR)
-		// Support lines up to 10 MiB to prevent scanner buffer overflow on large tool responses
 		const maxLineSize = 10 * 1024 * 1024
 		scanner.Buffer(make([]byte, 64*1024), maxLineSize)
 
@@ -450,15 +567,6 @@ func (s *cliSession) StreamTurn(ctx context.Context, input TurnInput) (EventStre
 		} else {
 			outStream.CloseWithError(nil)
 		}
-
-		// Ensure runner process has terminated and reaped
-		wg.Wait()
-
-		s.mu.Lock()
-		if s.backendSessionHandle == "" {
-			s.backendSessionHandle = s.config.SessionID
-		}
-		s.mu.Unlock()
 	}()
 
 	return outStream, nil
@@ -467,8 +575,8 @@ func (s *cliSession) StreamTurn(ctx context.Context, input TurnInput) (EventStre
 // parseCLIStdout parses process output into content, tool calls, usage, and backend session handle.
 func parseCLIStdout(output []byte) (string, []ToolCall, TokenUsage, string) {
 	scanner := bufio.NewScanner(bytes.NewReader(output))
-	// Allow scanning up to 10MB lines
-	scanner.Buffer(make([]byte, 64*1024), 10*1024*1024)
+	const maxLineSize = 10 * 1024 * 1024
+	scanner.Buffer(make([]byte, 64*1024), maxLineSize)
 
 	var contentBuilder strings.Builder
 	var toolCalls []ToolCall
@@ -479,34 +587,26 @@ func parseCLIStdout(output []byte) (string, []ToolCall, TokenUsage, string) {
 		line := scanner.Text()
 		var ev DriverEvent
 		if err := json.Unmarshal([]byte(line), &ev); err == nil && ev.Kind != "" {
-			if ev.Delta != "" {
+			switch ev.Kind {
+			case EventContentDelta:
 				contentBuilder.WriteString(ev.Delta)
-			}
-			if ev.ToolCall != nil {
-				toolCalls = append(toolCalls, *ev.ToolCall)
-			}
-			if ev.Usage != nil {
-				usage = usage.Add(*ev.Usage)
-			}
-		} else {
-			// Check for backend session handle announcement
-			var rawObj map[string]any
-			if json.Unmarshal([]byte(line), &rawObj) == nil {
-				if val, ok := rawObj["backend_session_id"].(string); ok && val != "" {
-					backendHandle = val
-				} else if val, ok := rawObj["session_id"].(string); ok && val != "" {
-					backendHandle = val
+			case EventToolCall:
+				if ev.ToolCall != nil {
+					toolCalls = append(toolCalls, *ev.ToolCall)
+				}
+			case EventTurnCompleted:
+				if ev.Usage != nil {
+					usage = usage.Add(*ev.Usage)
+				}
+				if ev.SessionID != "" {
+					backendHandle = ev.SessionID
 				}
 			}
+		} else {
 			contentBuilder.WriteString(line)
 			contentBuilder.WriteString("\n")
 		}
 	}
 
-	content := strings.TrimRight(contentBuilder.String(), "\n")
-	if usage.Total() == 0 && len(content) > 0 {
-		usage.OutputTokens = int64(len(strings.Fields(content)))
-	}
-
-	return content, toolCalls, usage, backendHandle
+	return contentBuilder.String(), toolCalls, usage, backendHandle
 }

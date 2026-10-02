@@ -179,6 +179,8 @@ Establish the session execution substrate (`internal/cognition/drivers`) across 
 - **MUST detect semantic loops and escalate (DCI-045, ADR-0019 §2):** The runtime must detect oscillating file edits (reverting between states) and repeating identical failed tool calls, pausing with `PAUSED_BUDGET_EXCEEDED` and flagging escalation.
 - **MUST cleanly cancel and terminate processes (DCI-055):** Context cancellation must terminate HTTP requests, streaming connections, and CLI subprocesses without orphan processes or hanging goroutines.
 - **MUST enforce worktree containment on tool operations (ADR-0015):** Tool operations interacting with the worktree must be mediated through `tools.Scope.ResolvePath` to prevent directory traversal escapes.
+- **MUST NOT advertise NativeWorktreeAccess without verified sandbox containment:** Default capability for `CLIWrapperDriver` MUST declare `NativeWorktreeAccess: false`. Process `Dir` sets execution CWD, but does NOT provide kernel-level filesystem containment. Filesystem modifications must be routed through mediated DevCadence tools (`ToolMediator`) for verified containment unless an explicit verified sandbox provider is configured.
+- **MUST enforce process secret boundary (DCI-081):** CLI process specifications MUST be validated via `credentials.ValidateProcessSpecNoSecrets` at driver creation and execution boundaries, rejecting raw secrets in arguments or environment variables.
 - **MUST NOT conflate endpoint kind with capability (ADR-0019 §1, DCI-054):** Local runtimes and remote APIs must truthfully report their actual `ContextControl` and `PrefixCache` capabilities without hardcoded assumptions.
 - **MUST run reusable contract test suite across all three drivers:** `DirectAPIDriver`, `CLIWrapperDriver`, and `FakeDriver` must all satisfy the identical contract test suite.
 
@@ -220,6 +222,9 @@ type EventStream interface {
 ### 3.2 Tool & Worktree Access Mediation (`mediation.go`)
 
 Mediation intercepts tool invocations before execution, validating path containment using `tools.Scope.ResolvePath`. Symlink escapes and `..` traversals are rejected with `errs.CategoryPolicyDenied`.
+- **Structural Path Policy:** Path arguments are identified via custom `ToolDefinition.PathExtractor`, declared `PathParameters`, or robust recursive JSON inspection.
+- **Session Isolation:** `ScopedToolMediator.ForSession` creates session-isolated mediators to prevent cross-session state mutation or duplicate listener accumulation.
+- **Tool Execution Observers:** Mediated executions notify `ToolExecutionListener` so that driver-internal tool calls are accurately metered and evaluated for semantic loops.
 
 ### 3.3 Silent Multi-Dimensional Metering Runtime (`metering.go`, `loop_detector.go`)
 

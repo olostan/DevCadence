@@ -8,17 +8,23 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/olostan/DevCadence/internal/errs"
+	"github.com/olostan/DevCadence/internal/protocol"
 )
 
 // mockDirectClient implements DirectAPIClient for testing.
 type mockDirectClient struct {
-	delay time.Duration
+	delay        time.Duration
+	lastMessages []DirectMessage
 }
 
 func (m *mockDirectClient) Complete(ctx context.Context, req DirectAPIRequest) (DirectAPIResponse, error) {
 	if err := ctx.Err(); err != nil {
 		return DirectAPIResponse{}, err
 	}
+
+	m.lastMessages = req.Messages
 
 	if m.delay > 0 {
 		select {
@@ -68,15 +74,13 @@ func (m *mockDirectClient) Stream(ctx context.Context, req DirectAPIRequest) (Ev
 
 		words := strings.Fields(fmt.Sprintf("Direct stream response to: %s", req.Prompt))
 		for _, w := range words {
-			if err := ctx.Err(); err != nil {
-				stream.CloseWithError(err)
-				return
-			}
-			stream.Send(DriverEvent{
+			if !stream.Send(DriverEvent{
 				Kind:      EventContentDelta,
 				Delta:     w + " ",
 				Timestamp: time.Now(),
-			})
+			}) {
+				return
+			}
 		}
 
 		stream.Send(DriverEvent{
@@ -96,14 +100,105 @@ func (m *mockDirectClient) Stream(ctx context.Context, req DirectAPIRequest) (Ev
 func TestDirectAPIDriverContract(t *testing.T) {
 	RunDriverContractTestSuite(t, func(t *testing.T) (SessionDriver, func()) {
 		client := &mockDirectClient{}
-		driver := NewDirectAPIDriver("direct-api-test-driver", client)
+		driver := MustNewDirectAPIDriver("direct-api-test-driver", client)
 		return driver, func() {}
 	})
 }
 
+func TestDirectAPIDriver_ConstructorValidation(t *testing.T) {
+	// Test client == nil
+	_, err := NewDirectAPIDriver("nil-client", nil)
+	if err == nil {
+		t.Fatalf("expected error for nil client, got nil")
+	}
+	if errs.CategoryOf(err) != errs.CategoryInvalidArgument {
+		t.Errorf("expected CategoryInvalidArgument, got %v", err)
+	}
+
+	// Test invalid capabilities
+	client := &mockDirectClient{}
+	invalidCaps := DriverCapabilities{
+		Kind:                  "invalid-kind",
+		SessionMode:           protocol.SessionStatelessPerCall,
+		ContextControl:        protocol.ContextControlExactStateless,
+		PrefixCache:           protocol.PrefixCacheExplicit,
+		MaxConcurrentRequests: 1,
+	}
+	_, err = NewDirectAPIDriver("invalid-caps", client, DirectAPIOptions{Capabilities: &invalidCaps})
+	if err == nil {
+		t.Fatalf("expected error for invalid capabilities, got nil")
+	}
+}
+
+func TestDirectAPIDriver_ResumeAfterClosePreservesHistory(t *testing.T) {
+	client := &mockDirectClient{}
+	driver := MustNewDirectAPIDriver("direct-api-history", client)
+	ctx := context.Background()
+
+	session, err := driver.StartSession(ctx, SessionConfig{
+		SessionID: "sess-history-preserve",
+		ModelID:   "direct-model-v1",
+	})
+	if err != nil {
+		t.Fatalf("StartSession failed: %v", err)
+	}
+
+	_, err = session.ExecuteTurn(ctx, TurnInput{
+		TurnID: "turn-1",
+		Prompt: "First turn prompt",
+	})
+	if err != nil {
+		t.Fatalf("turn 1 failed: %v", err)
+	}
+
+	// Close session
+	if err := session.Close(ctx); err != nil {
+		t.Fatalf("Close failed: %v", err)
+	}
+	if session.Status() != SessionStatusClosed {
+		t.Errorf("expected closed status, got %s", session.Status())
+	}
+
+	// Resume session
+	resumed, err := driver.ResumeSession(ctx, "sess-history-preserve", SessionConfig{
+		SessionID: "sess-history-preserve",
+		ModelID:   "direct-model-v1",
+	})
+	if err != nil {
+		t.Fatalf("ResumeSession failed: %v", err)
+	}
+	if resumed.Status() != SessionStatusActive {
+		t.Errorf("expected active status on resumed session, got %s", resumed.Status())
+	}
+
+	// Execute turn 2 on resumed session
+	_, err = resumed.ExecuteTurn(ctx, TurnInput{
+		TurnID: "turn-2",
+		Prompt: "Second turn prompt",
+	})
+	if err != nil {
+		t.Fatalf("turn 2 failed: %v", err)
+	}
+
+	// Verify client received both turn 1 and turn 2 messages in conversation history
+	if len(client.lastMessages) < 2 {
+		t.Fatalf("expected at least 2 messages in history, got %d", len(client.lastMessages))
+	}
+	foundTurn1 := false
+	for _, m := range client.lastMessages {
+		if strings.Contains(m.Content, "First turn prompt") {
+			foundTurn1 = true
+			break
+		}
+	}
+	if !foundTurn1 {
+		t.Errorf("expected history to preserve First turn prompt, but was not found in: %+v", client.lastMessages)
+	}
+}
+
 func TestDirectAPIDriver_Cancellation(t *testing.T) {
 	client := &mockDirectClient{delay: 200 * time.Millisecond}
-	driver := NewDirectAPIDriver("direct-api-cancel", client)
+	driver := MustNewDirectAPIDriver("direct-api-cancel", client)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
 	defer cancel()
@@ -127,7 +222,7 @@ func TestDirectAPIDriver_Cancellation(t *testing.T) {
 
 func TestDirectAPIDriver_ToolMediationExecution(t *testing.T) {
 	client := &mockDirectClient{}
-	driver := NewDirectAPIDriver("direct-api-tool", client)
+	driver := MustNewDirectAPIDriver("direct-api-tool", client)
 
 	mediator := NewScopedToolMediator(nil)
 	toolRan := false
@@ -139,7 +234,10 @@ func TestDirectAPIDriver_ToolMediationExecution(t *testing.T) {
 	session, err := driver.StartSession(context.Background(), SessionConfig{
 		SessionID: "sess-api-tool-exec",
 		ModelID:   "direct-model-v1",
-		Mediator:  mediator,
+		Tools: []ToolDefinition{
+			{Name: "fetch_data", Description: "fetches data"},
+		},
+		Mediator: mediator,
 	})
 	if err != nil {
 		t.Fatalf("StartSession failed: %v", err)
@@ -163,7 +261,7 @@ func TestDirectAPIDriver_ToolMediationExecution(t *testing.T) {
 
 func TestDirectAPIDriver_StreamingEvents(t *testing.T) {
 	client := &mockDirectClient{}
-	driver := NewDirectAPIDriver("direct-api-stream", client)
+	driver := MustNewDirectAPIDriver("direct-api-stream", client)
 
 	session, err := driver.StartSession(context.Background(), SessionConfig{
 		SessionID: "sess-api-stream",

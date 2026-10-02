@@ -16,14 +16,19 @@ import (
 // DriverCapabilities expresses the operational and context controllability of a driver.
 // It maps directly to protocol.AccessChannel capabilities (ADR-0018, ADR-0019).
 type DriverCapabilities struct {
-	Kind                  protocol.ChannelKind    `json:"kind"`
-	SessionMode           protocol.SessionMode    `json:"session_mode"`
-	ContextControl        protocol.ContextControl `json:"context_control"`
-	PrefixCache           protocol.PrefixCache    `json:"prefix_cache"`
-	SupportsStreaming     bool                    `json:"supports_streaming"`
-	SupportsTools         bool                    `json:"supports_tools"`
-	NativeWorktreeAccess  bool                    `json:"native_worktree_access"`
-	MaxConcurrentRequests int                     `json:"max_concurrent_requests"`
+	Kind              protocol.ChannelKind    `json:"kind"`
+	SessionMode       protocol.SessionMode    `json:"session_mode"`
+	ContextControl    protocol.ContextControl `json:"context_control"`
+	PrefixCache       protocol.PrefixCache    `json:"prefix_cache"`
+	SupportsStreaming bool                    `json:"supports_streaming"`
+	SupportsTools     bool                    `json:"supports_tools"`
+	// NativeWorktreeAccess indicates whether the execution substrate guarantees kernel-level
+	// or sandbox-enforced filesystem containment to the session's worktree.
+	// NOTE: Setting process CWD/Dir alone does NOT provide filesystem containment.
+	// Unless an explicit verified sandbox provider is active, NativeWorktreeAccess MUST be false,
+	// and write mutations must be routed through mediated DevCadence tools (ToolMediator) for verified containment.
+	NativeWorktreeAccess  bool `json:"native_worktree_access"`
+	MaxConcurrentRequests int  `json:"max_concurrent_requests"`
 }
 
 // Validate ensures that driver capabilities conform to defined protocol types and limits.
@@ -70,11 +75,24 @@ func (s SessionStatus) Valid() bool {
 	return false
 }
 
+// PathExtractor extracts relative filesystem paths from a tool's JSON arguments.
+type PathExtractor func(args json.RawMessage) ([]string, error)
+
 // ToolDefinition defines a callable tool with a JSON schema for arguments.
 type ToolDefinition struct {
-	Name        string          `json:"name"`
-	Description string          `json:"description"`
-	Parameters  json.RawMessage `json:"parameters,omitempty"`
+	Name           string          `json:"name"`
+	Description    string          `json:"description"`
+	Parameters     json.RawMessage `json:"parameters,omitempty"`
+	PathParameters []string        `json:"path_parameters,omitempty"` // Explicit parameter names that contain paths
+	PathExtractor  PathExtractor   `json:"-"`                         // Optional custom path extractor
+}
+
+// LoopDetectorSnapshot preserves the internal state of SemanticLoopDetector across checkpoints.
+type LoopDetectorSnapshot struct {
+	ConsecutiveFailedKey   string              `json:"consecutive_failed_key"`
+	ConsecutiveFailedCount int                 `json:"consecutive_failed_count"`
+	FileEditHashes         map[string][]string `json:"file_edit_hashes,omitempty"`
+	FileOscillationsCount  map[string]int      `json:"file_oscillations_count,omitempty"`
 }
 
 // ToolCall represents a model-issued request to execute a tool.
@@ -185,10 +203,16 @@ func (cfg SessionConfig) DeepCopy() SessionConfig {
 	if cfg.Tools != nil {
 		cp.Tools = make([]ToolDefinition, len(cfg.Tools))
 		for i, t := range cfg.Tools {
+			var pathParams []string
+			if t.PathParameters != nil {
+				pathParams = append([]string(nil), t.PathParameters...)
+			}
 			cp.Tools[i] = ToolDefinition{
-				Name:        t.Name,
-				Description: t.Description,
-				Parameters:  append([]byte(nil), t.Parameters...),
+				Name:           t.Name,
+				Description:    t.Description,
+				Parameters:     append([]byte(nil), t.Parameters...),
+				PathParameters: pathParams,
+				PathExtractor:  t.PathExtractor,
 			}
 		}
 	}
