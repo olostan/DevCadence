@@ -341,6 +341,13 @@ Dependency/completion graph:
 
 ### WP-M3C-2 — Session drivers and Cognitive Invocation Compiler
 
+**Planning size / split:** the umbrella is intentionally delivered as two separately reviewable implementation slices rather than one monolithic PR:
+- **WP-M3C-2A — Session execution substrate (medium):** driver interface, two real driver shapes + fake adapter contract, cancellation/resume/tool capability normalization, and silent resource metering.
+- **WP-M3C-2B — Cognitive Invocation Compiler (large):** deterministic admission/mapping/dependency closure, prompt renderers, ContextPack/ContextProfile enforcement, Cognitive State Capsule, Evidence Working Set leases, expansion/restart behavior, and lexical/graph optional-context retrieval.
+
+2A and 2B share WP-M3C-1 protocol contracts but are independently acceptable; neither may silently absorb the other's unfinished scope. M4's compiler/context experiments require 2B acceptance, so the compiler does **not** silently slip past the evidence gate. If either slice expands beyond its stated boundary, the Principal must split it again before implementation rather than enlarge the EWP.
+
+
 **Objective:** build the session-driver abstraction across heterogeneous cognition endpoints and compile bounded, complete model invocations without requiring agents to understand DevCadence's full rule/process corpus.
 
 **Deliverables:**
@@ -402,15 +409,15 @@ Dependency/completion graph:
 **Dependency/boundary:** this WP builds on the existing ReviewResult / ReviewCampaign / FindingDisposition / ClosureDecision contracts and M3C protocol conventions. It is deliberately numbered after the existing M3C-3/4 cards to avoid renumbering accepted roadmap identities, but it may proceed independently of WP-M3C-2/3/4 once WP-M3C-1 is accepted. Rich multi-review fan-out, lenses, falsification, aggregation policy and campaign automation remain M7.
 
 **Deliverables:**
-- `ReviewFinding` Go/schema twin with stable finding identity, raw ReviewResult observation refs, candidate/contract identity, canonical severity, canonical materiality, optional confidence, claim/evidence/requirement refs and verification method.
-- `FindingResolution` Go/schema twin representing author/implementer `fix_attempted | challenge` plus candidate/evidence.
-- `ResolutionVerification` Go/schema twin representing independent verification; verifier-facing cognition is identity-blinded by default while the control plane separately enforces reviewer/author independence.
+- `ReviewFinding` Go/schema twin with stable finding identity, raw ReviewResult observation refs, candidate/contract identity, canonical severity, canonical materiality, optional confidence, claim/evidence/requirement refs, verification method, and durable reviewer/producer provenance.
+- `FindingResolution` Go/schema twin representing author/implementer `fix_attempted | challenge` plus candidate/evidence and mandatory logical producer + invocation provenance.
+- `ResolutionVerification` Go/schema twin representing independent verification with mandatory verifier + invocation provenance; verifier-facing cognition is identity-blinded by default while the control plane compares durable provenance to enforce reviewer/author independence. Verification may return `re_adjudication_required`, but cannot itself create an authorized deferral.
 - Backward-compatible links to existing FindingDisposition and ClosureDecision semantics; a blocking `fix_attempted` remains open for closure until independent verification succeeds.
 - Focused role-specific projection tests proving clean-session reconstruction does not require the reviewer/author chat transcript.
 
-**MUST:** author/implementer self-verification is structurally rejected; severity/materiality vocabularies stay compatible with existing FindingDisposition; challenge verification is blind to producer identity unless identity is materially required evidence; no new record grants closure authority by itself.
+**MUST:** author/implementer self-verification is structurally rejected from durable producer/verifier provenance, including across clean sessions; severity/materiality vocabularies stay compatible with existing FindingDisposition; challenge verification is blind to producer identity unless identity is materially required evidence; verification cannot accept deferred risk; no new record grants closure authority by itself.
 
-**Acceptance criteria:** strict Go/schema parity and valid/invalid fixtures; normalized finding references round-trip; self-verification is rejected; an attempted blocking fix cannot satisfy ClosureDecision until verified; challenge verification can reconstruct from durable state/evidence in a clean session; existing ReviewCampaign/FindingDisposition/ClosureDecision records retain compatibility.
+**Acceptance criteria:** strict Go/schema parity and valid/invalid fixtures; normalized finding references and producer/verifier provenance round-trip; same-producer/self-verification is rejected after a clean-session handoff; an attempted blocking fix cannot satisfy ClosureDecision until verified; a verifier's deferral recommendation cannot satisfy ClosureDecision until an authorized superseding `FindingDisposition=defer` exists; challenge verification can reconstruct from durable state/evidence in a clean session; existing ReviewCampaign/FindingDisposition/ClosureDecision records retain compatibility.
 
 ## M3D — Adaptive portfolio and workflow synthesis
 

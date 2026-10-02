@@ -58,13 +58,13 @@ Embedding similarity, BM25, reranking, or an LLM MAY help retrieve optional/back
 
 A semantically distant safety or spending rule can still be binding. Conversely, a highly similar ADR paragraph may be rationale rather than authority.
 
-To bound **mis-mapped** rules, not only unmapped tasks, every execution-critical clause belongs to a deterministic admission class:
+To reduce exposure to **mis-mapped** rules while deterministically catching orphaned rules, every execution-critical clause belongs to a deterministic admission class:
 
 - `always`: a very small project-wide authority floor that is present in every cognition invocation;
 - `capability_default`: admitted whenever the invocation can exercise the corresponding authority class (for example repository mutation, credentials, network access, spending, or durable-state mutation); exclusion requires an explicit revision-pinned not-applicable mapping, never merely the absence of a tag;
 - `mapped`: admitted through the normal task/role/action/path/domain/risk mappings and dependency closure.
 
-A reverse-coverage linter rejects any mandatory clause that has no deterministic admission path. This does not make every security or governance rule resident everywhere; it makes cross-cutting authority fail safe without turning the whole corpus into a prompt.
+A reverse-coverage linter rejects any mandatory clause that has no deterministic admission path. That proves only **non-orphaning**, not semantic mapping correctness: a clause mapped only to the wrong domain can still pass reverse coverage. Mapping correctness is validated separately by Contract Completeness Review and M4's independent held-out/seeded applicability audit. This split keeps cross-cutting authority fail-safe without pretending static reachability proves the mapping is correct.
 
 The admission pipeline is therefore ordered:
 
@@ -206,17 +206,17 @@ For a finding whose existing `FindingDisposition` requires current repair, the i
 - `fix_attempted` with candidate commit/evidence; or
 - `challenge` with contradiction rationale/evidence.
 
-The implementer cannot mark a finding verified. A verified challenge does not silently mutate historical `FindingDisposition` evidence; the campaign records the verification and, where policy requires a changed adjudication, appends the appropriate new/superseding decision record according to the durable compatibility rules.
+The implementer cannot mark a finding verified. The durable `FindingResolution` records producer + invocation provenance, and `ResolutionVerification` records verifier + invocation provenance, so the control plane can reject logical self-verification across clean sessions even when the visible GitHub/user account is the same. A verified challenge does not silently mutate historical `FindingDisposition` evidence; the campaign records the verification and, where policy requires a changed adjudication, appends the appropriate new/superseding decision record according to the durable compatibility rules.
 
 A clean independent verifier evaluates an attempted fix. A challenged finding is evaluated in an unbiased adjudication context containing the original claim/evidence, the challenge argument, and the applicable normative material — not the accumulated conversation transcript. The cognitive verifier is **blinded by default** to the identities/model/provider of the original reviewer and challenger; independence/capability provenance is checked by the control plane and is exposed to the verifier only when identity itself is materially relevant evidence.
 
-Terminal outcomes are conceptually:
+Verification outcomes are conceptually:
 
 - `verified_fixed`;
 - `verified_dismissed`;
-- `verified_deferred`.
+- `re_adjudication_required`.
 
-A deferment must name a destination owner/WP, safety rationale, and reconsideration trigger. "Future work" without ownership is not closure.
+A verifier never accepts deferred risk. If verification supports deferral or another disposition change, `re_adjudication_required` carries the evidence back to the authorized Principal/Human, who must issue a new/superseding `FindingDisposition`. A deferral becomes closure-eligible only after that authorized disposition supplies the existing deferred-target, safety/accepted-risk evidence and reconsideration trigger. "Future work" without ownership is not closure.
 
 The exact durable schema/state machine belongs to its implementation WP; this ADR owns the authority split.
 

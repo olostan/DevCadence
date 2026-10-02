@@ -517,10 +517,8 @@ asking AI to choose the portfolio.
 - explicit privacy/spending/source-exposure/reserve/preference/diversity policy;
 - versioned CognitionPortfolio / PortfolioRecommendation / WorkflowPlan
   protocol shapes and activation/versioning primitives;
-- session-driver abstraction for authenticated CLIs/SDKs/APIs/local runtimes,
-  including model selection, structured/streaming events, resume,
-  cancellation, tool/MCP/worktree capabilities and usage/quota evidence where
-  observable;
+- WP-M3C-2A session execution substrate (**medium** planning size): authenticated CLI/SDK/API/local drivers, two materially different real driver shapes plus a fake adapter contract, structured/streaming events, resume/cancellation/tool capabilities and silent resource metering;
+- WP-M3C-2B Cognitive Invocation Compiler (**large** planning size): deterministic admission/mappings/dependency closure, renderers, ContextPack enforcement, state capsule, evidence leases, expansion/restart handling and lexical/graph retrieval. 2A/2B are independently acceptable; M4 compiler/context experiments require 2B, and either slice must be split again rather than silently expanding beyond its EWP boundary;
 - deterministic portfolio validator covering endpoint identity/capability
   provenance, source exposure, spending/overage, budget bindings, driver
   features and resource constraints;

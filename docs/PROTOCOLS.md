@@ -479,7 +479,7 @@ Every execution-critical clause declares one admission class:
 - `capability_default`: admitted whenever the invocation can exercise the named authority class; exclusion requires an explicit revision-pinned not-applicable mapping;
 - `mapped`: admitted through normal task/role/action/path/domain/risk rules and dependency closure.
 
-A reverse-coverage check rejects a mandatory clause with no deterministic admission path. This catches orphan/mis-mapped authority that a successful task mapping alone would otherwise miss.
+A reverse-coverage check rejects a mandatory clause with no deterministic admission path. This detects **orphaned authority only**: it does not prove that a `mapped` clause is attached to every domain/action where it belongs. Mapping correctness is a separate concern, checked by Contract Completeness Review plus M4's independently established/seeded applicability ground truth. Runtime admission therefore fails closed on unknown/orphaned applicability, while known-but-wrong mappings are treated as a specification defect to be falsified by those independent checks.
 
 Optional retrieval may use exact/lexical search and graph traversal. Dense embeddings/reranking are optional M4 experiments rather than an M3C baseline requirement. Retrieval results carry provenance, revision/freshness and admission reason. Dense similarity MAY expand recall but MUST NOT delete or override a mandatory clause.
 
@@ -795,6 +795,7 @@ A normalized stable material claim produced from one or more existing `ReviewRes
 - impact / why-now;
 - independent verification method;
 - source reviewer/lens;
+- durable producer provenance sufficient to distinguish logical producer and invocation across clean sessions (producer identity/reference, role, invocation reference, and endpoint/channel/session/model provenance when cognition-produced);
 - status.
 
 Multiple reviewer observations may support one normalized ReviewFinding. Severity means harm if true; materiality means current-campaign significance; confidence means evidence strength. FindingDisposition copies the normalized finding's severity/materiality; reclassification occurs during normalization/adjudication with explicit rationale, not implicitly during repair.
@@ -810,13 +811,20 @@ The implementer/author response to one accepted finding:
 - `fix_attempted`: identify candidate commit/files/evidence; or
 - `challenge`: provide reason/evidence that the finding is false, inapplicable or belongs at another boundary.
 
-A FindingResolution is never self-verification.
+The durable record MUST identify its logical producer and invocation provenance (producer reference/role plus invocation reference, with endpoint/channel/session/model provenance where cognition-produced). A FindingResolution is never self-verification.
 
 ### ResolutionVerification
 
-An independent decision over one finding + attempted resolution/challenge + focused evidence. The cognitive verifier is blinded by default to reviewer/challenger identity and model/provider; the control plane separately checks required independence and exposes identity only when it is materially relevant evidence. Conceptual terminal outcomes are `verified_fixed`, `verified_dismissed`, or `verified_deferred`. A deferment retains owner/WP, safety rationale and reconsideration trigger.
+An independent decision over one finding + attempted resolution/challenge + focused evidence. The durable record MUST identify verifier/invocation provenance sufficient for the control plane to compare it with the ReviewFinding/FindingResolution producer provenance and mechanically reject self-verification across clean sessions. The cognitive verifier is blinded by default to reviewer/challenger identity and model/provider; the control plane separately checks required independence and exposes identity only when it is materially relevant evidence.
 
-The exact v1 enum/schema may be smaller if needed, but it MUST preserve the authority split: author attempts; independent verification or deterministic proof closes.
+Conceptual outcomes are:
+- `verified_fixed` — the accepted repair is independently established;
+- `verified_dismissed` — the challenge is independently established and the finding no longer requires repair;
+- `re_adjudication_required` — verification produced evidence that the current disposition should change (including a possible deferral), but the verifier does **not** exercise Principal/Human risk-acceptance authority.
+
+A proposed deferral remains open until a Principal/Human writes a new/superseding `FindingDisposition{disposition=defer}` satisfying the existing deferred-target, reconsideration-trigger and accepted-risk requirements. Only that authorized disposition can make deferral eligible for closure.
+
+The exact v1 enum/schema may be smaller if needed, but it MUST preserve the authority split: author attempts; independent verification establishes facts; Principal/Human adjudication alone accepts risk/deferral; deterministic closure consumes those durable records.
 
 ### ClosureDecision
 

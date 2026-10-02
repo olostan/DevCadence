@@ -180,6 +180,8 @@ After the existing FindingDisposition selects a current-campaign repair (`fix_no
 
 An implementer MUST NOT mark its own resolution verified (DCI-134).
 
+Durable `ReviewFinding`, `FindingResolution`, and `ResolutionVerification` records must carry producer/verifier identity plus invocation provenance sufficient for the control plane to compare logical producers across clean sessions. For cognition-produced records that provenance includes endpoint/channel/session-or-invocation/model identity by reference; the verifier prompt may still be blinded to those identities.
+
 The runtime verifies that every required finding received a response; the implementer does not need the full lifecycle rules in its prompt.
 
 ## 7. Independent verification
@@ -213,13 +215,13 @@ A challenge is evaluated in an unbiased context containing:
 
 The verifier-facing projection is blinded by default to reviewer/challenger identity and model/provider. The control plane separately enforces independence and reveals identity only when it is materially relevant evidence. Do not prime the verifier with "the author says reviewer X was wrong" or load the conversational transcript.
 
-Conceptual terminal outcomes:
+Conceptual verification outcomes:
 
 - `verified_fixed`;
 - `verified_dismissed`;
-- `verified_deferred`.
+- `re_adjudication_required`.
 
-A deferment names a destination owner/WP, why deferral is safe now, and a reconsideration trigger. "Future work" alone is not closure.
+`re_adjudication_required` is evidence, not risk-acceptance authority. If verification supports deferral, the finding remains open until a Principal/Human issues a new/superseding `FindingDisposition=defer` with the existing required deferred target, reconsideration trigger and accepted-risk reference. "Future work" alone is not closure.
 
 ## 8. Review independence
 

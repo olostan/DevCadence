@@ -17,7 +17,7 @@ Rationale for the register: DCI-018/019 are only as good as their tooling. Until
 
 
 Resolved by PR #17 architecture:
-- **CF-6:** M3C work is explicitly split across WP-M3C-1..4; WP-M3C-2 owns compiler/runtime mediation and may be independently accepted before later synthesis.
+- **CF-6:** WP-M3C-2 now has an explicit planning-size/scope split: 2A session execution substrate (medium) and 2B Cognitive Invocation Compiler/context mediation (large), each independently acceptable under the WP-M3C-2 umbrella; M4 compiler/context experiments require 2B, so there is no silent resolver/compiler slip past M4, and either slice must be split again if its EWP grows beyond the stated boundary.
 - **CF-7:** WP-M3C-2 now names applicability/dependency mapping freshness as owned deterministic compiler work; unknown mapping fails closed.
 - **CF-8:** endpoint working-set sizes are no longer duplicated as a worker rule; M4 owns empirical ContextProfile calibration.
 - **CF-10:** review convergence no longer relies on an open-ended queued finding budget; stable findings are normalized before a bounded repair packet and closure uses thresholded structured state.
