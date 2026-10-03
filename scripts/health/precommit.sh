@@ -27,6 +27,6 @@ echo "health: validating staged snapshot"
   make docs-check
 )
 
-"$repo_root/scripts/health/coverage-guard.sh" HEAD "$candidate"
+sh "$repo_root/scripts/health/coverage-guard.sh" HEAD "$candidate"
 
 echo "health: staged snapshot PASS"
