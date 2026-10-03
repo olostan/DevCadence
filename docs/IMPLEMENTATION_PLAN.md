@@ -510,7 +510,7 @@ asking AI to choose the portfolio.
 - Cognitive Invocation Compiler with deterministic task/role/action/path/domain/risk applicability mapping, dependency-closed exact mandatory clause admission, projection freshness and complete-contract admission/reserves (`CONTEXT_UNFIT`);
 - optional-context retrieval baseline: exact/lexical + dependency graph traversal; dense embeddings/reranking are not required M3C implementation and are evaluated experimentally in M4;
 - endpoint-specific prompt-renderer interface so canonical protocol/state stays format-neutral while model-facing task/contract/evidence/action projections can be calibrated;
-- context budget/reference linting for role cores, contracts and compiled packs, plus honest measured/estimated/unknown telemetry and expansion/restart handling;
+- context budget/reference linting for role cores, contracts and compiled packs, plus measured/estimated telemetry and expansion/restart handling (honest unknown opaque-session usage reporting is deferred to a protocol follow-up per PRE-3/KG-2);
 - provider-neutral context-control capabilities: `ContextControl = ExactStateless | AppendOnly | OpaqueSession` and `PrefixCache = Explicit | Implicit | SessionKV | None` (ADR-0019 §1);
 - `Evidence Working Set` lease manager with content-addressed provenance `(file_path, content_digest, start_line, end_line)`, automatic freshness invalidation on file mutation, and server-side path authorization;
 - `RefactoringProposal` protocol definition in Go and JSON Schema (`internal/protocol/`, `schemas/refactoring-proposal.schema.json`) enabling bottom-up upstream challenge (ADR-0019 §3);
@@ -540,7 +540,7 @@ similarity is still admitted, mandatory admission classes have reverse coverage,
 optional retrieval cannot displace required authority, provisional profiles do
 not masquerade as calibrated evidence, hostile evidence delimiters cannot escape
 their PromptProjection container, and an oversized mandatory pack returns
-`CONTEXT_UNFIT`. Separately, WP-M3C-5 proves review finding/resolution state
+`CONTEXT_UNFIT`. Substrate integration verification across heterogeneous portfolios and known gaps (KG-1..KG-5) is verified in WP-M3C-4 (`tests/m3c_substrate_test.go`). Separately, WP-M3C-5 proves review finding/resolution state
 survives a clean-session handoff without permitting author self-verification.
 
 #### Exit criterion

@@ -513,7 +513,7 @@ Under ADR-0016:
 
 ## 10B. Adaptive Context Architecture and Evidence Working Set [Implemented - WP-M3C-1 / WP-M3C-2B]
 
-**Status:** merged WP-M3C-1 implements the core ContextProfile/Manifest/Pack/EvidenceLease Go/schema shapes; WP-M3C-2B implements the runtime Cognitive Invocation Compiler, deterministic invariant admission from embedded INVARIANTS.md, authority-projection catalog authentication, prompt renderers (tagged markdown and JSON), and lease/capsule lifecycle managers. Existing `internal/compaction` and bounded tools under ADR-0016 remain useful mechanisms. ADR-0019 owns context-layer rationale; ADR-0020 owns deterministic applicability, retrieval authority boundaries, prompt projection and review-ledger integration; this section owns protocol semantics.
+**Status:** merged WP-M3C-1 implements the core ContextProfile/Manifest/Pack/EvidenceLease Go/schema shapes; WP-M3C-2B implements the runtime Cognitive Invocation Compiler, deterministic invariant admission from embedded INVARIANTS.md, authority-projection catalog authentication, prompt renderers (tagged markdown and JSON), and lease/capsule lifecycle managers; WP-M3C-4 verifies substrate integration and characterizes known gaps KG-1..KG-5. Existing `internal/compaction` and bounded tools under ADR-0016 remain useful mechanisms. ADR-0019 owns context-layer rationale; ADR-0020 owns deterministic applicability, retrieval authority boundaries, prompt projection and review-ledger integration; this section owns protocol semantics.
 
 ### ContextProfile
 
@@ -524,7 +524,7 @@ Endpoint/access-path and workload-specific capability/budget evidence:
 - `ContextControl = ExactStateless | AppendOnly | OpaqueSession` and `PrefixCache = Explicit | Implicit | SessionKV | None` as adapter-observed capabilities, not inferred from local/remote labels;
 - long-context configuration and cache capabilities where observable; unknown values remain unknown.
 
-Targets are defaults; hard endpoint/policy ceilings are enforced. Model/runtime/configuration changes invalidate calibration applicability. Admission counts all model-visible system/host/tool-schema, contract, normative, state, evidence and tail tokens plus reserves; estimated counts include conservative margin. Hidden tokens in opaque sessions are not reported as exact zero.
+Targets are defaults; hard endpoint/policy ceilings are enforced. Model/runtime/configuration changes invalidate calibration applicability. Admission counts all model-visible system/host/tool-schema, contract, normative, state, evidence and tail tokens plus reserves; estimated counts include conservative margin. Opaque CLI session usage reporting is deferred to a protocol follow-up (KG-2, PRE-3).
 
 Before M4 empirical calibration, an endpoint may use a **provisional** profile: hard fit comes from runtime/declared capacity plus configured policy ceilings, explicit output/reasoning/tool reserves, and conservative accounting uncertainty. Any provisional target ceiling is versioned configuration, not a claim of measured effectiveness; DevCadence does not hard-code a universal percentage of the nominal window. A policy that requires verified effectiveness may declare the provisional endpoint ineligible.
 

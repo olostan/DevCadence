@@ -487,7 +487,7 @@ Dependency/completion graph:
 
 **Execution Work Package:** [docs/work-packages/wp-m3c-4-ewp.md](work-packages/wp-m3c-4-ewp.md)
 
-**Status:** READY_FOR_IMPLEMENTATION (delegation prerequisites cleared; escaper hardened in PR #31; independent readiness review recorded).
+**Status:** IMPLEMENTED — Delivered integration test suite in `tests/m3c_substrate_test.go` covering ACC-01 through ACC-14; awaiting independent review and verification.
 
 **Objective:** verify the integrated cognition substrate across heterogeneous portfolios and edge cases.
 
@@ -503,6 +503,12 @@ Dependency/completion graph:
   - Local, subscription, metered, and mixed candidate portfolios;
   - Graceful degradation when quota/resource evidence is missing or unknown;
   - Extensibility proof demonstrating a third fake provider/driver participates without core changes.
+- Characterized Known Gaps (KG-1..KG-5) and PRE-3 outcome:
+  - **KG-1:** `DefaultValidationPolicy()` leaves `RequireKnownResourceState` false; hosts with unknown metrics, missing resource/budget state, or `BudgetStatusUnknown` validate as acceptable. Only `RequireKnownResourceState=true` with non-empty `UnknownMetrics` produces `CodeUnknownResourceState`.
+  - **KG-2 / PRE-3:** `drivers.TokenUsage` has no unknown usage indicator; honest opaque-session usage reporting is deferred to a protocol follow-up.
+  - **KG-3:** `CompileRequest.WriteScope` is recorded in the manifest and used for rule admission; `ScopedToolMediator` enforces tool declaration and worktree containment, not `WriteScope` path patterns.
+  - **KG-4:** `EvidenceLeaseManager.InvalidateForFileMutation` has no non-test caller; the seam exists via `ScopedToolMediator.OnFileEdit` for mutating tools and is verified in integration tests.
+  - **KG-5:** Unknown-domain rejection in `RuleRegistry.ResolveAdmittedRules` applies when the registry has at least one known domain; an empty vocabulary accepts any domain.
 - Documentation synchronization across `docs/IMPLEMENTATION_PLAN.md`, `docs/PROTOCOLS.md`, and `docs/WORK_PACKAGES.md`.
 
 **MUST:** tests must run deterministically without requiring external API tokens or real GPUs.
