@@ -487,7 +487,7 @@ Dependency/completion graph:
 
 **Execution Work Package:** [docs/work-packages/wp-m3c-4-ewp.md](work-packages/wp-m3c-4-ewp.md)
 
-**Status:** BLOCKED on delegation prerequisites. The EWP (§0, §3A) records two prerequisites and five known gaps found by independent readiness review: evidence-escaper hardening, accepted-behavior for unknown quota, the unrepresentable "honest unknown opaque-session usage" deliverable, absent `WriteScope` enforcement and absent file-edit→lease-invalidation wiring. Deliverables below that the current protocol cannot satisfy are pending a Principal decision recorded in the EWP, not silently dropped.
+**Status:** READY_FOR_IMPLEMENTATION (delegation prerequisites cleared; escaper hardened in PR #31; independent readiness review recorded).
 
 **Objective:** verify the integrated cognition substrate across heterogeneous portfolios and edge cases.
 
@@ -512,6 +512,8 @@ Dependency/completion graph:
 ### WP-M3C-5 — Durable review-ledger primitives
 
 **Execution Work Package:** [docs/work-packages/wp-m3c-5-ewp.md](work-packages/wp-m3c-5-ewp.md)
+
+**Status:** READY_FOR_IMPLEMENTATION (design decisions D-1..D-3 owner-approved; independent readiness review recorded).
 
 **Objective:** implement the minimal backward-compatible review state needed to carry findings and repair verification across clean sessions without coupling that work to session-driver/compiler delivery.
 
