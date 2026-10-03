@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"html"
+	"regexp"
 	"strings"
 
 	"github.com/olostan/DevCadence/internal/errs"
@@ -217,22 +218,53 @@ func (r *JSONRenderer) Render(pack *protocol.ContextPack) (PromptProjection, err
 	}, nil
 }
 
+// containerTagNames lists every tag the TaggedMarkdownRenderer emits as a structural
+// container. Untrusted content (evidence, tool exchanges, diff manifests, validation
+// summaries) must never be able to introduce another opening tag of any of these names.
+// TestEscapeEvidenceDelimiters_CoversEveryEmittedContainerTag keeps this list in step
+// with the renderer.
+var containerTagNames = []string{
+	"role_core",
+	"execution_contract",
+	"mandatory_obligations",
+	"cognitive_state",
+	"hypotheses",
+	"active_todos",
+	"intermediate_decisions",
+	"open_questions",
+	"evidence_working_set",
+	"evidence_lease",
+	"ephemeral_tail",
+	"recent_tool_exchanges",
+	"candidate_diff_manifest",
+	"validation_summaries",
+	"current_action",
+}
+
+// containerOpenTagVariant matches an opening container tag in forms the exact-literal
+// replacements below do not cover: different case, whitespace after '<', or attributes.
+var containerOpenTagVariant = regexp.MustCompile(`(?i)<\s*(` + strings.Join(containerTagNames, "|") + `)`)
+
 // EscapeEvidenceDelimiters ensures that evidence content cannot break out of its XML container.
 // Specifically:
 // 1. It replaces literal '</' with '&lt;/' so closing tags cannot terminate container tags.
-// 2. It replaces '<execution_contract>' and other instruction injection tags.
-// 3. It escapes all XML angle brackets to html entities '&lt;' and '&gt;' if they attempt to simulate tags.
+// 2. It escapes the exact opening form of every container tag the renderer emits.
+// 3. It escapes case, whitespace and attribute variants of those opening tags.
+// All other '<' and '>' characters are left untouched so source code and markup survive verbatim.
 func EscapeEvidenceDelimiters(content string) string {
-	// First, replace any closing tags matching XML container tags
 	s := content
-	// Replace all occurrences of '</' with '&lt;/'
+	// Closing tags can never terminate a container.
 	s = strings.ReplaceAll(s, "</", "&lt;/")
-	// Replace all occurrences of '<execution_contract>' or '<mandatory_obligations>' or other instruction headers
-	s = strings.ReplaceAll(s, "<execution_contract>", "&lt;execution_contract&gt;")
-	s = strings.ReplaceAll(s, "<mandatory_obligations>", "&lt;mandatory_obligations&gt;")
-	s = strings.ReplaceAll(s, "<role_core>", "&lt;role_core&gt;")
-	s = strings.ReplaceAll(s, "<current_action>", "&lt;current_action&gt;")
-	s = strings.ReplaceAll(s, "<evidence_working_set>", "&lt;evidence_working_set&gt;")
-	s = strings.ReplaceAll(s, "<evidence_lease", "&lt;evidence_lease")
+	// Exact opening forms. 'evidence_lease' is matched as a prefix because the renderer
+	// emits it with attributes.
+	for _, name := range containerTagNames {
+		if name == "evidence_lease" {
+			s = strings.ReplaceAll(s, "<"+name, "&lt;"+name)
+			continue
+		}
+		s = strings.ReplaceAll(s, "<"+name+">", "&lt;"+name+"&gt;")
+	}
+	// Remaining variants (case, whitespace, attributes) of the same opening tags.
+	s = containerOpenTagVariant.ReplaceAllString(s, "&lt;$1")
 	return s
 }
