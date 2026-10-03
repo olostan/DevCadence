@@ -62,7 +62,7 @@ func TestEveryTaxonomySentinelHasADistinctCategory(t *testing.T) {
 		errs.ErrNeedsPrincipal, errs.ErrConsultantUnavailable, errs.ErrModelUnavailable,
 		errs.ErrWorktreeConflict, errs.ErrSchemaVersionUnsupported, errs.ErrInvalidTransition,
 		errs.ErrInvalidArgument, errs.ErrNotFound, errs.ErrConflict, errs.ErrIntegrity,
-		errs.ErrInternal,
+		errs.ErrContextUnfit, errs.ErrInternal,
 	}
 	seen := make(map[errs.Category]bool, len(sentinels))
 	for _, sentinel := range sentinels {

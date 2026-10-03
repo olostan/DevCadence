@@ -129,7 +129,7 @@
     },
     "target_resident_tokens": {
       "type": "integer",
-      "minimum": 1
+      "minimum": 0
     },
     "hard_resident_ceiling_tokens": {
       "type": "integer",
@@ -171,7 +171,8 @@
       "enum": [
         "exact_stateless",
         "append_only",
-        "opaque_session"
+        "opaque_session",
+        "unknown"
       ]
     },
     "observed_prefix_cache": {
@@ -179,7 +180,8 @@
         "explicit",
         "implicit",
         "session_kv",
-        "none"
+        "none",
+        "unknown"
       ]
     }
   }

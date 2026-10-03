@@ -78,6 +78,8 @@ const (
 	// control plane relies on, such as a projection that disagrees with the
 	// event journal.
 	CategoryIntegrity Category = "integrity"
+	// CategoryContextUnfit reports that the mandatory context pack cannot fit the endpoint profile bounds.
+	CategoryContextUnfit Category = "context_unfit"
 	// CategoryInternal reports a defect in DevCadence itself.
 	CategoryInternal Category = "internal"
 )
@@ -103,6 +105,7 @@ var (
 	ErrNotFound                 = &Error{Category: CategoryNotFound, Message: "not found"}
 	ErrConflict                 = &Error{Category: CategoryConflict, Message: "conflict"}
 	ErrIntegrity                = &Error{Category: CategoryIntegrity, Message: "integrity violation"}
+	ErrContextUnfit             = &Error{Category: CategoryContextUnfit, Message: "context unfit"}
 	ErrInternal                 = &Error{Category: CategoryInternal, Message: "internal error"}
 )
 

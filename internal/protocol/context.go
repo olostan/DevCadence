@@ -102,7 +102,7 @@ type ContextProfile struct {
 	Runtime                   string                    `json:"runtime"`
 	ModelRef                  string                    `json:"model_ref"`
 	Quantization              *string                   `json:"quantization,omitempty"`
-	ContextConfiguration     map[string]string         `json:"context_configuration,omitempty"`
+	ContextConfiguration      map[string]string         `json:"context_configuration,omitempty"`
 	Revision                  int                       `json:"revision"`
 	DeclaredWindowTokens      int                       `json:"declared_window_tokens"`
 	RuntimeWindowTokens       int                       `json:"runtime_window_tokens"`
@@ -174,8 +174,8 @@ func (c *ContextProfile) Validate() error {
 			"%s: hard_resident_ceiling_tokens (%d) + output_reserve (%d) + tool_tail_reserve (%d) exceeds runtime_window_tokens (%d)",
 			kind, c.HardResidentCeilingTokens, c.OutputReserveTokens, c.ToolTailReserveTokens, c.RuntimeWindowTokens)
 	}
-	if c.TargetResidentTokens < 1 || c.TargetResidentTokens > c.HardResidentCeilingTokens {
-		return errs.New(errs.CategoryInvalidArgument, "%s: target_resident_tokens (%d) must be between 1 and hard_resident_ceiling_tokens (%d)", kind, c.TargetResidentTokens, c.HardResidentCeilingTokens)
+	if c.TargetResidentTokens < 0 || c.TargetResidentTokens > c.HardResidentCeilingTokens {
+		return errs.New(errs.CategoryInvalidArgument, "%s: target_resident_tokens (%d) must be between 0 and hard_resident_ceiling_tokens (%d)", kind, c.TargetResidentTokens, c.HardResidentCeilingTokens)
 	}
 	if err := requireMinItems(kind, "workload_envelopes", len(c.WorkloadEnvelopes), 1); err != nil {
 		return err
@@ -199,21 +199,22 @@ func (c *ContextProfile) Validate() error {
 	}
 	if !c.ObservedContextControl.Valid() {
 		return enumError(kind, "observed_context_control", string(c.ObservedContextControl),
-			string(ContextControlExactStateless), string(ContextControlAppendOnly), string(ContextControlOpaqueSession))
+			string(ContextControlExactStateless), string(ContextControlAppendOnly), string(ContextControlOpaqueSession), string(ContextControlUnknown))
 	}
 	if !c.ObservedPrefixCache.Valid() {
 		return enumError(kind, "observed_prefix_cache", string(c.ObservedPrefixCache),
-			string(PrefixCacheExplicit), string(PrefixCacheImplicit), string(PrefixCacheSessionKV), string(PrefixCacheNone))
+			string(PrefixCacheExplicit), string(PrefixCacheImplicit), string(PrefixCacheSessionKV), string(PrefixCacheNone), string(PrefixCacheUnknown))
 	}
 	return nil
 }
 
 // MandatoryClauseRef identifies an exact normative clause deterministically admitted.
 type MandatoryClauseRef struct {
-	ClauseID      string `json:"clause_id"`
-	SourceDoc     string `json:"source_doc"`
-	Revision      string `json:"revision"`
-	ContentDigest string `json:"content_digest"`
+	ClauseID           string `json:"clause_id"`
+	SourceDoc          string `json:"source_doc"`
+	Revision           string `json:"revision"`
+	ContentDigest      string `json:"content_digest"`
+	SelectionRationale string `json:"selection_rationale,omitempty"`
 }
 
 // Validate checks MandatoryClauseRef fields.
@@ -458,17 +459,25 @@ func (e *EvidenceLease) Validate() error {
 	if err := requireNonEmpty(kind, "acquired_at", e.AcquiredAt); err != nil {
 		return err
 	}
+	acqTime, errAcq := time.Parse(time.RFC3339Nano, e.AcquiredAt)
+	if errAcq != nil {
+		acqTime, errAcq = time.Parse(time.RFC3339, e.AcquiredAt)
+	}
+	if errAcq != nil {
+		return errs.New(errs.CategoryInvalidArgument, "%s: acquired_at (%q) must be a valid RFC3339 timestamp: %v", kind, e.AcquiredAt, errAcq)
+	}
 	if e.ExpiresAt != nil {
 		if err := requireNonEmpty(kind, "expires_at", *e.ExpiresAt); err != nil {
 			return err
 		}
-		acqTime, errAcq := time.Parse(time.RFC3339Nano, e.AcquiredAt)
 		expTime, errExp := time.Parse(time.RFC3339Nano, *e.ExpiresAt)
-		if errAcq == nil && errExp == nil {
-			if expTime.Before(acqTime) {
-				return errs.New(errs.CategoryInvalidArgument, "%s: expires_at (%q) cannot be earlier than acquired_at (%q)", kind, *e.ExpiresAt, e.AcquiredAt)
-			}
-		} else if *e.ExpiresAt < e.AcquiredAt {
+		if errExp != nil {
+			expTime, errExp = time.Parse(time.RFC3339, *e.ExpiresAt)
+		}
+		if errExp != nil {
+			return errs.New(errs.CategoryInvalidArgument, "%s: expires_at (%q) must be a valid RFC3339 timestamp: %v", kind, *e.ExpiresAt, errExp)
+		}
+		if expTime.Before(acqTime) {
 			return errs.New(errs.CategoryInvalidArgument, "%s: expires_at (%q) cannot be earlier than acquired_at (%q)", kind, *e.ExpiresAt, e.AcquiredAt)
 		}
 	}
@@ -558,6 +567,7 @@ type ContextPack struct {
 	TokenAccounting       TokenAccountingBreakdown `json:"token_accounting"`
 	AdmittedObjectDigests map[string]string        `json:"admitted_object_digests"`
 	PackDigest            string                   `json:"pack_digest"`
+	InvocationDigest      string                   `json:"invocation_digest,omitempty"`
 	CoverageSummary       string                   `json:"coverage_summary"`
 	Status                ContextPackStatus        `json:"status"`
 }
@@ -610,6 +620,11 @@ func (p *ContextPack) Validate() error {
 	}
 	if err := validateSHA256Digest(kind, "pack_digest", p.PackDigest); err != nil {
 		return err
+	}
+	if p.InvocationDigest != "" {
+		if err := validateSHA256Digest(kind, "invocation_digest", p.InvocationDigest); err != nil {
+			return err
+		}
 	}
 	if err := requireNonEmpty(kind, "coverage_summary", p.CoverageSummary); err != nil {
 		return err

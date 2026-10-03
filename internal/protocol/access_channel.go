@@ -46,12 +46,13 @@ const (
 	ContextControlExactStateless ContextControl = "exact_stateless"
 	ContextControlAppendOnly     ContextControl = "append_only"
 	ContextControlOpaqueSession  ContextControl = "opaque_session"
+	ContextControlUnknown        ContextControl = "unknown"
 )
 
 // Valid reports whether the context control capability is known.
 func (c ContextControl) Valid() bool {
 	switch c {
-	case ContextControlExactStateless, ContextControlAppendOnly, ContextControlOpaqueSession:
+	case ContextControlExactStateless, ContextControlAppendOnly, ContextControlOpaqueSession, ContextControlUnknown:
 		return true
 	}
 	return false
@@ -65,12 +66,13 @@ const (
 	PrefixCacheImplicit  PrefixCache = "implicit"
 	PrefixCacheSessionKV PrefixCache = "session_kv"
 	PrefixCacheNone      PrefixCache = "none"
+	PrefixCacheUnknown   PrefixCache = "unknown"
 )
 
 // Valid reports whether the prefix cache capability is known.
 func (p PrefixCache) Valid() bool {
 	switch p {
-	case PrefixCacheExplicit, PrefixCacheImplicit, PrefixCacheSessionKV, PrefixCacheNone:
+	case PrefixCacheExplicit, PrefixCacheImplicit, PrefixCacheSessionKV, PrefixCacheNone, PrefixCacheUnknown:
 		return true
 	}
 	return false
@@ -124,11 +126,11 @@ func (a *AccessChannel) Validate() error {
 	}
 	if !a.ContextControl.Valid() {
 		return enumError(kind, "context_control", string(a.ContextControl),
-			string(ContextControlExactStateless), string(ContextControlAppendOnly), string(ContextControlOpaqueSession))
+			string(ContextControlExactStateless), string(ContextControlAppendOnly), string(ContextControlOpaqueSession), string(ContextControlUnknown))
 	}
 	if !a.PrefixCache.Valid() {
 		return enumError(kind, "prefix_cache", string(a.PrefixCache),
-			string(PrefixCacheExplicit), string(PrefixCacheImplicit), string(PrefixCacheSessionKV), string(PrefixCacheNone))
+			string(PrefixCacheExplicit), string(PrefixCacheImplicit), string(PrefixCacheSessionKV), string(PrefixCacheNone), string(PrefixCacheUnknown))
 	}
 	if a.MaxConcurrentRequests < 1 {
 		return errs.New(errs.CategoryInvalidArgument, "%s: max_concurrent_requests must be >= 1, got %d", kind, a.MaxConcurrentRequests)

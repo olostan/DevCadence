@@ -444,9 +444,9 @@ Under ADR-0016:
 - **Response Yield Threshold:** Commands taking longer than 10 seconds yield `status: "running"` with an `OperationID`. The operation proceeds uninterrupted; upon completion, hosts receive event-driven wakeups without token-wasting busy-loops.
 - **Universal Pagination (`fetch_content`):** Process outputs are decoupled via injected output sinks. Models page through immutable content-addressed artifacts with strict byte limits and contiguous offsets using `fetch_content(content_ref, offset, limit, unit)`. Full daemon-level live streaming into artifact storage with 4 KiB inline previews is scheduled with the background runner milestone.
 
-## 10B. Adaptive Context Architecture and Evidence Working Set [Partially Implemented - M3C]
+## 10B. Adaptive Context Architecture and Evidence Working Set [Implemented - WP-M3C-1 / WP-M3C-2B]
 
-**Status:** merged WP-M3C-1 implements the core ContextProfile/Manifest/Pack/EvidenceLease Go/schema shapes; runtime compilation/admission remains planned in WP-M3C-2. Existing `internal/compaction` and bounded tools under ADR-0016 remain useful mechanisms but are not the Cognitive Invocation Compiler. ADR-0019 owns context-layer rationale; ADR-0020 owns deterministic applicability, retrieval authority boundaries, prompt projection and review-ledger integration; this section owns protocol semantics.
+**Status:** merged WP-M3C-1 implements the core ContextProfile/Manifest/Pack/EvidenceLease Go/schema shapes; WP-M3C-2B implements the runtime Cognitive Invocation Compiler, deterministic invariant admission from embedded INVARIANTS.md, authority-projection catalog authentication, prompt renderers (tagged markdown and JSON), and lease/capsule lifecycle managers. Existing `internal/compaction` and bounded tools under ADR-0016 remain useful mechanisms. ADR-0019 owns context-layer rationale; ADR-0020 owns deterministic applicability, retrieval authority boundaries, prompt projection and review-ledger integration; this section owns protocol semantics.
 
 ### ContextProfile
 
@@ -473,6 +473,33 @@ The compiler derives mandatory admission from deterministic metadata rather than
 - project/runtime state that activates conditional policy.
 
 The resulting mandatory clause set is dependency-closed and revision-pinned. Unknown applicability is an error state, not a low score.
+
+#### Layered Authority Hierarchy and Composition
+
+Authority in DevCadence is strictly layered:
+1. **System Invariants (`system`)**: Universal engine invariants governing control-plane safety, evidence integrity, model boundaries, and isolated execution (94 DevCadence DCI invariants from `INVARIANTS.md`: DCI-001 through DCI-135, with intentional gaps) built by `NewCanonicalRuleRegistry()`.
+2. **Organization Policy (`organization`)**: Enterprise or team governance rules [future].
+3. **Project Invariants (`project`)**: Codebase-specific durable rules located in `.devcadence/INVARIANTS.md` of the target project, discovered and governed during M6 Project Adoption.
+4. **Task Constraints (`task`)**: Execution Work Package obligations and boundary contracts.
+
+Lower authority layers may add restrictions but MUST NOT weaken or contradict higher-authority constraints; detected contradictions fail closed. `NewCanonicalRuleRegistry()` builds the DevCadence system catalog, not the entire universe of authority for all projects. When additional authority layers are implemented, they will compose deterministically into a unified frozen registry snapshot.
+
+In the current M3C implementation, the compiler operates on the DevCadence system catalog with an explicit `SourceKind` authority seam on every `Rule` (`SourceKind`, `SourceDoc`, `Revision`, `ContentDigest`), authenticated cryptographically by `CatalogDigest`. The full `AuthoritySource` model (`source_kind`, `source_id`, `revision`, `digest`) and multi-source composition are planned for M6 Project Adoption and future distributed milestones.
+
+#### Effect Authority vs. IAM
+
+The capability system is **Effect Authority** (what real-world effects can this model invocation cause: `write`, `exec`, `credentials`, `network`, `spending`, `durable_state_mutation`), NOT enterprise IAM or human authentication. The deterministic control plane evaluates which execution capabilities are attached and admits corresponding mandatory rules (`capability_default`); models never declare, infer, or negotiate their own authority.
+
+#### Project Invariants vs. Documentation
+
+A clear distinction is maintained across knowledge artifacts:
+- **Ordinary Documentation / Specification**: Durable reference knowledge.
+- **Project Invariant**: A property that must continue to hold across future work packages.
+- **Current EWP Constraint**: Narrow, temporary execution authority for the immediate task.
+
+The project invariant lifecycle is deferred to M6 (Project Adoption), where adoption discovery proposes a small, curated set of durable project invariants, governs them through review, commits them versioned with the target codebase under `.devcadence/INVARIANTS.md`, and feeds them into the same deterministic compiler pipeline alongside system invariants.
+
+#### Admission Classes
 
 Every execution-critical clause declares one admission class:
 - `always`: admitted to every cognition invocation;
