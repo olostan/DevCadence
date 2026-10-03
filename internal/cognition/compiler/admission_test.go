@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -738,11 +739,19 @@ func TestCompiler_FailClosedOnMissingProvenance(t *testing.T) {
 		t.Errorf("expected ErrInvalidArgument for missing BudgetPoolID, got %v", err)
 	}
 
-	// Missing MappingVersion
-	reqNoMap := validCompileRequest(profile)
-	reqNoMap.MappingVersion = ""
-	if _, _, err := c.Compile(context.Background(), reqNoMap); !errors.Is(err, errs.ErrInvalidArgument) {
-		t.Errorf("expected ErrInvalidArgument for missing MappingVersion, got %v", err)
+	// Mismatched MappingVersion fails closed; omitted MappingVersion derives from registry (Pass 4 Finding 3)
+	reqMismatchedMap := validCompileRequest(profile)
+	reqMismatchedMap.MappingVersion = "v999.0"
+	if _, _, err := c.Compile(context.Background(), reqMismatchedMap); !errors.Is(err, errs.ErrInvalidArgument) {
+		t.Errorf("expected ErrInvalidArgument for mismatched MappingVersion, got %v", err)
+	}
+
+	reqOmittedMap := validCompileRequest(profile)
+	reqOmittedMap.MappingVersion = ""
+	if m, _, err := c.Compile(context.Background(), reqOmittedMap); err != nil {
+		t.Errorf("expected Compile to succeed with omitted MappingVersion, got %v", err)
+	} else if m.MappingVersion != reg.MappingRevision() {
+		t.Errorf("expected derived MappingVersion %q, got %q", reg.MappingRevision(), m.MappingVersion)
 	}
 
 	// Missing SourceRevision
@@ -773,10 +782,10 @@ func TestCompiler_EnforceProjectionBounds(t *testing.T) {
 	req.ContextProfile = tightProfile
 	// Add huge tool schemas to exceed projection fit (Finding 4)
 	req.ToolSchemas = []string{
-		strings.Repeat("tool schema declaration description parameters ", 200),
+		fmt.Sprintf(`{"name": "large_tool", "description": %q}`, strings.Repeat("tool schema declaration description parameters ", 200)),
 	}
 	req.DeclaredTools = []compiler.ToolCapabilityInfo{
-		{Name: "large_tool"},
+		{Name: "large_tool", ReadOnly: true},
 	}
 
 	_, pack, err := c.Compile(context.Background(), req)
@@ -908,25 +917,34 @@ func TestCompiler_CognitiveStateExpiredDependencyRejection(t *testing.T) {
 }
 
 func TestCompiler_TypedCapabilitiesDerivation(t *testing.T) {
-	// 1. Tool name substring matching is eliminated: "bash" does NOT grant "write" or "exec" automatically
+	// 1. Tool declaration with empty capabilities and ReadOnly == false MUST fail closed (Pass 4 Finding 1A)
 	toolsNoMeta := []compiler.ToolCapabilityInfo{
 		{Name: "bash"},
 		{Name: "edit_file"},
 	}
-	caps, err := compiler.DeriveActiveCapabilities(nil, toolsNoMeta, nil)
-	if err != nil {
-		t.Fatalf("unexpected error deriving capabilities: %v", err)
-	}
-	if len(caps) != 0 {
-		t.Errorf("expected 0 capabilities from un-annotated tool names, got %v", caps)
+	_, err := compiler.DeriveActiveCapabilities(nil, toolsNoMeta, nil)
+	if err == nil || !errors.Is(err, errs.ErrInvalidArgument) {
+		t.Fatalf("expected ErrInvalidArgument for tools with empty capabilities and ReadOnly == false, got %v", err)
 	}
 
-	// 2. Typed annotations grant exact capabilities
+	// ReadOnly tools without privileged capabilities succeed and yield 'read_only'
+	toolsReadOnly := []compiler.ToolCapabilityInfo{
+		{Name: "fetch_info", ReadOnly: true},
+	}
+	capsRO, err := compiler.DeriveActiveCapabilities(nil, toolsReadOnly, nil)
+	if err != nil {
+		t.Fatalf("unexpected error deriving capabilities for read-only tool: %v", err)
+	}
+	if len(capsRO) != 1 || capsRO[0] != "read_only" {
+		t.Errorf("expected ['read_only'], got %v", capsRO)
+	}
+
+	// 2. Typed annotations grant exact capabilities and normalize aliases
 	toolsTyped := []compiler.ToolCapabilityInfo{
 		{Name: "bash", RequiredCapabilities: []compiler.CapabilityClass{compiler.CapabilityClassExec}},
 		{Name: "editor", MutatesFiles: true},
 	}
-	caps, err = compiler.DeriveActiveCapabilities(nil, toolsTyped, []string{"network"})
+	caps, err := compiler.DeriveActiveCapabilities(nil, toolsTyped, []string{"network"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -982,7 +1000,7 @@ func TestCompiler_InvocationDigestVsPackDigest(t *testing.T) {
 	req3 := validCompileRequest(profile)
 	req3.Renderer = compiler.NewTaggedMarkdownRenderer()
 	req3.ToolSchemas = []string{`{"type": "function", "name": "do_task"}`}
-	req3.DeclaredTools = []compiler.ToolCapabilityInfo{{Name: "do_task"}}
+	req3.DeclaredTools = []compiler.ToolCapabilityInfo{{Name: "do_task", ReadOnly: true}}
 
 	_, pack3, err3 := c.Compile(context.Background(), req3)
 	if err3 != nil {
@@ -1076,9 +1094,146 @@ func TestCompiler_UnknownToolAuthority_FailsClosed(t *testing.T) {
 	// 2. Legacy req.Tools with undeclared tool fails closed
 	reqUndeclaredLegacy := validCompileRequest(profile)
 	reqUndeclaredLegacy.Tools = []string{"legacy_untyped_tool"}
-	reqUndeclaredLegacy.DeclaredTools = []compiler.ToolCapabilityInfo{{Name: "other_tool"}}
+	reqUndeclaredLegacy.DeclaredTools = []compiler.ToolCapabilityInfo{{Name: "other_tool", ReadOnly: true}}
 	if _, _, err := c.Compile(context.Background(), reqUndeclaredLegacy); !errors.Is(err, errs.ErrInvalidArgument) {
 		t.Errorf("expected ErrInvalidArgument for undeclared legacy tool, got %v", err)
+	}
+
+	// 3. Tool schema with unrelated declaration fails closed (Pass 4 Finding 1B)
+	reqUnrelated := validCompileRequest(profile)
+	reqUnrelated.ToolSchemas = []string{`{"name": "powerful_tool"}`}
+	reqUnrelated.DeclaredTools = []compiler.ToolCapabilityInfo{{Name: "unrelated_tool", ReadOnly: true}}
+	if _, _, err := c.Compile(context.Background(), reqUnrelated); !errors.Is(err, errs.ErrInvalidArgument) {
+		t.Errorf("expected ErrInvalidArgument for tool schema with unrelated declaration, got %v", err)
+	}
+
+	// 4. Declared tool without matching tool schema fails closed (Pass 4 Finding 1B)
+	reqExtraDecl := validCompileRequest(profile)
+	reqExtraDecl.ToolSchemas = []string{`{"name": "tool_a"}`}
+	reqExtraDecl.DeclaredTools = []compiler.ToolCapabilityInfo{
+		{Name: "tool_a", ReadOnly: true},
+		{Name: "tool_b", ReadOnly: true},
+	}
+	if _, _, err := c.Compile(context.Background(), reqExtraDecl); !errors.Is(err, errs.ErrInvalidArgument) {
+		t.Errorf("expected ErrInvalidArgument for extra tool declaration without schema, got %v", err)
+	}
+}
+
+func TestToolCapabilityInfo_FailClosedValidation(t *testing.T) {
+	// Empty capabilities and ReadOnly == false fails closed (Pass 4 Finding 1A)
+	t1 := compiler.ToolCapabilityInfo{Name: "tool1"}
+	if err := t1.Validate(); !errors.Is(err, errs.ErrInvalidArgument) {
+		t.Errorf("expected ErrInvalidArgument for empty capabilities with ReadOnly == false, got %v", err)
+	}
+
+	// ReadOnly: true without capabilities is valid
+	t2 := compiler.ToolCapabilityInfo{Name: "tool2", ReadOnly: true}
+	if err := t2.Validate(); err != nil {
+		t.Errorf("expected valid for ReadOnly: true tool, got %v", err)
+	}
+
+	// ReadOnly: true with MutatesFiles: true fails closed
+	t3 := compiler.ToolCapabilityInfo{Name: "tool3", ReadOnly: true, MutatesFiles: true}
+	if err := t3.Validate(); !errors.Is(err, errs.ErrInvalidArgument) {
+		t.Errorf("expected ErrInvalidArgument for ReadOnly: true + MutatesFiles: true, got %v", err)
+	}
+
+	// ReadOnly: true with privileged capability fails closed
+	t4 := compiler.ToolCapabilityInfo{
+		Name:                 "tool4",
+		ReadOnly:             true,
+		RequiredCapabilities: []compiler.CapabilityClass{compiler.CapabilityClassWrite},
+	}
+	if err := t4.Validate(); !errors.Is(err, errs.ErrInvalidArgument) {
+		t.Errorf("expected ErrInvalidArgument for ReadOnly: true + Write capability, got %v", err)
+	}
+}
+
+func TestCompiler_CapabilityAliasNormalization_AdmitsRules(t *testing.T) {
+	reg, err := compiler.NewCanonicalRuleRegistry()
+	if err != nil {
+		t.Fatalf("failed to build canonical rule registry: %v", err)
+	}
+	c := mustNewCompiler(t, reg, nil, nil)
+	profile := compiler.MustDefaultProvisionalProfile("ep_1", "chan_1", "model", 65536)
+
+	// 1. repository_mutation normalizes to write and admits DCI-030, DCI-031, DCI-034
+	reqWrite := validCompileRequest(profile)
+	reqWrite.SourceRevision = compiler.CanonicalSourceRevision
+	reqWrite.MappingVersion = compiler.CanonicalMappingRevision
+	reqWrite.ToolSchemas = []string{`{"name": "git_mutator"}`}
+	reqWrite.DeclaredTools = []compiler.ToolCapabilityInfo{
+		{
+			Name:                 "git_mutator",
+			RequiredCapabilities: []compiler.CapabilityClass{compiler.CapabilityClassRepositoryMutation},
+		},
+	}
+	_, packWrite, err := c.Compile(context.Background(), reqWrite)
+	if err != nil {
+		t.Fatalf("compile with repository_mutation failed: %v", err)
+	}
+	writeRules := map[string]bool{"DCI-030": false, "DCI-031": false, "DCI-034": false}
+	for id := range packWrite.AdmittedObjectDigests {
+		if _, ok := writeRules[id]; ok {
+			writeRules[id] = true
+		}
+	}
+	for id, found := range writeRules {
+		if !found {
+			t.Errorf("expected %s to be admitted by repository_mutation (normalized to write)", id)
+		}
+	}
+
+	// 2. process_execution normalizes to exec and admits DCI-033, DCI-083
+	reqExec := validCompileRequest(profile)
+	reqExec.SourceRevision = compiler.CanonicalSourceRevision
+	reqExec.MappingVersion = compiler.CanonicalMappingRevision
+	reqExec.ToolSchemas = []string{`{"name": "proc_runner"}`}
+	reqExec.DeclaredTools = []compiler.ToolCapabilityInfo{
+		{
+			Name:                 "proc_runner",
+			RequiredCapabilities: []compiler.CapabilityClass{compiler.CapabilityClassProcessExecution},
+		},
+	}
+	_, packExec, err := c.Compile(context.Background(), reqExec)
+	if err != nil {
+		t.Fatalf("compile with process_execution failed: %v", err)
+	}
+	execRules := map[string]bool{"DCI-033": false, "DCI-083": false}
+	for id := range packExec.AdmittedObjectDigests {
+		if _, ok := execRules[id]; ok {
+			execRules[id] = true
+		}
+	}
+	for id, found := range execRules {
+		if !found {
+			t.Errorf("expected %s to be admitted by process_execution (normalized to exec)", id)
+		}
+	}
+}
+
+func TestInvocationDigest_IncludesMappingRevision(t *testing.T) {
+	packDigest := "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+	profile := compiler.MustDefaultProvisionalProfile("ep_1", "chan_1", "model", 32768)
+
+	d1, err := compiler.ComputeInvocationDigest(
+		packDigest, "json", "sys", "user", []string{`{"name":"tool"}`}, "framing",
+		"cat-1", "rev-1", "map-rev-1", "sha256:catdigest1", profile,
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	d2, err := compiler.ComputeInvocationDigest(
+		packDigest, "json", "sys", "user", []string{`{"name":"tool"}`}, "framing",
+		"cat-1", "rev-1", "map-rev-2", "sha256:catdigest1", profile,
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if d1 == d2 {
+		t.Errorf("expected InvocationDigest to change when MappingRevision changes, got identical %q", d1)
 	}
 }
 

@@ -74,8 +74,13 @@ func (r Rule) Validate() error {
 	if strings.TrimSpace(r.Content) == "" {
 		return errs.New(errs.CategoryInvalidArgument, "%s: content cannot be empty", kind)
 	}
-	if r.AdmissionClass == AdmissionClassCapabilityDefault && strings.TrimSpace(r.Capability) == "" {
-		return errs.New(errs.CategoryInvalidArgument, "%s: capability_default rule must declare non-empty capability", kind)
+	if r.AdmissionClass == AdmissionClassCapabilityDefault {
+		if strings.TrimSpace(r.Capability) == "" {
+			return errs.New(errs.CategoryInvalidArgument, "%s: capability_default rule must declare non-empty capability", kind)
+		}
+		if _, err := NormalizeCapability(r.Capability); err != nil {
+			return errs.New(errs.CategoryInvalidArgument, "%s: capability_default rule declares invalid capability %q: %v", kind, r.Capability, err)
+		}
 	}
 	return nil
 }
@@ -142,6 +147,7 @@ const (
 	CapabilityClassDurableStateMutation CapabilityClass = "durable_state_mutation"
 	CapabilityClassFilesystem           CapabilityClass = "filesystem"
 	CapabilityClassTools                CapabilityClass = "tools"
+	CapabilityClassReadOnly             CapabilityClass = "read_only"
 )
 
 // Valid reports whether the capability class is recognized.
@@ -152,50 +158,105 @@ func (c CapabilityClass) Valid() bool {
 		CapabilityClassNetwork, CapabilityClassNetworkAccess,
 		CapabilityClassCredentials, CapabilityClassSpending,
 		CapabilityClassDurableStateMutation, CapabilityClassFilesystem,
-		CapabilityClassTools:
+		CapabilityClassTools, CapabilityClassReadOnly:
 		return true
 	}
 	return false
 }
 
-// ToolCapabilityInfo defines typed capability metadata for a tool (Finding 5, ADR-0020 §2).
+// Canonical returns the canonical normalized capability name for a CapabilityClass (Pass 4 Finding 1C).
+// Aliases are mapped to the canonical rule vocabulary:
+//   - repository_mutation -> write
+//   - process_execution -> exec
+//   - network_access -> network
+func (c CapabilityClass) Canonical() string {
+	switch c {
+	case CapabilityClassWrite, CapabilityClassRepositoryMutation:
+		return "write"
+	case CapabilityClassExec, CapabilityClassProcessExecution:
+		return "exec"
+	case CapabilityClassNetwork, CapabilityClassNetworkAccess:
+		return "network"
+	case CapabilityClassCredentials:
+		return "credentials"
+	case CapabilityClassSpending:
+		return "spending"
+	case CapabilityClassDurableStateMutation:
+		return "durable_state_mutation"
+	case CapabilityClassFilesystem:
+		return "filesystem"
+	case CapabilityClassTools:
+		return "tools"
+	case CapabilityClassReadOnly:
+		return "read_only"
+	default:
+		return string(c)
+	}
+}
+
+// NormalizeCapability normalizes a capability string to canonical vocabulary if recognized.
+func NormalizeCapability(capName string) (string, error) {
+	c := strings.ToLower(strings.TrimSpace(capName))
+	capClass := CapabilityClass(c)
+	if !capClass.Valid() {
+		return "", errs.New(errs.CategoryInvalidArgument, "unrecognized capability %q", capName)
+	}
+	return capClass.Canonical(), nil
+}
+
+// ToolCapabilityInfo defines typed capability metadata for a tool (Finding 5, ADR-0020 §2, Pass 4 Finding 1).
 type ToolCapabilityInfo struct {
 	Name                 string            `json:"name"`
 	RequiredCapabilities []CapabilityClass `json:"required_capabilities,omitempty"`
+	ReadOnly             bool              `json:"read_only,omitempty"`
 	MutatesFiles         bool              `json:"mutates_files,omitempty"`
 }
 
 // Validate checks that the tool capability declaration is valid and typed.
+// Fails closed if capability metadata is empty unless explicitly marked ReadOnly (Pass 4 Finding 1A).
 func (t ToolCapabilityInfo) Validate() error {
 	if strings.TrimSpace(t.Name) == "" {
 		return errs.New(errs.CategoryInvalidArgument, "tool name cannot be empty")
+	}
+	if t.ReadOnly && t.MutatesFiles {
+		return errs.New(errs.CategoryInvalidArgument,
+			"tool %q cannot declare both ReadOnly: true and MutatesFiles: true", t.Name)
 	}
 	for _, capClass := range t.RequiredCapabilities {
 		if !capClass.Valid() {
 			return errs.New(errs.CategoryInvalidArgument, "tool %q declares invalid capability %q", t.Name, capClass)
 		}
+		if t.ReadOnly && capClass.Canonical() != "read_only" {
+			return errs.New(errs.CategoryInvalidArgument,
+				"tool %q is marked ReadOnly: true but declares privileged capability %q", t.Name, capClass)
+		}
+	}
+	if !t.ReadOnly && len(t.RequiredCapabilities) == 0 && !t.MutatesFiles {
+		return errs.New(errs.CategoryInvalidArgument,
+			"tool %q has no capabilities specified and is not marked ReadOnly; empty capability metadata is fail-closed", t.Name)
 	}
 	return nil
 }
 
-// DeriveActiveCapabilities deterministically derives active capabilities from session, tool, and channel facts (Finding 5).
+// DeriveActiveCapabilities deterministically derives active capabilities from session, tool, and channel facts (Finding 5, Pass 4 Finding 1).
 // Substring matching on tool names is eliminated; capabilities must be derived from typed metadata and fail closed on unknown inputs.
+// Capability aliases are normalized to canonical rule vocabulary.
 func DeriveActiveCapabilities(channel *protocol.AccessChannel, tools []ToolCapabilityInfo, declaredCaps []string) ([]string, error) {
 	seen := make(map[string]bool)
 
 	if channel != nil {
 		if channel.NativeWorktreeAccess {
-			seen[string(CapabilityClassWrite)] = true
-			seen[string(CapabilityClassFilesystem)] = true
+			seen["write"] = true
+			seen["filesystem"] = true
 		}
 		if channel.CredentialRefID != nil && *channel.CredentialRefID != "" {
-			seen[string(CapabilityClassCredentials)] = true
+			seen["credentials"] = true
 		}
 		if channel.Kind == protocol.ChannelDirectHTTPAPI || channel.Kind == protocol.ChannelRemoteAgentProxy {
-			seen[string(CapabilityClassNetwork)] = true
+			seen["network"] = true
 		}
 		if channel.SupportsTools {
-			seen[string(CapabilityClassTools)] = true
+			seen["tools"] = true
 		}
 	}
 
@@ -204,24 +265,23 @@ func DeriveActiveCapabilities(channel *protocol.AccessChannel, tools []ToolCapab
 			return nil, err
 		}
 		for _, capClass := range tool.RequiredCapabilities {
-			seen[string(capClass)] = true
+			seen[capClass.Canonical()] = true
 		}
 		if tool.MutatesFiles {
-			seen[string(CapabilityClassWrite)] = true
-			seen[string(CapabilityClassFilesystem)] = true
+			seen["write"] = true
+			seen["filesystem"] = true
+		}
+		if tool.ReadOnly {
+			seen["read_only"] = true
 		}
 	}
 
 	for _, capName := range declaredCaps {
-		c := strings.ToLower(strings.TrimSpace(capName))
-		if c == "" {
-			continue
+		canon, err := NormalizeCapability(capName)
+		if err != nil {
+			return nil, err
 		}
-		capClass := CapabilityClass(c)
-		if !capClass.Valid() {
-			return nil, errs.New(errs.CategoryInvalidArgument, "unrecognized active capability %q", capName)
-		}
-		seen[c] = true
+		seen[canon] = true
 	}
 
 	result := make([]string, 0, len(seen))
@@ -446,7 +506,9 @@ func (reg *RuleRegistry) Freeze() error {
 	reg.normativeSourceDigest = "sha256:" + hex.EncodeToString(srcHasher.Sum(nil))
 
 	// 2. AuthorityProjectionDigest: authenticates exact mapping semantics (admission class, capabilities, domains, roles, etc.)
+	// and incorporates the catalog mapping revision (Pass 4 Finding 2).
 	projHasher := sha256.New()
+	projHasher.Write([]byte("mapping_revision:" + reg.mappingRevision + "\n"))
 	for _, id := range ids {
 		r := reg.rules[id]
 		projHasher.Write([]byte(canonicalRuleMappingSerialization(r) + "\n"))
@@ -612,10 +674,14 @@ func (reg *RuleRegistry) ResolveAdmittedRules(params AdmissionParams) ([]Rule, e
 		}
 	}
 
-	// 3. Process active and excluded capabilities (Finding 1)
+	// 3. Process active and excluded capabilities (Finding 1, Pass 4 Finding 1)
 	activeCapsSet := make(map[string]bool, len(params.ActiveCapabilities))
 	for _, c := range params.ActiveCapabilities {
-		activeCapsSet[strings.ToLower(strings.TrimSpace(c))] = true
+		canon, err := NormalizeCapability(c)
+		if err != nil {
+			return nil, err
+		}
+		activeCapsSet[canon] = true
 	}
 
 	// Excluded capabilities must have typed provenance
@@ -624,24 +690,30 @@ func (reg *RuleRegistry) ResolveAdmittedRules(params AdmissionParams) ([]Rule, e
 		if err := excl.Validate(); err != nil {
 			return nil, err
 		}
-		capLower := strings.ToLower(strings.TrimSpace(excl.Capability))
+		canon, err := NormalizeCapability(excl.Capability)
+		if err != nil {
+			return nil, err
+		}
 		// Fail closed on contradictory active + excluded
-		if activeCapsSet[capLower] {
+		if activeCapsSet[canon] {
 			return nil, errs.New(errs.CategoryInvalidArgument,
 				"contradictory capability %q is both active and excluded (decision %s)", excl.Capability, excl.DecisionID)
 		}
-		exclusions[capLower] = excl
+		exclusions[canon] = excl
 	}
 
 	// If legacy unprovenanced ExcludedCapabilities strings are supplied, verify they have typed decisions or fail closed
 	if len(params.ExcludedCapabilities) > 0 {
 		for _, capName := range params.ExcludedCapabilities {
-			capLower := strings.ToLower(strings.TrimSpace(capName))
-			if activeCapsSet[capLower] {
+			canon, err := NormalizeCapability(capName)
+			if err != nil {
+				return nil, err
+			}
+			if activeCapsSet[canon] {
 				return nil, errs.New(errs.CategoryInvalidArgument,
 					"contradictory capability %q is both active and excluded", capName)
 			}
-			if _, hasTyped := exclusions[capLower]; !hasTyped {
+			if _, hasTyped := exclusions[canon]; !hasTyped {
 				return nil, errs.New(errs.CategoryInvalidArgument,
 					"unprovenanced exclusion of capability %q: exclusion requires typed, revision-pinned CapabilityExclusion", capName)
 			}
@@ -670,11 +742,14 @@ func (reg *RuleRegistry) ResolveAdmittedRules(params AdmissionParams) ([]Rule, e
 			admittedMap[id] = rule
 			selectionRationale[id] = "admitted by always authority floor (DCI-132)"
 		case AdmissionClassCapabilityDefault:
-			capLower := strings.ToLower(rule.Capability)
-			if _, isExcluded := exclusions[capLower]; isExcluded {
+			canonCap, err := NormalizeCapability(rule.Capability)
+			if err != nil {
+				canonCap = strings.ToLower(strings.TrimSpace(rule.Capability))
+			}
+			if _, isExcluded := exclusions[canonCap]; isExcluded {
 				continue
 			}
-			if activeCapsSet[capLower] {
+			if activeCapsSet[canonCap] {
 				admittedMap[id] = rule
 				selectionRationale[id] = fmt.Sprintf("admitted by active capability %q", rule.Capability)
 			}
@@ -954,19 +1029,18 @@ func (c *Compiler) CompileInvocation(ctx context.Context, req CompileRequest) (*
 		}
 	}
 
-	// Authority & catalog provenance derived from frozen registry (Finding 2)
+	// Authority & catalog provenance derived from frozen registry (Finding 2, Pass 4 Finding 2 & 3)
 	catalogID := c.registry.CatalogID()
 	catalogRevision := c.registry.CatalogRevision()
+	mappingRevision := c.registry.MappingRevision()
 	catalogDigest := c.registry.CatalogDigest()
 
-	mappingVersion := req.MappingVersion
-	if strings.TrimSpace(mappingVersion) == "" {
-		return nil, errs.New(errs.CategoryInvalidArgument, "%s: mapping_version cannot be empty", kind)
-	}
-	if c.registry.CatalogVersion() != "" && mappingVersion != c.registry.CatalogVersion() && mappingVersion != c.registry.MappingRevision() {
+	// MappingVersion is derived directly from registry, not caller-selected (Pass 4 Finding 3)
+	mappingVersion := mappingRevision
+	if strings.TrimSpace(req.MappingVersion) != "" && req.MappingVersion != mappingVersion {
 		return nil, errs.New(errs.CategoryInvalidArgument,
-			"%s: request mapping_version %q does not match registry version/revision (%q / %q)",
-			kind, mappingVersion, c.registry.CatalogVersion(), c.registry.MappingRevision())
+			"%s: request mapping_version %q does not match registry mapping_revision %q",
+			kind, req.MappingVersion, mappingVersion)
 	}
 
 	// Strictly require explicit source_revision without falling back to catalog revision (Finding 2)
@@ -975,22 +1049,108 @@ func (c *Compiler) CompileInvocation(ctx context.Context, req CompileRequest) (*
 	}
 	sourceRevision := req.SourceRevision
 
-	// Validate tools and declared capabilities (Finding 5)
-	if len(req.Tools) > 0 {
-		declaredNames := make(map[string]bool)
-		for _, dt := range req.DeclaredTools {
-			declaredNames[dt.Name] = true
+	// Validate tools and declared capabilities with 1:1 binding (Finding 5, Pass 4 Finding 1)
+	hasSchemas := len(req.ToolSchemas) > 0
+	hasDeclared := len(req.DeclaredTools) > 0
+	hasLegacyTools := len(req.Tools) > 0
+
+	if hasSchemas {
+		if !hasDeclared {
+			return nil, errs.New(errs.CategoryInvalidArgument,
+				"%s: tool schemas provided (%d) but no typed ToolCapabilityInfo declarations provided; fail closed",
+				kind, len(req.ToolSchemas))
 		}
-		for _, t := range req.Tools {
-			if !declaredNames[t] {
+		schemaNames := make(map[string]int)
+		for i, s := range req.ToolSchemas {
+			sName, err := extractToolNameFromSchema(s)
+			if err != nil {
+				return nil, errs.Wrap(errs.CategoryInvalidArgument, err,
+					"%s: tool_schemas[%d] failed name extraction", kind, i)
+			}
+			if _, exists := schemaNames[sName]; exists {
 				return nil, errs.New(errs.CategoryInvalidArgument,
-					"%s: legacy tool %q lacks corresponding typed ToolCapabilityInfo declaration", kind, t)
+					"%s: duplicate tool schema name %q in tool_schemas", kind, sName)
+			}
+			schemaNames[sName] = 1
+		}
+
+		declaredNames := make(map[string]int)
+		for i, dt := range req.DeclaredTools {
+			if err := dt.Validate(); err != nil {
+				return nil, errs.Wrap(errs.CategoryInvalidArgument, err,
+					"%s: declared_tools[%d] (%q) invalid", kind, i, dt.Name)
+			}
+			if _, exists := declaredNames[dt.Name]; exists {
+				return nil, errs.New(errs.CategoryInvalidArgument,
+					"%s: duplicate tool declaration name %q in declared_tools", kind, dt.Name)
+			}
+			declaredNames[dt.Name] = 1
+		}
+
+		if len(schemaNames) != len(declaredNames) {
+			return nil, errs.New(errs.CategoryInvalidArgument,
+				"%s: mismatch between tool schemas count (%d) and declared tools count (%d); 1:1 binding required",
+				kind, len(schemaNames), len(declaredNames))
+		}
+		for sName := range schemaNames {
+			if _, found := declaredNames[sName]; !found {
+				return nil, errs.New(errs.CategoryInvalidArgument,
+					"%s: tool schema %q has no matching ToolCapabilityInfo declaration; fail closed", kind, sName)
 			}
 		}
-	}
-	if len(req.ToolSchemas) > 0 && len(req.DeclaredTools) == 0 {
+		for dName := range declaredNames {
+			if _, found := schemaNames[dName]; !found {
+				return nil, errs.New(errs.CategoryInvalidArgument,
+					"%s: declared tool %q has no matching tool schema; fail closed", kind, dName)
+			}
+		}
+	} else if hasLegacyTools {
+		if !hasDeclared {
+			return nil, errs.New(errs.CategoryInvalidArgument,
+				"%s: legacy tools provided (%d) but no typed ToolCapabilityInfo declarations provided; fail closed",
+				kind, len(req.Tools))
+		}
+		legacyNames := make(map[string]int)
+		for _, t := range req.Tools {
+			if _, exists := legacyNames[t]; exists {
+				return nil, errs.New(errs.CategoryInvalidArgument,
+					"%s: duplicate tool name %q in legacy tools", kind, t)
+			}
+			legacyNames[t] = 1
+		}
+		declaredNames := make(map[string]int)
+		for i, dt := range req.DeclaredTools {
+			if err := dt.Validate(); err != nil {
+				return nil, errs.Wrap(errs.CategoryInvalidArgument, err,
+					"%s: declared_tools[%d] (%q) invalid", kind, i, dt.Name)
+			}
+			if _, exists := declaredNames[dt.Name]; exists {
+				return nil, errs.New(errs.CategoryInvalidArgument,
+					"%s: duplicate tool declaration name %q in declared_tools", kind, dt.Name)
+			}
+			declaredNames[dt.Name] = 1
+		}
+		if len(legacyNames) != len(declaredNames) {
+			return nil, errs.New(errs.CategoryInvalidArgument,
+				"%s: mismatch between legacy tools count (%d) and declared tools count (%d); 1:1 binding required",
+				kind, len(legacyNames), len(declaredNames))
+		}
+		for tName := range legacyNames {
+			if _, found := declaredNames[tName]; !found {
+				return nil, errs.New(errs.CategoryInvalidArgument,
+					"%s: legacy tool %q has no matching ToolCapabilityInfo declaration; fail closed", kind, tName)
+			}
+		}
+		for dName := range declaredNames {
+			if _, found := legacyNames[dName]; !found {
+				return nil, errs.New(errs.CategoryInvalidArgument,
+					"%s: declared tool %q has no matching legacy tool; fail closed", kind, dName)
+			}
+		}
+	} else if hasDeclared {
 		return nil, errs.New(errs.CategoryInvalidArgument,
-			"%s: tool schemas enabled in request but no typed ToolCapabilityInfo declarations provided; cannot resolve capability applicability safely", kind)
+			"%s: declared tools provided (%d) but neither ToolSchemas nor Tools are present in request; unbound declaration fails closed",
+			kind, len(req.DeclaredTools))
 	}
 
 	derivedCaps, err := DeriveActiveCapabilities(req.AccessChannel, req.DeclaredTools, req.ActiveCapabilities)
@@ -1265,7 +1425,7 @@ func (c *Compiler) CompileInvocation(ctx context.Context, req CompileRequest) (*
 		return &CompiledInvocation{Manifest: manifest, Pack: pack, Projection: projection}, projErr
 	}
 
-	// 11. Compute InvocationDigest (Finding 5: true endpoint invocation identity)
+	// 11. Compute InvocationDigest (Finding 5: true endpoint invocation identity, Pass 4 Finding 2)
 	invocationDigest, err := ComputeInvocationDigest(
 		pack.PackDigest,
 		renderer.Format(),
@@ -1275,6 +1435,7 @@ func (c *Compiler) CompileInvocation(ctx context.Context, req CompileRequest) (*
 		req.HostFraming,
 		catalogID,
 		catalogRevision,
+		mappingRevision,
 		catalogDigest,
 		req.ContextProfile,
 	)
@@ -1294,6 +1455,27 @@ func (c *Compiler) CompileInvocation(ctx context.Context, req CompileRequest) (*
 		Projection:       projection,
 		InvocationDigest: invocationDigest,
 	}, nil
+}
+
+// extractToolNameFromSchema extracts the tool name from a raw JSON schema definition (Pass 4 Finding 1B).
+func extractToolNameFromSchema(rawSchema string) (string, error) {
+	trimmed := strings.TrimSpace(rawSchema)
+	if trimmed == "" {
+		return "", errs.New(errs.CategoryInvalidArgument, "empty tool schema string")
+	}
+	var obj map[string]interface{}
+	if err := json.Unmarshal([]byte(trimmed), &obj); err != nil {
+		return "", errs.New(errs.CategoryInvalidArgument, "tool schema is not valid JSON: %v", err)
+	}
+	if n, ok := obj["name"].(string); ok && strings.TrimSpace(n) != "" {
+		return strings.TrimSpace(n), nil
+	}
+	if fn, ok := obj["function"].(map[string]interface{}); ok {
+		if n, ok := fn["name"].(string); ok && strings.TrimSpace(n) != "" {
+			return strings.TrimSpace(n), nil
+		}
+	}
+	return "", errs.New(errs.CategoryInvalidArgument, "tool schema lacks a valid 'name' or 'function.name' attribute")
 }
 
 // CanonicalRoleCore returns the standard role core instructions for recognized roles.
@@ -1378,6 +1560,7 @@ type invocationDigestInput struct {
 	HostFraming     string   `json:"host_framing"`
 	CatalogID       string   `json:"catalog_id"`
 	CatalogRevision string   `json:"catalog_revision"`
+	MappingRevision string   `json:"mapping_revision"`
 	CatalogDigest   string   `json:"catalog_digest"`
 	ProfileID       string   `json:"profile_id"`
 	ProfileRevision int      `json:"profile_revision"`
@@ -1395,6 +1578,7 @@ func ComputeInvocationDigest(
 	hostFraming string,
 	catalogID string,
 	catalogRevision string,
+	mappingRevision string,
 	catalogDigest string,
 	profile *protocol.ContextProfile,
 ) (string, error) {
@@ -1420,6 +1604,7 @@ func ComputeInvocationDigest(
 		HostFraming:     hostFraming,
 		CatalogID:       catalogID,
 		CatalogRevision: catalogRevision,
+		MappingRevision: mappingRevision,
 		CatalogDigest:   catalogDigest,
 		ProfileID:       profID,
 		ProfileRevision: profRev,

@@ -186,6 +186,31 @@ func TestCatalogDigest_AuthenticatesMappingSemantics(t *testing.T) {
 	if regContent.CatalogDigest() == baseCatDigest {
 		t.Errorf("expected CatalogDigest to change when Content changes")
 	}
+
+	// 5. Changing MappingRevision MUST change AuthorityProjectionDigest and CatalogDigest,
+	// while NormativeSourceDigest MUST remain unchanged (Pass 4 Finding 2).
+	buildRegistryWithMappingRev := func(r compiler.Rule, mapRev string) *compiler.RuleRegistry {
+		reg := compiler.NewRuleRegistry()
+		_ = reg.RegisterKnownDomain("test")
+		if err := reg.Register(r); err != nil {
+			t.Fatalf("register failed: %v", err)
+		}
+		_ = reg.SetCatalogMeta("test-cat", "1.0", "rev-1", mapRev)
+		if err := reg.Freeze(); err != nil {
+			t.Fatalf("freeze failed: %v", err)
+		}
+		return reg
+	}
+	regMapRev := buildRegistryWithMappingRev(r1, "map-2")
+	if regMapRev.NormativeSourceDigest() != baseSrcDigest {
+		t.Errorf("expected NormativeSourceDigest to be unchanged when only MappingRevision changes")
+	}
+	if regMapRev.AuthorityProjectionDigest() == baseProjDigest {
+		t.Errorf("expected AuthorityProjectionDigest to change when MappingRevision changes")
+	}
+	if regMapRev.CatalogDigest() == baseCatDigest {
+		t.Errorf("expected CatalogDigest to change when MappingRevision changes")
+	}
 }
 
 func min(a, b int) int {
