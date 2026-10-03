@@ -22,7 +22,7 @@ fi
 echo "health: validating committed HEAD $(git -C "$repo_root" rev-parse --short HEAD)"
 (
   cd "$candidate"
-  FMT_BASE="$fmt_base" make ci
+  FMT_BASE="$fmt_base" DIFF_BASE="$fmt_base" make ci
 )
 
 echo "health: committed HEAD PASS"
