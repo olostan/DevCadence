@@ -234,13 +234,15 @@ func githubHeadingSlug(s string) string {
 	var b strings.Builder
 	for _, r := range s {
 		switch {
-		case unicode.IsLetter(r), unicode.IsDigit(r), r == '-', r == ' ':
+		case unicode.IsLetter(r), unicode.IsDigit(r), r == '-':
 			b.WriteRune(r)
 		case unicode.IsSpace(r):
-			b.WriteRune(' ')
+			// GitHub replaces each whitespace character with a hyphen after
+			// punctuation stripping; it does not collapse adjacent spaces.
+			b.WriteRune('-')
 		}
 	}
-	return strings.Join(strings.Fields(b.String()), "-")
+	return b.String()
 }
 
 func looksLikeRangeEndpoint(text string, start, end int) bool {
