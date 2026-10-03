@@ -3,12 +3,12 @@
 ## Identity
 
 - Work Package ID: WP-M3D-1A (first slice of WP-M3D-1 "AI-assisted Portfolio Planner"; WP-M3D-1B is the planner service and depends on this)
-- Revision: 2 (independent readiness review: NOT_READY→fixes 1-15 incorporated)
+- Revision: 3 (r2: first independent review NOT_READY, all findings fixed; r3: re-review READY_WITH_FIXES, findings 1-9 fixed)
 - Task ID: autonomous-run-1 (issue #36)
 - Base commit: `1cf7a9103bbef45f6435f1ca1eeff42179ef4830` (main after PR #38)
 - Contract digest: n/a (Markdown contract authoritative)
 - Target implementation endpoint/profile: competent Go implementer; mechanical protocol work
-- Status: READY_FOR_IMPLEMENTATION (r2; reviewer blockers closed and verified against code by the Principal)
+- Status: READY_FOR_IMPLEMENTATION (r3; two independent reviews, all findings closed; schema mechanics confirmed by the re-reviewer in a scratch copy)
 
 ## Objective
 
@@ -54,9 +54,9 @@ Helper names, test layout, comment wording.
 | REQ-04 | MUST | `PlannerProvenance{EndpointID string `endpoint_id`; DriverID string `driver_id`; ModelID string `model_id,omitempty`; InvocationDigest string `invocation_digest`}`. `endpoint_id`, `driver_id`, `invocation_digest` required non-empty (after `strings.TrimSpace`) when `planner` is present; `model_id` optional and unconstrained. `invocation_digest` has NO format validation (do not use `validateSHA256Digest`). `PlannerProvenance` has its own `Validate()` checking endpoint_id, driver_id, invocation_digest in that order. | design decision D-4; DCI-129 |
 | REQ-05 | MUST | Each `tradeoffs` item MUST be non-empty after trim; empty slice and absent are equivalent; duplicates allowed; order preserved. | COGNITION_PORTFOLIO §9 |
 | REQ-06 | MUST | `SetID` is a plain string: `""` means absent; a non-empty value that trims to empty (e.g. `" "`) is an error. Trimming is for the emptiness check only; stored values are never normalised. `Planner` absent = nil pointer; JSON `"planner": null` decodes to nil (Go accepts as absent; the schema `type:object` rejects null — allowed by INV-03); `"planner": {}` is present and fails required checks. Enums are not trimmed. | design decision D-1 |
-| REQ-07 | MUST | **Consistency rule, in BOTH schema and Go**: when `planner` is present, `intent`, `confidence`, `tradeoffs` (minItems 1) and `set_id` are required; Go `Validate()` returns `CategoryInvalidArgument` otherwise. When `planner` is absent all five fields remain optional. The schema expresses it as top-level `"if": {"required":["planner"]}, "then": {"required":["intent","confidence","tradeoffs","set_id"], "properties":{"tradeoffs":{"minItems":1}}}`. Go additionally rejects whitespace-only strings, which the schema cannot (minLength accepts `" "`; ACC-06 is Go-only). | design decision D-3 (AI output must be explained) |
+| REQ-07 | MUST | **Consistency rule, in BOTH schema and Go**: when `planner` is present, `intent`, `confidence`, `tradeoffs` (minItems 1) and `set_id` are required; Go `Validate()` returns `CategoryInvalidArgument` otherwise. When `planner` is absent all five fields remain optional. The schema expresses it as top-level `"if": {"required":["planner"]}, "then": {"required":["intent","confidence","tradeoffs","set_id"], "properties":{"tradeoffs":{"minItems":1}}}`. Go additionally rejects whitespace-only strings, which the schema cannot (minLength accepts `" "`; ACC-06 is Go-only). REQ-07 presence checks in Go use `== ""` / `len == 0` only (whitespace is rejected by the earlier Validate steps). Presence-error wording follows `requireNonEmpty` style, e.g. `PortfolioRecommendation: intent is required when planner is present`; tests MUST assert only non-nil error with category `errs.CategoryInvalidArgument`, never message text. | design decision D-3 (AI output must be explained) |
 | REQ-08 | MUST | Schema: add the five properties with `enum` for intent/confidence, `minLength:1` for strings, `items.minLength:1` for tradeoffs, nested `planner` object with `additionalProperties:false`, properties endpoint_id/driver_id/model_id/invocation_digest and `required:[endpoint_id,driver_id,invocation_digest]`; none added to top-level `required` except through the REQ-07 `if/then`. | A1, A2 |
-| REQ-09 | MUST | `tests/twin_fields_test.go` passes UNMODIFIED (it checks only top-level properties vs json tags and handles omitempty/pointer). Because nested `planner` fields are not covered by it, add a unit test in `internal/protocol` that reflects over `PlannerProvenance` json tags and compares them with the schema's `properties.planner.properties` keys. | repo convention |
+| REQ-09 | MUST | `tests/twin_fields_test.go` passes UNMODIFIED (it checks only top-level properties vs json tags and handles omitempty/pointer). Because nested `planner` fields are not covered by it, add a unit test in `internal/protocol` that reads `../../schemas/portfolio-recommendation.schema.json` with `os.ReadFile` (do not import `internal/schema`) and compares the json-tag name set of `PlannerProvenance` (strip `,omitempty`) with the key set of `properties.planner.properties`. | repo convention |
 | REQ-10 | MUST NOT | No code outside `internal/protocol` may read the new fields in this WP. | DCI-123/124 |
 | REQ-11 | MUST | `docs/PROTOCOLS.md` `### PortfolioRecommendation` (§3C) and `docs/COGNITION_PORTFOLIO.md` `## 9. Portfolio recommendation` add the field names and state: the fields are informational; they never grant, expand or substitute for validation authority; `planner` absent means non-AI/heuristic; Go additionally rejects whitespace-only values. | docs sync |
 
@@ -80,9 +80,20 @@ const (
     IntentPrivacyFirst RecommendationIntent = "privacy_first"
 )
 func (i RecommendationIntent) Valid() bool  // true only for the four values above
-type RecommendationConfidence string  // ConfidenceHigh/Medium/Low
+type RecommendationConfidence string
+const (
+    RecommendationConfidenceHigh   RecommendationConfidence = "high"
+    RecommendationConfidenceMedium RecommendationConfidence = "medium"
+    RecommendationConfidenceLow    RecommendationConfidence = "low"
+) // unprefixed ConfidenceHigh/Medium/Low are taken (review_ledger.go:113-115)
 func (c RecommendationConfidence) Valid() bool
-type PlannerProvenance struct { ... } // REQ-04
+type PlannerProvenance struct {
+    EndpointID string `json:"endpoint_id"`
+    DriverID string `json:"driver_id"`
+    ModelID string `json:"model_id,omitempty"`
+    InvocationDigest string `json:"invocation_digest"`
+}
+func (p PlannerProvenance) Validate() error // REQ-04 order: endpoint_id, driver_id, invocation_digest
 ```
 
 `Validate()`: append after the existing `rationale` check and before `return nil` (existing checks and their order are unchanged; existing Validate does not inspect `explanatory_diagnostics`/`capability_provenance`, and this WP does not either): (1) if `Intent != ""` and `!Intent.Valid()` ⇒ `enumError(kind, "intent", ...)`; (2) same for `confidence`; (3) each tradeoff via `requireNonEmptyTrimmed(kind, "tradeoffs[i]", t)`; (4) if `SetID != ""` ⇒ `requireNonEmptyTrimmed(kind, "set_id", ...)`; (5) if `Planner != nil`: `Planner.Validate()` wrapped as `errs.New(errs.CategoryInvalidArgument, "%s: planner: %v", kind, err)`, then REQ-07 presence checks (`requireNonEmpty`-style on intent/confidence/set_id, `len(Tradeoffs) >= 1`).
@@ -98,7 +109,7 @@ type PlannerProvenance struct { ... } // REQ-04
 | Input | Missing | Unknown | Stale | Malformed |
 | --- | --- | --- | --- | --- |
 | optional new fields | valid (heuristic record) | unknown enum value ⇒ reject | n/a | reject per REQ-02..07 |
-| `planner` present without intent/confidence/tradeoff/set_id | n/a | n/a | n/a | Go reject (REQ-07), schema accepts |
+| `planner` present without intent/confidence/tradeoff/set_id | n/a | n/a | n/a | both Go and schema reject (REQ-07; whitespace-only values are Go-only) |
 
 ## Failure matrix
 
@@ -128,9 +139,9 @@ Test and subtest names MUST contain `PortfolioRecommendation` and the `ACC-xx` i
 | ID | Setup | Action | Expected | Maps |
 | --- | --- | --- | --- | --- |
 | ACC-01 | existing `portfolio-recommendation.valid.json` | existing round-trip tests pass unchanged; plus a unit test marshals the decoded record and asserts none of `set_id`,`intent`,`tradeoffs`,`confidence`,`planner` appear and `Marshal(Unmarshal(Marshal(x))) == Marshal(x)` | still valid, new keys absent (semantic compare, not byte-equality with the pretty-printed file) | INV-01 |
-| ACC-02 | new `portfolio-recommendation.planner.valid.json` with all five fields (and `model_id`); added to the round-trip `cases` table | schema-validate, round-trip | valid; all fields preserved | REQ-01..08, INV-02 |
-| ACC-03 | the six invalid fixtures named in the Failure matrix, each `portfolio-recommendation.invalid-<slug>.json` (slugs: `confidence-critical`, `intent-unknown`, `empty-tradeoff`, `planner-missing-endpoint`, `planner-missing-confidence`, `planner-extra-field`), each differing from the valid planner fixture by that single defect | schema and Go reader | both reject each | REQ-02..04, 08, INV-03 |
-| ACC-04 | programmatic: planner present with each of {no intent, no confidence, empty tradeoffs, no set_id} removed in turn; planner absent with all four absent; planner absent with only intent | `Validate()` | first four reject; last two valid | REQ-07 |
+| ACC-02 | new `portfolio-recommendation.planner.valid.json` = `portfolio-recommendation.valid.json` plus top-level keys `set_id:"set_m3d_001"`, `intent:"balanced"`, `tradeoffs:["Lower spend; slower review turnaround"]`, `confidence:"medium"`, `planner:{endpoint_id:"ep_claude_37_sonnet", driver_id:"drv_claude_cli", model_id:"claude-3-7-sonnet", invocation_digest:"sha256:"+64 hex chars}`; added to the round-trip `cases` table | schema-validate, round-trip | valid; all fields preserved | REQ-01..08, INV-02 |
+| ACC-03 | the six invalid fixtures named in the Failure matrix, each `portfolio-recommendation.invalid-<slug>.json` (slugs: `confidence-critical`, `intent-unknown`, `empty-tradeoff`, `planner-missing-endpoint`, `planner-missing-confidence`, `planner-extra-field`), each a copy of the valid planner fixture with exactly one change: `confidence-critical` sets `confidence:"critical"`; `intent-unknown` sets `intent:"cheapest"`; `empty-tradeoff` sets `tradeoffs:[""]`; `planner-missing-endpoint` deletes `planner.endpoint_id`; `planner-missing-confidence` deletes top-level `confidence`; `planner-extra-field` adds `planner.extra:"x"` | schema and Go reader | both reject each | REQ-02..04, 08, INV-03 |
+| ACC-04 | programmatic, base = decoded `planner.valid.json`; (a) copy and delete one of intent/confidence/set_id or set tradeoffs nil (four cases); (b) set Planner=nil and clear all four; (c) set Planner=nil, clear confidence/tradeoffs/set_id, keep intent; (d) decode JSON with `"planner": null` plus otherwise valid fields | `Validate()` | (a) each invalid; (b),(c) valid (lone intent without planner is valid; schema `if` not triggered); (d) valid in Go (schema rejects null by `type:object`, allowed by INV-03) | REQ-06, REQ-07 |
 | ACC-05 | `tests/twin_fields_test.go` unmodified plus nested `PlannerProvenance` tag-vs-schema unit test | run | both pass | REQ-09 |
 | ACC-06 | whitespace-only `set_id`, whitespace-only `planner.endpoint_id`, whitespace tradeoff | `Validate()` | each rejected | REQ-04..06 |
 | ACC-07 | manual evidence in the PR: `grep -rnE '\.(SetID|Tradeoffs|Planner)\b' --include=*.go internal cmd` excluding `internal/protocol/` and `_test.go` (`Intent`/`Confidence` excluded: other types use them) | run and paste output | zero hits | REQ-10 |
@@ -167,5 +178,5 @@ missing/unknown input semantics: 2/2
 acceptance scenarios mapped: 8/8
 unresolved architecture choices: 0
 declared local-discretion choices: 3
-readiness: READY_FOR_IMPLEMENTATION (independent review r1 NOT_READY; blockers 1-3 and majors 4-8 fixed)
+readiness: READY_FOR_IMPLEMENTATION (review 1 NOT_READY, review 2 READY_WITH_FIXES; all findings fixed)
 ```
