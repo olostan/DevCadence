@@ -182,6 +182,10 @@ func makeTestInventory() *protocol.ResourceInventory {
 			TotalMemoryBytes:    ptr(int64(36 * 1024 * 1024 * 1024)),
 			AcceleratorBackends: []protocol.BackendKind{protocol.BackendMetal},
 		},
+		Readiness: []protocol.ScopeReadiness{
+			{Scope: protocol.ScopeCanRunLocalInference, Status: protocol.ScopeStatusReady, Reason: "READINESS_FIXTURE_REASON"},
+		},
+		Policy: &protocol.PolicySummary{MaxSourceExposure: protocol.ExposureFocusedSnippets, MaxCostClass: protocol.CostSubscriptionIncluded},
 		CognitionEndpoints: []protocol.CognitionEndpointSummary{
 			{
 				ID:                     "ep-local-01",

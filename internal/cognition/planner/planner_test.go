@@ -219,8 +219,12 @@ func TestPortfolioPlanner_ACC05_InvocationFailedTruncates(t *testing.T) {
 			if res.PromptDigest == "" || res.Accepted != nil || res.Rejected != nil {
 				t.Fatalf("%+v", res)
 			}
-			if len(res.Detail) < 255-1 {
-				t.Fatalf("truncated too much: %d", len(res.Detail))
+			wantLen := map[string]int{"ascii": 256, "multi": 256, "odd": 255}[name]
+			if len(res.Detail) != wantLen {
+				t.Fatalf("detail is %d bytes, want exactly %d", len(res.Detail), wantLen)
+			}
+			if res.InventoryDigest == "" || res.SetID != "" {
+				t.Fatalf("invocation_failed must set InventoryDigest and leave SetID empty: %+v", res)
 			}
 		})
 	}
@@ -261,7 +265,7 @@ func TestPortfolioPlanner_ACC06_MalformedOutputRules(t *testing.T) {
 			if res.Outcome != OutcomeMalformedOutput || !strings.HasPrefix(res.Detail, tc.rule) {
 				t.Fatalf("outcome %q detail %q want %q", res.Outcome, res.Detail, tc.rule)
 			}
-			if res.Accepted != nil || res.Rejected != nil || res.SetID != "" || res.PromptDigest == "" {
+			if res.Accepted != nil || res.Rejected != nil || res.SetID != "" || res.PromptDigest == "" || res.InventoryDigest == "" {
 				t.Fatalf("%+v", res)
 			}
 		})
@@ -496,11 +500,15 @@ func TestPortfolioPlanner_ACC14_PromptContent(t *testing.T) {
 		t.Fatalf("first line")
 	}
 	canon := func(v any) string { b, _ := protocol.CanonicalJSON(v); return string(b) }
+	if canon(req.Inventory.Readiness) == "null" || canon(req.Inventory.Policy) == "null" {
+		t.Fatalf("fixture must carry non-empty Readiness and Policy")
+	}
 	effective := cognition.DefaultValidationPolicy()
 	want := []string{
 		`["balanced","privacy_first"]`,
 		"ep-local-01", "ep-cli-01",
 		canon(req.Inventory.Hardware), canon(req.Inventory.Readiness), canon(req.Inventory.Policy),
+		"READINESS_FIXTURE_REASON", `"max_cost_class":"subscription_included"`,
 		"valid context_profile_id values", "budget pool ids that have live state",
 		`"profile_id":"prof-local-01"`, `"endpoint_id":"ep-local-01"`, `"channel_id":"chan-local-01"`,
 		`"observed_context_control":"exact_stateless"`, `"observed_context_control":"append_only"`,
@@ -602,8 +610,13 @@ func TestPortfolioPlanner_ACC17_InventoryDigest(t *testing.T) {
 }
 
 func TestPortfolioPlanner_ACC19_InputsNotMutated(t *testing.T) {
-	inv := &scriptedInvoker{result: okResult(allAlts(allIntents...))}
+	inv := &scriptedInvoker{result: okResult(output(alt(protocol.IntentBalanced), alt(protocol.IntentPrivacyFirst)))}
 	req := baseRequest(inv)
+	req.Intents = []protocol.RecommendationIntent{protocol.IntentPrivacyFirst, protocol.IntentBalanced}
+	req.Project = ProjectCharacteristics{Languages: []string{"go", "c", "go"}, RiskTags: []string{"z", "a"}}
+	wantIntents := append([]protocol.RecommendationIntent(nil), req.Intents...)
+	wantProject := ProjectCharacteristics{Languages: []string{"go", "c", "go"}, RiskTags: []string{"z", "a"}}
+	invokerBefore := req.Invoker
 	req.BudgetStates = map[string]*protocol.BudgetState{"pool-sub": {PoolID: "pool-sub"}}
 	req.ResourceStates = map[string]*protocol.ResourceState{"host-01": {HostID: "host-01"}}
 	policy := cognition.ValidationPolicy{MaxSourceExposure: protocol.ExposureFocusedSnippets}
@@ -624,6 +637,12 @@ func TestPortfolioPlanner_ACC19_InputsNotMutated(t *testing.T) {
 	_ = mustPlan(t, req)
 	if snap() != before {
 		t.Fatalf("Plan mutated its inputs")
+	}
+	if !reflect.DeepEqual(req.Intents, wantIntents) || !reflect.DeepEqual(req.Project, wantProject) {
+		t.Fatalf("Plan mutated Intents or Project: %v %+v", req.Intents, req.Project)
+	}
+	if req.Invoker != invokerBefore {
+		t.Fatalf("Plan replaced the Invoker")
 	}
 }
 

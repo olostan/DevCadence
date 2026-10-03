@@ -1,6 +1,7 @@
 package planner
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -9,6 +10,9 @@ import (
 	"github.com/olostan/DevCadence/internal/errs"
 	"github.com/olostan/DevCadence/internal/protocol"
 )
+
+// maxRule3Detail bounds the decoder error text copied into a rule 3 Detail.
+const maxRule3Detail = 160
 
 var canonicalIntentOrder = []protocol.RecommendationIntent{
 	protocol.IntentMinimumSpend,
@@ -50,8 +54,8 @@ type decodedAlternative struct {
 	Confidence protocol.RecommendationConfidence `json:"confidence"`
 }
 
-type decodedOutput struct {
-	Alternatives []decodedAlternative `json:"alternatives"`
+type decodedEnvelope struct {
+	Alternatives []json.RawMessage `json:"alternatives"`
 }
 
 // decodeOutput applies REQ-06 rules 1-6. On any violation it returns a Detail
@@ -66,23 +70,33 @@ func decodeOutput(content string, requested []protocol.RecommendationIntent) (ma
 	}
 	dec := json.NewDecoder(strings.NewReader(text))
 	dec.DisallowUnknownFields()
-	var out decodedOutput
-	if err := dec.Decode(&out); err != nil {
-		return nil, "rule 3: " + truncateUTF8(err.Error(), 160)
+	var env decodedEnvelope
+	if err := dec.Decode(&env); err != nil {
+		return nil, "rule 3: " + truncateUTF8(err.Error(), maxRule3Detail)
 	}
 	var extra json.RawMessage
 	if err := dec.Decode(&extra); err != io.EOF {
 		return nil, "rule 4: trailing data after the JSON value"
 	}
-	if n := len(out.Alternatives); n < 1 || n > len(requested) {
+	// Rule 5 is checked before any element is decoded so that memory stays
+	// bounded by the content limit, not by the element count.
+	if n := len(env.Alternatives); n < 1 || n > len(requested) {
 		return nil, fmt.Sprintf("rule 5: %d alternatives, expected 1 to %d", n, len(requested))
+	}
+	decoded := make([]decodedAlternative, len(env.Alternatives))
+	for i, raw := range env.Alternatives {
+		ed := json.NewDecoder(bytes.NewReader(raw))
+		ed.DisallowUnknownFields()
+		if err := ed.Decode(&decoded[i]); err != nil {
+			return nil, fmt.Sprintf("rule 3: alternatives[%d]: %s", i, truncateUTF8(err.Error(), maxRule3Detail))
+		}
 	}
 	want := make(map[protocol.RecommendationIntent]bool, len(requested))
 	for _, i := range requested {
 		want[i] = true
 	}
-	alts := make(map[protocol.RecommendationIntent]decodedAlternative, len(out.Alternatives))
-	for _, a := range out.Alternatives {
+	alts := make(map[protocol.RecommendationIntent]decodedAlternative, len(decoded))
+	for _, a := range decoded {
 		if !a.Intent.Valid() {
 			return nil, fmt.Sprintf("rule 6: invalid intent %q", string(a.Intent))
 		}

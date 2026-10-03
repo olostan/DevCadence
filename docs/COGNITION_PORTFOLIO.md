@@ -150,7 +150,7 @@ The planner reasons over ResourceInventory, DevCadence role requirements, projec
 
 Where useful, it presents materially different candidates such as minimum monetary spend, balanced, maximum quality within policy, or privacy-first. A recommendation explains tradeoffs and does not grant authority.
 
-The planner service (WP-M3D-1B) is the first producer of these records; it consumes the inventory, project languages/risk tags, policy and budget/resource state as caller-supplied facts. Historical evidence is not yet an input.
+The planner service (WP-M3D-1B) is the first producer of these records; it consumes the inventory, project languages/risk tags, policy and budget/resource state as caller-supplied facts. Historical evidence is not yet an input. Rejection reasons are bounded by the planner, but diagnostics are validator output and are not truncated: consumers that log or persist a planner `Result` must bound diagnostics.
 
 A recommendation record carries this explanation in optional fields: `set_id` (sibling alternatives), `intent` (`minimum_spend`, `balanced`, `maximum_quality_within_policy`, `privacy_first`), `tradeoffs`, `confidence` (`high`, `medium`, `low`) and `planner` provenance (`endpoint_id`, `driver_id`, optional `model_id`, `invocation_digest`). When `planner` is present the other four are required; `planner` absent means a non-AI/heuristic recommendation. These fields are informational only: they never grant, expand or substitute for deterministic validation or activation authority. The Go reader additionally rejects whitespace-only values (the schema cannot). See PROTOCOLS §3C.
 

@@ -10,6 +10,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -76,10 +77,11 @@ const (
 	reasonValidationFailed     = "validation_failed"
 	reasonRecordInvalidPrefix  = "record_invalid: "
 
-	noPlannerDetail   = "no planning endpoint available; deterministic-only"
-	maxDetailBytes    = 256
-	maxContentBytes   = 262144
-	setIDDigestPrefix = 16
+	noPlannerDetail    = "no planning endpoint available; deterministic-only"
+	maxDetailBytes     = 256
+	maxReasonBodyBytes = 512
+	maxContentBytes    = 262144
+	setIDDigestPrefix  = 16
 )
 
 // Rejected records an alternative that did not become an accepted recommendation.
@@ -167,9 +169,13 @@ func Plan(ctx context.Context, req Request) (*Result, error) {
 			out.Rejected = append(out.Rejected, Rejected{Intent: intent, Reason: reasonProvenanceIncomplete})
 			continue
 		}
+		if reason := blankReason(alt); reason != "" {
+			out.Rejected = append(out.Rejected, Rejected{Intent: intent, Reason: reasonRecordInvalidPrefix + reason})
+			continue
+		}
 		rec := buildRecommendation(alt, intent, setID, invDigest, promptDigest, synthesizedAt, res)
 		if err := rec.Validate(); err != nil {
-			out.Rejected = append(out.Rejected, Rejected{Intent: intent, Reason: reasonRecordInvalidPrefix + err.Error()})
+			out.Rejected = append(out.Rejected, Rejected{Intent: intent, Reason: reasonRecordInvalidPrefix + truncateUTF8(err.Error(), maxReasonBodyBytes)})
 			continue
 		}
 		vr := validator.Validate(cognition.ValidationInput{
@@ -253,4 +259,18 @@ func truncateUTF8(s string, limit int) string {
 		n--
 	}
 	return s[:n]
+}
+
+// blankReason reports the first whitespace-only rationale or tradeoff; the
+// protocol record check does not trim rationale (recorded follow-up).
+func blankReason(a decodedAlternative) string {
+	if strings.TrimSpace(a.Rationale) == "" {
+		return "rationale is blank"
+	}
+	for i, t := range a.Tradeoffs {
+		if strings.TrimSpace(t) == "" {
+			return "tradeoffs[" + strconv.Itoa(i) + "] is blank"
+		}
+	}
+	return ""
 }

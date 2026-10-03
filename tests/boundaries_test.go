@@ -169,11 +169,11 @@ func dependenciesOf(t *testing.T, pattern string) []string {
 	return strings.Fields(string(out))
 }
 
-// TestPortfolioPlannerDependenciesExcludeDriversAdaptersAndPersistence keeps the
+// TestPortfolioPlanner_ACC18_DependenciesExcludeDriversAdaptersAndPersistence keeps the
 // planner service free of driver, adapter and persistence coupling (WP-M3D-1B
 // REQ-12, DCI-054/055). It fails rather than skipping when the dependency list
 // cannot be resolved, so it can never pass vacuously.
-func TestPortfolioPlannerDependenciesExcludeDriversAdaptersAndPersistence(t *testing.T) {
+func TestPortfolioPlanner_ACC18_DependenciesExcludeDriversAdaptersAndPersistence(t *testing.T) {
 	const pkg = "github.com/olostan/DevCadence/internal/cognition/planner"
 	deps := dependenciesOf(t, pkg)
 	present := false
