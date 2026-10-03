@@ -34,6 +34,7 @@ Allowed paths:
 - `CONTRIBUTING.md`
 - `AGENTS.md`
 - `docs/ENGINEERING_HEALTH_POLICY.md`
+- `docs/README.md` (repair of health-check-detected stale internal references only)
 - `docs/REFACTORING_AND_HEALTH.md`
 - `docs/WORK_PACKAGES.md`
 - this EWP
