@@ -6,7 +6,7 @@
 - **Branch:** `refactor/m3c-structural-consolidation`
 - **Work Package ID:** `WP-M3C-R1`
 - **Version:** 1.0
-- **Status:** Approved for refactoring implementation after plan review
+- **Status:** Proposed — implementation and acceptance pending independent review
 
 ---
 
