@@ -299,7 +299,7 @@ func validateToolBindingsAndDeriveCapabilities(req *CompileRequest) ([]string, e
 				"%s: tool schemas provided (%d) but no typed ToolCapabilityInfo declarations provided; fail closed",
 				kind, len(req.ToolSchemas))
 		}
-		schemaNames := make(map[string]int)
+		schemaNames := make(map[string]struct{}, len(req.ToolSchemas))
 		for i, s := range req.ToolSchemas {
 			sName, err := extractToolNameFromSchema(s)
 			if err != nil {
@@ -310,38 +310,15 @@ func validateToolBindingsAndDeriveCapabilities(req *CompileRequest) ([]string, e
 				return nil, errs.New(errs.CategoryInvalidArgument,
 					"%s: duplicate tool schema name %q in tool_schemas", kind, sName)
 			}
-			schemaNames[sName] = 1
+			schemaNames[sName] = struct{}{}
 		}
 
-		declaredNames := make(map[string]int)
-		for i, dt := range req.DeclaredTools {
-			if err := dt.Validate(); err != nil {
-				return nil, errs.Wrap(errs.CategoryInvalidArgument, err,
-					"%s: declared_tools[%d] (%q) invalid", kind, i, dt.Name)
-			}
-			if _, exists := declaredNames[dt.Name]; exists {
-				return nil, errs.New(errs.CategoryInvalidArgument,
-					"%s: duplicate tool declaration name %q in declared_tools", kind, dt.Name)
-			}
-			declaredNames[dt.Name] = 1
+		declaredNames, err := validateDeclaredTools(req.DeclaredTools, kind)
+		if err != nil {
+			return nil, err
 		}
-
-		if len(schemaNames) != len(declaredNames) {
-			return nil, errs.New(errs.CategoryInvalidArgument,
-				"%s: mismatch between tool schemas count (%d) and declared tools count (%d); 1:1 binding required",
-				kind, len(schemaNames), len(declaredNames))
-		}
-		for sName := range schemaNames {
-			if _, found := declaredNames[sName]; !found {
-				return nil, errs.New(errs.CategoryInvalidArgument,
-					"%s: tool schema %q has no matching ToolCapabilityInfo declaration; fail closed", kind, sName)
-			}
-		}
-		for dName := range declaredNames {
-			if _, found := schemaNames[dName]; !found {
-				return nil, errs.New(errs.CategoryInvalidArgument,
-					"%s: declared tool %q has no matching tool schema; fail closed", kind, dName)
-			}
+		if err := verifyOneToOneToolBinding(kind, "tool schema", "tool schemas", schemaNames, declaredNames); err != nil {
+			return nil, err
 		}
 	} else if hasLegacyTools {
 		if !hasDeclared {
@@ -349,42 +326,21 @@ func validateToolBindingsAndDeriveCapabilities(req *CompileRequest) ([]string, e
 				"%s: legacy tools provided (%d) but no typed ToolCapabilityInfo declarations provided; fail closed",
 				kind, len(req.Tools))
 		}
-		legacyNames := make(map[string]int)
+		legacyNames := make(map[string]struct{}, len(req.Tools))
 		for _, t := range req.Tools {
 			if _, exists := legacyNames[t]; exists {
 				return nil, errs.New(errs.CategoryInvalidArgument,
 					"%s: duplicate tool name %q in legacy tools", kind, t)
 			}
-			legacyNames[t] = 1
+			legacyNames[t] = struct{}{}
 		}
-		declaredNames := make(map[string]int)
-		for i, dt := range req.DeclaredTools {
-			if err := dt.Validate(); err != nil {
-				return nil, errs.Wrap(errs.CategoryInvalidArgument, err,
-					"%s: declared_tools[%d] (%q) invalid", kind, i, dt.Name)
-			}
-			if _, exists := declaredNames[dt.Name]; exists {
-				return nil, errs.New(errs.CategoryInvalidArgument,
-					"%s: duplicate tool declaration name %q in declared_tools", kind, dt.Name)
-			}
-			declaredNames[dt.Name] = 1
+
+		declaredNames, err := validateDeclaredTools(req.DeclaredTools, kind)
+		if err != nil {
+			return nil, err
 		}
-		if len(legacyNames) != len(declaredNames) {
-			return nil, errs.New(errs.CategoryInvalidArgument,
-				"%s: mismatch between legacy tools count (%d) and declared tools count (%d); 1:1 binding required",
-				kind, len(legacyNames), len(declaredNames))
-		}
-		for tName := range legacyNames {
-			if _, found := declaredNames[tName]; !found {
-				return nil, errs.New(errs.CategoryInvalidArgument,
-					"%s: legacy tool %q has no matching ToolCapabilityInfo declaration; fail closed", kind, tName)
-			}
-		}
-		for dName := range declaredNames {
-			if _, found := legacyNames[dName]; !found {
-				return nil, errs.New(errs.CategoryInvalidArgument,
-					"%s: declared tool %q has no matching legacy tool; fail closed", kind, dName)
-			}
+		if err := verifyOneToOneToolBinding(kind, "legacy tool", "legacy tools", legacyNames, declaredNames); err != nil {
+			return nil, err
 		}
 	} else if hasDeclared {
 		return nil, errs.New(errs.CategoryInvalidArgument,
@@ -397,6 +353,43 @@ func validateToolBindingsAndDeriveCapabilities(req *CompileRequest) ([]string, e
 		return nil, errs.Wrap(errs.CategoryInvalidArgument, err, "%s: capability derivation failed", kind)
 	}
 	return derivedCaps, nil
+}
+
+func validateDeclaredTools(declared []ToolCapabilityInfo, kind string) (map[string]struct{}, error) {
+	declaredNames := make(map[string]struct{}, len(declared))
+	for i, dt := range declared {
+		if err := dt.Validate(); err != nil {
+			return nil, errs.Wrap(errs.CategoryInvalidArgument, err,
+				"%s: declared_tools[%d] (%q) invalid", kind, i, dt.Name)
+		}
+		if _, exists := declaredNames[dt.Name]; exists {
+			return nil, errs.New(errs.CategoryInvalidArgument,
+				"%s: duplicate tool declaration name %q in declared_tools", kind, dt.Name)
+		}
+		declaredNames[dt.Name] = struct{}{}
+	}
+	return declaredNames, nil
+}
+
+func verifyOneToOneToolBinding(kind, toolLabel, countLabel string, toolNames, declaredNames map[string]struct{}) error {
+	if len(toolNames) != len(declaredNames) {
+		return errs.New(errs.CategoryInvalidArgument,
+			"%s: mismatch between %s count (%d) and declared tools count (%d); 1:1 binding required",
+			kind, countLabel, len(toolNames), len(declaredNames))
+	}
+	for tName := range toolNames {
+		if _, found := declaredNames[tName]; !found {
+			return errs.New(errs.CategoryInvalidArgument,
+				"%s: %s %q has no matching ToolCapabilityInfo declaration; fail closed", kind, toolLabel, tName)
+		}
+	}
+	for dName := range declaredNames {
+		if _, found := toolNames[dName]; !found {
+			return errs.New(errs.CategoryInvalidArgument,
+				"%s: declared tool %q has no matching %s; fail closed", kind, dName, toolLabel)
+		}
+	}
+	return nil
 }
 
 // admitMandatoryRules executes deterministic rule admission and dependency closure.
