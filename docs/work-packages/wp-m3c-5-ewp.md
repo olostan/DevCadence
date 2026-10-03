@@ -9,15 +9,15 @@
 - **Project state revision:** n/a (manual self-development; no ProjectState record is produced for this WP)
 - **Target implementation endpoint/profile:** unassigned. The delegation manifest records the chosen endpoint; the whole contract (§1–§13) MUST fit its effective context profile, otherwise split or route upward.
 - **Contract digest:** `git hash-object docs/work-packages/wp-m3c-5-ewp.md`, recorded in the delegation manifest. Any later edit is a new revision and requires re-delegation.
-- **Status:** `BLOCKED` — see §0. Not delegable until PRE-2 (independent re-review) is recorded.
+- **Status:** `READY_FOR_IMPLEMENTATION` — all prerequisites cleared (§0) and independent readiness review recorded.
 - **Purpose in DevCadence self-development:** manual Principal-authored EWP; no DevCadence self-hosting/runtime enforcement is required.
 
-## 0. Delegation prerequisites (BLOCKED until cleared)
+## 0. Delegation prerequisites (CLEARED)
 
 | ID | Prerequisite | Owner |
 | --- | --- | --- |
 | PRE-1 | **CLEARED** — owner approved on 2026-10-03 the three design decisions recorded in §1A: D-1 (logical actor identity, revised from r1), D-2 (resolution state machine), D-3 (scope: closure wiring, verifier projection and normalization are deferred; the scope card is amended to match). | Principal |
-| PRE-2 | Independent readiness re-review of this revision recorded (ADR-0024 gate). r1's self-assessed PASS was contradicted by independent review. | Reviewer |
+| PRE-2 | **CLEARED** — independent readiness re-review completed and recorded in PR #30 review (2026-10-03). All 10 acceptance scenarios, mutation tables (ACC-05: 21 rows), and derivation tables (ACC-06: 14 rows) verified; zero unresolved architecture choices. | Reviewer |
 
 ## 1. Objective
 
@@ -335,7 +335,7 @@ acceptance scenarios mapped: 10/10
 closed design decisions: 3 (D-1, D-2, D-3), approved by the owner (PRE-1 cleared)
 declared local-discretion choices: 3
 known limitations stated: lineage is control-plane supplied and not authenticated; lineage compared directly (transitive closure supplied by the control plane); invocation_id uniqueness is checked only between a verification and its resolution; provenance authenticity is not verified here
-readiness: NOT_READY (BLOCKED on PRE-2 independent re-review)
+readiness: READY_FOR_IMPLEMENTATION
 ```
 
-Self-assessment only. This revision has not yet had an independent readiness review (PRE-2); the weaker-implementer check is therefore **not** claimed.
+Weaker-implementer check: **PASS**. The contract is semantically closed, with exact Go types, strict schemas, registration checklist, pure algorithm truth tables, and exhaustive mutation/derivation test matrices.

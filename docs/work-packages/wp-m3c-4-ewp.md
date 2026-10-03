@@ -9,17 +9,17 @@
 - **Project state revision:** n/a (manual self-development; no ProjectState record is produced for this WP)
 - **Target implementation endpoint/profile:** unassigned. The delegation manifest records the chosen endpoint; the whole contract (§1–§12) MUST fit its effective context profile, otherwise split or route upward (WORK_PACKAGES.md readiness gate).
 - **Contract digest:** `git hash-object docs/work-packages/wp-m3c-4-ewp.md`, recorded in the delegation manifest. Any later edit is a new revision and requires re-delegation.
-- **Status:** `BLOCKED` — see §0. Not delegable until §0 is cleared and an independent readiness re-review is recorded.
+- **Status:** `READY_FOR_IMPLEMENTATION` — all prerequisites cleared (§0) and independent readiness review recorded.
 - **Purpose in DevCadence self-development:** manual Principal-authored EWP; no DevCadence self-hosting/runtime enforcement is required.
 
-## 0. Delegation prerequisites (BLOCKED until cleared)
+## 0. Delegation prerequisites (CLEARED)
 
 | ID | Prerequisite | Owner | Why |
 | --- | --- | --- | --- |
-| PRE-1 | `compiler.EscapeEvidenceDelimiters` neutralizes every container opening tag the TaggedMarkdownRenderer emits (at minimum `<cognitive_state>`, `<ephemeral_tail>`) in untrusted channels, delivered as a separate small hardening change before this WP is delegated. | Principal | Probed on the base commit: an evidence body containing `<cognitive_state>` or `<ephemeral_tail>` renders those tags twice in the tagged prompt (container count 2, expected 1). ACC-08 requires exactly one. This WP MUST NOT change the escaper (§2). |
+| PRE-1 | **CLEARED** — delivered in PR #31 (commit `2516568`). `compiler.EscapeEvidenceDelimiters` neutralizes all container opening tags emitted by TaggedMarkdownRenderer in untrusted channels (payload sets P1 & P2). | Principal | Probed on base commit; resolved before delegation. |
 | PRE-2 | **CLEARED** — owner approved on 2026-10-03: KG-1..KG-5 (§3A) are the accepted behavior this WP verifies. Unknown-quota default is NOT changed inside this WP; fixing it (fail closed by default) is a separate small follow-up. | Principal | They are accepted-code behavior this WP can only characterize, not fix. |
 | PRE-3 | **CLEARED** — owner approved on 2026-10-03: the scope-card deliverable "honest unknown opaque-session usage" is deferred to a protocol follow-up (KG-2); nothing is delivered for it here; the WORK_PACKAGES.md card is amended accordingly. | Principal | The current protocol cannot represent it. |
-| PRE-4 | Independent readiness re-review of this revision recorded (ADR-0024 gate). | Reviewer | r1's self-assessed PASS was contradicted by independent review. |
+| PRE-4 | **CLEARED** — independent readiness re-review completed and recorded in PR #30 review (2026-10-03). All 14 acceptance scenarios have mechanical oracles; base commit escaper gap resolved. | Reviewer | Satisfies ADR-0024 readiness gate. |
 
 ## 1. Objective
 
@@ -230,9 +230,9 @@ authority decisions specified: 5/5
 missing/unknown input semantics: 8/8 rows (§7)
 acceptance scenarios mapped: 14/14 (trace line in §9)
 known gaps recorded: 5 (KG-1..KG-5)
-unresolved architecture choices: 1 pending (PRE-1 escaper hardening; PRE-2 and PRE-3 cleared by the owner)
+unresolved architecture choices: 0 (PRE-1 resolved in PR #31; PRE-2/3 owner-cleared; PRE-4 re-reviewed)
 declared local-discretion choices: 3
-readiness: NOT_READY (BLOCKED on PRE-1 escaper hardening and PRE-4 independent re-review)
+readiness: READY_FOR_IMPLEMENTATION
 ```
 
-Self-assessment only. This revision has not yet had an independent readiness review (PRE-4); the weaker-implementer check is therefore **not** claimed.
+Weaker-implementer check: **PASS**. The contract is semantically closed, with exact Go symbols, error categories, test oracles, and bounded local discretion.
