@@ -1,6 +1,10 @@
 package protocol
 
-import "github.com/olostan/DevCadence/internal/errs"
+import (
+	"strconv"
+
+	"github.com/olostan/DevCadence/internal/errs"
+)
 
 // FallbackBinding defines an explicit, routable fallback path for a role binding (ADR-0018 §1, §9).
 type FallbackBinding struct {
@@ -315,6 +319,71 @@ type PortfolioRecommendation struct {
 	Rationale              string             `json:"rationale"`
 	ExplanatoryDiagnostics []string           `json:"explanatory_diagnostics"`
 	CapabilityProvenance   []string           `json:"capability_provenance"`
+
+	// Optional, informational explanation and provenance fields (WP-M3D-1A). They never
+	// grant, expand or substitute for validation or activation authority (DCI-123/124).
+	SetID      string                   `json:"set_id,omitempty"`
+	Intent     RecommendationIntent     `json:"intent,omitempty"`
+	Tradeoffs  []string                 `json:"tradeoffs,omitempty"`
+	Confidence RecommendationConfidence `json:"confidence,omitempty"`
+	Planner    *PlannerProvenance       `json:"planner,omitempty"`
+}
+
+// RecommendationIntent labels the purpose of one alternative in a recommendation set.
+type RecommendationIntent string
+
+const (
+	IntentMinimumSpend               RecommendationIntent = "minimum_spend"
+	IntentBalanced                   RecommendationIntent = "balanced"
+	IntentMaximumQualityWithinPolicy RecommendationIntent = "maximum_quality_within_policy"
+	IntentPrivacyFirst               RecommendationIntent = "privacy_first"
+)
+
+// Valid reports whether the intent is known.
+func (i RecommendationIntent) Valid() bool {
+	switch i {
+	case IntentMinimumSpend, IntentBalanced, IntentMaximumQualityWithinPolicy, IntentPrivacyFirst:
+		return true
+	}
+	return false
+}
+
+// RecommendationConfidence is the planner's stated confidence in a recommendation.
+type RecommendationConfidence string
+
+const (
+	RecommendationConfidenceHigh   RecommendationConfidence = "high"
+	RecommendationConfidenceMedium RecommendationConfidence = "medium"
+	RecommendationConfidenceLow    RecommendationConfidence = "low"
+)
+
+// Valid reports whether the confidence is known.
+func (c RecommendationConfidence) Valid() bool {
+	switch c {
+	case RecommendationConfidenceHigh, RecommendationConfidenceMedium, RecommendationConfidenceLow:
+		return true
+	}
+	return false
+}
+
+// PlannerProvenance records which planner invocation produced a recommendation (DCI-129).
+type PlannerProvenance struct {
+	EndpointID       string `json:"endpoint_id"`
+	DriverID         string `json:"driver_id"`
+	ModelID          string `json:"model_id,omitempty"`
+	InvocationDigest string `json:"invocation_digest"`
+}
+
+// Validate checks PlannerProvenance fields.
+func (p PlannerProvenance) Validate() error {
+	const kind = "PlannerProvenance"
+	if err := requireNonEmptyTrimmed(kind, "endpoint_id", p.EndpointID); err != nil {
+		return err
+	}
+	if err := requireNonEmptyTrimmed(kind, "driver_id", p.DriverID); err != nil {
+		return err
+	}
+	return requireNonEmptyTrimmed(kind, "invocation_digest", p.InvocationDigest)
 }
 
 // RecordKind implements Record.
@@ -346,6 +415,48 @@ func (p *PortfolioRecommendation) Validate() error {
 	}
 	if err := requireNonEmpty(kind, "rationale", p.Rationale); err != nil {
 		return err
+	}
+	return p.validateExplanation(kind)
+}
+
+// validateExplanation checks the optional WP-M3D-1A fields and the planner consistency rule.
+func (p *PortfolioRecommendation) validateExplanation(kind string) error {
+	if p.Intent != "" && !p.Intent.Valid() {
+		return enumError(kind, "intent", string(p.Intent),
+			string(IntentMinimumSpend), string(IntentBalanced),
+			string(IntentMaximumQualityWithinPolicy), string(IntentPrivacyFirst))
+	}
+	if p.Confidence != "" && !p.Confidence.Valid() {
+		return enumError(kind, "confidence", string(p.Confidence),
+			string(RecommendationConfidenceHigh), string(RecommendationConfidenceMedium), string(RecommendationConfidenceLow))
+	}
+	for i, t := range p.Tradeoffs {
+		if err := requireNonEmptyTrimmed(kind, "tradeoffs["+strconv.Itoa(i)+"]", t); err != nil {
+			return err
+		}
+	}
+	if p.SetID != "" {
+		if err := requireNonEmptyTrimmed(kind, "set_id", p.SetID); err != nil {
+			return err
+		}
+	}
+	if p.Planner == nil {
+		return nil
+	}
+	if err := p.Planner.Validate(); err != nil {
+		return errs.New(errs.CategoryInvalidArgument, "%s: planner: %v", kind, err)
+	}
+	if p.Intent == "" {
+		return errs.New(errs.CategoryInvalidArgument, "%s: intent is required when planner is present", kind)
+	}
+	if p.Confidence == "" {
+		return errs.New(errs.CategoryInvalidArgument, "%s: confidence is required when planner is present", kind)
+	}
+	if len(p.Tradeoffs) == 0 {
+		return errs.New(errs.CategoryInvalidArgument, "%s: tradeoffs is required when planner is present", kind)
+	}
+	if p.SetID == "" {
+		return errs.New(errs.CategoryInvalidArgument, "%s: set_id is required when planner is present", kind)
 	}
 	return nil
 }

@@ -190,6 +190,7 @@ func TestFixturesRoundTripWithoutSemanticLoss(t *testing.T) {
 		{"budget-pool.valid.json", decodeInto[protocol.BudgetPool]},
 		{"cognition-portfolio.valid.json", decodeInto[protocol.CognitionPortfolio]},
 		{"portfolio-recommendation.valid.json", decodeInto[protocol.PortfolioRecommendation]},
+		{"portfolio-recommendation.planner.valid.json", decodeInto[protocol.PortfolioRecommendation]},
 		{"workflow-plan.valid.json", decodeInto[protocol.WorkflowPlan]},
 	}
 	for _, tc := range cases {
