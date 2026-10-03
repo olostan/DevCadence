@@ -4,7 +4,7 @@
 - **Base commit:** `23f2dc1bb23868b9e3fc18c80aae3d5d89bd4539`
 - **Branch:** `chore/health-enforcement`
 - **Version:** 1.0
-- **Status:** Implemented — independent acceptance pending
+- **Status:** Implemented — accepted on merge (CI green on head; review findings addressed)
 
 ## Objective
 
