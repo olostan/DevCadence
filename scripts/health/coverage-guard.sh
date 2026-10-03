@@ -23,7 +23,7 @@ run_coverage() {
   report=$3
   (
     cd "$tree"
-    go test -count=1 -covermode=atomic -coverpkg=./... -coverprofile="$profile" ./...
+    go test -count=1 -covermode=atomic -coverpkg=./... -coverprofile="$profile" ./... >/dev/null
     go tool cover -func="$profile" > "$report"
   )
   awk '/^total:/ { gsub(/%/, "", $3); print $3 }' "$report"
