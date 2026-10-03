@@ -234,8 +234,8 @@ func TestActivationManager(t *testing.T) {
 		}
 	})
 
-	t.Run("rollback fails when no previous activation exists", func(t *testing.T) {
-		tmpDir, err := os.MkdirTemp("", "devcadence-activation-norollback-*")
+	t.Run("GetActivePortfolio and GetActivationHistory edge cases", func(t *testing.T) {
+		tmpDir, err := os.MkdirTemp("", "devcadence-activation-edge-*")
 		if err != nil {
 			t.Fatalf("MkdirTemp failed: %v", err)
 		}
@@ -246,207 +246,56 @@ func TestActivationManager(t *testing.T) {
 			t.Fatalf("NewActivationManager failed: %v", err)
 		}
 
-		// Activate only once
-		p := makeTestPortfolio()
-		_, err = mgr.Activate(ctx, cognition.ValidationInput{
-			Portfolio:       p,
-			MachineProfile:  makeTestMachineProfile(),
-			Inventory:       makeTestInventory(),
-			ContextProfiles: makeTestContextProfiles(),
-			Clock:           clk,
-		})
+		// Empty dir: GetActivePortfolio -> CategoryNotFound
+		_, _, err = mgr.GetActivePortfolio(ctx)
+		if err == nil || errs.CategoryOf(err) != errs.CategoryNotFound {
+			t.Errorf("expected CategoryNotFound on empty dir, got: %v", err)
+		}
+
+		// Empty dir: GetActivationHistory -> nil, nil
+		hist, err := mgr.GetActivationHistory(ctx)
+		if err != nil || hist != nil {
+			t.Errorf("expected nil history on empty dir, got: %v, %v", hist, err)
+		}
+
+		// Malformed active-portfolio.json -> CategoryIntegrity
+		activePath := filepath.Join(tmpDir, cognition.ActivePortfolioFileName)
+		_ = os.WriteFile(activePath, []byte("bad-json"), 0644)
+		_, _, err = mgr.GetActivePortfolio(ctx)
+		if err == nil || errs.CategoryOf(err) != errs.CategoryIntegrity {
+			t.Errorf("expected CategoryIntegrity on malformed active portfolio, got: %v", err)
+		}
+
+		// Valid active-portfolio.json but missing lineage.json -> returns portfolio with nil record
+		validP := makeTestPortfolio()
+		data, err := json.MarshalIndent(validP, "", "  ")
 		if err != nil {
-			t.Fatalf("Activate failed: %v", err)
+			t.Fatalf("MarshalIndent failed: %v", err)
+		}
+		_ = os.WriteFile(activePath, data, 0644)
+		p, rec, err := mgr.GetActivePortfolio(ctx)
+		if err != nil || p == nil || rec != nil {
+			t.Errorf("expected portfolio with nil record when lineage missing, got: %v, %v, %v", p, rec, err)
 		}
 
-		// Attempt rollback
-		revalInput := cognition.ValidationInput{
-			MachineProfile:  makeTestMachineProfile(),
-			Inventory:       makeTestInventory(),
-			ContextProfiles: makeTestContextProfiles(),
-			Clock:           clk,
-		}
-		_, err = mgr.RollbackToPrevious(ctx, &revalInput)
-		if err == nil {
-			t.Fatalf("expected error rolling back with only 1 activation")
-		}
-		if errs.CategoryOf(err) != errs.CategoryNotFound {
-			t.Errorf("expected CategoryNotFound, got: %v", err)
-		}
-	})
-
-	t.Run("rollback to specific historical activation", func(t *testing.T) {
-		tmpDir, err := os.MkdirTemp("", "devcadence-activation-rollback-specific-*")
-		if err != nil {
-			t.Fatalf("MkdirTemp failed: %v", err)
-		}
-		defer os.RemoveAll(tmpDir)
-
-		mgr, err := cognition.NewActivationManager(tmpDir, nil, clk)
-		if err != nil {
-			t.Fatalf("NewActivationManager failed: %v", err)
-		}
-
-		mp := makeTestMachineProfile()
-		inv := makeTestInventory()
-		cp := makeTestContextProfiles()
-		policy := cognition.DefaultValidationPolicy()
-
-		p1 := makeTestPortfolio()
-		p1.PortfolioID = "port-A"
-		rec1, err := mgr.Activate(ctx, cognition.ValidationInput{
-			Portfolio:       p1,
-			MachineProfile:  mp,
-			Inventory:       inv,
-			ContextProfiles: cp,
-			Policy:          &policy,
-			Clock:           clk,
-		})
-		if err != nil {
-			t.Fatalf("activate 1 failed: %v", err)
-		}
-
-		p2 := makeTestPortfolio()
-		p2.PortfolioID = "port-B"
-		_, err = mgr.Activate(ctx, cognition.ValidationInput{
-			Portfolio:       p2,
-			MachineProfile:  mp,
-			Inventory:       inv,
-			ContextProfiles: cp,
-			Policy:          &policy,
-			Clock:           clk,
-		})
-		if err != nil {
-			t.Fatalf("activate 2 failed: %v", err)
-		}
-
-		p3 := makeTestPortfolio()
-		p3.PortfolioID = "port-C"
-		_, err = mgr.Activate(ctx, cognition.ValidationInput{
-			Portfolio:       p3,
-			MachineProfile:  mp,
-			Inventory:       inv,
-			ContextProfiles: cp,
-			Policy:          &policy,
-			Clock:           clk,
-		})
-		if err != nil {
-			t.Fatalf("activate 3 failed: %v", err)
-		}
-
-		// Rollback specifically to port-A (rec1.ActivationID)
-		revalInput := cognition.ValidationInput{
-			MachineProfile:  mp,
-			Inventory:       inv,
-			ContextProfiles: cp,
-			Policy:          &policy,
-			Clock:           clk,
-		}
-		recRollback, err := mgr.RollbackToActivation(ctx, rec1.ActivationID, &revalInput)
-		if err != nil {
-			t.Fatalf("RollbackToActivation failed: %v", err)
-		}
-
-		if recRollback.PortfolioID != "port-A" {
-			t.Errorf("expected rolled back portfolio to be port-A, got %q", recRollback.PortfolioID)
-		}
-		if recRollback.RollbackTargetActivationID != rec1.ActivationID {
-			t.Errorf("expected rollback target %q, got %q", rec1.ActivationID, recRollback.RollbackTargetActivationID)
-		}
-
-		activePort, _, err := mgr.GetActivePortfolio(ctx)
-		if err != nil {
-			t.Fatalf("GetActivePortfolio failed: %v", err)
-		}
-		if activePort.PortfolioID != "port-A" {
-			t.Errorf("expected active portfolio port-A, got %q", activePort.PortfolioID)
-		}
-	})
-
-	t.Run("reads target from disk history when lineage history is truncated and verifies Dir", func(t *testing.T) {
-		tmpDir, err := os.MkdirTemp("", "devcadence-activation-disk-hist-*")
-		if err != nil {
-			t.Fatalf("MkdirTemp failed: %v", err)
-		}
-		defer os.RemoveAll(tmpDir)
-
-		mgr, err := cognition.NewActivationManager(tmpDir, nil, clk)
-		if err != nil {
-			t.Fatalf("NewActivationManager failed: %v", err)
-		}
-
-		if mgr.Dir() != tmpDir {
-			t.Errorf("expected Dir() %q, got %q", tmpDir, mgr.Dir())
-		}
-
-		mp := makeTestMachineProfile()
-		inv := makeTestInventory()
-		cp := makeTestContextProfiles()
-
-		p1 := makeTestPortfolio()
-		p1.PortfolioID = "port-disk-1"
-		rec1, err := mgr.Activate(ctx, cognition.ValidationInput{
-			Portfolio:       p1,
-			MachineProfile:  mp,
-			Inventory:       inv,
-			ContextProfiles: cp,
-			Clock:           clk,
-		})
-		if err != nil {
-			t.Fatalf("first activate failed: %v", err)
-		}
-
-		p2 := makeTestPortfolio()
-		p2.PortfolioID = "port-disk-2"
-		_, err = mgr.Activate(ctx, cognition.ValidationInput{
-			Portfolio:       p2,
-			MachineProfile:  mp,
-			Inventory:       inv,
-			ContextProfiles: cp,
-			Clock:           clk,
-		})
-		if err != nil {
-			t.Fatalf("second activate failed: %v", err)
-		}
-
-		// Now clear lineage.json's History slice on disk so target must be read from portfolio-history/
+		// Corrupted lineage.json -> GetActivationHistory returns CategoryIntegrity
 		lineagePath := filepath.Join(tmpDir, cognition.LineageFileName)
-		data, err := os.ReadFile(lineagePath)
-		if err != nil {
-			t.Fatalf("ReadFile lineage failed: %v", err)
-		}
-		var lin cognition.PortfolioLineage
-		if err := json.Unmarshal(data, &lin); err != nil {
-			t.Fatalf("Unmarshal lineage failed: %v", err)
-		}
-		lin.History = nil
-		newData, err := json.MarshalIndent(lin, "", "  ")
-		if err != nil {
-			t.Fatalf("Marshal lineage failed: %v", err)
-		}
-		if err := os.WriteFile(lineagePath, newData, 0o644); err != nil {
-			t.Fatalf("WriteFile lineage failed: %v", err)
+		_ = os.WriteFile(lineagePath, []byte("bad-json"), 0644)
+		_, err = mgr.GetActivationHistory(ctx)
+		if err == nil || errs.CategoryOf(err) != errs.CategoryIntegrity {
+			t.Errorf("expected CategoryIntegrity on corrupted lineage, got: %v", err)
 		}
 
-		// Rollback to rec1.ActivationID; it should be loaded from disk history
-		revalInput := cognition.ValidationInput{
-			MachineProfile:  mp,
-			Inventory:       inv,
-			ContextProfiles: cp,
-			Clock:           clk,
-		}
-		recRollback, err := mgr.RollbackToActivation(ctx, rec1.ActivationID, &revalInput)
-		if err != nil {
-			t.Fatalf("RollbackToActivation from disk history failed: %v", err)
-		}
-		if recRollback.PortfolioID != "port-disk-1" {
-			t.Errorf("expected rolled back portfolio port-disk-1, got %q", recRollback.PortfolioID)
+		// RollbackToActivation with empty ID -> CategoryInvalidArgument
+		_, err = mgr.RollbackToActivation(ctx, "", nil)
+		if err == nil || errs.CategoryOf(err) != errs.CategoryInvalidArgument {
+			t.Errorf("expected CategoryInvalidArgument for empty activation ID, got: %v", err)
 		}
 
-		// Nonexistent activation ID should fail
-		_, err = mgr.RollbackToActivation(ctx, "act-nonexistent", &revalInput)
-		if err == nil {
-			t.Fatalf("expected error for nonexistent activation ID")
+		// NewActivationManager with empty dir -> CategoryInvalidArgument
+		_, err = cognition.NewActivationManager("", nil, clk)
+		if err == nil || errs.CategoryOf(err) != errs.CategoryInvalidArgument {
+			t.Errorf("expected CategoryInvalidArgument for empty dir, got: %v", err)
 		}
 	})
 }

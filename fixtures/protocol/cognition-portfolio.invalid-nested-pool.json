@@ -33,14 +33,14 @@
     {
       "schema_version": "1.0",
       "pool_id": "pool_subscription_bad",
-      "name": "Subscription with forbidden metered fallback",
+      "name": "Subscription with forbidden overage",
       "regime": "subscription_quota",
       "unit": "requests",
       "hard_limit": 500,
       "soft_alert_limit": 400,
       "period": "billing_cycle",
-      "allow_overage": false,
-      "fallback_allowed_to_metered": true
+      "allow_overage": true,
+      "fallback_allowed_to_metered": false
     }
   ],
   "max_source_exposure": "focused_snippets"

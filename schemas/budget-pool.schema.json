@@ -69,14 +69,6 @@
   "allOf": [
     {
       "if": {
-        "properties": { "fallback_allowed_to_metered": { "const": true } }
-      },
-      "then": {
-        "properties": { "regime": { "const": "metered_api" } }
-      }
-    },
-    {
-      "if": {
         "properties": {
           "regime": {
             "enum": ["local_compute", "subscription_quota", "unknown_custom"]

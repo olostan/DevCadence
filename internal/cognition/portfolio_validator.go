@@ -18,7 +18,6 @@ type ValidationPolicy struct {
 	MaxCostClass                protocol.CostClass        `json:"max_cost_class"`
 	AllowedRegimes              []protocol.EconomicRegime `json:"allowed_regimes,omitempty"`
 	ForbidMeteredAPI            bool                      `json:"forbid_metered_api"`
-	AllowMeteredFallback        bool                      `json:"allow_metered_fallback,omitempty"`
 	RequireMeasuredProvenance   bool                      `json:"require_measured_provenance"`
 	RequireVerifiedAcceleration bool                      `json:"require_verified_acceleration"`
 	RequireKnownContextControl  bool                      `json:"require_known_context_control"`

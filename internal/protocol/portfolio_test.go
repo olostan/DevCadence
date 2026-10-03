@@ -553,3 +553,44 @@ func TestWorkflowStageValidation(t *testing.T) {
 		}
 	})
 }
+
+func TestPortfolioRecordInterface(t *testing.T) {
+	p := validPortfolio()
+	if p.RecordKind() != "CognitionPortfolio" {
+		t.Errorf("unexpected RecordKind: %s", p.RecordKind())
+	}
+	if p.RecordID() != p.PortfolioID {
+		t.Errorf("unexpected RecordID: %s", p.RecordID())
+	}
+	if p.SchemaVer() != p.SchemaVersion {
+		t.Errorf("unexpected SchemaVer: %s", p.SchemaVer())
+	}
+
+	rec := protocol.PortfolioRecommendation{
+		SchemaVersion:    protocol.SchemaVersion1,
+		RecommendationID: "rec-1",
+	}
+	if rec.RecordKind() != "PortfolioRecommendation" {
+		t.Errorf("unexpected RecordKind: %s", rec.RecordKind())
+	}
+	if rec.RecordID() != rec.RecommendationID {
+		t.Errorf("unexpected RecordID: %s", rec.RecordID())
+	}
+	if rec.SchemaVer() != rec.SchemaVersion {
+		t.Errorf("unexpected SchemaVer: %s", rec.SchemaVer())
+	}
+
+	wf := protocol.WorkflowPlan{
+		SchemaVersion: protocol.SchemaVersion1,
+		PlanID:        "plan-1",
+	}
+	if wf.RecordKind() != "WorkflowPlan" {
+		t.Errorf("unexpected RecordKind: %s", wf.RecordKind())
+	}
+	if wf.RecordID() != wf.PlanID {
+		t.Errorf("unexpected RecordID: %s", wf.RecordID())
+	}
+	if wf.SchemaVer() != wf.SchemaVersion {
+		t.Errorf("unexpected SchemaVer: %s", wf.SchemaVer())
+	}
+}

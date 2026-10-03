@@ -180,20 +180,17 @@ func (ctx *validatorContext) validatePolicyAndEconomics(diags *[]PortfolioDiagno
 			for j, fb := range rb.Fallbacks {
 				fbPool, okF := ctx.poolMap[fb.BudgetPoolID]
 				if okF {
-					if fbPool.Regime == protocol.RegimeMeteredAPI {
-						authorized := ctx.policy.AllowMeteredFallback || primaryPool.FallbackAllowedToMetered
-						if !authorized {
-							*diags = append(*diags, PortfolioDiagnostic{
-								Code:         CodeUnauthorizedMeteredFallback,
-								Condition:    ConditionUnauthorized,
-								Target:       fmt.Sprintf("role_bindings[%d].fallbacks[%d]", i, j),
-								ViolatedRule: "DCI-122, ADR-0018 §9",
-								Message: fmt.Sprintf("fallback to metered pool %q from non-metered pool %q is forbidden without explicit authorization",
-									fbPool.PoolID, primaryPool.PoolID),
-								Observed: "fallback_allowed_to_metered: false",
-								Required: "fallback_allowed_to_metered: true or allow_metered_fallback: true",
-							})
-						}
+					if fbPool.Regime == protocol.RegimeMeteredAPI && !primaryPool.FallbackAllowedToMetered {
+						*diags = append(*diags, PortfolioDiagnostic{
+							Code:         CodeUnauthorizedMeteredFallback,
+							Condition:    ConditionUnauthorized,
+							Target:       fmt.Sprintf("role_bindings[%d].fallbacks[%d]", i, j),
+							ViolatedRule: "DCI-122, ADR-0018 §9",
+							Message: fmt.Sprintf("fallback to metered pool %q from non-metered pool %q is forbidden without explicit authorization",
+								fbPool.PoolID, primaryPool.PoolID),
+							Observed: "fallback_allowed_to_metered: false",
+							Required: "fallback_allowed_to_metered: true",
+						})
 					}
 				}
 			}

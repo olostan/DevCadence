@@ -48,6 +48,10 @@
     "docs/work-packages/wp-m3c-3-ewp.md",
     "docs/WORK_PACKAGES.md",
     "docs/IMPLEMENTATION_PLAN.md",
+    "schemas/budget-pool.schema.json",
+    "fixtures/protocol/cognition-portfolio.invalid-nested-pool.json",
+    "internal/protocol/economics.go",
+    "internal/protocol/economics_test.go",
     "internal/cognition/portfolio_diagnostics.go",
     "internal/cognition/portfolio_validator.go",
     "internal/cognition/portfolio_validator_endpoints.go",
@@ -148,6 +152,10 @@ Implement the deterministic control-plane gate that validates candidate cognitio
 - `docs/work-packages/wp-m3c-3-ewp.md`
 - `docs/WORK_PACKAGES.md`
 - `docs/IMPLEMENTATION_PLAN.md`
+- `schemas/budget-pool.schema.json`
+- `fixtures/protocol/cognition-portfolio.invalid-nested-pool.json`
+- `internal/protocol/economics.go`
+- `internal/protocol/economics_test.go`
 - `internal/cognition/portfolio_diagnostics.go`
 - `internal/cognition/portfolio_validator.go`
 - `internal/cognition/portfolio_validator_endpoints.go`
@@ -192,6 +200,10 @@ Implement the deterministic control-plane gate that validates candidate cognitio
 
 ---
 
-## 4. Protocol Defect Escalation (DCI-122 Metered Fallback Authorization)
-- **Contradiction Identified**: In M3C-1, `BudgetPool.Validate` and `schemas/budget-pool.schema.json` enforce that `fallback_allowed_to_metered: true` is only valid when `regime == "metered_api"`. Concurrently, `CognitionPortfolio.Validate` and the DCI-122 invariant require that the primary (subscription or local) pool authorize fallback to metered spending (`primaryPool.FallbackAllowedToMetered`). Because non-metered pools cannot set `fallback_allowed_to_metered: true` without failing schema validation, `CognitionPortfolio` cannot authorize metered fallbacks via pool configuration alone without schema drift.
-- **WP-M3C-3 Resolution**: The portfolio validator introduces `ValidationPolicy.AllowMeteredFallback` to provide explicit policy authorization for metered fallback (strictly satisfying DCI-122: "without explicit policy/approval"), while preserving schema parity and escalating the contradiction for a unified protocol amendment in a subsequent milestone.
+## 4. Authoritative Protocol Contract Amendment (DCI-122 Metered Fallback Authorization)
+- **Problem**: In M3C-1, `BudgetPool.Validate` and `schemas/budget-pool.schema.json` erroneously restricted `fallback_allowed_to_metered: true` to `metered_api` pools. Concurrently, `CognitionPortfolio.Validate` and the DCI-122 invariant require that the primary (subscription or local) pool authorize fallback to metered spending (`primaryPool.FallbackAllowedToMetered`). Because non-metered pools could not set `fallback_allowed_to_metered: true` without failing schema validation, `CognitionPortfolio` could never legally authorize metered fallback.
+- **Authoritative Resolution**: In WP-M3C-3, the protocol contract is amended directly:
+  1. `schemas/budget-pool.schema.json` removes the `regime == "metered_api"` constraint on `fallback_allowed_to_metered`, allowing any budget pool regime (subscription quota, local compute, etc.) to set `fallback_allowed_to_metered: true` to authorize fallback to metered API.
+  2. `BudgetPool.Validate()` in `internal/protocol/economics.go` removes the regime prohibition.
+  3. `cognition-portfolio.invalid-nested-pool.json` is updated to test forbidden overage on subscription quota (`allow_overage: true`), preserving test coverage for invalid nested budget pools.
+  4. End-to-end acceptance tests verify that a portfolio with non-metered → metered fallback validates successfully when authorized on the primary pool (`res.Valid == true`), and fails closed when unauthorized.

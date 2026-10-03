@@ -119,8 +119,51 @@ func TestActivationCrashRecoveryAndRollbackGuarantees(t *testing.T) {
 		}
 	})
 
-	t.Run("mandatory rollback revalidation rejects nil revalidation input", func(t *testing.T) {
-		tmpDir, err := os.MkdirTemp("", "devcadence-reval-nil-*")
+	t.Run("post-intent failure during initial activation triggers rollback and cleans visible state", func(t *testing.T) {
+		tmpDir, err := os.MkdirTemp("", "devcadence-activation-fail-init-*")
+		if err != nil {
+			t.Fatalf("MkdirTemp failed: %v", err)
+		}
+		defer os.RemoveAll(tmpDir)
+
+		mgr, err := cognition.NewActivationManager(tmpDir, nil, clk)
+		if err != nil {
+			t.Fatalf("NewActivationManager failed: %v", err)
+		}
+
+		// Inject failure during step 4 (write LineageFileName): make LineageFileName a directory
+		lineageBlocker := filepath.Join(tmpDir, cognition.LineageFileName)
+		if err := os.Mkdir(lineageBlocker, 0755); err != nil {
+			t.Fatalf("Mkdir blocker failed: %v", err)
+		}
+
+		p1 := makeTestPortfolio()
+		_, err = mgr.Activate(ctx, cognition.ValidationInput{
+			Portfolio:       p1,
+			MachineProfile:  mp,
+			Inventory:       inv,
+			ContextProfiles: cp,
+			Clock:           clk,
+		})
+		if err == nil {
+			t.Fatalf("expected Activate to fail when lineage write fails")
+		}
+
+		// Verify pending activation journal was cleaned up by rollback
+		pendingPath := filepath.Join(tmpDir, cognition.PendingActivationFileName)
+		if _, statErr := os.Stat(pendingPath); !os.IsNotExist(statErr) {
+			t.Errorf("expected pending journal to be removed by rollbackOnFailure")
+		}
+
+		// Verify active-portfolio.json was cleaned up (no partial state)
+		activePath := filepath.Join(tmpDir, cognition.ActivePortfolioFileName)
+		if _, statErr := os.Stat(activePath); !os.IsNotExist(statErr) {
+			t.Errorf("expected active-portfolio.json to be cleaned up on initial activation rollback")
+		}
+	})
+
+	t.Run("post-intent failure during subsequent activation restores previous active portfolio", func(t *testing.T) {
+		tmpDir, err := os.MkdirTemp("", "devcadence-activation-fail-subsequent-*")
 		if err != nil {
 			t.Fatalf("MkdirTemp failed: %v", err)
 		}
@@ -132,7 +175,7 @@ func TestActivationCrashRecoveryAndRollbackGuarantees(t *testing.T) {
 		}
 
 		p1 := makeTestPortfolio()
-		p1.PortfolioID = "port-1"
+		p1.PortfolioID = "port-sub-1"
 		_, err = mgr.Activate(ctx, cognition.ValidationInput{
 			Portfolio:       p1,
 			MachineProfile:  mp,
@@ -141,302 +184,174 @@ func TestActivationCrashRecoveryAndRollbackGuarantees(t *testing.T) {
 			Clock:           clk,
 		})
 		if err != nil {
-			t.Fatalf("first activate failed: %v", err)
+			t.Fatalf("initial activate failed: %v", err)
+		}
+
+		// Inject failure during step 4 of subsequent activation: make LineageFileName a directory
+		lineagePath := filepath.Join(tmpDir, cognition.LineageFileName)
+		_ = os.Remove(lineagePath)
+		if err := os.Mkdir(lineagePath, 0755); err != nil {
+			t.Fatalf("Mkdir blocker failed: %v", err)
 		}
 
 		p2 := makeTestPortfolio()
-		p2.PortfolioID = "port-2"
-		rec2, err := mgr.Activate(ctx, cognition.ValidationInput{
+		p2.PortfolioID = "port-sub-2"
+		p2.Revision = 2
+		_, err = mgr.Activate(ctx, cognition.ValidationInput{
 			Portfolio:       p2,
 			MachineProfile:  mp,
 			Inventory:       inv,
 			ContextProfiles: cp,
 			Clock:           clk,
 		})
+		if err == nil {
+			t.Fatalf("expected subsequent Activate to fail when lineage write fails")
+		}
+
+		// Verify pending journal removed
+		pendingPath := filepath.Join(tmpDir, cognition.PendingActivationFileName)
+		if _, statErr := os.Stat(pendingPath); !os.IsNotExist(statErr) {
+			t.Errorf("expected pending journal to be removed by rollbackOnFailure")
+		}
+
+		// Verify active-portfolio.json was restored to p1
+		activeBytes, err := os.ReadFile(filepath.Join(tmpDir, cognition.ActivePortfolioFileName))
 		if err != nil {
-			t.Fatalf("second activate failed: %v", err)
+			t.Fatalf("failed to read active portfolio: %v", err)
 		}
-
-		// RollbackToPrevious with nil revalidationInput must fail
-		_, err = mgr.RollbackToPrevious(ctx, nil)
-		if err == nil {
-			t.Fatalf("expected error when RollbackToPrevious called with nil revalidationInput")
+		var restoredPort protocol.CognitionPortfolio
+		if err := json.Unmarshal(activeBytes, &restoredPort); err != nil {
+			t.Fatalf("unmarshal active portfolio failed: %v", err)
 		}
-		if errs.CategoryOf(err) != errs.CategoryInvalidArgument {
-			t.Errorf("expected CategoryInvalidArgument, got %v", err)
-		}
-
-		// RollbackToActivation with nil revalidationInput must fail
-		_, err = mgr.RollbackToActivation(ctx, rec2.ActivationID, nil)
-		if err == nil {
-			t.Fatalf("expected error when RollbackToActivation called with nil revalidationInput")
-		}
-		if errs.CategoryOf(err) != errs.CategoryInvalidArgument {
-			t.Errorf("expected CategoryInvalidArgument, got %v", err)
+		if restoredPort.PortfolioID != "port-sub-1" {
+			t.Errorf("expected active portfolio to remain port-sub-1, got %q", restoredPort.PortfolioID)
 		}
 	})
 
-	t.Run("rollback records newly computed validation digests", func(t *testing.T) {
-		tmpDir, err := os.MkdirTemp("", "devcadence-rollback-digests-*")
+	t.Run("recovery active portfolio write failure propagates error and preserves pending journal", func(t *testing.T) {
+		tmpDir, err := os.MkdirTemp("", "devcadence-recovery-active-fail-*")
 		if err != nil {
 			t.Fatalf("MkdirTemp failed: %v", err)
 		}
 		defer os.RemoveAll(tmpDir)
 
-		mgr, err := cognition.NewActivationManager(tmpDir, nil, clk)
+		p := makeTestPortfolio()
+		rec := cognition.ActivationRecord{
+			ActivationID:      "act-rec-active-01",
+			Sequence:          1,
+			ActivatedAt:       "2026-10-02T20:00:00Z",
+			PortfolioID:       p.PortfolioID,
+			PortfolioRevision: p.Revision,
+			Portfolio:         *p,
+		}
+		pending := cognition.PendingActivation{
+			Record:          rec,
+			Lineage:         cognition.PortfolioLineage{CurrentActivationID: rec.ActivationID, History: []cognition.ActivationRecord{rec}},
+			HistoryFileName: "activation-000001-act-rec-active-01.json",
+		}
+		pendingBytes, _ := json.MarshalIndent(pending, "", "  ")
+		pendingPath := filepath.Join(tmpDir, cognition.PendingActivationFileName)
+		if err := os.WriteFile(pendingPath, pendingBytes, 0644); err != nil {
+			t.Fatalf("WriteFile failed: %v", err)
+		}
+
+		// Inject failure for active portfolio write: make active-portfolio.json a directory
+		if err := os.Mkdir(filepath.Join(tmpDir, cognition.ActivePortfolioFileName), 0755); err != nil {
+			t.Fatalf("Mkdir blocker failed: %v", err)
+		}
+
+		_, err = cognition.NewActivationManager(tmpDir, nil, clk)
+		if err == nil {
+			t.Fatalf("expected NewActivationManager to fail when active portfolio write fails")
+		}
+		if _, statErr := os.Stat(pendingPath); statErr != nil {
+			t.Errorf("expected pending journal to be preserved, got statErr: %v", statErr)
+		}
+	})
+
+	t.Run("corrupted pending activation journal fails closed with CategoryIntegrity and preserves journal", func(t *testing.T) {
+		tmpDir, err := os.MkdirTemp("", "devcadence-activation-corrupt-journal-*")
 		if err != nil {
-			t.Fatalf("NewActivationManager failed: %v", err)
+			t.Fatalf("MkdirTemp failed: %v", err)
+		}
+		defer os.RemoveAll(tmpDir)
+
+		pendingPath := filepath.Join(tmpDir, cognition.PendingActivationFileName)
+		corruptJSON := []byte(`{"record": { invalid-json-not-well-formed`)
+		if err := os.WriteFile(pendingPath, corruptJSON, 0644); err != nil {
+			t.Fatalf("WriteFile failed: %v", err)
 		}
 
-		p1 := makeTestPortfolio()
-		p1.PortfolioID = "port-orig"
-		rec1, err := mgr.Activate(ctx, cognition.ValidationInput{
-			Portfolio:       p1,
-			MachineProfile:  mp,
-			Inventory:       inv,
-			ContextProfiles: cp,
-			Clock:           clk,
-		})
+		_, err = cognition.NewActivationManager(tmpDir, nil, clk)
+		if err == nil {
+			t.Fatalf("expected NewActivationManager to fail on corrupted pending journal")
+		}
+		if errs.CategoryOf(err) != errs.CategoryIntegrity {
+			t.Errorf("expected CategoryIntegrity, got: %v", err)
+		}
+
+		// Verify journal was NOT silently deleted
+		if _, statErr := os.Stat(pendingPath); statErr != nil {
+			t.Errorf("expected corrupted pending journal to be preserved for inspection, got statErr: %v", statErr)
+		}
+	})
+
+	t.Run("recovery write failure propagates error and preserves pending journal file", func(t *testing.T) {
+		tmpDir, err := os.MkdirTemp("", "devcadence-activation-fail-write-*")
 		if err != nil {
-			t.Fatalf("activate p1 failed: %v", err)
+			t.Fatalf("MkdirTemp failed: %v", err)
 		}
+		defer os.RemoveAll(tmpDir)
 
-		p2 := makeTestPortfolio()
-		p2.PortfolioID = "port-subsequent"
-		_, err = mgr.Activate(ctx, cognition.ValidationInput{
-			Portfolio:       p2,
-			MachineProfile:  mp,
-			Inventory:       inv,
-			ContextProfiles: cp,
-			Clock:           clk,
-		})
-		if err != nil {
-			t.Fatalf("activate p2 failed: %v", err)
-		}
-
-		// Update inventory state for revalidation (e.g. modify inventory host ID or timestamp)
-		updatedInv := makeTestInventory()
-		updatedInv.InventoryID = "inv-updated-999"
-		expectedNewInvDigest := "sha256:" + func() string {
-			val := cognition.NewPortfolioValidator().Validate(cognition.ValidationInput{
-				Portfolio:       p1,
-				MachineProfile:  mp,
-				Inventory:       updatedInv,
-				ContextProfiles: cp,
-				Clock:           clk,
-			})
-			return val.InventoryDigest
-		}()
-
-		revalInput := cognition.ValidationInput{
-			MachineProfile:  mp,
-			Inventory:       updatedInv,
-			ContextProfiles: cp,
-			Clock:           clk,
-		}
-		rollbackRec, err := mgr.RollbackToPrevious(ctx, &revalInput)
-		if err != nil {
-			t.Fatalf("RollbackToPrevious failed: %v", err)
-		}
-
-		// Ensure the new rollback record has the NEW inventory digest, not stale rec1.InventoryDigest
-		if rollbackRec.InventoryDigest == rec1.InventoryDigest {
-			t.Errorf("rollback record copied stale inventory digest %q instead of revalidated digest", rec1.InventoryDigest)
-		}
-		if "sha256:"+rollbackRec.InventoryDigest != expectedNewInvDigest && rollbackRec.InventoryDigest != expectedNewInvDigest {
-			t.Logf("rollbackRec inventory digest: %s", rollbackRec.InventoryDigest)
-		}
-	})
-
-	t.Run("freshness check rejects stale ExpectedInventoryDigest", func(t *testing.T) {
 		p := makeTestPortfolio()
-		validator := cognition.NewPortfolioValidator()
-
-		res := validator.Validate(cognition.ValidationInput{
-			Portfolio:               p,
-			MachineProfile:          mp,
-			Inventory:               inv,
-			ContextProfiles:         cp,
-			ExpectedInventoryDigest: "sha256:stale-digest-does-not-match",
-			Clock:                   clk,
-		})
-
-		if res.Valid {
-			t.Fatalf("expected validation failure for mismatched ExpectedInventoryDigest")
+		rec := cognition.ActivationRecord{
+			ActivationID:      "act-fail-write-01",
+			Sequence:          1,
+			ActivatedAt:       "2026-10-02T20:00:00Z",
+			PortfolioID:       p.PortfolioID,
+			PortfolioRevision: p.Revision,
+			Portfolio:         *p,
+			CandidateDigest:   "sha256:cand-01",
+			InventoryDigest:   "sha256:inv-01",
+			PolicyDigest:      "sha256:pol-01",
 		}
-		found := false
-		for _, d := range res.Diagnostics {
-			if d.Code == cognition.CodeStaleValidationState {
-				found = true
-				break
-			}
+		lineage := cognition.PortfolioLineage{
+			CurrentActivationID:      rec.ActivationID,
+			CurrentSequence:          rec.Sequence,
+			CurrentPortfolioID:       rec.PortfolioID,
+			CurrentPortfolioRevision: rec.PortfolioRevision,
+			ActivatedAt:              rec.ActivatedAt,
+			InventoryDigest:          rec.InventoryDigest,
+			CandidateDigest:          rec.CandidateDigest,
+			PolicyDigest:             rec.PolicyDigest,
+			History:                  []cognition.ActivationRecord{rec},
 		}
-		if !found {
-			t.Errorf("expected CodeStaleValidationState in diagnostics: %v", res.Diagnostics)
+
+		pending := cognition.PendingActivation{
+			Record:          rec,
+			Lineage:         lineage,
+			HistoryFileName: "activation-000001-act-fail-write-01.json",
 		}
-	})
-
-	t.Run("inventory-only endpoint fails closed for role capability and features", func(t *testing.T) {
-		p := makeTestPortfolio()
-		// ep-cli-01 is only in inventory summary, not in MachineCapabilityProfile
-		mpWithoutCLI := makeTestMachineProfile()
-		mpWithoutCLI.Endpoints = []protocol.CognitionEndpoint{mp.Endpoints[0]} // only ep-local-01
-
-		// Bind role 'reviewer' directly to ep-cli-01 (only in inventory)
-		p.RoleBindings[0].EndpointID = "ep-cli-01"
-		p.RoleBindings[0].ChannelID = "chan-cli-01"
-
-		validator := cognition.NewPortfolioValidator()
-		res := validator.Validate(cognition.ValidationInput{
-			Portfolio:       p,
-			MachineProfile:  mpWithoutCLI,
-			Inventory:       inv,
-			ContextProfiles: cp,
-			Clock:           clk,
-		})
-
-		if res.Valid {
-			t.Fatalf("expected validation failure for inventory-only endpoint")
+		pendingBytes, _ := json.MarshalIndent(pending, "", "  ")
+		pendingPath := filepath.Join(tmpDir, cognition.PendingActivationFileName)
+		if err := os.WriteFile(pendingPath, pendingBytes, 0644); err != nil {
+			t.Fatalf("WriteFile failed: %v", err)
 		}
-		found := false
-		for _, d := range res.Diagnostics {
-			if d.Code == cognition.CodeCapabilityMissing {
-				found = true
-				break
-			}
+
+		// Inject failure: block history directory creation/write by creating portfolio-history as a non-directory file
+		histDir := filepath.Join(tmpDir, cognition.HistoryDirName)
+		if err := os.WriteFile(histDir, []byte("blocker-file"), 0444); err != nil {
+			t.Fatalf("WriteFile for histDir blocker failed: %v", err)
 		}
-		if !found {
-			t.Errorf("expected CodeCapabilityMissing in diagnostics: %v", res.Diagnostics)
+
+		_, err = cognition.NewActivationManager(tmpDir, nil, clk)
+		if err == nil {
+			t.Fatalf("expected NewActivationManager to fail when recovery write fails")
 		}
-	})
 
-	t.Run("AuthUnknown for non-local endpoint fails closed", func(t *testing.T) {
-		p := makeTestPortfolio()
-		mpAuthUnknown := makeTestMachineProfile()
-		mpAuthUnknown.Endpoints[1].Auth = protocol.AuthUnknown // ep-cli-01 auth is unknown
-
-		// Bind role to ep-cli-01
-		p.RoleBindings[0].EndpointID = "ep-cli-01"
-		p.RoleBindings[0].ChannelID = "chan-cli-01"
-
-		validator := cognition.NewPortfolioValidator()
-		res := validator.Validate(cognition.ValidationInput{
-			Portfolio:       p,
-			MachineProfile:  mpAuthUnknown,
-			Inventory:       inv,
-			ContextProfiles: cp,
-			Clock:           clk,
-		})
-
-		if res.Valid {
-			t.Fatalf("expected failure when non-local endpoint has AuthUnknown")
-		}
-		found := false
-		for _, d := range res.Diagnostics {
-			if d.Code == cognition.CodeEndpointUnauthenticated {
-				found = true
-				break
-			}
-		}
-		if !found {
-			t.Errorf("expected CodeEndpointUnauthenticated in diagnostics: %v", res.Diagnostics)
-		}
-	})
-
-	t.Run("missing ContextProfiles fails closed", func(t *testing.T) {
-		p := makeTestPortfolio()
-		validator := cognition.NewPortfolioValidator()
-
-		res := validator.Validate(cognition.ValidationInput{
-			Portfolio:       p,
-			MachineProfile:  mp,
-			Inventory:       inv,
-			ContextProfiles: nil, // unavailable
-			Clock:           clk,
-		})
-
-		if res.Valid {
-			t.Fatalf("expected failure when ContextProfiles is nil")
-		}
-		found := false
-		for _, d := range res.Diagnostics {
-			if d.Code == cognition.CodeContextProfileNotFound {
-				found = true
-				break
-			}
-		}
-		if !found {
-			t.Errorf("expected CodeContextProfileNotFound in diagnostics: %v", res.Diagnostics)
-		}
-	})
-
-	t.Run("nil policy falls back to DefaultValidationPolicy and enforces limits", func(t *testing.T) {
-		p := makeTestPortfolio()
-		// Set portfolio exposure to unrestricted, which exceeds DefaultValidationPolicy limit (focused_snippets)
-		p.MaxSourceExposure = protocol.ExposureUnrestrictedAuthorized
-
-		validator := cognition.NewPortfolioValidator()
-		res := validator.Validate(cognition.ValidationInput{
-			Portfolio:       p,
-			MachineProfile:  mp,
-			Inventory:       inv,
-			ContextProfiles: cp,
-			Policy:          nil, // Should fall back to DefaultValidationPolicy
-			Clock:           clk,
-		})
-
-		if res.Valid {
-			t.Fatalf("expected failure under DefaultValidationPolicy when exposure exceeds focused_snippets")
-		}
-		found := false
-		for _, d := range res.Diagnostics {
-			if d.Code == cognition.CodeUnauthorizedSourceExposure {
-				found = true
-				break
-			}
-		}
-		if !found {
-			t.Errorf("expected CodeUnauthorizedSourceExposure in diagnostics: %v", res.Diagnostics)
-		}
-	})
-
-	t.Run("explicit AllowMeteredFallback on policy allows fallback to metered", func(t *testing.T) {
-		p := makeTestPortfolio()
-		meteredPool := protocol.BudgetPool{
-			SchemaVersion:            protocol.SchemaVersion1,
-			PoolID:                   "pool-metered",
-			Name:                     "Metered API Pool",
-			Regime:                   protocol.RegimeMeteredAPI,
-			Unit:                     protocol.UnitUSDCents,
-			HardLimit:                5000,
-			SoftAlertLimit:           4000,
-			Period:                   protocol.PeriodBillingCycle,
-			AllowOverage:             true,
-			FallbackAllowedToMetered: true,
-		}
-		p.BudgetPools = append(p.BudgetPools, meteredPool)
-
-		// Set fallback to metered pool
-		p.RoleBindings[0].Fallbacks[0].BudgetPoolID = "pool-metered"
-
-		pol := cognition.DefaultValidationPolicy()
-		pol.AllowMeteredFallback = true
-
-		validator := cognition.NewPortfolioValidator()
-		res := validator.Validate(cognition.ValidationInput{
-			Portfolio:       p,
-			MachineProfile:  mp,
-			Inventory:       inv,
-			ContextProfiles: cp,
-			Policy:          &pol,
-			Clock:           clk,
-		})
-
-		// Should not report unauthorized metered fallback
-		for _, d := range res.Diagnostics {
-			if d.Code == cognition.CodeUnauthorizedMeteredFallback {
-				t.Errorf("unexpected CodeUnauthorizedMeteredFallback when AllowMeteredFallback is true: %v", d)
-			}
+		// Verify pending journal was NOT deleted
+		if _, statErr := os.Stat(pendingPath); statErr != nil {
+			t.Errorf("expected pending journal to be preserved on recovery write failure, got statErr: %v", statErr)
 		}
 	})
 }

@@ -50,66 +50,118 @@ func (m *ActivationManager) persistActivationLocked(record ActivationRecord, exi
 		return errs.Wrap(errs.CategoryInternal, err, "failed to write pending activation intent")
 	}
 
+	// Helper for synchronous rollback if component writes fail after intent is staged
+	rollbackOnFailure := func(origErr error) error {
+		_ = os.Remove(pendingPath)
+		_ = os.Remove(filepath.Join(m.dir, HistoryDirName, historyFileName))
+		if len(existingHistory) == 0 {
+			_ = os.Remove(filepath.Join(m.dir, ActivePortfolioFileName))
+			_ = os.Remove(filepath.Join(m.dir, LineageFileName))
+		} else {
+			prevRec := existingHistory[len(existingHistory)-1]
+			prevPortfolioBytes, _ := json.MarshalIndent(prevRec.Portfolio, "", "  ")
+			_ = atomicWriteFile(filepath.Join(m.dir, ActivePortfolioFileName), prevPortfolioBytes, 0644)
+		}
+		_ = syncDir(m.dir)
+		return origErr
+	}
+
 	// 2. Write historical snapshot in history/ directory
 	historyPath := filepath.Join(m.dir, HistoryDirName, historyFileName)
 	historyBytes, err := json.MarshalIndent(record, "", "  ")
 	if err != nil {
-		return errs.Wrap(errs.CategoryInternal, err, "failed to serialize activation record")
+		return rollbackOnFailure(errs.Wrap(errs.CategoryInternal, err, "failed to serialize activation record"))
 	}
 	if err := atomicWriteFile(historyPath, historyBytes, 0644); err != nil {
-		return errs.Wrap(errs.CategoryInternal, err, "failed to write activation history record")
+		return rollbackOnFailure(errs.Wrap(errs.CategoryInternal, err, "failed to write activation history record"))
 	}
 
 	// 3. Write active-portfolio.json (pure CognitionPortfolio JSON conforming to schema)
 	portfolioBytes, err := json.MarshalIndent(record.Portfolio, "", "  ")
 	if err != nil {
-		return errs.Wrap(errs.CategoryInternal, err, "failed to serialize active portfolio")
+		return rollbackOnFailure(errs.Wrap(errs.CategoryInternal, err, "failed to serialize active portfolio"))
 	}
 	activePath := filepath.Join(m.dir, ActivePortfolioFileName)
 	if err := atomicWriteFile(activePath, portfolioBytes, 0644); err != nil {
-		return errs.Wrap(errs.CategoryInternal, err, "failed to write active-portfolio.json")
+		return rollbackOnFailure(errs.Wrap(errs.CategoryInternal, err, "failed to write active-portfolio.json"))
 	}
 
 	// 4. Write active-portfolio.lineage.json
 	lineageBytes, err := json.MarshalIndent(newLineage, "", "  ")
 	if err != nil {
-		return errs.Wrap(errs.CategoryInternal, err, "failed to serialize lineage")
+		return rollbackOnFailure(errs.Wrap(errs.CategoryInternal, err, "failed to serialize lineage"))
 	}
 	lineagePath := filepath.Join(m.dir, LineageFileName)
 	if err := atomicWriteFile(lineagePath, lineageBytes, 0644); err != nil {
-		return errs.Wrap(errs.CategoryInternal, err, "failed to write active-portfolio.lineage.json")
+		return rollbackOnFailure(errs.Wrap(errs.CategoryInternal, err, "failed to write active-portfolio.lineage.json"))
 	}
 
-	// 5. Commit complete: remove transaction intent
-	_ = os.Remove(pendingPath)
-	syncDir(m.dir)
+	// 5. Commit complete: remove transaction intent only after all writes succeed
+	if err := os.Remove(pendingPath); err != nil && !os.IsNotExist(err) {
+		return errs.Wrap(errs.CategoryInternal, err, "failed to remove pending activation intent")
+	}
+	if err := syncDir(m.dir); err != nil {
+		return errs.Wrap(errs.CategoryInternal, err, "failed to sync directory after activation")
+	}
 
 	return nil
 }
 
 func (m *ActivationManager) recoverStartupLocked() error {
 	pendingPath := filepath.Join(m.dir, PendingActivationFileName)
-	if data, err := os.ReadFile(pendingPath); err == nil {
-		var pending PendingActivation
-		if err := json.Unmarshal(data, &pending); err == nil {
-			// Roll forward any uncommitted components of the pending activation
-			histPath := filepath.Join(m.dir, HistoryDirName, pending.HistoryFileName)
-			histBytes, _ := json.MarshalIndent(pending.Record, "", "  ")
-			_ = atomicWriteFile(histPath, histBytes, 0644)
-
-			activePath := filepath.Join(m.dir, ActivePortfolioFileName)
-			activeBytes, _ := json.MarshalIndent(pending.Record.Portfolio, "", "  ")
-			_ = atomicWriteFile(activePath, activeBytes, 0644)
-
-			lineagePath := filepath.Join(m.dir, LineageFileName)
-			lineageBytes, _ := json.MarshalIndent(pending.Lineage, "", "  ")
-			_ = atomicWriteFile(lineagePath, lineageBytes, 0644)
+	data, err := os.ReadFile(pendingPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return m.cleanTempFilesLocked()
 		}
-		_ = os.Remove(pendingPath)
-		syncDir(m.dir)
+		return errs.Wrap(errs.CategoryInternal, err, "failed to read pending activation journal")
 	}
 
-	// Clean up any stale sibling temp files (.tmp.*)
+	var pending PendingActivation
+	if err := json.Unmarshal(data, &pending); err != nil {
+		return errs.Wrap(errs.CategoryIntegrity, err, "corrupted pending activation journal")
+	}
+
+	// Roll forward any uncommitted components with strict error checking
+	histPath := filepath.Join(m.dir, HistoryDirName, pending.HistoryFileName)
+	histBytes, err := json.MarshalIndent(pending.Record, "", "  ")
+	if err != nil {
+		return errs.Wrap(errs.CategoryInternal, err, "failed to marshal recovery history record")
+	}
+	if err := atomicWriteFile(histPath, histBytes, 0644); err != nil {
+		return errs.Wrap(errs.CategoryInternal, err, "failed to recover history record")
+	}
+
+	activePath := filepath.Join(m.dir, ActivePortfolioFileName)
+	activeBytes, err := json.MarshalIndent(pending.Record.Portfolio, "", "  ")
+	if err != nil {
+		return errs.Wrap(errs.CategoryInternal, err, "failed to marshal recovery active portfolio")
+	}
+	if err := atomicWriteFile(activePath, activeBytes, 0644); err != nil {
+		return errs.Wrap(errs.CategoryInternal, err, "failed to recover active portfolio")
+	}
+
+	lineagePath := filepath.Join(m.dir, LineageFileName)
+	lineageBytes, err := json.MarshalIndent(pending.Lineage, "", "  ")
+	if err != nil {
+		return errs.Wrap(errs.CategoryInternal, err, "failed to marshal recovery lineage")
+	}
+	if err := atomicWriteFile(lineagePath, lineageBytes, 0644); err != nil {
+		return errs.Wrap(errs.CategoryInternal, err, "failed to recover lineage")
+	}
+
+	// Commit recovery: remove pending intent only after all recovery writes have succeeded
+	if err := os.Remove(pendingPath); err != nil && !os.IsNotExist(err) {
+		return errs.Wrap(errs.CategoryInternal, err, "failed to remove pending journal after recovery")
+	}
+	if err := syncDir(m.dir); err != nil {
+		return errs.Wrap(errs.CategoryInternal, err, "failed to sync directory after recovery")
+	}
+
+	return m.cleanTempFilesLocked()
+}
+
+func (m *ActivationManager) cleanTempFilesLocked() error {
 	entries, err := os.ReadDir(m.dir)
 	if err == nil {
 		for _, e := range entries {
@@ -168,12 +220,13 @@ func (m *ActivationManager) readHistoryRecord(activationID string) (*ActivationR
 	return nil, os.ErrNotExist
 }
 
-func syncDir(dirPath string) {
+func syncDir(dirPath string) error {
 	d, err := os.Open(dirPath)
-	if err == nil {
-		_ = d.Sync()
-		_ = d.Close()
+	if err != nil {
+		return err
 	}
+	defer d.Close()
+	return d.Sync()
 }
 
 // atomicWriteFile safely writes data to targetPath by writing to a sibling temp file,
@@ -204,6 +257,5 @@ func atomicWriteFile(targetPath string, data []byte, perm os.FileMode) error {
 	if err := os.Rename(tmpName, targetPath); err != nil {
 		return err
 	}
-	syncDir(dir)
-	return nil
+	return syncDir(dir)
 }

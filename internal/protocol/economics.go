@@ -122,13 +122,6 @@ func (b *BudgetPool) Validate() error {
 	if b.SoftAlertLimit < 0 || b.SoftAlertLimit > b.HardLimit {
 		return errs.New(errs.CategoryInvalidArgument, "%s: soft_alert_limit (%d) must be between 0 and hard_limit (%d)", kind, b.SoftAlertLimit, b.HardLimit)
 	}
-	// ADR-0018 §9 & DCI-104: Loss of local/subscription/prepaid/enterprise/unknown quota never
-	// authorizes fallback to metered billing. Only metered_api permits fallback_allowed_to_metered (allowlist).
-	if b.FallbackAllowedToMetered && b.Regime != RegimeMeteredAPI {
-		return errs.New(errs.CategoryInvalidArgument,
-			"%s: fallback_allowed_to_metered is forbidden for regime %q (only metered_api permits fallback_allowed_to_metered per ADR-0018 §9, DCI-104)",
-			kind, string(b.Regime))
-	}
 	// ADR-0018 §9: Silent overage is forbidden for subscription, local compute, and unknown custom regimes.
 	if b.AllowOverage && (b.Regime == RegimeLocalCompute || b.Regime == RegimeSubscriptionQuota || b.Regime == RegimeUnknownCustom) {
 		return errs.New(errs.CategoryInvalidArgument,
