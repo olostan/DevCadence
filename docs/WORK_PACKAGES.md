@@ -42,14 +42,111 @@ concurrently, under this v1 protocol.
 
 An EWP has two layers:
 
-1. **Execution Contract:** bounded and authoritative for its task, containing EWP ID/revision/digest and base/state revision; objective; allowed write paths/domains and forbidden changes; applicable exact MUST/MUST-NOT clauses; required interfaces and algorithm/edge-case semantics; acceptance criteria; validation commands/profiles; escalation triggers and unresolved assumptions.
+1. **Execution Contract:** bounded and authoritative for its task. It contains EWP ID/revision/digest and base/state revision; objective; a semantic scope envelope; exact MUST/MUST-NOT clauses; required interfaces/algorithms; explicit invariants/state rules; failure/authority/missing-input semantics where applicable; representability bindings; acceptance scenarios; validation; escalation; and declared local discretion.
 2. **Design and rationale:** alternatives, research, extended pseudocode/examples, historical decisions and explanatory material, retrieved progressively. Necessary interfaces or semantics cannot be relegated here alone. Requirement strength remains explicit; any conflict with owning normative sources escalates.
 
 Every EWP declares a **Context Manifest** with role/task, revision-pinned contract reference, read-authority envelope distinct from write scope, domains/risk tags, exact normative references, initial evidence handles, deferred references, assumptions, expansion/re-resolution triggers and the endpoint profile/budget. Deterministic mappings complete declared requirements; the Principal validates completeness. A pointer becomes mandatory context only after its exact clause is resolved and admitted. An implementer need not read the milestone ADR set wholesale.
 
+### Implementation Readiness / Contract Completeness Gate
+
+A substantial EWP MUST be reviewed for implementation readiness before code is delegated. The Principal owns semantic closure.
+
+The readiness test is intentionally calibrated to weaker/local execution cognition:
+
+> Could a competent implementation model that knows the language and repository idioms, but has mediocre architectural judgment, implement this EWP without inventing any important semantics?
+
+If the answer is no, the EWP is not ready.
+
+The ambiguity budget for implementation-critical semantics is zero:
+
+- unresolved architecture choices: 0;
+- unresolved authority/security/privacy/spending decisions: 0;
+- unresolved persistence/durability/state-transition behavior: 0;
+- unresolved required missing/unknown-input behavior: 0;
+- local implementation choices: explicitly allowed and bounded.
+
+For every material requirement, the contract SHOULD make the following trace explicit:
+
+**requirement → invariant/state rule → exact representation → acceptance scenario**
+
+If a requirement cannot be represented unambiguously by the current Go type, schema, API, persistence record or other canonical state, implementation MUST NOT guess. Amend the protocol/schema, split the EWP or escalate.
+
+### Required contract closure for substantial work
+
+The following sections are required when applicable; for stateful/systemic/high-risk work they are presumed applicable unless explicitly justified otherwise.
+
+#### Invariants / state rules
+
+Use stable local IDs and testable statements. State what must remain true before, during and after successful and failed operations. Avoid phrases such as “atomic”, “safe”, “clean rollback”, “current policy” or “fail closed” without defining the observable postconditions they imply.
+
+#### Failure matrix
+
+Enumerate material failure points and the required postcondition/evidence. Stateful work includes crash/restart boundaries where relevant. “Handle failure recovery” is not an acceptance criterion.
+
+#### Authority matrix
+
+For each material decision, state the authorized source and forbidden substitutes. Examples include activation, spending expansion, privacy/source exposure, rollback acceptance, durable closure and policy override.
+
+#### Missing / unknown / stale input semantics
+
+Declare behavior when required facts are absent, stale, unknown, malformed or contradictory. For control-plane/security-sensitive positive requirements, absence of evidence does not satisfy the requirement unless an explicit default/exception says otherwise.
+
+#### Representability map
+
+Bind every important concept to its exact current representation. A contradiction between the intended requirement and current types/schema is an upstream design defect. The Principal resolves it before delegation.
+
+#### Acceptance scenarios
+
+Specify scenario-oriented acceptance before implementation: setup/precondition, action, expected outcome, mapped requirement/invariant and required evidence. Validation commands are evidence runners, not substitutes for semantic acceptance.
+
+### Compact readiness report
+
+Before implementation, record a compact coverage report such as:
+
+```text
+requirements represented: 18/18
+mandatory clauses resolved: 11/11
+state transitions specified: 7/7
+failure cases specified: 14/14
+authority decisions specified: 9/9
+missing/unknown input semantics: 12/12
+acceptance scenarios mapped: 21/21
+unresolved architecture choices: 0
+declared local-discretion choices: 6
+readiness: READY_FOR_IMPLEMENTATION
+```
+
+The exact counts vary by task. Counts demonstrate coverage; they do not prove that the semantics are correct.
+
+### Scope envelope and local discretion
+
+Write scope is primarily semantic, not an exhaustive filename bureaucracy. An EWP SHOULD declare authorized domains/path patterns plus forbidden semantic changes.
+
+Within that envelope, implementers may normally:
+
+- split/add tests;
+- add private/package-local helpers;
+- adapt local naming/data structures;
+- make repository-native local refactors required by the exact contract.
+
+An EWP amendment/escalation is required for:
+
+- public/API contract changes;
+- protocol/schema semantic changes;
+- persistence/crash/recovery semantics;
+- security/trust/privacy/spending authority;
+- cross-layer dependency changes;
+- invariant changes;
+- new external services/dependencies;
+- unrelated subsystem work.
+
+This distinction intentionally permits the kind of harmless test-file split that often appears during implementation while preventing silent architectural expansion.
+
 The whole Execution Contract must fit the selected endpoint. If it does not, split into independently reviewed atomic contracts, route to an authorized capable endpoint or return `CONTEXT_UNFIT`. Do not dynamically cut arbitrary paragraphs or silently truncate requirements. Decomposition must preserve shared interface/dependency requirements and the complete acceptance obligations of each subtask.
 
-Manual Markdown manifests/contracts are used until M3C implements typed structures. Current strict `EngineeringWorkPackage` schema/Go records are unchanged by this documentation amendment; proposed fields are not legal extra fields in existing records. Store manual companions as referenced artifacts using existing supported evidence references. M3C must version new shapes, validators and fixtures together before emitting them.
+Manual Markdown manifests/contracts are used until the typed EWP contract evolves. Current strict `EngineeringWorkPackage` schema/Go records are unchanged by this documentation amendment; proposed fields are not legal extra fields in existing records. Store manual companions as referenced artifacts using existing supported evidence references. Future typed protocol work should version structures equivalent to `ContractInvariant`, `FailureCase`, `AuthorityRule`, `InputSemantic`, `RepresentabilityBinding`, `AcceptanceScenario`, `ScopeEnvelope` and `ImplementationReadiness` together with validators/fixtures.
+
+See [ADR-0024](adr/0024-implementation-ready-work-packages-and-contract-completeness.md) for rationale, the delegation-floor goal and the relationship to ADR-0020. Use [docs/work-packages/IMPLEMENTATION_READY_TEMPLATE.md](work-packages/IMPLEMENTATION_READY_TEMPLATE.md) as the default authoring skeleton for new substantial EWPs.
 
 ## M3B — Guided bootstrap and onboarding
 
@@ -388,6 +485,8 @@ Dependency/completion graph:
 
 ### WP-M3C-4 — Substrate integration verification
 
+**Execution Work Package:** [docs/work-packages/wp-m3c-4-ewp.md](work-packages/wp-m3c-4-ewp.md)
+
 **Objective:** verify the integrated cognition substrate across heterogeneous portfolios and edge cases.
 
 **Deliverables:**
@@ -410,6 +509,8 @@ Dependency/completion graph:
 
 ### WP-M3C-5 — Durable review-ledger primitives
 
+**Execution Work Package:** [docs/work-packages/wp-m3c-5-ewp.md](work-packages/wp-m3c-5-ewp.md)
+
 **Objective:** implement the minimal backward-compatible review state needed to carry findings and repair verification across clean sessions without coupling that work to session-driver/compiler delivery.
 
 **Dependency/boundary:** this WP builds on the existing ReviewResult / ReviewCampaign / FindingDisposition / ClosureDecision contracts and M3C protocol conventions. It is deliberately numbered after the existing M3C-3/4 cards to avoid renumbering accepted roadmap identities, but it may proceed independently of WP-M3C-2/3/4 once WP-M3C-1 is accepted. Rich multi-review fan-out, lenses, falsification, aggregation policy and campaign automation remain M7.
@@ -431,6 +532,8 @@ M3D consumes M3C's deterministic substrate and adds AI-assisted recommendation,
 adaptive workflow topology and the richer setup/explanation UX.
 
 Branch: `feat/m3d-adaptive-planning`.
+
+**Self-development planning rule:** the M3D entries below are scope cards only. Before any M3D implementation begins, the Principal session must expand the selected card into a committed implementation-ready EWP using [IMPLEMENTATION_READY_TEMPLATE.md](work-packages/IMPLEMENTATION_READY_TEMPLATE.md). This is a manual development discipline while DevCadence is not yet self-hosting; it does not depend on runtime enforcement. In particular, the EWP must close authority, failure, missing-state and representability semantics before handing work to an implementation model.
 
 ### WP-M3D-1 — AI-assisted Portfolio Planner
 Use any sufficiently capable eligible endpoint to synthesize typed alternatives

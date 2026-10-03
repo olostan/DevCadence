@@ -40,11 +40,17 @@ For systemic or architectural work, compare at least two viable approaches under
 
 ## 6. Engineering Work Packages
 
-A substantial EWP has a bounded authoritative **Execution Contract** plus retrievable design/rationale. The contract includes objective, revision/base identity, allowed paths, MUST/MUST-NOT requirements, interfaces, acceptance, validation, escalation and exact normative references. Include algorithms/pseudocode and edge-case semantics needed for correct execution. No execution-critical constraint may live only in rationale. If the contract cannot fit, split work, choose an authorized capable endpoint or escalate; never silently truncate. See [docs/WORK_PACKAGES.md](docs/WORK_PACKAGES.md#execution-contract-and-context-manifest) and PROTOCOLS §7.
+A substantial EWP has a bounded authoritative **Execution Contract** plus retrievable design/rationale. The contract includes objective, revision/base identity, scope envelope, MUST/MUST-NOT requirements, interfaces, acceptance, validation, escalation and exact normative references. Include algorithms/pseudocode and edge-case semantics needed for correct execution. No execution-critical constraint may live only in rationale.
+
+Before delegation, the Principal MUST perform an **Implementation Readiness / Contract Completeness Review**. Implementation-critical ambiguity is not delegated. Material requirements must be closed through requirement → invariant/state rule → exact representation → acceptance scenario. Stateful, authority-sensitive or otherwise high-risk work also requires explicit failure cases, authority decisions and missing/unknown-input semantics. Any requirement that cannot be represented unambiguously by the current types/schema/API/state model is a design defect to resolve before implementation, not a choice for the worker.
+
+The readiness question is: *could a competent implementation model with repository/language skill but mediocre architectural judgment implement this without inventing important semantics?* Unresolved architecture, authority, durability, security, persistence or required-input behavior means NOT READY. If the complete ready contract cannot fit the selected endpoint, split work, choose an authorized capable endpoint or escalate; never silently truncate. See [ADR-0024](docs/adr/0024-implementation-ready-work-packages-and-contract-completeness.md), [docs/WORK_PACKAGES.md](docs/WORK_PACKAGES.md#execution-contract-and-context-manifest) and PROTOCOLS §7.
 
 ## 7. Challenge without silent redesign
 
-Workers may adapt names, helpers, local data structures and idioms within the EWP. False assumptions require exact contradiction evidence and escalation. Changing public contracts, cross-layer dependencies, invariants, persistence/security boundaries, external services or scope requires explicit authorization and an amended EWP.
+Workers may adapt names, helpers, private local data structures, repository idioms and bounded test/helper file layout inside the declared implementation domain. A filename list is not a reason to prohibit harmless local decomposition when semantics and domain remain unchanged.
+
+False assumptions or semantic holes require exact contradiction evidence and escalation. Changing public contracts, protocol/schema meaning, cross-layer dependencies, invariants, persistence/crash semantics, security/trust/privacy/spending boundaries, external services/dependencies or unrelated subsystem scope requires explicit authorization and an amended EWP. Missing/unknown behavior that affects a positive requirement must never be filled by plausible invention.
 
 ## 8. Accepted changes require evidence
 

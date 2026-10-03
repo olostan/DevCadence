@@ -142,9 +142,19 @@ flowchart TD
 ### Important behavior
 The implementer should not blindly translate pseudocode line-for-line. It adapts to actual repository idioms while preserving semantic requirements.
 
-It may deviate from SHOULD/SUGGESTED guidance with explanation.
+It may deviate from SHOULD/SUGGESTED guidance with explanation. Within the declared implementation domain it may split/add tests, introduce private helpers and make package-local repository-native refactors when those changes preserve the contract.
 
-It may never silently violate MUST.
+It may never silently violate MUST, and it must not supply missing architecture from intuition. The following are escalation conditions rather than coding choices:
+
+- required behavior has no unambiguous type/schema/API/state representation;
+- normative sources contradict each other;
+- failure/rollback/recovery semantics are materially unspecified;
+- missing/unknown/stale required input has no declared behavior;
+- implementation would change a public contract, protocol/schema meaning, authority/security/privacy/spending boundary, persistence semantics, cross-layer dependency or unrelated subsystem.
+
+For a positive control-plane requirement, absence of evidence is not success unless the contract explicitly defines a default.
+
+The worker's target is to execute a locally complete programming problem, not rediscover the Principal's architecture.
 
 ## 5. Test Designer
 
