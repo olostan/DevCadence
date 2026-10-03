@@ -510,7 +510,7 @@ asking AI to choose the portfolio.
 - Cognitive Invocation Compiler with deterministic task/role/action/path/domain/risk applicability mapping, dependency-closed exact mandatory clause admission, projection freshness and complete-contract admission/reserves (`CONTEXT_UNFIT`);
 - optional-context retrieval baseline: exact/lexical + dependency graph traversal; dense embeddings/reranking are not required M3C implementation and are evaluated experimentally in M4;
 - endpoint-specific prompt-renderer interface so canonical protocol/state stays format-neutral while model-facing task/contract/evidence/action projections can be calibrated;
-- context budget/reference linting for role cores, contracts and compiled packs, plus measured/estimated telemetry and expansion/restart handling (honest unknown opaque-session usage reporting is deferred to a protocol follow-up per PRE-3/KG-2);
+- context budget/reference linting for role cores, contracts and compiled packs, plus honest measured/estimated/unknown telemetry and expansion/restart handling;
 - provider-neutral context-control capabilities: `ContextControl = ExactStateless | AppendOnly | OpaqueSession` and `PrefixCache = Explicit | Implicit | SessionKV | None` (ADR-0019 §1);
 - `Evidence Working Set` lease manager with content-addressed provenance `(file_path, content_digest, start_line, end_line)`, automatic freshness invalidation on file mutation, and server-side path authorization;
 - `RefactoringProposal` protocol definition in Go and JSON Schema (`internal/protocol/`, `schemas/refactoring-proposal.schema.json`) enabling bottom-up upstream challenge (ADR-0019 §3);

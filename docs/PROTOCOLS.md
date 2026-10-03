@@ -524,7 +524,7 @@ Endpoint/access-path and workload-specific capability/budget evidence:
 - `ContextControl = ExactStateless | AppendOnly | OpaqueSession` and `PrefixCache = Explicit | Implicit | SessionKV | None` as adapter-observed capabilities, not inferred from local/remote labels;
 - long-context configuration and cache capabilities where observable; unknown values remain unknown.
 
-Targets are defaults; hard endpoint/policy ceilings are enforced. Model/runtime/configuration changes invalidate calibration applicability. Admission counts all model-visible system/host/tool-schema, contract, normative, state, evidence and tail tokens plus reserves; estimated counts include conservative margin. Opaque CLI session usage reporting is deferred to a protocol follow-up (KG-2, PRE-3).
+Targets are defaults; hard endpoint/policy ceilings are enforced. Model/runtime/configuration changes invalidate calibration applicability. Admission counts all model-visible system/host/tool-schema, contract, normative, state, evidence and tail tokens plus reserves; estimated counts include conservative margin. Hidden tokens in opaque sessions are not reported as exact zero.
 
 Before M4 empirical calibration, an endpoint may use a **provisional** profile: hard fit comes from runtime/declared capacity plus configured policy ceilings, explicit output/reasoning/tool reserves, and conservative accounting uncertainty. Any provisional target ceiling is versioned configuration, not a claim of measured effectiveness; DevCadence does not hard-code a universal percentage of the nominal window. A policy that requires verified effectiveness may declare the provisional endpoint ineligible.
 
