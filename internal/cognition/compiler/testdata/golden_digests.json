@@ -1,8 +1,8 @@
 {
-  "authority_projection": "sha256:1f7b8233d67a37a161e4731d9f0402f19903dc6d600f3a9e4cfaf235906d71da",
-  "catalog": "sha256:f33655bd50a8e82afa6fd3c1fd823b9d7ad6a88e79be38fcb902e01bc40caab5",
-  "invocation_json": "sha256:4b8b08091cf59c69c66e36101dc13bc91b4e5ed986f43db5fee68652685bd93c",
-  "invocation_markdown": "sha256:ffe1b46773d465841f32174b41b34583521bbdb346961caebe06a3b3ad26d3a0",
-  "normative_source": "sha256:ae94b28606098e0ba8e9b50fbb11f2b9d005fda25021e651164203831773a9d0",
+  "authority_projection": "sha256:e65e9f04e0d132856bfb499cf2da11ff93cf54fffca837c11791fd3ac4a9acbd",
+  "catalog": "sha256:5e92de5695dcb673c4c29a43e845c9001901c8edd85c3f05bc1f49230484e871",
+  "invocation_json": "sha256:c1fc7dd9570211bca8f1c9a604e594bf3cb197e9ec7a767b1eddb46daa253a5e",
+  "invocation_markdown": "sha256:2716eb89c0bcc862af5e695ac5ebd35e5ffe811515d80c09d665aa8992d83c3c",
+  "normative_source": "sha256:908bd526b9714ca6ecb3cfc53e29ba85b3c0eded64a132a280022b240b8f4810",
   "pack": "sha256:beb6cb6d93b1b900fd7e12ab4c005fe36886ee7ed9041f7216e64c63fc3b7d9c"
 }
