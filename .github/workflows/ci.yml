@@ -1,0 +1,104 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  static:
+    name: static
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Formatting, module hygiene, vet, and diff checks
+        env:
+          DIFF_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
+        run: make fmt-check diff-check mod-check vet
+
+  test-contracts:
+    name: test-contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Unit, schema, and documentation contracts
+        run: make test schemas docs-check
+
+  race:
+    name: race
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Race detector
+        run: make race
+
+  coverage:
+    name: coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Compare PR coverage with exact base
+        if: github.event_name == 'pull_request'
+        env:
+          COVERAGE_EXPORT_DIR: ${{ github.workspace }}
+        run: sh scripts/health/coverage-guard.sh "${{ github.event.pull_request.base.sha }}" "."
+      - name: Measure main coverage
+        if: github.event_name != 'pull_request'
+        run: |
+          make coverage
+          total=$(awk '/^total:/ { print $3 }' coverage.txt)
+          printf "candidate=%s\n" "$total" > coverage-summary.txt
+      - name: Coverage summary
+        if: always()
+        run: |
+          if [ -f coverage-summary.txt ]; then
+            {
+              echo "### Coverage"
+              echo
+              echo '~~~text'
+              cat coverage-summary.txt
+              echo '~~~'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Upload coverage artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: |
+            coverage.out
+            coverage.txt
+            coverage-summary.txt
+          if-no-files-found: ignore
