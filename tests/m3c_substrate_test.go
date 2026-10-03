@@ -2135,9 +2135,8 @@ func TestM3CSubstrate_ACC10_MissingAndUnknownResourceFacts(t *testing.T) {
 		}
 	}
 
-	// (b) default policy, same host with unknown metrics -> valid (KG-1)
-	t.Run("ACC-10_DefaultPolicy_AcceptsUnknownMetrics_KG1", func(t *testing.T) {
-		// KG-1: DefaultValidationPolicy leaves RequireKnownResourceState false, so unknown host metrics pass.
+	// (b) default policy, same host with unknown metrics -> invalid (KG-1 closed)
+	t.Run("ACC-10_DefaultPolicy_RejectsUnknownMetrics", func(t *testing.T) {
 		polB := cognition.DefaultValidationPolicy()
 		resB := validator.Validate(cognition.ValidationInput{
 			Portfolio:       p,
@@ -2148,10 +2147,38 @@ func TestM3CSubstrate_ACC10_MissingAndUnknownResourceFacts(t *testing.T) {
 			Policy:          &polB,
 			Clock:           clk,
 		})
-		if !resB.Valid {
-			t.Errorf("expected default policy to accept unknown metrics per KG-1, got: %v", resB.Summary())
+		if resB.Valid {
+			t.Fatalf("expected default policy to reject unknown metrics")
 		}
-		assertNoResourceDiagnostics(t, resB)
+		var found bool
+		for _, d := range resB.Diagnostics {
+			if d.Code == cognition.CodeUnknownResourceState && d.Condition == cognition.ConditionUnknown && d.ViolatedRule == "DCI-005" {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("expected UNKNOWN_RESOURCE_STATE, got: %v", resB.Diagnostics)
+		}
+	})
+
+	// (b2) explicit opt-out (both flags false) -> valid
+	t.Run("ACC-10_ExplicitPolicyOptOut_AcceptsUnknownMetrics", func(t *testing.T) {
+		polB2 := cognition.DefaultValidationPolicy()
+		polB2.RequireKnownResourceState = false
+		polB2.RequireKnownBudgetState = false
+		resB2 := validator.Validate(cognition.ValidationInput{
+			Portfolio:       p,
+			MachineProfile:  mp,
+			Inventory:       inv,
+			ContextProfiles: cp,
+			ResourceStates:  hostWithUnknownMetrics,
+			Policy:          &polB2,
+			Clock:           clk,
+		})
+		if !resB2.Valid {
+			t.Errorf("expected explicit opt-out to accept unknown metrics, got: %v", resB2.Summary())
+		}
+		assertNoResourceDiagnostics(t, resB2)
 	})
 
 	// (c) default policy, no ResourceStates -> valid (KG-1)
@@ -2193,8 +2220,8 @@ func TestM3CSubstrate_ACC10_MissingAndUnknownResourceFacts(t *testing.T) {
 	})
 
 	// (e) default policy, BudgetStates with BudgetStatusUnknown -> valid (KG-1)
-	t.Run("ACC-10_DefaultPolicy_AcceptsBudgetStatusUnknown_KG1", func(t *testing.T) {
-		// KG-1: BudgetStatusUnknown is not read by PortfolioValidator under DefaultValidationPolicy.
+	t.Run("ACC-10_DefaultPolicy_LocalComputePool_ExemptFromBudgetStatusUnknown", func(t *testing.T) {
+		// local_compute pools carry no spend and are exempt from unknown-budget checks (REQ-07).
 		polE := cognition.DefaultValidationPolicy()
 		budgetStatesWithUnknown := map[string]*protocol.BudgetState{
 			"pool-local": {
@@ -2212,9 +2239,64 @@ func TestM3CSubstrate_ACC10_MissingAndUnknownResourceFacts(t *testing.T) {
 			Clock:           clk,
 		})
 		if !resE.Valid {
-			t.Errorf("expected default policy to accept BudgetStatusUnknown per KG-1, got: %v", resE.Summary())
+			t.Errorf("expected local_compute pool with unknown status to remain valid, got: %v", resE.Summary())
 		}
 		assertNoResourceDiagnostics(t, resE)
+	})
+
+	// Spend-bearing variants: the used pool is subscription_quota.
+	spendPortfolio := func() *protocol.CognitionPortfolio {
+		cp2 := *p
+		cp2.BudgetPools = append([]protocol.BudgetPool(nil), p.BudgetPools...)
+		cp2.BudgetPools[0].Regime = protocol.RegimeSubscriptionQuota
+		cp2.BudgetPools[0].Unit = protocol.UnitRequests
+		cp2.BudgetPools[0].Period = protocol.PeriodBillingCycle
+		return &cp2
+	}
+	runSpend := func(states map[string]*protocol.BudgetState, pol cognition.ValidationPolicy) cognition.ValidationResult {
+		return validator.Validate(cognition.ValidationInput{
+			Portfolio:       spendPortfolio(),
+			MachineProfile:  mp,
+			Inventory:       inv,
+			ContextProfiles: cp,
+			BudgetStates:    states,
+			Policy:          &pol,
+			Clock:           clk,
+		})
+	}
+	unknownBudgetObserved := func(res cognition.ValidationResult) []string {
+		var out []string
+		for _, d := range res.Diagnostics {
+			if d.Code == cognition.CodeUnknownBudgetState && d.Condition == cognition.ConditionUnknown && d.ViolatedRule == "DCI-005" {
+				out = append(out, d.Observed)
+			}
+		}
+		return out
+	}
+
+	t.Run("ACC-10_SpendPool_UnknownStatus_FailsClosed", func(t *testing.T) {
+		res := runSpend(map[string]*protocol.BudgetState{"pool-local": {PoolID: "pool-local", Status: protocol.BudgetStatusUnknown}}, cognition.DefaultValidationPolicy())
+		got := unknownBudgetObserved(res)
+		if res.Valid || len(got) != 1 || got[0] != "unknown" {
+			t.Errorf("expected invalid with one UNKNOWN_BUDGET_STATE observed unknown; valid=%v got=%v diags=%v", res.Valid, got, res.Diagnostics)
+		}
+	})
+
+	t.Run("ACC-10_SpendPool_AbsentEntry_FailsClosed", func(t *testing.T) {
+		res := runSpend(map[string]*protocol.BudgetState{}, cognition.DefaultValidationPolicy())
+		got := unknownBudgetObserved(res)
+		if res.Valid || len(got) != 1 || got[0] != "missing" {
+			t.Errorf("expected invalid with one UNKNOWN_BUDGET_STATE observed missing; valid=%v got=%v diags=%v", res.Valid, got, res.Diagnostics)
+		}
+	})
+
+	t.Run("ACC-10_SpendPool_ExplicitOptOut_Accepts", func(t *testing.T) {
+		pol := cognition.DefaultValidationPolicy()
+		pol.RequireKnownBudgetState = false
+		res := runSpend(map[string]*protocol.BudgetState{"pool-local": {PoolID: "pool-local", Status: protocol.BudgetStatusUnknown}}, pol)
+		if !res.Valid || len(unknownBudgetObserved(res)) != 0 {
+			t.Errorf("expected explicit opt-out to accept unknown budget state, got: %v", res.Summary())
+		}
 	})
 }
 

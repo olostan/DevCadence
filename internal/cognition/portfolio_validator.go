@@ -22,6 +22,7 @@ type ValidationPolicy struct {
 	RequireVerifiedAcceleration bool                      `json:"require_verified_acceleration"`
 	RequireKnownContextControl  bool                      `json:"require_known_context_control"`
 	RequireKnownResourceState   bool                      `json:"require_known_resource_state"`
+	RequireKnownBudgetState     bool                      `json:"require_known_budget_state"`
 	MinContractLimitTokens      int                       `json:"min_contract_limit_tokens,omitempty"`
 	RoleRequirements            map[Role]RoleRequirement  `json:"role_requirements,omitempty"`
 }
@@ -32,6 +33,11 @@ func DefaultValidationPolicy() ValidationPolicy {
 		MaxSourceExposure: protocol.ExposureFocusedSnippets,
 		MaxCostClass:      protocol.CostRemoteEconomy,
 		RoleRequirements:  DefaultRequirements(),
+		// Fail closed on unknown observed state (DCI-005, KG-1). A policy built
+		// as a struct literal or decoded from JSON defaults these to false,
+		// which is an explicit opt-out.
+		RequireKnownResourceState: true,
+		RequireKnownBudgetState:   true,
 	}
 }
 

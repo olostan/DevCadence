@@ -52,6 +52,7 @@ const (
 	CodeHardwareBackendUnavailable  = "HARDWARE_BACKEND_UNAVAILABLE"
 	CodeResourceCapacityExceeded    = "RESOURCE_CAPACITY_EXCEEDED"
 	CodeUnknownResourceState        = "UNKNOWN_RESOURCE_STATE"
+	CodeUnknownBudgetState          = "UNKNOWN_BUDGET_STATE"
 	CodePortfolioStructureInvalid   = "PORTFOLIO_STRUCTURE_INVALID"
 	CodeDiversityViolation          = "DIVERSITY_VIOLATION"
 	CodeEscalationRuleInvalid       = "ESCALATION_RULE_INVALID"
