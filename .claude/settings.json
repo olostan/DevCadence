@@ -1,0 +1,14 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"${CLAUDE_PROJECT_DIR:-.}\" && make -s hooks-install >/dev/null 2>&1 || true"
+          }
+        ]
+      }
+    ]
+  }
+}

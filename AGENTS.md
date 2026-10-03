@@ -70,6 +70,10 @@ Trajectories produce LessonCandidates/PolicyExperiments, not direct autonomous c
 
 Do not merge worker changes directly to protected main. Use isolated branches/worktrees under the applicable runtime manager; development of DevCadence itself follows [AGENT_HANDOFF_PROTOCOL.md](AGENT_HANDOFF_PROTOCOL.md), including its single-writer and no-force-push rules. Preserve task/EWP, base, attempt, validation, review and acceptance lineage.
 
+**Hooks are mandatory setup for every agent, whatever the tool.** In every fresh clone or sandbox, before the first commit, run `make hooks-install` (idempotent; sets `core.hooksPath` to the versioned `.githooks/`) and confirm with `make hooks-check`. Git does not install hooks on clone, and one install per repository covers its worktrees. Do not bypass the hooks (`--no-verify`, `-c core.hooksPath=…`) to land a candidate. The only exception is bootstrapping a fix to the health scripts themselves, which run from `HEAD`: run the fixed `scripts/health/precommit.sh` manually against the exact staged tree and disclose the bypass and that evidence in the commit message and PR. If the install cannot run in your environment, say so in the PR or handoff; CI and the `main` ruleset remain authoritative. See [docs/ENGINEERING_HEALTH_POLICY.md](docs/ENGINEERING_HEALTH_POLICY.md#2-local-gates).
+
+`CLAUDE.md` and `GEMINI.md` exist only to import this file for tools that do not read `AGENTS.md` natively; they must not hold rules of their own.
+
 ## 13. Engineering defaults
 
 Go control plane, SQLite canonical storage, typed Go plus versioned JSON Schemas, integrations behind interfaces, thin MCP adapters, CLI first, structured logs, explicit cancellation/timeouts, bounded concurrency, no hidden global mutable state and deterministic tests. Apply relevant [ENGINEERING_STANDARDS.md](ENGINEERING_STANDARDS.md) clauses.
