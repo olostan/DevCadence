@@ -85,13 +85,17 @@ const (
 	NameWorkflowPlan            Name = "workflow-plan"
 )
 
-// Names of the review-convergence schemas published ahead of full M7 campaign
-// orchestration. WP-M3C-5 adds companion ReviewFinding / FindingResolution /
-// ResolutionVerification Go+schema records without claiming full campaign runtime.
+// Names of the review-convergence schemas.
+// WP-M3C-5 adds companion ReviewFinding / FindingResolution / ResolutionVerification
+// Go+schema records; campaign orchestration contracts (ReviewCampaign, FindingDisposition,
+// ClosureDecision) remain awaiting full M7 implementation.
 const (
-	NameReviewCampaign     Name = "review-campaign"
-	NameFindingDisposition Name = "finding-disposition"
-	NameClosureDecision    Name = "closure-decision"
+	NameReviewCampaign         Name = "review-campaign"
+	NameFindingDisposition     Name = "finding-disposition"
+	NameClosureDecision        Name = "closure-decision"
+	NameReviewFinding          Name = "review-finding"
+	NameFindingResolution      Name = "finding-resolution"
+	NameResolutionVerification Name = "resolution-verification"
 )
 
 // RecordKindToSchema maps a Go record kind to the schema that governs it.
@@ -133,6 +137,9 @@ var RecordKindToSchema = map[string]Name{
 	"CognitionPortfolio":        NameCognitionPortfolio,
 	"PortfolioRecommendation":   NamePortfolioRecommendation,
 	"WorkflowPlan":              NameWorkflowPlan,
+	"ReviewFinding":             NameReviewFinding,
+	"FindingResolution":         NameFindingResolution,
+	"ResolutionVerification":    NameResolutionVerification,
 }
 
 // Set is a compiled collection of schemas.
@@ -282,6 +289,7 @@ func AllNames() []Name {
 		NameEvidenceLease, NameRefactoringProposal, NameBudgetPool,
 		NameBudgetState, NameResourceState, NameCognitionPortfolio,
 		NamePortfolioRecommendation, NameWorkflowPlan,
+		NameReviewFinding, NameFindingResolution, NameResolutionVerification,
 	}
 	sort.Slice(names, func(i, j int) bool {
 		if len(names[i]) != len(names[j]) {

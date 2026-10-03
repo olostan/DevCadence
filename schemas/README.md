@@ -16,6 +16,9 @@ This directory contains versioned machine-readable contracts for durable DevCade
 - `review-campaign.schema.json`
 - `finding-disposition.schema.json`
 - `closure-decision.schema.json`
+- `review-finding.schema.json`
+- `finding-resolution.schema.json`
+- `resolution-verification.schema.json`
 
 ### Environment and cognition capability
 

@@ -519,7 +519,7 @@ Dependency/completion graph:
 
 **Execution Work Package:** [docs/work-packages/wp-m3c-5-ewp.md](work-packages/wp-m3c-5-ewp.md)
 
-**Status:** READY_FOR_IMPLEMENTATION (design decisions D-1..D-3 owner-approved; independent readiness review recorded).
+**Status:** IMPLEMENTED (WP-M3C-5 completed with Go/schema twins, CheckVerification, DeriveFindingResolutionState, and clean-session derivation; awaiting M7 orchestration and ClosureDecision wiring).
 
 **Objective:** implement the minimal backward-compatible review state needed to carry findings and repair verification across clean sessions without coupling that work to session-driver/compiler delivery.
 
