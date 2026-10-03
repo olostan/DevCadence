@@ -299,3 +299,59 @@ func TestActivationManager_SyncDirFailureRollback(t *testing.T) {
 			lineage.CurrentPortfolioID, lineage.CurrentSequence)
 	}
 }
+
+func TestActivationManager_FinalSyncDirFailureAfterCommitDoesNotFailActivation(t *testing.T) {
+	ctx := context.Background()
+	clk := clock.NewFake(time.Date(2026, 10, 2, 22, 0, 0, 0, time.UTC), time.Second)
+	validator := cognition.NewPortfolioValidator()
+
+	mp := makeTestMachineProfile()
+	inv := makeTestInventory()
+	cp := makeTestContextProfiles()
+
+	tmpDir, err := os.MkdirTemp("", "devcadence-final-sync-commit-*")
+	if err != nil {
+		t.Fatalf("MkdirTemp failed: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	mgr, err := cognition.NewActivationManager(tmpDir, validator, clk)
+	if err != nil {
+		t.Fatalf("NewActivationManager failed: %v", err)
+	}
+
+	p := makeTestPortfolio()
+	p.PortfolioID = "port-commit-test"
+	p.Revision = 1
+
+	// Injected syncDirHook only fails if pending journal has already been removed (post-commit)
+	pendingPath := filepath.Join(tmpDir, cognition.PendingActivationFileName)
+	mgr.SetSyncDirHookForTesting(func(dirPath string) error {
+		if _, statErr := os.Stat(pendingPath); os.IsNotExist(statErr) {
+			return errors.New("simulated fsync failure on directory after pending journal unlinked")
+		}
+		return nil
+	})
+
+	rec, err := mgr.Activate(ctx, cognition.ValidationInput{
+		Portfolio:       p,
+		MachineProfile:  mp,
+		Inventory:       inv,
+		ContextProfiles: cp,
+		Clock:           clk,
+	})
+	if err != nil {
+		t.Fatalf("expected Activate to succeed even if post-commit directory sync fails, got: %v", err)
+	}
+	if rec.PortfolioID != "port-commit-test" {
+		t.Errorf("expected activation record for 'port-commit-test', got %q", rec.PortfolioID)
+	}
+
+	active, _, err := mgr.GetActivePortfolio(ctx)
+	if err != nil {
+		t.Fatalf("GetActivePortfolio failed: %v", err)
+	}
+	if active.PortfolioID != "port-commit-test" {
+		t.Errorf("expected active portfolio to be 'port-commit-test', got %q", active.PortfolioID)
+	}
+}

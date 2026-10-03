@@ -125,13 +125,12 @@ func (m *ActivationManager) persistActivationLocked(record ActivationRecord, pre
 		return rollbackOnFailure(errs.Wrap(errs.CategoryInternal, err, "failed to write active-portfolio.lineage.json"))
 	}
 
-	// 5. Commit complete: remove transaction intent only after all writes succeed
-	if err := os.Remove(pendingPath); err != nil && !os.IsNotExist(err) {
-		return errs.Wrap(errs.CategoryInternal, err, "failed to remove pending activation intent")
-	}
-	if err := m.syncDir(m.dir); err != nil {
-		return errs.Wrap(errs.CategoryInternal, err, "failed to sync directory after activation")
-	}
+	// 5. Commit complete: all state components and their directory syncs have succeeded,
+	// making the new activation durable and visible. Clean up the pending activation journal.
+	// A directory sync failure at this point does not invalidate the already-visible activation;
+	// if an unlinked journal survives an abrupt crash, startup recovery rolls forward idempotently.
+	_ = os.Remove(pendingPath)
+	_ = m.syncDir(m.dir)
 
 	return nil
 }
@@ -180,12 +179,8 @@ func (m *ActivationManager) recoverStartupLocked() error {
 	}
 
 	// Commit recovery: remove pending intent only after all recovery writes have succeeded
-	if err := os.Remove(pendingPath); err != nil && !os.IsNotExist(err) {
-		return errs.Wrap(errs.CategoryInternal, err, "failed to remove pending journal after recovery")
-	}
-	if err := m.syncDir(m.dir); err != nil {
-		return errs.Wrap(errs.CategoryInternal, err, "failed to sync directory after recovery")
-	}
+	_ = os.Remove(pendingPath)
+	_ = m.syncDir(m.dir)
 
 	return m.cleanTempFilesLocked()
 }
