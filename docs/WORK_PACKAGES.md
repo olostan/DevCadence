@@ -494,7 +494,7 @@ Dependency/completion graph:
 **Deliverables:**
 - End-to-end integration test suite in `tests/m3c_substrate_test.go` covering:
   - Exact stateless vs. opaque session driver behavior;
-  - Oversized contract/pack rejection without truncation; stale normative projection rejection; unmapped-domain re-resolution; output reserve accounting; independent read/write authority; expansion within policy and honest unknown opaque-session usage;
+  - Oversized contract/pack rejection without truncation; stale normative projection rejection; unmapped-domain re-resolution; output reserve accounting; independent read/write authority; expansion within policy (honest unknown opaque-session usage is **deferred**: the current protocol cannot represent an unknown usage measurement, see the EWP §3A KG-2; it needs a protocol follow-up);
   - Mandatory rule admission unaffected by low semantic similarity; always/capability-default/mapped admission classes have reverse coverage; optional ranking cannot remove mandatory clauses;
   - Provisional uncalibrated ContextProfiles use hard/runtime bounds + explicit reserves/uncertainty and never claim verified effectiveness;
   - Endpoint prompt projection preserves the same canonical task/contract/evidence semantics across at least two renderers/driver shapes, including hostile evidence containing apparent closing tags/fences;

@@ -17,8 +17,8 @@
 | ID | Prerequisite | Owner | Why |
 | --- | --- | --- | --- |
 | PRE-1 | `compiler.EscapeEvidenceDelimiters` neutralizes every container opening tag the TaggedMarkdownRenderer emits (at minimum `<cognitive_state>`, `<ephemeral_tail>`) in untrusted channels, delivered as a separate small hardening change before this WP is delegated. | Principal | Probed on the base commit: an evidence body containing `<cognitive_state>` or `<ephemeral_tail>` renders those tags twice in the tagged prompt (container count 2, expected 1). ACC-08 requires exactly one. This WP MUST NOT change the escaper (§2). |
-| PRE-2 | Principal accepts known gaps KG-1..KG-5 (§3A) as the accepted behavior this WP verifies, or amends them first. | Principal | They are accepted-code behavior this WP can only characterize, not fix. |
-| PRE-3 | Principal decides how the scope-card deliverable "honest unknown opaque-session usage" is handled (see KG-2). Default proposed in §3A: deliver nothing for it here, amend the card and plan. | Principal | The current protocol cannot represent it. |
+| PRE-2 | **CLEARED** — owner approved on 2026-10-03: KG-1..KG-5 (§3A) are the accepted behavior this WP verifies. Unknown-quota default is NOT changed inside this WP; fixing it (fail closed by default) is a separate small follow-up. | Principal | They are accepted-code behavior this WP can only characterize, not fix. |
+| PRE-3 | **CLEARED** — owner approved on 2026-10-03: the scope-card deliverable "honest unknown opaque-session usage" is deferred to a protocol follow-up (KG-2); nothing is delivered for it here; the WORK_PACKAGES.md card is amended accordingly. | Principal | The current protocol cannot represent it. |
 | PRE-4 | Independent readiness re-review of this revision recorded (ADR-0024 gate). | Reviewer | r1's self-assessed PASS was contradicted by independent review. |
 
 ## 1. Objective
@@ -230,9 +230,9 @@ authority decisions specified: 5/5
 missing/unknown input semantics: 8/8 rows (§7)
 acceptance scenarios mapped: 14/14 (trace line in §9)
 known gaps recorded: 5 (KG-1..KG-5)
-unresolved architecture choices: 3 pending Principal decisions (PRE-1 escaper hardening, PRE-2 gap acceptance, PRE-3 opaque-usage deliverable)
+unresolved architecture choices: 1 pending (PRE-1 escaper hardening; PRE-2 and PRE-3 cleared by the owner)
 declared local-discretion choices: 3
-readiness: NOT_READY (BLOCKED on PRE-1..PRE-4)
+readiness: NOT_READY (BLOCKED on PRE-1 escaper hardening and PRE-4 independent re-review)
 ```
 
 Self-assessment only. This revision has not yet had an independent readiness review (PRE-4); the weaker-implementer check is therefore **not** claimed.
