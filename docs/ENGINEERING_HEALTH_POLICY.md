@@ -17,13 +17,15 @@ This document owns the concrete repository policy that turns DevCadence's engine
 
 ## 2. Local gates
 
-Install repository hooks once per clone:
+Enable the repository hooks once per clone:
 
 ```sh
 make hooks-install
 ```
 
-The installed hooks invoke versioned repository scripts, so later policy improvements do not require reinstalling the hooks. The hooks run the scripts as committed at `HEAD`, not from the working tree, so neither unstaged edits nor the change being committed can weaken the gate that checks it; changes to `scripts/health/*` take effect for later commits once they are committed and reviewed. An existing different hook is saved as `<hook>.devcadence-backup` before being replaced. Existing historical formatting debt is not grandfathered into changed code: formatting is enforced on staged files locally and on files changed from the exact merge base in CI.
+Git never installs hooks on clone, so this step is manual for every clone, including fresh agent sandboxes. It sets `core.hooksPath` to the versioned `.githooks/` directory instead of copying files, so hook updates apply on `git pull` with no reinstall, and there is no stale copy. A pre-existing hook in `.git/hooks` is left in place but is ignored once `core.hooksPath` is set; `make hooks-install` says so. `make build` and `make verify` print a warning (they never fail) when the clone has not enabled the hooks. CI is authoritative regardless: a clone without hooks cannot merge an unhealthy change.
+
+The hooks run the repository scripts as committed at `HEAD`, not from the working tree, so neither unstaged edits to `scripts/health/*` nor the change being committed can weaken the gate that checks it; changes to those scripts take effect for later commits once they are committed and reviewed. The thin wrappers in `.githooks/` are read from the working tree, so changes to them take effect immediately. Existing historical formatting debt is not grandfathered into changed code: formatting is enforced on staged files locally and on files changed from the exact merge base in CI.
 
 ### Pre-commit
 
@@ -63,6 +65,7 @@ Repository health policy is exposed through Make targets so local checks and Git
 - `make precommit`
 - `make prepush`
 - `make hooks-install`
+- `make hooks-check`
 
 Workflow YAML should orchestrate these targets rather than reimplementing repository policy.
 

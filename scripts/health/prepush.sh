@@ -43,7 +43,7 @@ for sha in $shas; do
   (
     cd "$worktree"
     # Hook-provided repository variables must not redirect Git inside the worktree.
-    unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE
+    unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_PREFIX GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES
     FMT_BASE="$base" DIFF_BASE="$base" make ci
   )
   git -C "$repo_root" worktree remove --force "$worktree" >/dev/null 2>&1 || true

@@ -392,9 +392,13 @@ bin/devcadence state show -project demo -at 4   # any historical revision
 Verification:
 
 ```bash
-make verify        # go vet ./... && go test ./... && schema validation
+make hooks-install # once per clone: enable the versioned pre-commit/pre-push health hooks
+make verify        # fmt/whitespace/module checks, go vet, go test, schemas, docs integrity
 make race          # the suite under the race detector
+make ci            # full local equivalent of the CI health gate (adds race and coverage)
 ```
+
+See [docs/ENGINEERING_HEALTH_POLICY.md](docs/ENGINEERING_HEALTH_POLICY.md) for what the hooks and CI enforce.
 
 ## Operating on a real repository (M2)
 

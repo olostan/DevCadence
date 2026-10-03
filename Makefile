@@ -8,12 +8,19 @@ BIN_DIR ?= bin
 COVERAGE_PROFILE ?= coverage.out
 COVERAGE_REPORT ?= coverage.txt
 
-.PHONY: all build fmt-check diff-check mod-check test vet race schemas docs-check coverage verify ci precommit prepush hooks-install clean
+.PHONY: all build hooks-check fmt-check diff-check mod-check test vet race schemas docs-check coverage verify ci precommit prepush hooks-install clean
 
 all: verify
 
+## hooks-check: warn (never fail) when this clone has not enabled the repository hooks.
+hooks-check:
+	@if [ -z "$$CI" ] && git rev-parse --git-dir >/dev/null 2>&1 && \
+	   [ "$$(git config --get core.hooksPath)" != ".githooks" ]; then \
+		echo "warning: repository health hooks are not enabled in this clone; run 'make hooks-install' once" >&2; \
+	fi
+
 ## build: compile the CLI into bin/devcadence.
-build:
+build: hooks-check
 	$(GO) build -o $(BIN_DIR)/devcadence ./cmd/devcadence
 
 ## fmt-check: fail if Go files changed from the selected merge base are not gofmt-clean.
@@ -73,7 +80,7 @@ coverage:
 	$(GO) tool cover -func=$(COVERAGE_PROFILE) | tee $(COVERAGE_REPORT)
 
 ## verify: deterministic repository verification suitable for normal development.
-verify: fmt-check diff-check mod-check vet test schemas docs-check
+verify: hooks-check fmt-check diff-check mod-check vet test schemas docs-check
 
 ## ci: full local equivalent of the blocking CI health gate. The coverage run
 ## executes the whole suite, so the plain test target is not repeated.
@@ -87,19 +94,17 @@ precommit:
 prepush:
 	sh scripts/health/prepush.sh
 
-## hooks-install: install tiny Git hooks that delegate to versioned repository policy.
+## hooks-install: enable the versioned Git hooks for this clone (core.hooksPath=.githooks).
 hooks-install:
-	@hooks_dir="$$(git rev-parse --git-path hooks)"; \
-	mkdir -p "$$hooks_dir"; \
+	@chmod +x .githooks/pre-commit .githooks/pre-push; \
+	git config core.hooksPath .githooks; \
+	hooks_dir="$$(git rev-parse --git-common-dir)/hooks"; \
 	for hook in pre-commit pre-push; do \
-		if [ -f "$$hooks_dir/$$hook" ] && ! cmp -s ".githooks/$$hook" "$$hooks_dir/$$hook"; then \
-			cp "$$hooks_dir/$$hook" "$$hooks_dir/$$hook.devcadence-backup"; \
-			echo "Existing $$hook hook saved as $$hook.devcadence-backup"; \
+		if [ -f "$$hooks_dir/$$hook" ]; then \
+			echo "note: $$hooks_dir/$$hook is ignored while core.hooksPath=.githooks; remove it if it is not needed" >&2; \
 		fi; \
-		cp ".githooks/$$hook" "$$hooks_dir/$$hook"; \
 	done; \
-	chmod +x "$$hooks_dir/pre-commit" "$$hooks_dir/pre-push"; \
-	echo "Installed DevCadence hooks in $$hooks_dir"
+	echo "Enabled DevCadence hooks: core.hooksPath=.githooks (pre-commit, pre-push). Hook updates apply on git pull."
 
 clean:
 	rm -rf $(BIN_DIR) $(COVERAGE_PROFILE) $(COVERAGE_REPORT)
