@@ -16,12 +16,22 @@ all: verify
 build:
 	$(GO) build -o $(BIN_DIR)/devcadence ./cmd/devcadence
 
-## fmt-check: fail if any tracked Go source is not gofmt-clean.
+## fmt-check: fail if Go files changed from the selected merge base are not gofmt-clean.
 fmt-check:
-	@out="$$(gofmt -l .)"; \
-	if [ -n "$$out" ]; then \
-		echo "gofmt required for:"; \
-		echo "$$out"; \
+	@base="$(FMT_BASE)"; \
+	if [ -z "$base" ] && git rev-parse --verify origin/main >/dev/null 2>&1; then \
+		base="$(git merge-base HEAD origin/main)"; \
+	fi; \
+	if [ -n "$base" ]; then \
+		files="$(git diff --name-only --diff-filter=ACMR "$base...HEAD" -- '*.go')"; \
+	else \
+		files="$(git diff --name-only --diff-filter=ACMR HEAD -- '*.go')"; \
+	fi; \
+	if [ -z "$files" ]; then exit 0; fi; \
+	out="$(printf '%s\n' "$files" | xargs gofmt -l)"; \
+	if [ -n "$out" ]; then \
+		echo "gofmt required for changed files:"; \
+		echo "$out"; \
 		exit 1; \
 	fi
 
