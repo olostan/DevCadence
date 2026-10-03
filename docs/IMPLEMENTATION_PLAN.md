@@ -540,7 +540,7 @@ similarity is still admitted, mandatory admission classes have reverse coverage,
 optional retrieval cannot displace required authority, provisional profiles do
 not masquerade as calibrated evidence, hostile evidence delimiters cannot escape
 their PromptProjection container, and an oversized mandatory pack returns
-`CONTEXT_UNFIT`. Separately, WP-M3C-5 proves review finding/resolution state
+`CONTEXT_UNFIT`. Substrate integration verification across heterogeneous portfolios and known gaps (KG-1..KG-5) is verified in WP-M3C-4 (`tests/m3c_substrate_test.go`). Separately, WP-M3C-5 proves review finding/resolution state
 survives a clean-session handoff without permitting author self-verification.
 
 #### Exit criterion
