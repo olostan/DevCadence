@@ -347,6 +347,8 @@ Dependency/completion graph:
 
 2A and 2B share WP-M3C-1 protocol contracts but are independently acceptable; neither may silently absorb the other's unfinished scope. M4's compiler/context experiments require 2B acceptance, so the compiler does **not** silently slip past the evidence gate. If either slice expands beyond its stated boundary, the Principal must split it again before implementation rather than enlarge the EWP.
 
+**Post-WP-M3C-2B health inter-step:** merge of WP-M3C-2B triggers the behavior-preserving **WP-M3C-R1 Structural Consolidation Refactoring Epoch** ([EWP](work-packages/wp-m3c-r1-structural-consolidation.md)) under DCI-060..063. R1 records whole-repository structural findings but begins with a bounded compiler decomposition; setup/protocol/other hotspots remain explicit follow-up slices rather than silently expanding the first refactor. The epoch must preserve behavior, protocol/schema semantics, deterministic digests, fail-closed authority, and verification evidence.
+
 
 **Objective:** build the session-driver abstraction across heterogeneous cognition endpoints and compile bounded, complete model invocations without requiring agents to understand DevCadence's full rule/process corpus.
 
