@@ -63,10 +63,12 @@ type PendingActivation struct {
 // ActivationManager coordinates deterministic validation, atomic versioned activation,
 // and safe rollback of cognition portfolios.
 type ActivationManager struct {
-	mu        sync.Mutex
-	dir       string
-	validator *PortfolioValidator
-	clock     clock.Clock
+	mu             sync.Mutex
+	dir            string
+	validator      *PortfolioValidator
+	clock          clock.Clock
+	postRenameHook func(targetPath string) error
+	syncDirHook    func(dirPath string) error
 }
 
 // NewActivationManager creates an ActivationManager storing state in dir and performs startup recovery.
@@ -136,12 +138,10 @@ func (m *ActivationManager) Activate(ctx context.Context, input ValidationInput)
 	seq := 1
 	prevActID := ""
 	prevPortID := ""
-	var history []ActivationRecord
 	if lineage != nil {
 		seq = lineage.CurrentSequence + 1
 		prevActID = lineage.CurrentActivationID
 		prevPortID = lineage.CurrentPortfolioID
-		history = lineage.History
 	}
 
 	now := m.clock.Now().UTC()
@@ -162,7 +162,7 @@ func (m *ActivationManager) Activate(ctx context.Context, input ValidationInput)
 	}
 
 	// 3. Atomically persist activation
-	if err := m.persistActivationLocked(record, history); err != nil {
+	if err := m.persistActivationLocked(record, lineage); err != nil {
 		return nil, err
 	}
 
@@ -266,7 +266,7 @@ func (m *ActivationManager) rollbackToLocked(ctx context.Context, targetActID st
 		RollbackTargetActivationID: targetActID,
 	}
 
-	if err := m.persistActivationLocked(newRecord, lineage.History); err != nil {
+	if err := m.persistActivationLocked(newRecord, lineage); err != nil {
 		return nil, err
 	}
 
@@ -323,4 +323,11 @@ func (m *ActivationManager) GetActivationHistory(ctx context.Context) ([]Activat
 	out := make([]ActivationRecord, len(lineage.History))
 	copy(out, lineage.History)
 	return out, nil
+}
+
+// GetLineage returns the current portfolio lineage metadata.
+func (m *ActivationManager) GetLineage(ctx context.Context) (*PortfolioLineage, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.loadLineageLocked()
 }
