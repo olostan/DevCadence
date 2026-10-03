@@ -919,7 +919,7 @@ digest.
 While current milestones focus on a single-developer, local-first control plane, DevCadence preserves explicit architectural seams for future distributed and multi-user operation:
 
 - **Multiple Collaborative Actors**: Multiple developers, local workers, remote/cloud cognition runners, CI automation agents, and delegated independent reviewers working on the same repository.
-- **Explicit Provenance and Authority Layers**: Every invariant, contract, and finding tracks its `AuthoritySource` (`system | organization | project | task`). Organization-level policies can be composed without altering engine invariants or target project baselines.
+- **Explicit Provenance and Authority Layers**: The architecture preserves a path for every invariant, contract, and finding to carry explicit `AuthoritySource` provenance (`system | organization | project | task`). Organization-level policies can be composed without altering engine invariants or target project baselines.
 - **Control-Plane Effect Authority**: Capabilities represent execution effect authority (`write`, `exec`, `credentials`, `network`, `spending`, `state`) verified and attached by the deterministic control plane, preventing models from self-granting or negotiating privileges.
 - **Actor/Identity Decoupling**: The `ContextManifest` and context pack admission architecture naturally accommodate future human identity, actor signatures, and RBAC tiers without requiring structural redesign or premature IAM/PKI complexity in early milestones.
 

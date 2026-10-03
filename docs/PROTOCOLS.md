@@ -482,7 +482,7 @@ Authority in DevCadence is strictly layered:
 3. **Project Invariants (`project`)**: Codebase-specific durable rules located in `.devcadence/INVARIANTS.md` of the target project, discovered and governed during M6 Project Adoption.
 4. **Task Constraints (`task`)**: Execution Work Package obligations and boundary contracts.
 
-Lower authority layers may add restrictions but MUST NOT weaken or contradict higher-authority constraints; detected contradictions fail closed. `NewCanonicalRuleRegistry()` builds the DevCadence system catalog, not the entire universe of authority for all projects. Lower layers compose deterministically into a unified frozen registry snapshot.
+Lower authority layers may add restrictions but MUST NOT weaken or contradict higher-authority constraints; detected contradictions fail closed. `NewCanonicalRuleRegistry()` builds the DevCadence system catalog, not the entire universe of authority for all projects. When additional authority layers are implemented, they will compose deterministically into a unified frozen registry snapshot.
 
 In the current M3C implementation, the compiler operates on the DevCadence system catalog with an explicit `SourceKind` authority seam on every `Rule` (`SourceKind`, `SourceDoc`, `Revision`, `ContentDigest`), authenticated cryptographically by `CatalogDigest`. The full `AuthoritySource` model (`source_kind`, `source_id`, `revision`, `digest`) and multi-source composition are planned for M6 Project Adoption and future distributed milestones.
 
