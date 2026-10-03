@@ -1,4 +1,13 @@
 #!/bin/sh
+# Run the policy scripts as committed at HEAD so the change being committed
+# cannot weaken the gate that checks it (bootstrap: fall back to the working tree).
 set -eu
 repo_root=$(git rev-parse --show-toplevel)
-exec sh "$repo_root/scripts/health/prepush.sh"
+if git -C "$repo_root" cat-file -e HEAD:scripts/health/prepush.sh 2>/dev/null; then
+  policy=$(mktemp -d "${TMPDIR:-/tmp}/devcadence-policy.XXXXXX")
+  trap 'rm -rf "$policy"' EXIT HUP INT TERM
+  git -C "$repo_root" archive HEAD scripts/health | tar -x -C "$policy"
+  sh "$policy/scripts/health/prepush.sh"
+else
+  sh "$repo_root/scripts/health/prepush.sh"
+fi

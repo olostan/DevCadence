@@ -29,6 +29,7 @@ Allowed paths:
 - `.githooks/*`
 - `scripts/health/*`
 - `tests/docs_integrity_test.go`
+- `tests/docs_integrity_helpers_test.go`
 - `Makefile`
 - `.gitignore`
 - `CONTRIBUTING.md`

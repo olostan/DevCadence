@@ -2,6 +2,7 @@
 set -eu
 
 repo_root=$(git rev-parse --show-toplevel)
+script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 
 if git -C "$repo_root" diff --cached --quiet; then
   echo "health: no staged changes"
@@ -41,7 +42,9 @@ echo "health: validating staged snapshot"
 )
 
 # coverage-guard also executes the complete Go test suite against the staged
-# snapshot and compares it with the exact current HEAD baseline.
-sh "$repo_root/scripts/health/coverage-guard.sh" HEAD "$candidate"
+# snapshot and compares it with the exact current HEAD baseline. HEAD coverage
+# is cached by SHA under the Git directory, so only the candidate is re-measured.
+COVERAGE_CACHE_DIR=$(git -C "$repo_root" rev-parse --absolute-git-dir)/devcadence-coverage-cache \
+  sh "$script_dir/coverage-guard.sh" HEAD "$candidate"
 
 echo "health: staged snapshot PASS"

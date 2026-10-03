@@ -1,9 +1,11 @@
 package tests
 
 import (
+	"bytes"
 	"io/fs"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -17,8 +19,11 @@ var (
 	markdownLinkPattern = regexp.MustCompile("!?\\[[^\\]]*\\]\\(([^)]+)\\)")
 	headingPattern      = regexp.MustCompile("^(#{1,6})[ \\t]+(.+?)[ \\t]*#*[ \\t]*$")
 	dciPattern          = regexp.MustCompile("DCI-[0-9]{3}")
+	dciDefinition       = regexp.MustCompile("(?m)^#{2,6}[ \\t]+(DCI-[0-9]{3})\\b")
+	htmlTagPattern      = regexp.MustCompile("<[^>]+>")
+	inlineLinkPattern   = regexp.MustCompile("\\[([^\\]]*)\\]\\([^)]*\\)")
+	refDefPattern       = regexp.MustCompile("(?m)^[ ]{0,3}\\[[^\\]]+\\]:[ \\t]*(\\S+)")
 	adrPattern          = regexp.MustCompile("ADR-([0-9]{4})")
-	fencePattern        = regexp.MustCompile("(?s)" + string(rune(96)) + string(rune(96)) + string(rune(96)) + ".*?" + string(rune(96)) + string(rune(96)) + string(rune(96)) + "|~~~.*?~~~")
 )
 
 func TestRepositoryMarkdownLinksAndAnchors(t *testing.T) {
@@ -30,17 +35,27 @@ func TestRepositoryMarkdownLinksAndAnchors(t *testing.T) {
 		if err != nil {
 			t.Fatalf("read %s: %v", source, err)
 		}
-		text := fencePattern.ReplaceAllString(string(raw), "")
+		text := stripFences(string(raw))
 
+		destinations := []string{}
 		for _, match := range markdownLinkPattern.FindAllStringSubmatch(text, -1) {
-			destination := strings.TrimSpace(match[1])
+			destinations = append(destinations, match[1])
+		}
+		for _, match := range refDefPattern.FindAllStringSubmatch(text, -1) {
+			destinations = append(destinations, match[1])
+		}
+		for _, raw := range destinations {
+			destination := strings.TrimSpace(raw)
 			if destination == "" {
 				continue
 			}
-			if i := strings.IndexAny(destination, " \t"); i >= 0 {
+			if strings.HasPrefix(destination, "<") {
+				if end := strings.IndexByte(destination, '>'); end > 0 {
+					destination = destination[1:end]
+				}
+			} else if i := strings.IndexAny(destination, " \t"); i >= 0 {
 				destination = destination[:i]
 			}
-			destination = strings.Trim(destination, "<>")
 			if isExternalMarkdownDestination(destination) {
 				continue
 			}
@@ -93,8 +108,11 @@ func TestDocumentationDCIReferencesResolve(t *testing.T) {
 		t.Fatal(err)
 	}
 	defined := map[string]struct{}{}
-	for _, id := range dciPattern.FindAllString(string(invariants), -1) {
-		defined[id] = struct{}{}
+	for _, match := range dciDefinition.FindAllStringSubmatch(string(invariants), -1) {
+		defined[match[1]] = struct{}{}
+	}
+	if len(defined) == 0 {
+		t.Fatal("INVARIANTS.md defines no DCI headings; definition pattern out of date")
 	}
 
 	for _, path := range markdownFiles(t, root) {
@@ -102,13 +120,10 @@ func TestDocumentationDCIReferencesResolve(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		text := fencePattern.ReplaceAllString(string(raw), "")
+		text := stripFences(string(raw))
 		for _, loc := range dciPattern.FindAllStringIndex(text, -1) {
 			id := text[loc[0]:loc[1]]
 			if _, ok := defined[id]; ok {
-				continue
-			}
-			if looksLikeRangeEndpoint(text, loc[0], loc[1]) {
 				continue
 			}
 			t.Errorf("%s: references undefined %s", rel(root, path), id)
@@ -138,7 +153,7 @@ func TestDocumentationADRReferencesResolve(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		text := fencePattern.ReplaceAllString(string(raw), "")
+		text := stripFences(string(raw))
 		for _, match := range adrPattern.FindAllStringSubmatch(text, -1) {
 			if _, ok := defined[match[1]]; !ok {
 				t.Errorf("%s: references undefined ADR-%s", rel(root, path), match[1])
@@ -156,23 +171,41 @@ func repositoryRoot(t *testing.T) string {
 	return root
 }
 
+// markdownFiles lists the repository's tracked Markdown files so untracked
+// local content (virtualenvs, runtime state) cannot make the result differ
+// between machines. A staged-index snapshot has no Git metadata, and every file
+// in it is tracked by construction, so it falls back to a plain walk.
 func markdownFiles(t *testing.T, root string) []string {
 	t.Helper()
+	cmd := exec.Command("git", "ls-files", "-z", "--", "*.md")
+	cmd.Dir = root
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	if out, err := cmd.Output(); err == nil && len(out) > 0 {
+		var files []string
+		for _, name := range strings.Split(string(out), "\x00") {
+			if name != "" {
+				files = append(files, filepath.Join(root, filepath.FromSlash(name)))
+			}
+		}
+		sort.Strings(files)
+		return files
+	}
+	if _, err := os.Stat(filepath.Join(root, ".git")); err == nil {
+		t.Fatalf("git ls-files failed in a Git checkout: %s", stderr.String())
+	}
 	var files []string
 	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-		if d.IsDir() {
+		if d.IsDir() && path != root {
 			switch d.Name() {
-			case ".git", "bin", ".devcadence", "artifacts", "worktrees":
-				if path != root {
-					return filepath.SkipDir
-				}
+			case ".git", ".devcadence":
+				return filepath.SkipDir
 			}
-			return nil
 		}
-		if strings.EqualFold(filepath.Ext(path), ".md") {
+		if !d.IsDir() && strings.EqualFold(filepath.Ext(path), ".md") {
 			files = append(files, path)
 		}
 		return nil
@@ -182,6 +215,38 @@ func markdownFiles(t *testing.T, root string) []string {
 	}
 	sort.Strings(files)
 	return files
+}
+
+// stripFences removes fenced code blocks line by line, honouring CommonMark's
+// rule that a closing fence uses the same character and is at least as long as
+// the opening fence.
+func stripFences(text string) string {
+	var out []string
+	var fenceChar byte
+	fenceLen := 0
+	for _, line := range strings.Split(text, "\n") {
+		trimmed := strings.TrimLeft(strings.TrimRight(line, "\r"), " ")
+		indent := len(line) - len(strings.TrimLeft(line, " "))
+		run := 0
+		if indent <= 3 && len(trimmed) > 0 && (trimmed[0] == '`' || trimmed[0] == '~') {
+			for run < len(trimmed) && trimmed[run] == trimmed[0] {
+				run++
+			}
+		}
+		switch {
+		case fenceLen == 0 && run >= 3:
+			fenceChar, fenceLen = trimmed[0], run
+			out = append(out, "")
+		case fenceLen > 0 && run >= fenceLen && trimmed[0] == fenceChar && strings.TrimSpace(trimmed[run:]) == "":
+			fenceLen = 0
+			out = append(out, "")
+		case fenceLen > 0:
+			out = append(out, "")
+		default:
+			out = append(out, line)
+		}
+	}
+	return strings.Join(out, "\n")
 }
 
 func isExternalMarkdownDestination(destination string) bool {
@@ -204,7 +269,7 @@ func markdownAnchors(path string) (map[string]struct{}, error) {
 	if err != nil {
 		return nil, err
 	}
-	text := fencePattern.ReplaceAllString(string(raw), "")
+	text := stripFences(string(raw))
 	anchors := map[string]struct{}{}
 	seen := map[string]int{}
 	for _, line := range strings.Split(text, "\n") {
@@ -226,31 +291,24 @@ func markdownAnchors(path string) (map[string]struct{}, error) {
 	return anchors, nil
 }
 
+// githubHeadingSlug approximates GitHub's heading anchors: inline links and
+// HTML reduce to their text, emphasis/code markers vanish, punctuation other
+// than hyphen and underscore is dropped, and each space becomes a hyphen.
 func githubHeadingSlug(s string) string {
+	s = inlineLinkPattern.ReplaceAllString(s, "$1")
+	s = htmlTagPattern.ReplaceAllString(s, "")
 	s = strings.ToLower(strings.TrimSpace(s))
-	s = strings.ReplaceAll(s, string(rune(96)), "")
-	s = strings.ReplaceAll(s, "*", "")
-	s = strings.ReplaceAll(s, "_", "")
+	s = strings.NewReplacer("`", "", "*", "").Replace(s)
 	var b strings.Builder
 	for _, r := range s {
 		switch {
-		case unicode.IsLetter(r), unicode.IsDigit(r), r == '-':
+		case unicode.IsLetter(r), unicode.IsDigit(r), r == '-', r == '_':
 			b.WriteRune(r)
 		case unicode.IsSpace(r):
-			// GitHub replaces each whitespace character with a hyphen after
-			// punctuation stripping; it does not collapse adjacent spaces.
 			b.WriteRune('-')
 		}
 	}
 	return b.String()
-}
-
-func looksLikeRangeEndpoint(text string, start, end int) bool {
-	left := text[maxInt(0, start-4):start]
-	right := text[end:minInt(len(text), end+4)]
-	return strings.Contains(left, "..") || strings.Contains(right, "..") ||
-		strings.Contains(left, "–") || strings.Contains(right, "–") ||
-		strings.Contains(left, "—") || strings.Contains(right, "—")
 }
 
 func rel(root, path string) string {
@@ -259,18 +317,4 @@ func rel(root, path string) string {
 		return path
 	}
 	return filepath.ToSlash(r)
-}
-
-func maxInt(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}
-
-func minInt(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }

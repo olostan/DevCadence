@@ -11,7 +11,8 @@ permissions:
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  # Never cancel main: each pushed commit keeps its own result.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   static:
@@ -28,8 +29,8 @@ jobs:
           cache: true
       - name: Formatting, module hygiene, vet, and diff checks
         env:
-          DIFF_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
-          FMT_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
+          DIFF_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+          FMT_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
         run: make fmt-check diff-check mod-check vet
 
   test-contracts:

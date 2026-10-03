@@ -23,7 +23,7 @@ Install repository hooks once per clone:
 make hooks-install
 ```
 
-The installed hooks invoke versioned repository scripts, so later policy improvements do not require reinstalling the hooks. Existing historical formatting debt is not grandfathered into changed code: formatting is enforced on staged files locally and on files changed from the exact merge base in CI.
+The installed hooks invoke versioned repository scripts, so later policy improvements do not require reinstalling the hooks. The hooks run the scripts as committed at `HEAD`, not from the working tree, so neither unstaged edits nor the change being committed can weaken the gate that checks it; changes to `scripts/health/*` take effect for later commits once they are committed and reviewed. An existing different hook is saved as `<hook>.devcadence-backup` before being replaced. Existing historical formatting debt is not grandfathered into changed code: formatting is enforced on staged files locally and on files changed from the exact merge base in CI.
 
 ### Pre-commit
 
@@ -38,11 +38,11 @@ Pre-commit validates the exact Git index snapshot and blocks the commit if any o
 - full Go tests under coverage instrumentation;
 - statement coverage regression against current `HEAD`.
 
-Coverage comparison is base-relative on the same machine/toolchain. The default allowed regression is zero percentage points. A non-zero tolerance is a health-policy decision, not a routine feature-PR escape hatch.
+Coverage comparison is base-relative on the same machine/toolchain, and `HEAD` coverage is cached by commit SHA and Go version under the Git directory so each commit measures only the candidate. Percentages are computed exactly from covered/total statements in the profile, not from the one-decimal figure printed by `go tool cover`. The default allowed regression is zero percentage points. A non-zero tolerance is a health-policy decision, not a routine feature-PR escape hatch.
 
 ### Pre-push
 
-Pre-push validates the committed `HEAD` in an isolated snapshot and runs the full CI-equivalent local gate, including the race detector.
+Pre-push validates every commit being pushed (the local SHAs Git supplies on stdin; `HEAD` when run via `make prepush`) in an isolated worktree and runs the full CI-equivalent local gate, including the race detector. `make ci` runs coverage instead of a separate plain test run, since coverage executes the whole suite.
 
 This catches commits created with hooks disabled before they reach the remote.
 
@@ -78,7 +78,7 @@ For pull requests, head coverage is compared with the exact PR base SHA using th
 
 For local pre-commit, the staged snapshot is compared with current `HEAD`.
 
-A coverage decrease fails the gate unless the health policy itself is explicitly amended and independently reviewed. This prevents a feature PR from "fixing" its own regression by lowering a checked-in baseline.
+The base must itself pass its tests: if the exact base is red, the coverage job fails, and a PR repairing a broken base needs an explicitly reviewed health-policy exception. A coverage decrease fails the gate unless the health policy itself is explicitly amended and independently reviewed. This prevents a feature PR from "fixing" its own regression by lowering a checked-in baseline.
 
 Coverage artifacts and a human-readable summary are produced in CI.
 
@@ -88,19 +88,19 @@ Coverage does not prove that behavior is well tested. Review must still consider
 
 `make docs-check` validates semantic repository documentation integrity, including:
 
-- repository-relative Markdown links;
-- Markdown heading anchors;
-- referenced DCI identifiers;
+- repository-relative Markdown links, including reference-style definitions;
+- Markdown heading anchors, using GitHub's slug rules (underscores kept, link/HTML text reduced, fences of any valid length skipped);
+- referenced DCI identifiers, resolved against the `### DCI-nnn` headings in `INVARIANTS.md` with no range exemption;
 - referenced ADR identifiers;
 - existing code/document drift tests.
 
-The checker intentionally prioritizes broken references and contract drift over stylistic Markdown trivia.
+The checker reads Git-tracked Markdown files only, so untracked local content cannot change the result; a staged snapshot without Git metadata is walked instead. The checker intentionally prioritizes broken references and contract drift over stylistic Markdown trivia.
 
 Protocol/schema synchronization continues to be enforced by schema fixtures and Go/schema parity tests.
 
 ## 6. GitHub Actions
 
-CI runs on pull requests and pushes to `main`.
+CI runs on pull requests and pushes to `main`. Formatting and whitespace checks compare against the PR base SHA, or the previous tip on pushes to `main`.
 
 Required logical checks are:
 
@@ -110,7 +110,7 @@ Required logical checks are:
 - documentation/schema contracts;
 - coverage and base-relative coverage regression.
 
-CI runs with read-only repository permissions unless a future job has an explicitly reviewed need for more authority. Stale runs for the same PR are cancelled.
+CI runs with read-only repository permissions unless a future job has an explicitly reviewed need for more authority. Stale runs for the same PR are cancelled; runs on `main` are never cancelled.
 
 ## 7. Exceptions
 

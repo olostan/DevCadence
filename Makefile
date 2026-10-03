@@ -75,8 +75,9 @@ coverage:
 ## verify: deterministic repository verification suitable for normal development.
 verify: fmt-check diff-check mod-check vet test schemas docs-check
 
-## ci: full local equivalent of the blocking CI health gate.
-ci: verify race coverage
+## ci: full local equivalent of the blocking CI health gate. The coverage run
+## executes the whole suite, so the plain test target is not repeated.
+ci: fmt-check diff-check mod-check vet schemas docs-check race coverage
 
 ## precommit: validate the exact staged snapshot against HEAD, including coverage regression.
 precommit:
@@ -90,8 +91,13 @@ prepush:
 hooks-install:
 	@hooks_dir="$$(git rev-parse --git-path hooks)"; \
 	mkdir -p "$$hooks_dir"; \
-	cp .githooks/pre-commit "$$hooks_dir/pre-commit"; \
-	cp .githooks/pre-push "$$hooks_dir/pre-push"; \
+	for hook in pre-commit pre-push; do \
+		if [ -f "$$hooks_dir/$$hook" ] && ! cmp -s ".githooks/$$hook" "$$hooks_dir/$$hook"; then \
+			cp "$$hooks_dir/$$hook" "$$hooks_dir/$$hook.devcadence-backup"; \
+			echo "Existing $$hook hook saved as $$hook.devcadence-backup"; \
+		fi; \
+		cp ".githooks/$$hook" "$$hooks_dir/$$hook"; \
+	done; \
 	chmod +x "$$hooks_dir/pre-commit" "$$hooks_dir/pre-push"; \
 	echo "Installed DevCadence hooks in $$hooks_dir"
 
