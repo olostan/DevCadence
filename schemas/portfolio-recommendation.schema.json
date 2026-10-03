@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/olostan/DevCadence/schemas/portfolio-recommendation.schema.json",
   "title": "DevCadence PortfolioRecommendation",
-  "description": "AI-synthesized or heuristic portfolio configuration proposal with explanatory diagnostics (ADR-0018 §5, §6).",
+  "description": "AI-synthesized or heuristic portfolio configuration proposal with explanatory diagnostics (ADR-0018 \u00a75, \u00a76).",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -16,7 +16,9 @@
     "capability_provenance"
   ],
   "properties": {
-    "schema_version": { "const": "1.0" },
+    "schema_version": {
+      "const": "1.0"
+    },
     "recommendation_id": {
       "type": "string",
       "minLength": 1
@@ -38,11 +40,85 @@
     },
     "explanatory_diagnostics": {
       "type": "array",
-      "items": { "type": "string" }
+      "items": {
+        "type": "string"
+      }
     },
     "capability_provenance": {
       "type": "array",
-      "items": { "type": "string" }
+      "items": {
+        "type": "string"
+      }
+    },
+    "set_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "intent": {
+      "enum": [
+        "minimum_spend",
+        "balanced",
+        "maximum_quality_within_policy",
+        "privacy_first"
+      ]
+    },
+    "tradeoffs": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "confidence": {
+      "enum": [
+        "high",
+        "medium",
+        "low"
+      ]
+    },
+    "planner": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "endpoint_id",
+        "driver_id",
+        "invocation_digest"
+      ],
+      "properties": {
+        "endpoint_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "driver_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "model_id": {
+          "type": "string"
+        },
+        "invocation_digest": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  },
+  "if": {
+    "required": [
+      "planner"
+    ]
+  },
+  "then": {
+    "required": [
+      "intent",
+      "confidence",
+      "tradeoffs",
+      "set_id"
+    ],
+    "properties": {
+      "tradeoffs": {
+        "minItems": 1
+      }
     }
   }
 }
