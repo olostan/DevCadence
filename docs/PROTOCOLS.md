@@ -332,7 +332,7 @@ Architecture-level decisions should also have a human-readable ADR.
 
 ## 7. Engineering Work Package
 
-This is the core frontier-to-local contract.
+This is the core Principal-to-implementation contract. Its purpose is to **remove implementation-critical architectural choice before delegation**, especially when the worker may be a smaller/local model.
 
 ### 7.1 Shape
 
@@ -344,79 +344,86 @@ flowchart TB
     EWP --> Ground["GROUNDING<br/>assumptions, evidence, ADRs, invariants"]
     EWP --> What["WHAT<br/>behavior, scope, acceptance"]
     EWP --> How["HOW<br/>strategy, interfaces, pseudocode, snippets"]
-    EWP --> Guard["GUARDRAILS<br/>MUST/SHOULD/SUGGESTED/discretion"]
-    EWP --> Verify["VERIFY<br/>tests, checks, properties"]
+    EWP --> Invariants["INVARIANTS<br/>state rules & postconditions"]
+    EWP --> Failure["FAILURE<br/>failure/crash/missing-input matrix"]
+    EWP --> Authority["AUTHORITY<br/>who/what may decide"]
+    EWP --> Repr["REPRESENTABILITY<br/>type/schema/API bindings"]
+    EWP --> Verify["VERIFY<br/>acceptance scenarios & checks"]
     EWP --> Esc["ESCALATE<br/>contradictions, scope, risk"]
 ```
 
-### 7.2 Mandatory fields for systemic work
+### 7.2 Mandatory fields for substantial delegated work
 
 - `work_package_id`
 - `task_id`
 - `project_state_revision`
 - `base_commit`
 - objective
-- rationale
-- architectural intent
+- rationale / architectural intent
 - assumptions with verification status
 - source evidence references
 - relevant decisions/invariants
-- scope and non-scope
-- implementation strategy
-- guidance list with strength
-- acceptance criteria
+- semantic scope envelope and non-scope
+- exact MUST/MUST-NOT requirements
+- required interfaces / algorithm semantics
+- local-discretion list
+- acceptance scenarios
 - validation requirements
 - escalation conditions
+- Implementation Readiness result
 
-### 7.3 Recommended fields
+For systemic, stateful, security/authority-sensitive or otherwise high-risk work, the following are mandatory unless explicitly shown not applicable:
 
-- interface sketches;
-- pseudocode;
-- code snippets;
-- sequence/state diagrams;
-- repository anchors;
-- existing patterns;
-- expected files/packages;
-- edge cases;
-- failure modes;
-- performance expectations;
-- observability requirements;
-- migration/rollback details.
+- invariant/state-rule table;
+- failure matrix;
+- authority matrix;
+- missing/unknown/stale-input semantics;
+- representability map;
+- requirement → invariant → representation → acceptance traceability.
 
-### Execution Contract and Context Manifest (manual now; typed M3C)
+### 7.3 Implementation Readiness
 
-An EWP contains the complete bounded Execution Contract described in WORK_PACKAGES.md, plus progressively retrievable design/rationale. The contract and task Context Manifest identify the EWP revision/digest, base/state identity, authorized paths, exact applicable normative clauses, acceptance, validation and escalation. Required clauses must be resolved into verbatim content before action; index lines are navigational only. No execution-critical requirement may exist solely in rationale.
+A Work Package is not implementation authority merely because its design is approved. Before delegation, a Principal performs Contract Completeness Review and records `READY_FOR_IMPLEMENTATION` only when implementation-critical ambiguity is closed.
 
-This is a document-authoring contract now, **not** a new field on the current strict EngineeringWorkPackage wire record. M3C must specify a versioned contract/manifest companion, link it through supported artifact/evidence references and migrate schema/type validation with compatibility tests before using new wire fields. Existing accepted records retain their meaning (DCI-090–093).
+The test is:
 
-### 7.4 RefactoringProposal (Bottom-Up Challenge Protocol) [Proposed - M3C]
+> Could a competent worker with good language/repository skill but mediocre architecture judgment execute this contract without inventing important semantics?
+
+The following are never left to implementer inference:
+
+- public/cross-layer contract meaning;
+- authority/security/privacy/spending decisions;
+- persistence, commit, rollback and recovery semantics;
+- missing/unknown behavior for required facts;
+- protocol/schema interpretation when sources conflict;
+- acceptance meaning.
+
+If a requirement has no exact representation in current types/schema/API/state, the Principal resolves that design defect first.
+
+### 7.4 Scope envelope
+
+Scope is semantic. EWPs should declare authorized domains/path patterns and forbidden semantic changes rather than relying solely on brittle exhaustive filenames.
+
+Within the declared domain, adding/splitting tests, private helpers, local implementation files or repository-native refactors is LOCAL_DISCRETION unless it changes semantics.
+
+The worker must escalate before changing public contracts, protocol/schema meaning, persistence/crash behavior, security/trust/privacy/spending boundaries, invariant meaning, cross-layer dependency direction, external services/dependencies or unrelated subsystems.
+
+### 7.5 Execution Contract and Context Manifest (manual now; typed evolution)
+
+An EWP contains the complete bounded Execution Contract described in WORK_PACKAGES.md, plus progressively retrievable design/rationale. The contract and task Context Manifest identify the EWP revision/digest, base/state identity, scope envelope, exact applicable normative clauses, acceptance, validation and escalation. Required clauses must be resolved into exact operative content before action; index lines are navigational only. No execution-critical requirement may exist solely in rationale.
+
+The contract additionally closes applicable invariants, failure behavior, authority, missing-input semantics, representability and acceptance scenarios per [ADR-0024](adr/0024-implementation-ready-work-packages-and-contract-completeness.md).
+
+This is a document-authoring contract now, **not** a new field on the current strict EngineeringWorkPackage wire record. Future versioned protocol work should add typed equivalents such as `ContractInvariant`, `FailureCase`, `AuthorityRule`, `InputSemantic`, `RepresentabilityBinding`, `AcceptanceScenario`, `ScopeEnvelope` and `ImplementationReadiness`, with schema/type compatibility tests. Existing accepted records retain their meaning (DCI-090–093).
+
+### 7.6 RefactoringProposal (Bottom-Up Challenge Protocol) [Proposed - M3C]
 
 *Status:* Proposed for Milestone M3C. Protocol Go types and JSON Schemas will be formalized under `internal/protocol/` and `schemas/` during M3C implementation.
 
-An accepted Work Package is a stable baseline, not an immutable dogma (ADR-0019 §3). When an implementer or reviewer discovers that an upstream interface, dependency, or contract is flawed, clunky, or missing essential parameters, it is forbidden from writing hacky workarounds or local shims.
+An accepted Work Package is a stable baseline, not an immutable dogma (ADR-0019 §3). When an implementer or reviewer discovers that an upstream interface, dependency, representation or contract is flawed, contradictory, or missing essential semantics, it must not write a plausible workaround or silently reinterpret the requirement.
 
-Instead, the worker emits a typed `RefactoringProposal`:
+Instead, the worker emits a typed `RefactoringProposal` / escalation with contradiction evidence, proposed change, affected callers/contracts and reversibility assessment. The Principal adjudicates the proposal. If accepted, the EWP/contract is amended before implementation continues.
 
-```yaml
-schema_version: "1.0"
-proposal_id: "REF-001"
-source_work_package_id: "WP-M3B-5"
-target_work_package_id: "WP-M3B-2"
-architectural_tension: >
-  Doctor.Run requires context.Context for cancellation and timeouts,
-  but WP-2 defined the interface with only facts and scope.
-contradiction_evidence:
-  - "internal/setup/doctor.go:210"
-  - "compiler error on timeout handler implementation"
-proposed_interface: >
-  Run(ctx context.Context, scope ReadinessEvaluationScope, facts EnvironmentFacts) (*DoctorReport, error)
-affected_callers:
-  - "cmd/devcadence/cmd_doctor.go"
-  - "tests/m3b_milestone_closure_test.go"
-reversibility_assessment: "Low risk; atomic signature update across 3 callers."
-```
-
-The Principal adjudicates the proposal. If accepted, an atomic upstream refactor is applied cleanly, regression tests run, and the codebase remains free of architectural rot.
 
 ## 8. Guidance strength
 

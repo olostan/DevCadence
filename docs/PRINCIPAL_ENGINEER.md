@@ -236,7 +236,13 @@ The Principal pays the architectural reasoning cost and compiles it into a **com
 
 Declare the Context Manifest: role, revision/base identity, paths/domains/risks, normative/evidence refs, assumptions and re-resolution/escalation triggers. Resolve cross-cutting security/state/review obligations. The target endpoint's effective workload profile must fit the whole contract plus mandatory clauses and reserves. If not, decompose into complete atomic contracts, choose an authorized capable endpoint or escalate; never trim requirements to win a token budget.
 
-Manual contracts/manifests apply now; M3C implements the Cognitive Invocation Compiler and linting. Deterministic mapping can validate applicability/freshness/size but cannot prove that the human/Principal contract captured every product semantic. Systemic durable-protocol work therefore receives Contract Completeness Review before implementation. Principals also use progressive context; justified architectural reconciliation permits broader reads without making the corpus a permanent boot payload. See ADR-0020.
+Manual contracts/manifests apply now; M3C implements the Cognitive Invocation Compiler and linting. Deterministic mapping can validate applicability/freshness/size but cannot prove that the human/Principal contract captured every product semantic.
+
+Before delegating any substantial EWP, the Principal performs **Implementation Readiness / Contract Completeness Review**. Systemic, stateful and authority-sensitive work receives the full closure treatment: explicit invariants/state rules, failure matrix, authority matrix, missing/unknown/stale-input semantics, exact representability bindings and mapped acceptance scenarios. Unresolved implementation-critical architecture is not delegated.
+
+Use the **weaker-implementer test**: could an implementation model with good language/repository skill but mediocre architectural judgment execute this contract correctly without inventing semantics? If not, continue Principal work, amend the protocol/schema, split the task or route it upward. The goal is not a longer EWP; it is a denser locally complete programming problem with zero ambiguity in authority, durability, security, persistence and required-input behavior.
+
+Principals also use progressive context; justified architectural reconciliation permits broader reads without making the corpus a permanent boot payload. See ADR-0020 and ADR-0024.
 
 ### Example design handoff shape
 

@@ -297,19 +297,13 @@ A closure review may add a new finding only when it crosses the closure threshol
 
 Equivalent restatements of already adjudicated findings do not reopen the campaign.
 
-### 10. Contract completeness review precedes implementation for systemic protocol work
+### 10. Contract completeness review precedes implementation
 
-For systemic/durable protocol WPs, the **Principal/contract author MUST perform a pre-implementation Contract Completeness Review** as an effective-now manual evidence step. It does not require a new wire record. M7 may automate the check, but ownership exists before that automation.
+[ADR-0024](0024-implementation-ready-work-packages-and-contract-completeness.md) generalizes the earlier systemic-protocol Contract Completeness Review into an **Implementation Readiness Gate for all substantial delegated EWPs**.
 
-The review checks requirement → protocol/schema representability before implementation begins. A compact coverage matrix is preferred over broad prose, for example:
+The Cognitive Invocation Compiler may prove that known mandatory clauses are admitted, fresh and within the endpoint envelope. It cannot prove that the Principal closed every implementation-critical semantic. Before delegation, the Principal therefore closes requirement → invariant/state rule → exact representation → acceptance scenario, plus applicable failure, authority and missing/unknown-input semantics.
 
-| Required concept | Owning source | Representation |
-| --- | --- | --- |
-| fallback economic path | FR/ADR | `FallbackBinding` |
-| retry bound | PROTOCOLS | `WorkflowStage.RetryLimit` |
-| deterministic gate | PROTOCOLS | `DeterministicGateID` |
-
-Missing representation is cheaper to fix before code and schema freeze.
+For systemic/stateful/high-risk work, missing representation or unresolved architecture is a hard NOT READY result. The worker does not reconstruct the missing design from the broader corpus. This keeps the compiler's role clean: deterministic admission of a closed contract, not speculative completion of an incomplete one.
 
 ### 11. The runtime reports state; agents do not self-declare completion
 
