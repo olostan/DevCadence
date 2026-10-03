@@ -15,8 +15,8 @@ const (
 
 // SessionPolicy configures privacy, locality, and cost inheritance for a session.
 type SessionPolicy struct {
-	Locality  LocalityPolicy `json:"locality"`
-	ProjectID string         `json:"project_id"`
+	Locality LocalityPolicy `json:"locality"`
+	ProjectID string        `json:"project_id"`
 }
 
 // Amendment represents an authorized assignment change, correction, or directive.
@@ -89,27 +89,27 @@ const (
 
 // Message represents an atomic turn in the execution session.
 type Message struct {
-	Role       MessageRole `json:"role"`
-	Content    string      `json:"content"`
-	ToolCalls  []ToolCall  `json:"tool_calls,omitempty"`
-	ToolCallID string      `json:"tool_call_id,omitempty"`
-	ContentRef string      `json:"content_ref,omitempty"`
-	IsPruned   bool        `json:"is_pruned,omitempty"`
-	Protected  bool        `json:"protected,omitempty"`
-	GroupID    string      `json:"group_id,omitempty"`    // Links assistant tool_calls with matching tool results
-	Authority  int         `json:"authority,omitempty"`   // Authority level
-	JournalSeq uint64      `json:"journal_seq,omitempty"` // Monotonic sequence
-	IsDigest   bool        `json:"is_digest,omitempty"`   // Typed identifier for generated trajectory digests
+	Role        MessageRole `json:"role"`
+	Content     string      `json:"content"`
+	ToolCalls   []ToolCall  `json:"tool_calls,omitempty"`
+	ToolCallID  string      `json:"tool_call_id,omitempty"`
+	ContentRef  string      `json:"content_ref,omitempty"`
+	IsPruned    bool        `json:"is_pruned,omitempty"`
+	Protected   bool        `json:"protected,omitempty"`
+	GroupID     string      `json:"group_id,omitempty"`     // Links assistant tool_calls with matching tool results
+	Authority   int         `json:"authority,omitempty"`    // Authority level
+	JournalSeq  uint64      `json:"journal_seq,omitempty"` // Monotonic sequence
+	IsDigest    bool        `json:"is_digest,omitempty"`   // Typed identifier for generated trajectory digests
 }
 
 // ExecutionSession holds the conversation history and active state.
 type ExecutionSession struct {
-	SystemPrompt       string
-	Assignment         AuthorizedAssignment
-	Checkpoint         WorkspaceCheckpoint
-	Digest             *TrajectoryDigest
-	Messages           []Message
-	ActiveOperationIDs []string
-	KnownDecisionIDs   map[string]bool
-	Policy             SessionPolicy
+	SystemPrompt        string
+	Assignment          AuthorizedAssignment
+	Checkpoint          WorkspaceCheckpoint
+	Digest              *TrajectoryDigest
+	Messages            []Message
+	ActiveOperationIDs  []string
+	KnownDecisionIDs    map[string]bool
+	Policy              SessionPolicy
 }

@@ -276,13 +276,13 @@ func extractCallName(fun ast.Expr) (string, string) {
 }
 
 var (
-	tsFuncDeclRegex  = regexp.MustCompile(`(?:export\s+)?(?:async\s+)?function\s+([A-Za-z0-9_$]+)`)
-	tsClassDeclRegex = regexp.MustCompile(`(?:export\s+)?class\s+([A-Za-z0-9_$]+)`)
-	tsInterfaceRegex = regexp.MustCompile(`(?:export\s+)?interface\s+([A-Za-z0-9_$]+)`)
-	tsTypeRegex      = regexp.MustCompile(`(?:export\s+)?type\s+([A-Za-z0-9_$]+)\s*=`)
-	tsMethodRegex    = regexp.MustCompile(`^\s*(?:async\s+)?([A-Za-z0-9_$]+)\s*\([^)]*\)\s*[{:]`)
-	tsArrowFuncRegex = regexp.MustCompile(`(?:const|let|var)\s+([A-Za-z0-9_$]+)\s*=\s*(?:async\s*)?(?:\([^)]*\)|[A-Za-z0-9_$]+)\s*=>`)
-	tsCallExprRegex  = regexp.MustCompile(`(?:([A-Za-z0-9_$]+)\.)?([A-Za-z0-9_$]+)\s*\(`)
+	tsFuncDeclRegex   = regexp.MustCompile(`(?:export\s+)?(?:async\s+)?function\s+([A-Za-z0-9_$]+)`)
+	tsClassDeclRegex  = regexp.MustCompile(`(?:export\s+)?class\s+([A-Za-z0-9_$]+)`)
+	tsInterfaceRegex  = regexp.MustCompile(`(?:export\s+)?interface\s+([A-Za-z0-9_$]+)`)
+	tsTypeRegex       = regexp.MustCompile(`(?:export\s+)?type\s+([A-Za-z0-9_$]+)\s*=`)
+	tsMethodRegex     = regexp.MustCompile(`^\s*(?:async\s+)?([A-Za-z0-9_$]+)\s*\([^)]*\)\s*[{:]`)
+	tsArrowFuncRegex  = regexp.MustCompile(`(?:const|let|var)\s+([A-Za-z0-9_$]+)\s*=\s*(?:async\s*)?(?:\([^)]*\)|[A-Za-z0-9_$]+)\s*=>`)
+	tsCallExprRegex   = regexp.MustCompile(`(?:([A-Za-z0-9_$]+)\.)?([A-Za-z0-9_$]+)\s*\(`)
 )
 
 func parseTSFile(fullPath, relPath, targetSymbol string, result *SymbolResult) {

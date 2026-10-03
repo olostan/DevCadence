@@ -24,6 +24,7 @@ func setupTestRegistryUnfrozen(t *testing.T) *compiler.RuleRegistry {
 	// 1. Always rule
 	err := reg.Register(compiler.Rule{
 		ID:             "DCI-018",
+		SourceKind:     compiler.AuthoritySourceKindSystem,
 		AdmissionClass: compiler.AdmissionClassAlways,
 		SourceDoc:      "docs/INVARIANTS.md",
 		Revision:       "v1.0",
@@ -36,6 +37,7 @@ func setupTestRegistryUnfrozen(t *testing.T) *compiler.RuleRegistry {
 	// 2. Capability default rule
 	err = reg.Register(compiler.Rule{
 		ID:             "DCI-010",
+		SourceKind:     compiler.AuthoritySourceKindSystem,
 		AdmissionClass: compiler.AdmissionClassCapabilityDefault,
 		SourceDoc:      "docs/INVARIANTS.md",
 		Revision:       "v1.0",
@@ -49,6 +51,7 @@ func setupTestRegistryUnfrozen(t *testing.T) *compiler.RuleRegistry {
 	// 3. Mapped rule (by domain)
 	err = reg.Register(compiler.Rule{
 		ID:             "DCI-131",
+		SourceKind:     compiler.AuthoritySourceKindSystem,
 		AdmissionClass: compiler.AdmissionClassMapped,
 		SourceDoc:      "docs/INVARIANTS.md",
 		Revision:       "v1.0",
@@ -63,6 +66,7 @@ func setupTestRegistryUnfrozen(t *testing.T) *compiler.RuleRegistry {
 	// 4. Mapped rule (depended upon by DCI-131)
 	err = reg.Register(compiler.Rule{
 		ID:             "DCI-132",
+		SourceKind:     compiler.AuthoritySourceKindSystem,
 		AdmissionClass: compiler.AdmissionClassMapped,
 		SourceDoc:      "docs/INVARIANTS.md",
 		Revision:       "v1.0",
@@ -76,6 +80,7 @@ func setupTestRegistryUnfrozen(t *testing.T) *compiler.RuleRegistry {
 	// 5. Mapped rule by path
 	err = reg.Register(compiler.Rule{
 		ID:             "RULE-SETUP-DOCTOR",
+		SourceKind:     compiler.AuthoritySourceKindSystem,
 		AdmissionClass: compiler.AdmissionClassMapped,
 		SourceDoc:      "docs/PROTOCOLS.md",
 		Revision:       "v1.0",
@@ -115,8 +120,21 @@ func mustNewCompiler(t *testing.T, registry *compiler.RuleRegistry, leaseMgr *co
 func TestRuleRegistry_ValidationAndDuplicate(t *testing.T) {
 	reg := compiler.NewRuleRegistry()
 
-	// Missing ID
+	// Missing or invalid SourceKind
 	err := reg.Register(compiler.Rule{
+		ID:             "R_NO_KIND",
+		AdmissionClass: compiler.AdmissionClassAlways,
+		SourceDoc:      "doc",
+		Revision:       "v1",
+		Content:        "content",
+	})
+	if !errors.Is(err, errs.ErrInvalidArgument) {
+		t.Fatalf("expected ErrInvalidArgument for missing SourceKind, got %v", err)
+	}
+
+	// Missing ID
+	err = reg.Register(compiler.Rule{
+		SourceKind:     compiler.AuthoritySourceKindSystem,
 		AdmissionClass: compiler.AdmissionClassAlways,
 		SourceDoc:      "doc",
 		Revision:       "v1",
@@ -129,6 +147,7 @@ func TestRuleRegistry_ValidationAndDuplicate(t *testing.T) {
 	// Invalid admission class
 	err = reg.Register(compiler.Rule{
 		ID:             "R1",
+		SourceKind:     compiler.AuthoritySourceKindSystem,
 		AdmissionClass: "invalid_class",
 		SourceDoc:      "doc",
 		Revision:       "v1",
@@ -141,6 +160,7 @@ func TestRuleRegistry_ValidationAndDuplicate(t *testing.T) {
 	// Capability default without capability
 	err = reg.Register(compiler.Rule{
 		ID:             "R2",
+		SourceKind:     compiler.AuthoritySourceKindSystem,
 		AdmissionClass: compiler.AdmissionClassCapabilityDefault,
 		SourceDoc:      "doc",
 		Revision:       "v1",
@@ -153,6 +173,7 @@ func TestRuleRegistry_ValidationAndDuplicate(t *testing.T) {
 	// Valid registration
 	err = reg.Register(compiler.Rule{
 		ID:             "R3",
+		SourceKind:     compiler.AuthoritySourceKindSystem,
 		AdmissionClass: compiler.AdmissionClassAlways,
 		SourceDoc:      "doc",
 		Revision:       "v1",
@@ -165,6 +186,7 @@ func TestRuleRegistry_ValidationAndDuplicate(t *testing.T) {
 	// Duplicate registration conflict
 	err = reg.Register(compiler.Rule{
 		ID:             "R3",
+		SourceKind:     compiler.AuthoritySourceKindSystem,
 		AdmissionClass: compiler.AdmissionClassAlways,
 		SourceDoc:      "doc",
 		Revision:       "v1",
@@ -187,6 +209,7 @@ func TestRuleRegistry_ReverseCoverageValidation(t *testing.T) {
 		reg := setupTestRegistryUnfrozen(t)
 		err := reg.Register(compiler.Rule{
 			ID:             "ORPHAN-001",
+			SourceKind:     compiler.AuthoritySourceKindSystem,
 			AdmissionClass: compiler.AdmissionClassMapped,
 			SourceDoc:      "docs/INVARIANTS.md",
 			Revision:       "v1.0",
@@ -218,6 +241,7 @@ func TestRuleRegistry_DeepCopyImmutability(t *testing.T) {
 
 	err := reg.Register(compiler.Rule{
 		ID:             "RULE-IMMUTABLE",
+		SourceKind:     compiler.AuthoritySourceKindSystem,
 		AdmissionClass: compiler.AdmissionClassMapped,
 		SourceDoc:      "docs/INVARIANTS.md",
 		Revision:       "v1.0",
@@ -1116,6 +1140,17 @@ func TestCompiler_UnknownToolAuthority_FailsClosed(t *testing.T) {
 	}
 	if _, _, err := c.Compile(context.Background(), reqExtraDecl); !errors.Is(err, errs.ErrInvalidArgument) {
 		t.Errorf("expected ErrInvalidArgument for extra tool declaration without schema, got %v", err)
+	}
+
+	// 5. Mixed modern ToolSchemas and legacy Tools fails closed
+	reqMixed := validCompileRequest(profile)
+	reqMixed.ToolSchemas = []string{`{"name": "safe_tool"}`}
+	reqMixed.Tools = []string{"untyped_legacy_tool"}
+	reqMixed.DeclaredTools = []compiler.ToolCapabilityInfo{
+		{Name: "safe_tool", ReadOnly: true},
+	}
+	if _, _, err := c.Compile(context.Background(), reqMixed); !errors.Is(err, errs.ErrInvalidArgument) {
+		t.Errorf("expected ErrInvalidArgument for mixed ToolSchemas and legacy Tools, got %v", err)
 	}
 }
 

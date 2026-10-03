@@ -6,7 +6,7 @@
 - **Branch:** `feat/m3c-2b-cognitive-compiler`
 - **Task ID:** `task-m3c-2b-cognitive-compiler`
 - **Work Package ID:** `WP-M3C-2B`
-- **Version:** 1.0
+- **Version:** 1.1
 - **Status:** Approved for Implementation
 
 ---
@@ -15,10 +15,10 @@
 
 ```json
 {
-  "manifest_id": "manifest-wp-m3c-2b-v1",
+  "manifest_id": "manifest-wp-m3c-2b-v2",
   "task_id": "task-m3c-2b-cognitive-compiler",
   "work_package_id": "WP-M3C-2B",
-  "work_package_revision": 1,
+  "work_package_revision": 2,
   "role": "principal_engineer",
   "base_commit": "d99e40c2107965b5af53a8c429aa6286f430ff8f",
   "project_state_revision": "bootstrap-m3c-2a-closed",
@@ -44,13 +44,23 @@
     "internal/cognition/drivers/*"
   ],
   "write_scope": [
+    "AGENTS.md",
+    "docs/LOCAL_AGENTS.md",
+    "docs/IMPLEMENTATION_PLAN.md",
+    "docs/PROTOCOLS.md",
+    "docs/adr/0020-cognitive-invocation-compiler-and-review-ledger.md",
+    "docs/work-packages/wp-m3c-2b-ewp.md",
     "internal/cognition/compiler/*",
     "internal/errs/errs.go",
     "internal/errs/errs_test.go",
-    "docs/adr/0020-cognitive-invocation-compiler-and-review-ledger.md",
-    "docs/PROTOCOLS.md",
-    "docs/IMPLEMENTATION_PLAN.md",
-    "docs/work-packages/wp-m3c-2b-ewp.md"
+    "internal/protocol/access_channel.go",
+    "internal/protocol/context.go",
+    "internal/protocol/context_test.go",
+    "schemas.go",
+    "schemas/access-channel.schema.json",
+    "schemas/context-manifest.schema.json",
+    "schemas/context-pack.schema.json",
+    "schemas/context-profile.schema.json"
   ],
   "domains": [
     "cognitive_compiler",
@@ -227,3 +237,4 @@ Build the deterministic **Cognitive Invocation Compiler** (`internal/cognition/c
 7. **Optional Retrieval:** Traverses graph and lexical matches without evicting or overriding mandatory clauses.
 8. **Verification:** All tests pass deterministically (`go test -count=1 ./...` and `go test -race ./...`), `go vet ./...` reports 0 issues, and `gofmt` is clean.
 9. **Layered Authority & Effect Capabilities Documentation:** Formally specifies the 4-layer authority hierarchy (`system` -> `organization` [future] -> `project` -> `task`), `AuthoritySourceKind` / `AuthoritySource` conceptual model, the non-weakening composition rule, the distinction between effect authority (real-world capabilities) and IAM, and the roadmap toward distributed/multi-user operation in ADR-0020, PROTOCOLS §10B, and IMPLEMENTATION_PLAN.
+10. **Scope & Provenance Integrity:** Reverted unrelated formatting-only churn across other packages; the EWP write scope explicitly covers every substantive file touched by WP-M3C-2B. Mutual exclusivity between modern `ToolSchemas` and legacy `Tools` is strictly enforced to prevent authority bypasses.

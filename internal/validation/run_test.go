@@ -317,3 +317,4 @@ func TestRunProfileModuleInheritanceAndOverride(t *testing.T) {
 		t.Errorf("check 1 working dir = %v, want %s", checks[1].WorkingDirectory, resolvedWeb)
 	}
 }
+

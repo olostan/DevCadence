@@ -313,8 +313,8 @@ func (p *HealthReportRecorded) Validate() error {
 
 // ModuleCatalogRecorded records the approved module catalog for a monorepo (ADR-0015).
 type ModuleCatalogRecorded struct {
-	ConfigDigest string                      `json:"config_digest"`
-	RootModuleID string                      `json:"root_module_id,omitempty"`
+	ConfigDigest string                     `json:"config_digest"`
+	RootModuleID string                     `json:"root_module_id,omitempty"`
 	Modules      []protocol.ModuleDefinition `json:"modules"`
 }
 

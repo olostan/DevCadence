@@ -96,8 +96,8 @@ func (r Rule) Validate() error {
 	if strings.TrimSpace(r.ID) == "" {
 		return errs.New(errs.CategoryInvalidArgument, "%s: id cannot be empty", kind)
 	}
-	if r.SourceKind != "" && !r.SourceKind.Valid() {
-		return errs.New(errs.CategoryInvalidArgument, "%s: invalid source_kind %q", kind, r.SourceKind)
+	if !r.SourceKind.Valid() {
+		return errs.New(errs.CategoryInvalidArgument, "%s: invalid or empty source_kind %q; explicit authority layer required (system, organization, project, task)", kind, r.SourceKind)
 	}
 	if !r.AdmissionClass.Valid() {
 		return errs.New(errs.CategoryInvalidArgument, "%s: invalid admission_class %q", kind, r.AdmissionClass)
@@ -575,14 +575,9 @@ func canonicalRuleMappingSerialization(r Rule) string {
 	deps := append([]string(nil), r.DependsOn...)
 	sort.Strings(deps)
 
-	srcKind := r.SourceKind
-	if srcKind == "" {
-		srcKind = AuthoritySourceKindSystem
-	}
-
 	return fmt.Sprintf("id=%s|kind=%s|class=%s|cap=%s|domains=%s|roles=%s|risks=%s|actions=%s|paths=%s|deps=%s|rev=%s",
 		r.ID,
-		srcKind,
+		r.SourceKind,
 		r.AdmissionClass,
 		r.Capability,
 		strings.Join(domains, ","),
@@ -1096,6 +1091,12 @@ func (c *Compiler) CompileInvocation(ctx context.Context, req CompileRequest) (*
 	hasSchemas := len(req.ToolSchemas) > 0
 	hasDeclared := len(req.DeclaredTools) > 0
 	hasLegacyTools := len(req.Tools) > 0
+
+	if hasSchemas && hasLegacyTools {
+		return nil, errs.New(errs.CategoryInvalidArgument,
+			"%s: request specifies both modern tool_schemas (%d) and legacy tools (%d); tool representations are mutually exclusive, fail closed",
+			kind, len(req.ToolSchemas), len(req.Tools))
+	}
 
 	if hasSchemas {
 		if !hasDeclared {

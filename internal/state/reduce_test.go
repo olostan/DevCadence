@@ -566,3 +566,4 @@ func TestReduceModuleCatalogRecorded(t *testing.T) {
 		t.Errorf("unexpected module 1: %+v", state.Modules[1])
 	}
 }
+

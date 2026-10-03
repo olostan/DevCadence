@@ -85,6 +85,7 @@ func TestCanonicalRuleRegistry_FullCoverageAndFrozen(t *testing.T) {
 	// Verify registry is frozen (cannot register new rule or modify metadata)
 	err = reg.Register(compiler.Rule{
 		ID:             "DCI-999",
+		SourceKind:     compiler.AuthoritySourceKindSystem,
 		AdmissionClass: compiler.AdmissionClassAlways,
 		SourceDoc:      "test.md",
 		Revision:       "v1.0",
@@ -104,6 +105,7 @@ func TestCatalogDigest_AuthenticatesMappingSemantics(t *testing.T) {
 	// Baseline rule
 	r1 := compiler.Rule{
 		ID:             "DCI-030",
+		SourceKind:     compiler.AuthoritySourceKindSystem,
 		AdmissionClass: compiler.AdmissionClassCapabilityDefault,
 		Capability:     "write",
 		SourceDoc:      "INVARIANTS.md",

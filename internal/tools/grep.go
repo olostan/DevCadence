@@ -42,7 +42,7 @@ type GrepOptions struct {
 	Artifacts  *artifacts.Store
 	Scope      Scope
 	Query      string
-	Path       string // Relative to scope (file or directory)
+	Path       string   // Relative to scope (file or directory)
 	IsRegex    bool
 	Mode       GrepMode // "matches" (default), "files_only", "count"
 	MaxResults int      // Default 20

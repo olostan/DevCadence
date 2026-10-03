@@ -118,18 +118,15 @@ Cognitive Invocation Compiler
 ```
 
 1. **Layered Authority Hierarchy**:
-   - **System Invariants (`system`)**: Universal DevCadence invariants (`INVARIANTS.md`, DCI-001..094) governing control-plane safety, evidence integrity, model boundaries, and isolated execution. Constructed by `NewCanonicalRuleRegistry()`.
+   - **System Invariants (`system`)**: Universal DevCadence invariants governing control-plane safety, evidence integrity, model boundaries, and isolated execution (94 DevCadence DCI invariants from `INVARIANTS.md`: DCI-001 through DCI-135, with intentional gaps). Constructed by `NewCanonicalRuleRegistry()`.
    - **Organization Policy (`organization`)**: Enterprise or team-level governance policies (e.g. licensing restrictions, approved dependency registries, mandatory internal auditing). [Deferred to future enterprise milestones].
    - **Project-Local Invariants (`project`)**: Codebase-specific durable rules located in the target project's committed canonical baseline (e.g. `.devcadence/INVARIANTS.md`), discovered and governed during M6 Project Adoption.
    - **Task Constraints (`task`)**: Narrow, temporary execution contracts defined in the active Engineering Work Package.
    - **Composition Invariant**: Lower authority layers may add further restrictions but MUST NOT silently weaken or contradict higher-authority constraints; detected contradictions fail closed.
 
-2. **AuthoritySource Model**:
-   Each admitted rule carries explicit provenance via an `AuthoritySource` identity:
-   - `source_kind`: `system | organization | project | task`
-   - `source_id`: canonical identifier of the authority origin (e.g. `canonical-dci-invariants`, `project-acme-backend`)
-   - `revision`: git commit or release version of the source document
-   - `digest`: content hash authenticating the source content
+2. **Authority Provenance: Current Implementation vs. Future Contract**:
+   - **Current M3C Implementation**: The compiler operates on the DevCadence system catalog (`NewCanonicalRuleRegistry()`), embedding an explicit `SourceKind` seam (`system`, `organization`, `project`, `task`) directly on every `Rule`. Rules carry concrete source provenance (`SourceKind`, `SourceDoc`, `Revision`, `ContentDigest`), authenticated cryptographically by `CatalogDigest`.
+   - **Planned M6 / Future Contract**: In Milestone M6 (Project Adoption) and future distributed topologies, the authority model expands into the full `AuthoritySource` descriptor (`source_kind`, `source_id`, `revision`, `digest`), multi-source deterministic composition (System + Org + Project + Task), and automated non-weakening conflict checking across disparate authority catalogs.
 
 3. **Capability Model as Effect Authority**:
    The capability system is **Effect Authority** (what real-world effects this invocation can cause: `write`, `exec`, `credentials`, `network`, `spending`, `durable_state_mutation`), NOT enterprise IAM or human user authentication.

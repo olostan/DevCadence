@@ -355,3 +355,4 @@ func TestRunStreamingSinks(t *testing.T) {
 		t.Errorf("stderr sink = %q, want hello-stderr", stderrBuf.String())
 	}
 }
+
