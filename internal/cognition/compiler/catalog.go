@@ -82,7 +82,7 @@ type InvariantMapping struct {
 	DependsOn      []string
 }
 
-// CanonicalInvariantMappings pairs all 94 DCI invariants with their deterministic admission path.
+// CanonicalInvariantMappings pairs all canonical DCI invariants with their deterministic admission path.
 var CanonicalInvariantMappings = map[string]InvariantMapping{
 	// A. Intelligence-boundary invariants (DCI-001..DCI-009)
 	"DCI-001": {AdmissionClass: AdmissionClassMapped, Domains: []string{"cognition"}, Roles: []string{"principal_engineer", "architect"}},
@@ -203,6 +203,31 @@ var CanonicalInvariantMappings = map[string]InvariantMapping{
 	"DCI-133": {AdmissionClass: AdmissionClassMapped, Domains: []string{"compiler", "cognitive_compiler", "context_admission"}},
 	"DCI-134": {AdmissionClass: AdmissionClassMapped, Domains: []string{"review", "review_and_convergence"}},
 	"DCI-135": {AdmissionClass: AdmissionClassMapped, Domains: []string{"review", "review_and_convergence"}},
+
+	// N. Project bootstrap, capability-pack, and health invariants (DCI-136..DCI-158)
+	"DCI-136": {AdmissionClass: AdmissionClassMapped, Domains: []string{"adoption", "bootstrap", "discovery"}},
+	"DCI-137": {AdmissionClass: AdmissionClassMapped, Domains: []string{"adoption", "bootstrap", "governance"}},
+	"DCI-138": {AdmissionClass: AdmissionClassMapped, Domains: []string{"health", "governance", "validation"}},
+	"DCI-139": {AdmissionClass: AdmissionClassMapped, Domains: []string{"health", "brownfield", "governance"}},
+	"DCI-140": {AdmissionClass: AdmissionClassMapped, Domains: []string{"health", "validation", "review"}},
+	"DCI-141": {AdmissionClass: AdmissionClassMapped, Domains: []string{"health", "validation", "execution"}},
+	"DCI-142": {AdmissionClass: AdmissionClassMapped, Domains: []string{"health", "controlplane", "governance"}},
+	"DCI-143": {AdmissionClass: AdmissionClassMapped, Domains: []string{"bootstrap", "adoption", "governance"}},
+	"DCI-144": {AdmissionClass: AdmissionClassMapped, Domains: []string{"architecture", "discovery_and_specification", "architectural_reasoning"}},
+	"DCI-145": {AdmissionClass: AdmissionClassMapped, Domains: []string{"architecture", "bootstrap", "architectural_reasoning"}},
+	"DCI-146": {AdmissionClass: AdmissionClassMapped, Domains: []string{"bootstrap", "repository_execution", "execution"}},
+	"DCI-147": {AdmissionClass: AdmissionClassMapped, Domains: []string{"bootstrap", "governance"}},
+	"DCI-148": {AdmissionClass: AdmissionClassMapped, Domains: []string{"bootstrap", "health", "adoption"}},
+	"DCI-149": {AdmissionClass: AdmissionClassMapped, Domains: []string{"architecture", "governance"}},
+	"DCI-150": {AdmissionClass: AdmissionClassMapped, Domains: []string{"architecture", "governance"}},
+	"DCI-151": {AdmissionClass: AdmissionClassMapped, Domains: []string{"compiler", "cognitive_compiler", "context_admission"}},
+	"DCI-152": {AdmissionClass: AdmissionClassMapped, Domains: []string{"governance", "architecture"}},
+	"DCI-153": {AdmissionClass: AdmissionClassMapped, Domains: []string{"governance", "state"}},
+	"DCI-154": {AdmissionClass: AdmissionClassMapped, Domains: []string{"validation", "architecture"}},
+	"DCI-155": {AdmissionClass: AdmissionClassMapped, Domains: []string{"governance", "validation"}},
+	"DCI-156": {AdmissionClass: AdmissionClassMapped, Domains: []string{"health", "validation", "governance"}},
+	"DCI-157": {AdmissionClass: AdmissionClassMapped, Domains: []string{"security", "governance", "execution"}},
+	"DCI-158": {AdmissionClass: AdmissionClassMapped, Domains: []string{"governance", "validation", "health"}},
 }
 
 // computeRuleDigest calculates sha256:hex(content).
@@ -214,7 +239,7 @@ func computeRuleDigest(content string) string {
 
 var dciHeadingRegex = regexp.MustCompile(`(?m)^### (DCI-\d{3}) — (.*)$`)
 
-// ParseInvariantsFromDoc extracts all 94 DCI invariants with verbatim text and headings from INVARIANTS.md.
+// ParseInvariantsFromDoc extracts all canonical DCI invariants with verbatim text and headings from INVARIANTS.md.
 func ParseInvariantsFromDoc(docText string, rev string) ([]Rule, error) {
 	if strings.TrimSpace(docText) == "" {
 		return nil, errs.New(errs.CategoryInvalidArgument, "ParseInvariantsFromDoc: docText cannot be empty")
@@ -280,7 +305,7 @@ func ParseInvariantsFromDoc(docText string, rev string) ([]Rule, error) {
 	return rules, nil
 }
 
-// CanonicalRules returns all 94 canonical DevCadence mandatory rules extracted verbatim from INVARIANTS.md.
+// CanonicalRules returns all canonical DevCadence mandatory rules extracted verbatim from INVARIANTS.md.
 func CanonicalRules() []Rule {
 	rules, err := ParseInvariantsFromDoc(devcadence.InvariantsDoc, CanonicalCatalogRevision)
 	if err != nil {
@@ -290,7 +315,7 @@ func CanonicalRules() []Rule {
 }
 
 // NewCanonicalRuleRegistry creates, populates, and freezes the authoritative RuleRegistry
-// with all 94 DCI invariants extracted verbatim from INVARIANTS.md.
+// with all canonical DCI invariants extracted verbatim from INVARIANTS.md.
 // Note: This builds the DevCadence *system* invariant catalog (AuthoritySourceKindSystem),
 // not the entire universe of authority for all projects. Lower authority layers (organization policies,
 // project-local invariants in .devcadence/INVARIANTS.md, and task constraints) compose deterministically
@@ -305,7 +330,7 @@ func NewCanonicalRuleRegistry() (*RuleRegistry, error) {
 		}
 	}
 
-	// 2. Parse all 94 invariants from embedded INVARIANTS.md
+	// 2. Parse all canonical invariants from embedded INVARIANTS.md
 	rules, err := ParseInvariantsFromDoc(devcadence.InvariantsDoc, CanonicalSourceRevision)
 	if err != nil {
 		return nil, errs.Wrap(errs.CategoryInternal, err, "parse canonical invariants")

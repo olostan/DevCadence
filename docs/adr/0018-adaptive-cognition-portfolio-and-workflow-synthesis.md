@@ -80,7 +80,7 @@ New hardware, subscriptions, APIs, models, policy or evaluated outcomes may prod
 - **M3D:** AI-assisted portfolio synthesis, adaptive workflow topology, explicit adaptation/rollback and richer setup/explanation UX.
 - **M4:** validates the adaptive heterogeneous-cognition hypothesis early against simpler baselines before broad productization.
 - **M5:** semantic principal/host integration consumes the M3 substrate after the evidence gate.
-- **M6:** brownfield Project Adoption remains a separate product subsystem and is not required to learn whether adaptive cognition works.
+- **M6:** project bootstrap/capability packs/adoption remain a separate downstream product subsystem (M6A/M6B/M6C) and are not required to learn whether adaptive cognition works.
 - **M7:** consultants/reviewers become role/independence constraints over the active portfolio.
 - **M9:** evaluates endpoint/access/role/task/topology outcomes and governs learned promotion/rollback.
 - **M10:** dashboard/long-running scheduler consumes the same protocols.

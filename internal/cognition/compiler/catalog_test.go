@@ -10,14 +10,14 @@ import (
 	"github.com/olostan/DevCadence/internal/errs"
 )
 
-func TestParseInvariantsFromDoc_All94Invariants(t *testing.T) {
+func TestParseInvariantsFromDoc_AllCanonicalInvariants(t *testing.T) {
 	rules, err := compiler.ParseInvariantsFromDoc(devcadence.InvariantsDoc, compiler.CanonicalCatalogRevision)
 	if err != nil {
 		t.Fatalf("unexpected error parsing invariants from INVARIANTS.md: %v", err)
 	}
 
-	if len(rules) != 94 {
-		t.Fatalf("expected exactly 94 DCI invariants extracted, got %d", len(rules))
+	if len(rules) != len(compiler.CanonicalInvariantMappings) {
+		t.Fatalf("parsed %d DCI invariants, want exactly the %d mapped canonical invariants", len(rules), len(compiler.CanonicalInvariantMappings))
 	}
 
 	// Verify every invariant has non-empty fields and valid SHA-256 digest
@@ -79,7 +79,7 @@ func TestCanonicalRuleRegistry_FullCoverageAndFrozen(t *testing.T) {
 
 	// Verify 100% reverse coverage
 	if err := reg.VerifyReverseCoverage(); err != nil {
-		t.Errorf("expected 100%% reverse coverage across all 94 invariants, got error: %v", err)
+		t.Errorf("expected 100%% reverse coverage across the canonical invariant mapping, got error: %v", err)
 	}
 
 	// Verify registry is frozen (cannot register new rule or modify metadata)

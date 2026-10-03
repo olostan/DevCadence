@@ -464,3 +464,7 @@ name, normative grounding, dependency chain, WP entries with objective/
 deliverables/MUST/acceptance-criteria/non-goals), when a later milestone is ready to be broken down into implementation-sized
 work. Don't pre-populate all future milestones speculatively — this file keeps
 detailed scope cards only for work close enough to execute.
+
+## Future M6 architecture work
+
+**WP-M6-H1 — Extensible Project Bootstrap, Capability Packs, Toolchains, and Health** ([EWP](work-packages/wp-m6-h1-project-toolchains-health-architecture.md)) defines the producer-neutral pack/Skills/conformance boundary, compositional toolchains, base-governed ProjectHealthContract, brownfield pack synthesis, and bounded-EWP greenfield bootstrap. Implementation is sequenced as M6A pack/health core → M6B adoption+synthesis → M6C greenfield bootstrap, downstream of the M4 evidence gate. ADR-0021..0023 and the M6 architecture docs own the detailed semantics.

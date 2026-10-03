@@ -18,7 +18,7 @@ flowchart LR
     M3D["M3D<br/>Adaptive portfolio<br/>+ workflow synthesis"]
     M4["M4<br/>Adaptive vertical slice<br/>+ evidence gate"]
     M5["M5<br/>Semantic principal<br/>+ host portability"]
-    M6["M6<br/>Project adoption<br/>+ reconstruction"]
+    M6["M6<br/>Project bootstrap<br/>+ adoption"]
     M7["M7<br/>Reviews + consultants"]
     M8["M8<br/>Health/refactoring"]
     M9["M9<br/>Learning/evaluation"]
@@ -40,9 +40,10 @@ If the experiment shows that simpler workflows consume fewer scarce resources
 for equivalent accepted quality, M3D policy/topology should be revised before
 M5+ scope proceeds unchanged.
 
-M5 productizes semantic principal integration and host portability. M6 gives
-brownfield Project Adoption its own milestone rather than hiding that
-product-sized subsystem inside a host-integration phase. M7-M10 then build
+M5 productizes semantic principal integration and host portability. M6 owns
+project bootstrap as a product-sized subsystem: greenfield technology selection/
+materialization plus brownfield Project Adoption and reconstruction rather than
+hiding either inside host integration. M7-M10 then build
 review convergence, engineering health, evaluated learning, and long-running
 campaigns in that order.
 
@@ -696,59 +697,130 @@ See [PRINCIPAL_HOSTS.md](PRINCIPAL_HOSTS.md),
 [ANTIGRAVITY_INTEGRATION.md](ANTIGRAVITY_INTEGRATION.md), and
 [MCP_API.md](MCP_API.md).
 
-## M6 — Project Adoption and Retrospective Reconstruction
+## M6 — Project Bootstrap, Capability Packs, and Adoption
 
 ### Goal
-Allow an existing repository with absent, stale, incomplete or arbitrary
-documentation to become a trustworthy DevCadence-managed project.
 
-Repository registration alone is not readiness. Project Adoption is large
-enough to own a full milestone rather than being a sub-phase of host
-integration.
+Create or adopt a repository into a trustworthy DevCadence-managed project using a horizontal ecosystem-capability model rather than language/framework-specific core branches.
 
-### Deliverables
-- project-adoption state/workflow;
+M6 begins **after the M4 core-hypothesis/evidence gate**. M6 must not be pulled forward in a way that delays proving the compact-principal + bounded-execution + deterministic-verification hypothesis.
+
+M6 has three implementation slices so the platform contract lands before broad adoption/scaffolding behavior.
+
+### M6A — Pack, mechanics, and health core
+
+Deliverables:
+
+- one PackRegistry abstraction;
+- ProjectCapabilityPack manifest/schema;
+- Agent Skills-compatible pack knowledge;
+- built-in, home-library, project-local, and explicit GitHub/HTTPS pack loading through one contract;
+- durable pack identity/origin/revision/content-digest/provenance;
+- explicit PackUpgradeProposal/revalidation flow;
+- compatibility/dependency/conflict resolution;
+- compositional ToolchainProfile capabilities per ADR-0015 module;
+- mechanical manifest for environment, build/typecheck, run/dev, test, lint/static-analysis, coverage, generated-code, install/device/deploy, and result adapters;
+- generic structured result/finding interchange and explicit opaque-pass/fail tier;
+- pack conformance harness;
+- seeded-failure checks for important health mechanics;
+- ProjectHealthContract;
+- base-governed candidate acceptance ("candidate cannot rewrite its own judge");
+- capability-separated successor-policy approval channel outside the worker tool/shell/API envelope;
+- candidate-accurate evidence;
+- finding-fingerprint no-new-debt baseline/ratchet;
+- explicit baseline reconciliation across pack/tool/rule upgrades;
+- managed hook/CI adapter provenance/drift detection;
+- initial trust-profile presets while preserving always-on integrity;
+- Cognitive Invocation Compiler admission of pack Skills without double injection or authority expansion;
+- at least two genuinely different reference packs (for example Go and Flutter).
+
+### M6B — Brownfield adoption and pack synthesis
+
+Deliverables:
+
 - adoption source-commit pinning;
-- deterministic repository/document inventory;
-- broad existing-document harvest/classification;
-- source/test/schema/configuration contract discovery;
-- targeted Git-history archaeology;
-- ambiguity/contradiction ledger for brownfield evidence;
-- reconstruction provenance distinguishing observed, documented, inferred,
-  human-confirmed, reconstructed-confirmed, unknown, contradicted and
-  accepted-risk;
-- mandatory canonical documentation baseline under `docs/devcadence/` by
-  default (or an explicitly configured committed canonical root), including
-  VISION, REQUIREMENTS, ARCHITECTURE, INVARIANTS, SECURITY, TEST_STRATEGY,
-  OPERATIONS and applicable ADRs;
-- project invariant discovery and governance: clearly distinguishing ordinary
-  documentation (durable reference knowledge) from project invariants
-  (properties that must continue to hold across future work packages, admitted
-  by the Cognitive Invocation Compiler alongside system invariants) and
-  temporary EWP constraints;
-- isolated adoption-baseline worktree/branch;
-- AdoptionDecision and Adoption Readiness Gate;
-- guard preventing normal managed implementation/acceptance/integration before
-  READY.
+- deterministic repository/document/tool inventory;
+- existing-document harvest/classification;
+- source/test/schema/configuration/history reconstruction;
+- ambiguity/contradiction ledger;
+- canonical documentation baseline under docs/devcadence/ by default;
+- native build/test/lint/coverage/CI mapping;
+- pack recommendation from observed stack;
+- LLM-synthesized candidate pack for unsupported/bespoke stacks;
+- conformance/seeded-failure/Skill-trial validation of synthesized packs;
+- inherited debt/finding baseline;
+- project invariant candidate reconciliation;
+- AdoptionDecision and readiness gate;
+- guard preventing normal managed implementation/acceptance/integration before READY.
 
-Existing good native documentation should be preserved/referenced rather than
-rewritten merely for formatting consistency.
+Existing good native tooling/documentation is preserved/mapped rather than rewritten for stylistic consistency.
+
+### M6C — Greenfield project bootstrap
+
+Deliverables:
+
+- TechnologyOptionSet comparison for material stack choices;
+- explicit separation of technical fit from DevCadence supportability;
+- TechnologyDecision/ADR evidence;
+- versioned ProjectBlueprint;
+- bounded greenfield EWP for initial materialization;
+- pack-guided Agent Skills and ecosystem-native generator/model execution;
+- observed generator/tool version/argument provenance when available;
+- explicit partial/unsupported capability handling;
+- optional candidate-pack synthesis during bootstrap;
+- post-materialization module/capability resolution;
+- initial ProjectHealthContract and canonical documentation;
+- deterministic readiness gate before normal feature work.
+
+DevCadence does **not** maintain a universal ScaffoldRecipe/template registry. The durable contract is architecture + EWP + pack knowledge + observed execution evidence + deterministic acceptance.
 
 ### Verification
-Synthetic brownfield repositories including no docs, README only, high-quality
-native docs, stale docs contradicting code/tests, tests revealing undocumented
-invariants, recoverable and unrecoverable historical rationale, human-authority
-product ambiguity, required canonical artifacts missing/not-applicable,
-uncommitted generated canonical docs, source commit drift during
-reconstruction, blocked delegation before READY, and successful READY
-transition after blockers close.
+
+M6A:
+- Go and Flutter reference packs;
+- structured and opaque result tiers;
+- seeded lint/test failure detection;
+- pack source pinning and successor upgrade;
+- compositional module capabilities;
+- candidate attempting to weaken its own health contract;
+- worker attempts to self-approve the successor through CLI, writable state, daemon/control-plane API, subprocesses, reused credentials/tokens, or trust-profile mutation; all attempts MUST fail until an out-of-band authority approves;
+- finding-fingerprint debt ratchet;
+- permissive and stricter trust presets;
+- Skill projection without double injection.
+
+M6B:
+- no-docs and stale-doc brownfield fixtures;
+- native-tool preservation;
+- unsupported stack;
+- LLM-synthesized unfamiliar "Zeta" pack;
+- conformance catching a hallucinated/no-op command;
+- generated Skill trial;
+- accepted-risk debt/readiness.
+
+M6C:
+- backend service;
+- Flutter/mobile app;
+- polyglot project;
+- technically preferred but partially supported stack;
+- native generator use;
+- direct model-created baseline;
+- post-bootstrap health failure/repair.
 
 ### Exit criterion
-DevCadence can take an imperfect existing repository, reconstruct an
-evidence-backed engineering contract, commit the mandatory canonical baseline,
-and refuse normal managed work until that baseline passes Adoption Readiness.
 
-See [PROJECT_ADOPTION.md](PROJECT_ADOPTION.md) and ADR-0012.
+DevCadence can:
+
+1. load/synthesize ecosystem capability packs through one producer-neutral contract;
+2. preserve exact pack lineage and safely propose later upgrades;
+3. map a project/module to compositional capabilities and a canonical health contract;
+4. prevent a candidate from weakening its own acceptance judge;
+5. adopt an imperfect brownfield repository with bounded debt;
+6. turn a specification-ready greenfield product into a bounded EWP-created, health-verified managed baseline;
+7. do all of this without adding ecosystem-specific branches to core orchestration/state/authority for an ordinary new stack.
+
+See PROJECT_CAPABILITY_PACKS.md, PROJECT_CREATION_AND_SCAFFOLDING.md,
+PROJECT_ADOPTION.md, PROJECT_TOOLCHAINS_AND_HEALTH.md, ADR-0012,
+ADR-0015, and ADR-0021..0023.
 
 ## M7 — Multi-review and consultant cognition
 
@@ -796,12 +868,19 @@ unavailable behavior; and security/redaction policy.
 Prevent feature throughput from degrading architecture.
 
 ### Deliverables
-- deterministic health metrics;
+- deterministic longitudinal health metrics over the M6 ProjectHealthContract
+  baseline;
+- structural metrics and trend snapshots;
 - semantic health reviews;
 - Refactoring Epoch state/process;
-- health trend snapshots;
 - Architecture Reconciliation workflow;
-- refactoring Work Package templates.
+- refactoring Work Package templates;
+- health/debt reduction campaigns and policy-evolution proposals.
+
+M8 does **not** introduce the first build/test/lint/coverage policy for a
+managed project. Minimum deterministic mechanical health is established during
+M6 project bootstrap/adoption; M8 reasons about trends, structural debt and
+architecture over that trusted substrate.
 
 ### Verification
 Seed a fixture project with intentional smells and verify detection, epoch

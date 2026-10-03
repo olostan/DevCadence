@@ -90,7 +90,7 @@ State the uncertain/violated assumption, exact evidence, observation versus inte
 
 ## 16. Current phase
 
-M0–M3B are complete. M3C adds cognition resources/session drivers, the Cognitive Invocation Compiler, context mediation, and compact durable review-state primitives; M3D adds adaptive portfolio/workflow synthesis; M4 is the empirical evidence gate. M5 covers semantic Principal integration/hosts; M6 adoption; M7 multi-review; M8 health; M9 evaluated learning; M10 autonomous campaigns. [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) owns detail and status. A local LLM is optional; no provider, subscription or host is mandatory. Prove the core hypothesis before dashboard/distributed-scheduling/training expansion.
+M0–M3B are complete. M3C adds cognition resources/session drivers, the Cognitive Invocation Compiler, context mediation, and compact durable review-state primitives; M3D adds adaptive portfolio/workflow synthesis; M4 is the empirical evidence gate. M5 covers semantic Principal integration/hosts; M6 project bootstrap/capability packs/brownfield adoption; M7 multi-review; M8 semantic/longitudinal health; M9 evaluated learning; M10 autonomous campaigns. [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) owns detail and status. A local LLM is optional; no provider, subscription or host is mandatory. Prove the core hypothesis before dashboard/distributed-scheduling/training expansion.
 
 ## 17. Definition of done
 

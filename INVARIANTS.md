@@ -311,3 +311,74 @@ An implementer or author may report a fix attempt or challenge with evidence but
 
 ### DCI-135 — Review conversation is not canonical review state
 Material findings, dispositions/resolutions, verification and closure state have stable identities outside chat transcripts. Equivalent restatements do not reopen adjudicated findings without materially new evidence, changed contract or a repair regression.
+
+## N. Project bootstrap, capability-pack, and health invariants
+
+### DCI-136 — Discovery is evidence, not authority
+Repository manifests, executable presence, CI files, generated configuration, and other observed tooling facts MUST be treated as evidence only; they MUST NOT by themselves create language/framework-specific policy or authority.
+
+### DCI-137 — Ecosystem policy requires explicit activated capability
+A toolchain/framework-specific check or invariant MUST become operative only through an explicitly activated/resolved capability or explicitly adopted project-native policy. Unsupported or unknown capability MUST remain explicit rather than receiving model-invented defaults.
+
+### DCI-138 — Managed project health has one canonical contract
+Every normally managed project MUST have a versioned ProjectHealthContract defining applicable deterministic checks, lifecycle gates, baseline/regression semantics, debt treatment, and bounded exceptions. ValidationProfiles, hooks, and CI MUST NOT silently become independent health authorities.
+
+### DCI-139 — Historical health debt cannot silently grow
+Brownfield health debt MAY be grandfathered through an explicit revision-pinned baseline, but future managed changes MUST NOT introduce unmatched new debt unless an authorized policy change explicitly permits it.
+
+### DCI-140 — Deterministic health precedes cognition-heavy review by default
+Unless an EWP or health policy explicitly authorizes a bounded exception, a candidate MUST satisfy its applicable deterministic health gate before scarce semantic-review cognition is spent on acceptance.
+
+### DCI-141 — Health evidence identifies the actual candidate and judge
+Presubmit, pre-push, review, and integration health evidence MUST identify the actual candidate/base/ref set plus the governing ProjectHealthContract, pack revisions, and relevant tool versions. Evidence from an unrelated tree or policy revision MUST NOT stand in for the candidate being accepted.
+
+### DCI-142 — Managed enforcement adapters are drift-detectable
+When DevCadence manages hooks, CI workflows, or equivalent enforcement adapters, they MUST carry enough contract/pack/renderer provenance for deterministic drift detection.
+
+### DCI-143 — Built-in capability is not universal doctrine
+Built-in packs and recipes MUST be treated as reusable capability rather than universal project policy. DevCadence-specific choices such as Make, GitHub Actions, or a particular linter MUST NOT become requirements solely because DevCadence itself uses them.
+
+### DCI-144 — Technology selection is requirement-driven
+Greenfield technology/framework selection MUST be justified from product/engineering requirements, constraints, and evidence. DevCadence supportability MUST be represented separately and MUST NOT silently override superior technical/product fit.
+
+### DCI-145 — Blueprint and bounded EWP precede greenfield materialization
+A non-trivial greenfield repository/module baseline MUST derive from an accepted ProjectBlueprint or equivalent explicit architecture decision and a bounded EWP. The active host/model MUST NOT become the implicit source of repository topology or technology authority.
+
+### DCI-146 — Greenfield generator/model output is candidate evidence
+Files produced by an ecosystem generator or implementation model MUST remain candidate implementation until module/toolchain state, canonical documentation, and health acceptance are established. Generator success MUST NOT itself imply managed readiness.
+
+### DCI-147 — Unsupported capability remains explicit
+When no compatible pack/toolchain capability exists, DevCadence MUST report the unsupported/partial state and bounded fallback path; it MUST NOT represent generic model knowledge as deterministic ecosystem support.
+
+### DCI-148 — Initial managed baseline requires deterministic acceptance
+A newly created or adopted project MUST NOT enter normal managed feature work until authoritative module/capability bindings, canonical project documentation, and applicable ProjectHealthContract gates are established, or an explicitly authorized readiness exception exists.
+
+### DCI-149 — Ecosystem support grows horizontally
+Ordinary support for a new ecosystem MUST be expressible through the ProjectCapabilityPack contract plus fixtures/conformance unless that ecosystem exposes a genuinely new reusable core capability. Ecosystem identity alone MUST NOT require branches throughout core orchestration/state/authority.
+
+### DCI-150 — Pack extension is declarative/Skills-first
+ProjectCapabilityPacks MUST use versioned manifest data, Agent Skills-format knowledge, command/result mechanics, references, and fixtures as the default extension surface. Arbitrary in-process executable plugins MUST NOT be the default extension mechanism.
+
+### DCI-151 — Pack Skills are typed, bounded, and subordinate to authority
+Pack-provided Skills/prompt guidance MUST have explicit identity/revision, provenance, applicability, and context bounds. They MUST NOT expand authority, weaken system/project invariants or EWP constraints, or grant themselves mandatory status.
+
+### DCI-152 — Pack composition is explicit
+Capability-pack dependencies, compatibility, and conflicts MUST be resolved deterministically. Semantic conflicts MUST NOT be resolved by incidental load order.
+
+### DCI-153 — Pack identity, origin, and upgrades are durable
+An activated pack MUST retain logical identity, exact revision/content digest, source/origin locator when available, and validation provenance. A successor revision MUST be an explicit revalidated upgrade; active projects MUST NOT silently follow mutable pack sources.
+
+### DCI-154 — Pack extensibility is proven by conformance
+The extension model MUST be evaluated with materially different reference ecosystems and at least one unfamiliar synthesized ecosystem demonstrating that discovery/mechanics/Skills/health support can be added through a pack and conformance without ecosystem-specific core branches.
+
+### DCI-155 — Pack producer is not the trust boundary
+Built-in, human-authored, fetched, project-local, and model-generated packs MUST satisfy the same structural/compatibility contract. Evidence MUST preserve provenance/conformance class rather than treating producer identity as proof of correctness.
+
+### DCI-156 — A candidate cannot rewrite or silently extend its own judge
+A candidate that changes its ProjectHealthContract, debt baseline, resolved toolchain composition, activated pack content/digest, conformance fixtures/result adapters, or managed acceptance adapter MUST be evaluated under the accepted base judge. Proposed successor policy/capability MUST NOT govern acceptance of the same candidate that introduces it. New scope not covered by the base judge MUST be represented as uncovered and MUST NOT be treated as passing until successor coverage is separately accepted.
+
+### DCI-157 — Pack/Skill authority is capped by active policy
+A pack, Skill, manifest, or generated pack content MUST NOT grant itself filesystem/process/network/spending/tool authority beyond the active DevCadence policy/trust profile.
+
+### DCI-158 — Successor-policy acceptance is capability-separated
+A proposed successor health/pack/toolchain policy MUST be accepted by an authority structurally independent of the candidate producer. The producing worker MUST NOT possess, derive, invoke, or mutate the credential, API, IPC endpoint, UI action, state record, or other capability that records/promotes successor approval. Role labels, prompts, or an approval command reachable from the worker's own execution environment are insufficient separation.
