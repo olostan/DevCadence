@@ -37,7 +37,7 @@ func TestRepositoryMarkdownLinksAndAnchors(t *testing.T) {
 			if destination == "" {
 				continue
 			}
-			if i := strings.IndexAny(destination, " \\t"); i >= 0 {
+			if i := strings.IndexAny(destination, " \t"); i >= 0 {
 				destination = destination[:i]
 			}
 			destination = strings.Trim(destination, "<>")
