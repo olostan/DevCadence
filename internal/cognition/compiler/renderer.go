@@ -227,12 +227,35 @@ func EscapeEvidenceDelimiters(content string) string {
 	s := content
 	// Replace all occurrences of '</' with '&lt;/'
 	s = strings.ReplaceAll(s, "</", "&lt;/")
-	// Replace all occurrences of '<execution_contract>' or '<mandatory_obligations>' or other instruction headers
+	// Replace all occurrences of opening container tags emitted by TaggedMarkdownRenderer
 	s = strings.ReplaceAll(s, "<execution_contract>", "&lt;execution_contract&gt;")
+	s = strings.ReplaceAll(s, "<execution_contract ", "&lt;execution_contract ")
 	s = strings.ReplaceAll(s, "<mandatory_obligations>", "&lt;mandatory_obligations&gt;")
+	s = strings.ReplaceAll(s, "<mandatory_obligations ", "&lt;mandatory_obligations ")
 	s = strings.ReplaceAll(s, "<role_core>", "&lt;role_core&gt;")
-	s = strings.ReplaceAll(s, "<current_action>", "&lt;current_action&gt;")
+	s = strings.ReplaceAll(s, "<role_core ", "&lt;role_core ")
+	s = strings.ReplaceAll(s, "<cognitive_state>", "&lt;cognitive_state&gt;")
+	s = strings.ReplaceAll(s, "<cognitive_state ", "&lt;cognitive_state ")
+	s = strings.ReplaceAll(s, "<hypotheses>", "&lt;hypotheses&gt;")
+	s = strings.ReplaceAll(s, "<hypotheses ", "&lt;hypotheses ")
+	s = strings.ReplaceAll(s, "<active_todos>", "&lt;active_todos&gt;")
+	s = strings.ReplaceAll(s, "<active_todos ", "&lt;active_todos ")
+	s = strings.ReplaceAll(s, "<intermediate_decisions>", "&lt;intermediate_decisions&gt;")
+	s = strings.ReplaceAll(s, "<intermediate_decisions ", "&lt;intermediate_decisions ")
+	s = strings.ReplaceAll(s, "<open_questions>", "&lt;open_questions&gt;")
+	s = strings.ReplaceAll(s, "<open_questions ", "&lt;open_questions ")
 	s = strings.ReplaceAll(s, "<evidence_working_set>", "&lt;evidence_working_set&gt;")
+	s = strings.ReplaceAll(s, "<evidence_working_set ", "&lt;evidence_working_set ")
 	s = strings.ReplaceAll(s, "<evidence_lease", "&lt;evidence_lease")
+	s = strings.ReplaceAll(s, "<ephemeral_tail>", "&lt;ephemeral_tail&gt;")
+	s = strings.ReplaceAll(s, "<ephemeral_tail ", "&lt;ephemeral_tail ")
+	s = strings.ReplaceAll(s, "<recent_tool_exchanges>", "&lt;recent_tool_exchanges&gt;")
+	s = strings.ReplaceAll(s, "<recent_tool_exchanges ", "&lt;recent_tool_exchanges ")
+	s = strings.ReplaceAll(s, "<candidate_diff_manifest>", "&lt;candidate_diff_manifest&gt;")
+	s = strings.ReplaceAll(s, "<candidate_diff_manifest ", "&lt;candidate_diff_manifest ")
+	s = strings.ReplaceAll(s, "<validation_summaries>", "&lt;validation_summaries&gt;")
+	s = strings.ReplaceAll(s, "<validation_summaries ", "&lt;validation_summaries ")
+	s = strings.ReplaceAll(s, "<current_action>", "&lt;current_action&gt;")
+	s = strings.ReplaceAll(s, "<current_action ", "&lt;current_action ")
 	return s
 }
