@@ -8,6 +8,8 @@ Read README.md and AGENTS.md. Then resolve only the clauses your change touches,
 
 If your change contradicts an invariant, do not code around it. Propose an ADR explaining why the invariant should be changed or superseded.
 
+Install repository health hooks once per clone with `make hooks-install`. See [docs/ENGINEERING_HEALTH_POLICY.md](docs/ENGINEERING_HEALTH_POLICY.md). Commits are expected to pass staged-snapshot checks; pushes are expected to pass the full local CI-equivalent gate.
+
 ## Types of contribution
 
 Typical contributions include:
