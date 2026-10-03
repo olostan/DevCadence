@@ -70,7 +70,7 @@ For stateful work, include pre-state, committed state and failed/interrupted sta
 
 ## Verified facts about the current code
 
-Every assumption about existing code that the contract depends on, each with how it was verified. A reader who finds a row false returns the EWP to the Principal.
+Every assumption about existing code that the contract depends on, each with how it was verified. A reader who finds a row false escalates per the Escalation triggers (AGENTS.md §7) and does not proceed on it.
 
 | ID | Claim | Evidence (file:line / command) | Verified by |
 | --- | --- | --- | --- |
