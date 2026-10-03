@@ -349,6 +349,8 @@ Dependency/completion graph:
 
 **Post-WP-M3C-2B health inter-step:** merge of WP-M3C-2B triggers the behavior-preserving **WP-M3C-R1 Structural Consolidation Refactoring Epoch** ([EWP](work-packages/wp-m3c-r1-structural-consolidation.md)) under DCI-060..063. R1 records whole-repository structural findings but begins with a bounded compiler decomposition; setup/protocol/other hotspots remain explicit follow-up slices rather than silently expanding the first refactor. The epoch must preserve behavior, protocol/schema semantics, deterministic digests, fail-closed authority, and verification evidence.
 
+**Repository health enforcement:** after the M3C structural consolidation, **WP-M3C-H1** ([EWP](work-packages/wp-m3c-h1-health-enforcement.md)) establishes staged-snapshot pre-commit checks, pre-push verification, coverage-regression protection, documentation integrity checks, and GitHub CI before further feature growth.
+
 
 **Objective:** build the session-driver abstraction across heterogeneous cognition endpoints and compile bounded, complete model invocations without requiring agents to understand DevCadence's full rule/process corpus.
 
