@@ -138,8 +138,8 @@ func (c *Compiler) CompileInvocation(ctx context.Context, req CompileRequest) (*
 	manifest := assembleContextManifest(req, c.registry, mappingVersion, sourceRevision, mandatoryRefs)
 
 	// Stage 5: Gather Evidence Working Set leases with freshness and read scope checks
-	now := time.Now().UTC()
-	evidenceWorkingSet, err := collectEvidenceWorkingSet(c.leaseMgr, req.ActiveLeaseIDs, req.ReadEnvelope, sourceRevision, now, admittedObjectDigests, manifest)
+	evidenceNow := time.Now().UTC()
+	evidenceWorkingSet, err := collectEvidenceWorkingSet(c.leaseMgr, req.ActiveLeaseIDs, req.ReadEnvelope, sourceRevision, evidenceNow, admittedObjectDigests, manifest)
 	if err != nil {
 		return nil, err
 	}
@@ -149,7 +149,8 @@ func (c *Compiler) CompileInvocation(ctx context.Context, req CompileRequest) (*
 	}
 
 	// Stage 6: Gather Cognitive State Capsule with dependency freshness checks
-	cognitiveState, err := collectCognitiveState(c.capsuleMgr, c.leaseMgr, sourceRevision, now)
+	cognitiveNow := time.Now().UTC()
+	cognitiveState, err := collectCognitiveState(c.capsuleMgr, c.leaseMgr, sourceRevision, cognitiveNow)
 	if err != nil {
 		return nil, err
 	}
