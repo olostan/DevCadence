@@ -63,12 +63,13 @@ type PendingActivation struct {
 // ActivationManager coordinates deterministic validation, atomic versioned activation,
 // and safe rollback of cognition portfolios.
 type ActivationManager struct {
-	mu             sync.Mutex
-	dir            string
-	validator      *PortfolioValidator
-	clock          clock.Clock
-	postRenameHook func(targetPath string) error
-	syncDirHook    func(dirPath string) error
+	mu               sync.Mutex
+	dir              string
+	validator        *PortfolioValidator
+	clock            clock.Clock
+	recoveryRequired bool
+	postRenameHook   func(targetPath string) error
+	syncDirHook      func(dirPath string) error
 }
 
 // NewActivationManager creates an ActivationManager storing state in dir and performs startup recovery.
@@ -106,6 +107,10 @@ func (m *ActivationManager) Activate(ctx context.Context, input ValidationInput)
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	if m.recoveryRequired {
+		return nil, errs.New(errs.CategoryConflict, "activation manager requires restart/recovery after an incomplete rollback")
+	}
+
 	if input.Clock == nil {
 		input.Clock = m.clock
 	}
@@ -122,17 +127,13 @@ func (m *ActivationManager) Activate(ctx context.Context, input ValidationInput)
 		return nil, err
 	}
 
-	// Freshness check: if candidate was validated with a stale inventory compared to current
-	if lineage != nil && lineage.InventoryDigest != "" && result.InventoryDigest != "" {
-		if input.Inventory != nil && lineage.InventoryDigest != result.InventoryDigest {
-			// Inventory changed since last active activation - this is normal when updating inventory.
-			// But if the validation input itself has a mismatch between inventory and machine profile:
-			if input.MachineProfile != nil && input.Inventory.MachineFingerprint != input.MachineProfile.MachineFingerprint {
-				return nil, errs.New(errs.CategoryConflict,
-					"activation rejected: inventory machine fingerprint %q does not match profile machine fingerprint %q",
-					input.Inventory.MachineFingerprint, input.MachineProfile.MachineFingerprint)
-			}
-		}
+	// Inventory and machine profile must always describe the same machine when both are supplied.
+	// This is an input-consistency invariant, independent of prior lineage or digest freshness.
+	if input.Inventory != nil && input.MachineProfile != nil &&
+		input.Inventory.MachineFingerprint != input.MachineProfile.MachineFingerprint {
+		return nil, errs.New(errs.CategoryConflict,
+			"activation rejected: inventory machine fingerprint %q does not match profile machine fingerprint %q",
+			input.Inventory.MachineFingerprint, input.MachineProfile.MachineFingerprint)
 	}
 
 	seq := 1
@@ -174,6 +175,10 @@ func (m *ActivationManager) RollbackToPrevious(ctx context.Context, revalidation
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	if m.recoveryRequired {
+		return nil, errs.New(errs.CategoryConflict, "activation manager requires restart/recovery after an incomplete rollback")
+	}
+
 	if revalidationInput == nil {
 		return nil, errs.New(errs.CategoryInvalidArgument, "rollback: revalidation input is mandatory")
 	}
@@ -193,6 +198,10 @@ func (m *ActivationManager) RollbackToPrevious(ctx context.Context, revalidation
 func (m *ActivationManager) RollbackToActivation(ctx context.Context, targetActivationID string, revalidationInput *ValidationInput) (*ActivationRecord, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+
+	if m.recoveryRequired {
+		return nil, errs.New(errs.CategoryConflict, "activation manager requires restart/recovery after an incomplete rollback")
+	}
 
 	if targetActivationID == "" {
 		return nil, errs.New(errs.CategoryInvalidArgument, "rollback: target_activation_id is required")
@@ -293,8 +302,8 @@ func (m *ActivationManager) GetActivePortfolio(ctx context.Context) (*protocol.C
 	}
 
 	lineage, err := m.loadLineageLocked()
-	if err != nil {
-		return &p, nil, nil
+	if err != nil && errs.CategoryOf(err) != errs.CategoryNotFound {
+		return nil, nil, err
 	}
 
 	var currentRec *ActivationRecord

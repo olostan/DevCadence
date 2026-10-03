@@ -2,6 +2,7 @@ package cognition
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/olostan/DevCadence/internal/protocol"
@@ -161,7 +162,13 @@ func (ctx *validatorContext) validateContextAndConstraints(diags *[]PortfolioDia
 	}
 
 	if ctx.input.ResourceStates != nil {
-		for hostID, resState := range ctx.input.ResourceStates {
+		hostIDs := make([]string, 0, len(ctx.input.ResourceStates))
+		for hostID := range ctx.input.ResourceStates {
+			hostIDs = append(hostIDs, hostID)
+		}
+		sort.Strings(hostIDs)
+		for _, hostID := range hostIDs {
+			resState := ctx.input.ResourceStates[hostID]
 			if resState.ActiveSlots != nil && resState.MaxConcurrentSlots != nil {
 				if *resState.ActiveSlots >= *resState.MaxConcurrentSlots {
 					*diags = append(*diags, PortfolioDiagnostic{

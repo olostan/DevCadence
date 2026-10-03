@@ -56,41 +56,55 @@ func (m *ActivationManager) persistActivationLocked(record ActivationRecord, pre
 		return errs.Wrap(errs.CategoryInternal, err, "failed to write pending activation intent")
 	}
 
-	// Helper for synchronous rollback if component writes fail after intent is staged
+	// Helper for synchronous rollback if component writes fail after intent is staged.
+	// If rollback itself cannot complete durably, preserve the pending journal and poison
+	// this manager instance so no later mutation can overwrite unresolved recovery state.
 	rollbackOnFailure := func(origErr error) error {
-		_ = os.Remove(filepath.Join(m.dir, HistoryDirName, historyFileName))
+		rollbackFailed := func(msg string, err error) error {
+			m.recoveryRequired = true
+			return errs.Wrap(errs.CategoryInternal, origErr, msg+": %v", err)
+		}
+
+		historyPath := filepath.Join(m.dir, HistoryDirName, historyFileName)
+		if err := os.Remove(historyPath); err != nil && !os.IsNotExist(err) {
+			return rollbackFailed("rollback remove history failed", err)
+		}
+		if err := m.syncDir(filepath.Join(m.dir, HistoryDirName)); err != nil {
+			return rollbackFailed("rollback sync history dir failed", err)
+		}
+
 		if prevLineage == nil || len(existingHistory) == 0 {
 			if err := os.Remove(filepath.Join(m.dir, ActivePortfolioFileName)); err != nil && !os.IsNotExist(err) {
-				return errs.Wrap(errs.CategoryInternal, origErr, "rollback remove active failed: %v", err)
+				return rollbackFailed("rollback remove active failed", err)
 			}
 			if err := os.Remove(filepath.Join(m.dir, LineageFileName)); err != nil && !os.IsNotExist(err) {
-				return errs.Wrap(errs.CategoryInternal, origErr, "rollback remove lineage failed: %v", err)
+				return rollbackFailed("rollback remove lineage failed", err)
 			}
 		} else {
 			prevRec := existingHistory[len(existingHistory)-1]
 			prevPortfolioBytes, err := json.MarshalIndent(prevRec.Portfolio, "", "  ")
 			if err != nil {
-				return errs.Wrap(errs.CategoryInternal, origErr, "rollback marshal portfolio failed: %v", err)
+				return rollbackFailed("rollback marshal portfolio failed", err)
 			}
 			if err := m.atomicWriteFile(filepath.Join(m.dir, ActivePortfolioFileName), prevPortfolioBytes, 0644); err != nil {
-				return errs.Wrap(errs.CategoryInternal, origErr, "rollback restore portfolio failed: %v", err)
+				return rollbackFailed("rollback restore portfolio failed", err)
 			}
 			prevLineageBytes, err := json.MarshalIndent(prevLineage, "", "  ")
 			if err != nil {
-				return errs.Wrap(errs.CategoryInternal, origErr, "rollback marshal lineage failed: %v", err)
+				return rollbackFailed("rollback marshal lineage failed", err)
 			}
 			if err := m.atomicWriteFile(filepath.Join(m.dir, LineageFileName), prevLineageBytes, 0644); err != nil {
-				return errs.Wrap(errs.CategoryInternal, origErr, "rollback restore lineage failed: %v", err)
+				return rollbackFailed("rollback restore lineage failed", err)
 			}
 		}
 		if err := m.syncDir(m.dir); err != nil {
-			return errs.Wrap(errs.CategoryInternal, origErr, "rollback sync dir failed: %v", err)
+			return rollbackFailed("rollback sync dir failed", err)
 		}
 		if err := os.Remove(pendingPath); err != nil && !os.IsNotExist(err) {
-			return errs.Wrap(errs.CategoryInternal, origErr, "rollback remove pending failed: %v", err)
+			return rollbackFailed("rollback remove pending failed", err)
 		}
 		if err := m.syncDir(m.dir); err != nil {
-			return errs.Wrap(errs.CategoryInternal, origErr, "rollback final sync dir failed: %v", err)
+			return rollbackFailed("rollback final sync dir failed", err)
 		}
 		return origErr
 	}
@@ -229,15 +243,18 @@ func (m *ActivationManager) readHistoryRecord(activationID string) (*ActivationR
 		return nil, err
 	}
 	for _, entry := range entries {
-		if strings.Contains(entry.Name(), activationID) {
-			data, err := os.ReadFile(filepath.Join(histDir, entry.Name()))
-			if err != nil {
-				return nil, err
-			}
-			var rec ActivationRecord
-			if err := json.Unmarshal(data, &rec); err != nil {
-				return nil, err
-			}
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(histDir, entry.Name()))
+		if err != nil {
+			return nil, err
+		}
+		var rec ActivationRecord
+		if err := json.Unmarshal(data, &rec); err != nil {
+			return nil, err
+		}
+		if rec.ActivationID == activationID {
 			return &rec, nil
 		}
 	}

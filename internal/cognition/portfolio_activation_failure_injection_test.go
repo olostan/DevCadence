@@ -185,14 +185,41 @@ func TestActivationManager_PostRenameFailureWithRollbackFailure_PreservesPending
 		t.Errorf("expected pending journal for 'port-2', got %q", pending.Record.PortfolioID)
 	}
 
-	// 5. Simulate process restart: create a new ActivationManager without test hooks.
+	// 5. Clear the injected hook and verify this manager instance is poisoned until
+	// restart/recovery. A subsequent mutation must not overwrite the unresolved journal.
+	mgr.SetPostRenameHookForTesting(nil)
+	p3 := makeTestPortfolio()
+	p3.PortfolioID = "port-3"
+	p3.Revision = 3
+	if _, err := mgr.Activate(ctx, cognition.ValidationInput{
+		Portfolio:       p3,
+		MachineProfile:  mp,
+		Inventory:       inv,
+		ContextProfiles: cp,
+		Clock:           clk,
+	}); err == nil {
+		t.Fatalf("expected subsequent activation to be rejected while recovery is required")
+	}
+	pendingAfter, readErr := os.ReadFile(pendingPath)
+	if readErr != nil {
+		t.Fatalf("expected pending journal to remain after rejected subsequent activation: %v", readErr)
+	}
+	var pendingAfterRecord cognition.PendingActivation
+	if err := json.Unmarshal(pendingAfter, &pendingAfterRecord); err != nil {
+		t.Fatalf("pending journal corrupted after rejected subsequent activation: %v", err)
+	}
+	if pendingAfterRecord.Record.PortfolioID != "port-2" {
+		t.Fatalf("subsequent activation overwrote pending recovery journal: got %q", pendingAfterRecord.Record.PortfolioID)
+	}
+
+	// 6. Simulate process restart: create a new ActivationManager without test hooks.
 	// Startup recovery must roll forward the pending activation cleanly.
 	recoveredMgr, err := cognition.NewActivationManager(tmpDir, validator, clk)
 	if err != nil {
 		t.Fatalf("startup recovery failed: %v", err)
 	}
 
-	// 6. Verify pending journal was removed and port-2 is now active
+	// 7. Verify pending journal was removed and port-2 is now active
 	if _, statErr := os.Stat(pendingPath); !os.IsNotExist(statErr) {
 		t.Errorf("expected pending journal to be removed after startup recovery, got statErr: %v", statErr)
 	}
