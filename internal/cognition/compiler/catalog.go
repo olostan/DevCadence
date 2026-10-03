@@ -255,6 +255,7 @@ func ParseInvariantsFromDoc(docText string, rev string) ([]Rule, error) {
 
 		rule := Rule{
 			ID:             dciID,
+			SourceKind:     AuthoritySourceKindSystem,
 			AdmissionClass: mapping.AdmissionClass,
 			SourceDoc:      "INVARIANTS.md",
 			Revision:       rev,
@@ -290,6 +291,10 @@ func CanonicalRules() []Rule {
 
 // NewCanonicalRuleRegistry creates, populates, and freezes the authoritative RuleRegistry
 // with all 94 DCI invariants extracted verbatim from INVARIANTS.md.
+// Note: This builds the DevCadence *system* invariant catalog (AuthoritySourceKindSystem),
+// not the entire universe of authority for all projects. Lower authority layers (organization policies,
+// project-local invariants in .devcadence/INVARIANTS.md, and task constraints) compose deterministically
+// into a frozen registry snapshot; lower layers may add restrictions but cannot weaken higher authority (ADR-0020).
 func NewCanonicalRuleRegistry() (*RuleRegistry, error) {
 	reg := NewRuleRegistry()
 

@@ -47,6 +47,9 @@
     "internal/cognition/compiler/*",
     "internal/errs/errs.go",
     "internal/errs/errs_test.go",
+    "docs/adr/0020-cognitive-invocation-compiler-and-review-ledger.md",
+    "docs/PROTOCOLS.md",
+    "docs/IMPLEMENTATION_PLAN.md",
     "docs/work-packages/wp-m3c-2b-ewp.md"
   ],
   "domains": [
@@ -189,7 +192,8 @@ Build the deterministic **Cognitive Invocation Compiler** (`internal/cognition/c
 
 1. **`admission.go`**:
    - `AdmissionClass` (`always`, `capability_default`, `mapped`).
-   - `Rule`: canonical representation with ID, class, doc, revision, content, digest, capabilities, domains, risk tags, roles, actions, path patterns, and dependencies.
+   - `AuthoritySourceKind` (`system`, `organization`, `project`, `task`) and `AuthoritySource` provenance descriptor.
+   - `Rule`: canonical representation with ID, source kind, class, doc, revision, content, digest, capabilities, domains, risk tags, roles, actions, path patterns, and dependencies.
    - `RuleRegistry`: thread-safe registry with `Register`, `Get`, `ValidateReverseCoverage`, and `ResolveAdmittedRules`.
    - `Compiler`: synthesizes `protocol.ContextManifest` and `protocol.ContextPack`.
 2. **`profile.go`**:
@@ -222,3 +226,4 @@ Build the deterministic **Cognitive Invocation Compiler** (`internal/cognition/c
 6. **Cognitive State Capsule:** Correctly preserves and serializes non-authoritative hypotheses, TODOs, and decisions across turns.
 7. **Optional Retrieval:** Traverses graph and lexical matches without evicting or overriding mandatory clauses.
 8. **Verification:** All tests pass deterministically (`go test -count=1 ./...` and `go test -race ./...`), `go vet ./...` reports 0 issues, and `gofmt` is clean.
+9. **Layered Authority & Effect Capabilities Documentation:** Formally specifies the 4-layer authority hierarchy (`system` -> `organization` [future] -> `project` -> `task`), `AuthoritySourceKind` / `AuthoritySource` conceptual model, the non-weakening composition rule, the distinction between effect authority (real-world capabilities) and IAM, and the roadmap toward distributed/multi-user operation in ADR-0020, PROTOCOLS §10B, and IMPLEMENTATION_PLAN.

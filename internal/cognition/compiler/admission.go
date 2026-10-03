@@ -38,22 +38,56 @@ func (c AdmissionClass) Valid() bool {
 	return false
 }
 
+// AuthoritySourceKind identifies the layer of authority from which an invariant or normative constraint originates.
+// Authority hierarchy (ADR-0020, PROTOCOLS §10B):
+//  1. System (DevCadence engine rules / invariants)
+//  2. Organization (enterprise / team policies - future)
+//  3. Project (project-local invariants in .devcadence/INVARIANTS.md)
+//  4. Task (current EWP contract / task constraints)
+type AuthoritySourceKind string
+
+const (
+	AuthoritySourceKindSystem       AuthoritySourceKind = "system"
+	AuthoritySourceKindOrganization AuthoritySourceKind = "organization"
+	AuthoritySourceKindProject      AuthoritySourceKind = "project"
+	AuthoritySourceKindTask         AuthoritySourceKind = "task"
+)
+
+// Valid reports whether the authority source kind is recognized.
+func (k AuthoritySourceKind) Valid() bool {
+	switch k {
+	case AuthoritySourceKindSystem, AuthoritySourceKindOrganization, AuthoritySourceKindProject, AuthoritySourceKindTask:
+		return true
+	}
+	return false
+}
+
+// AuthoritySource identifies an authoritative origin of normative invariants.
+// Represents a discrete layer in the authority hierarchy (ADR-0020, PROTOCOLS §10B).
+type AuthoritySource struct {
+	SourceKind AuthoritySourceKind `json:"source_kind"`
+	SourceID   string              `json:"source_id"`
+	Revision   string              `json:"revision"`
+	Digest     string              `json:"digest"`
+}
+
 // Rule defines an operative normative requirement or invariant.
 type Rule struct {
-	ID                 string         `json:"id"`
-	AdmissionClass     AdmissionClass `json:"admission_class"`
-	SourceDoc          string         `json:"source_doc"`
-	Revision           string         `json:"revision"`
-	Content            string         `json:"content"`
-	ContentDigest      string         `json:"content_digest"`
-	Capability         string         `json:"capability,omitempty"`          // Required if class is capability_default (e.g., "write", "exec", "network")
-	Domains            []string       `json:"domains,omitempty"`             // Mapped domains
-	RiskTags           []string       `json:"risk_tags,omitempty"`           // Mapped risk tags
-	Roles              []string       `json:"roles,omitempty"`               // Mapped roles
-	Actions            []string       `json:"actions,omitempty"`             // Mapped actions
-	PathPatterns       []string       `json:"path_patterns,omitempty"`       // Mapped file paths / globs
-	DependsOn          []string       `json:"depends_on,omitempty"`          // Mandatory dependency edges
-	SelectionRationale string         `json:"selection_rationale,omitempty"` // Explicit rationale populated upon admission (PROTOCOLS §10B)
+	ID                 string              `json:"id"`
+	SourceKind         AuthoritySourceKind `json:"source_kind,omitempty"` // Layer of authority: system, organization, project, task (default: system)
+	AdmissionClass     AdmissionClass      `json:"admission_class"`
+	SourceDoc          string              `json:"source_doc"`
+	Revision           string              `json:"revision"`
+	Content            string              `json:"content"`
+	ContentDigest      string              `json:"content_digest"`
+	Capability         string              `json:"capability,omitempty"`          // Required if class is capability_default (e.g., "write", "exec", "network")
+	Domains            []string            `json:"domains,omitempty"`             // Mapped domains
+	RiskTags           []string            `json:"risk_tags,omitempty"`           // Mapped risk tags
+	Roles              []string            `json:"roles,omitempty"`               // Mapped roles
+	Actions            []string            `json:"actions,omitempty"`             // Mapped actions
+	PathPatterns       []string            `json:"path_patterns,omitempty"`       // Mapped file paths / globs
+	DependsOn          []string            `json:"depends_on,omitempty"`          // Mandatory dependency edges
+	SelectionRationale string              `json:"selection_rationale,omitempty"` // Explicit rationale populated upon admission (PROTOCOLS §10B)
 }
 
 // Validate checks Rule field constraints.
@@ -61,6 +95,9 @@ func (r Rule) Validate() error {
 	const kind = "Rule"
 	if strings.TrimSpace(r.ID) == "" {
 		return errs.New(errs.CategoryInvalidArgument, "%s: id cannot be empty", kind)
+	}
+	if r.SourceKind != "" && !r.SourceKind.Valid() {
+		return errs.New(errs.CategoryInvalidArgument, "%s: invalid source_kind %q", kind, r.SourceKind)
 	}
 	if !r.AdmissionClass.Valid() {
 		return errs.New(errs.CategoryInvalidArgument, "%s: invalid admission_class %q", kind, r.AdmissionClass)
@@ -538,8 +575,14 @@ func canonicalRuleMappingSerialization(r Rule) string {
 	deps := append([]string(nil), r.DependsOn...)
 	sort.Strings(deps)
 
-	return fmt.Sprintf("id=%s|class=%s|cap=%s|domains=%s|roles=%s|risks=%s|actions=%s|paths=%s|deps=%s|rev=%s",
+	srcKind := r.SourceKind
+	if srcKind == "" {
+		srcKind = AuthoritySourceKindSystem
+	}
+
+	return fmt.Sprintf("id=%s|kind=%s|class=%s|cap=%s|domains=%s|roles=%s|risks=%s|actions=%s|paths=%s|deps=%s|rev=%s",
 		r.ID,
+		srcKind,
 		r.AdmissionClass,
 		r.Capability,
 		strings.Join(domains, ","),

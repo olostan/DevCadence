@@ -474,6 +474,33 @@ The compiler derives mandatory admission from deterministic metadata rather than
 
 The resulting mandatory clause set is dependency-closed and revision-pinned. Unknown applicability is an error state, not a low score.
 
+#### Layered Authority Hierarchy and Composition
+
+Authority in DevCadence is strictly layered:
+1. **System Invariants (`system`)**: Universal engine invariants (`INVARIANTS.md`, DCI-001..094) built by `NewCanonicalRuleRegistry()`.
+2. **Organization Policy (`organization`)**: Enterprise or team governance rules [future].
+3. **Project Invariants (`project`)**: Codebase-specific durable rules located in `.devcadence/INVARIANTS.md` of the target project, discovered and governed during M6 Project Adoption.
+4. **Task Constraints (`task`)**: Execution Work Package obligations and boundary contracts.
+
+Lower authority layers may add restrictions but MUST NOT weaken or contradict higher-authority constraints; detected contradictions fail closed. `NewCanonicalRuleRegistry()` builds the DevCadence system catalog, not the entire universe of authority for all projects. Lower layers compose deterministically into a unified frozen registry snapshot.
+
+Each admitted rule carries explicit provenance via `AuthoritySource` (`source_kind`, `source_id`, `revision`, `digest`).
+
+#### Effect Authority vs. IAM
+
+The capability system is **Effect Authority** (what real-world effects can this model invocation cause: `write`, `exec`, `credentials`, `network`, `spending`, `durable_state_mutation`), NOT enterprise IAM or human authentication. The deterministic control plane evaluates which execution capabilities are attached and admits corresponding mandatory rules (`capability_default`); models never declare, infer, or negotiate their own authority.
+
+#### Project Invariants vs. Documentation
+
+A clear distinction is maintained across knowledge artifacts:
+- **Ordinary Documentation / Specification**: Durable reference knowledge.
+- **Project Invariant**: A property that must continue to hold across future work packages.
+- **Current EWP Constraint**: Narrow, temporary execution authority for the immediate task.
+
+The project invariant lifecycle is deferred to M6 (Project Adoption), where adoption discovery proposes a small, curated set of durable project invariants, governs them through review, commits them versioned with the target codebase under `.devcadence/INVARIANTS.md`, and feeds them into the same deterministic compiler pipeline alongside system invariants.
+
+#### Admission Classes
+
 Every execution-critical clause declares one admission class:
 - `always`: admitted to every cognition invocation;
 - `capability_default`: admitted whenever the invocation can exercise the named authority class; exclusion requires an explicit revision-pinned not-applicable mapping;

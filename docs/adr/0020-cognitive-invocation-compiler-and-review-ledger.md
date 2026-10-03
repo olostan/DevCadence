@@ -97,6 +97,51 @@ task + role + EWP + paths + domains + risks + action + project state
 
 Mandatory objects survive ranking and token pressure. Before M4 has calibrated an endpoint, M3C uses a **provisional ContextProfile** derived from the runtime/declared hard window, explicit output/reasoning/tool reserves, configured policy ceilings, and conservative accounting uncertainty. A provisional target is configuration, not an empirical effectiveness claim; there is no universal fixed percentage such as 70%. If the complete mandatory pack cannot fit the applicable hard/provisional bound, the compiler returns `CONTEXT_UNFIT`; it does not drop requirements. Policies that require empirically demonstrated reliability may reject an uncalibrated endpoint rather than pretending the provisional profile is verified.
 
+### 2A. Layered Authority Hierarchy and Effect Capability Model
+
+Authority in DevCadence is not a monolithic flat list of engine rules. It forms a strict **layered authority hierarchy**:
+
+```text
+DevCadence system invariants (engine rules)
+        +
+organization/team policy [future]
+        +
+project-local invariants (.devcadence/INVARIANTS.md, target codebase rules)
+        +
+current EWP/task constraints (narrow temporary execution authority)
+        ↓
+deterministic composition
+        ↓
+frozen authority snapshot
+        ↓
+Cognitive Invocation Compiler
+```
+
+1. **Layered Authority Hierarchy**:
+   - **System Invariants (`system`)**: Universal DevCadence invariants (`INVARIANTS.md`, DCI-001..094) governing control-plane safety, evidence integrity, model boundaries, and isolated execution. Constructed by `NewCanonicalRuleRegistry()`.
+   - **Organization Policy (`organization`)**: Enterprise or team-level governance policies (e.g. licensing restrictions, approved dependency registries, mandatory internal auditing). [Deferred to future enterprise milestones].
+   - **Project-Local Invariants (`project`)**: Codebase-specific durable rules located in the target project's committed canonical baseline (e.g. `.devcadence/INVARIANTS.md`), discovered and governed during M6 Project Adoption.
+   - **Task Constraints (`task`)**: Narrow, temporary execution contracts defined in the active Engineering Work Package.
+   - **Composition Invariant**: Lower authority layers may add further restrictions but MUST NOT silently weaken or contradict higher-authority constraints; detected contradictions fail closed.
+
+2. **AuthoritySource Model**:
+   Each admitted rule carries explicit provenance via an `AuthoritySource` identity:
+   - `source_kind`: `system | organization | project | task`
+   - `source_id`: canonical identifier of the authority origin (e.g. `canonical-dci-invariants`, `project-acme-backend`)
+   - `revision`: git commit or release version of the source document
+   - `digest`: content hash authenticating the source content
+
+3. **Capability Model as Effect Authority**:
+   The capability system is **Effect Authority** (what real-world effects this invocation can cause: `write`, `exec`, `credentials`, `network`, `spending`, `durable_state_mutation`), NOT enterprise IAM or human user authentication.
+   - The deterministic control plane determines which capabilities are attached to an execution context (e.g. worktree write access, tool availability, access channels) and automatically admits the corresponding mandatory rules (`capability_default`).
+   - Models never infer, negotiate, or grant their own authority.
+
+4. **Path Toward Distributed / Multi-User DevCadence**:
+   While M3C implements local-first execution, the architecture preserves clean seams for future distributed development (multiple developers, remote cognition workers, CI agents, delegated reviewers, and varied privilege tiers):
+   - Authority provenance is explicitly layered and tracked per rule.
+   - Capability authority is strictly control-plane-owned and verified.
+   - The `ContextManifest` and authority provenance model accommodate future actor/identity dimensions without structural redesign or premature IAM complexity.
+
 ### 3. Hybrid retrieval, not embeddings alone
 
 For non-mandatory discovery the compiler SHOULD combine:
