@@ -499,9 +499,9 @@ Consume M3 substrate/planning to configure the semantic MCP/principal
 integration for supported hosts. Antigravity is the reference integration;
 Cursor and VS Code are first-class supported targets.
 
-### M6 — Project adoption
+### M6 — Project bootstrap, capability packs, and adoption
 
-Build the brownfield reconstruction/readiness subsystem as its own milestone.
+Build M6A pack/conformance/toolchain/health infrastructure first, then M6B brownfield reconstruction/readiness and M6C greenfield bootstrap. M6 remains downstream of the M4 evidence gate.
 
 ### M7 — Reviews and consultants
 

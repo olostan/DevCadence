@@ -622,7 +622,35 @@ A new feature or product-semantic change should:
 
 A product decision changing an active architecture may trigger Architecture Reconciliation.
 
-## 22. Anti-patterns
+## 22. Specification-to-architecture technology selection
+
+Specification discovery establishes product intent and engineering constraints; it does not prematurely choose a favorite framework.
+
+After Specification Readiness, material greenfield stack choices should enter an explicit architecture decision phase:
+
+```text
+Specification Candidate
+  -> TechnologyOptionSet
+  -> evidence / bounded experiments where needed
+  -> TechnologyDecision / ADR
+  -> ProjectBlueprint
+  -> bounded greenfield EWP
+```
+
+Technology-option evaluation should distinguish:
+
+- product/technical fit;
+- factual ecosystem/platform feasibility;
+- operational and security consequences;
+- human/team/business constraints;
+- migration/reversibility;
+- **DevCadence supportability**.
+
+DevCadence supportability is visible but not authoritative over product/technical fitness. If the strongest architecture uses an unsupported/partially supported stack, the Principal must surface that consequence rather than quietly steering the product toward a better-supported ecosystem.
+
+See [PROJECT_CREATION_AND_SCAFFOLDING.md](PROJECT_CREATION_AND_SCAFFOLDING.md) and ADR-0022.
+
+## 23. Anti-patterns
 
 - 50-question onboarding form regardless of project;
 - asking the human to choose database/protocol/framework without product reason;
@@ -634,7 +662,7 @@ A product decision changing an active architecture may trigger Architecture Reco
 - hiding unresolved ambiguity under "we can decide later" without a safe boundary;
 - converting all uncertainty into low-confidence requirements instead of explicit unknowns.
 
-## 23. Day-0 completion condition
+## 24. Day-0 completion condition
 
 Discovery is successful when a new principal session can read compact durable artifacts and understand:
 - what problem is being solved;

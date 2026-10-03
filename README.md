@@ -475,7 +475,7 @@ The active roadmap now proceeds through:
 - **M3D:** AI-assisted cognition portfolio + adaptive workflow synthesis and richer setup/explanation UX;
 - **M4:** adaptive-cognition vertical-slice evidence gate against simpler baselines;
 - **M5:** semantic MCP + Antigravity/Cursor/VS Code principal-host portability;
-- **M6:** brownfield Project Adoption & Retrospective Reconstruction;
+- **M6:** project bootstrap + capability packs + brownfield adoption (M6A pack/health core, M6B adoption+synthesis, M6C greenfield bootstrap);
 - **M7–M10:** bounded review/consultants, engineering health, evaluated learning, then long-running campaigns.
 
 See [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md).

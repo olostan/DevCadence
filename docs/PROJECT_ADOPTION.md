@@ -224,11 +224,17 @@ Useful inventory includes:
 - external services;
 - CI/build/deployment configuration;
 - tests and test frameworks;
+- formatting/lint/static-analysis configuration;
+- coverage configuration and historical reports where available;
+- local presubmit/pre-push hooks;
+- CI/merge validation configuration;
 - generated code;
 - documentation corpus;
 - dependency manifests;
 - important repository topology;
 - current accepted HEAD/branch.
+
+Toolchain evidence is discovered during this inventory, but discovery does not activate policy. A manifest such as `pyproject.toml`, `go.mod`, `Cargo.toml`, `CMakeLists.txt` or `pubspec.yaml` identifies a candidate ecosystem; toolchain-specific checks/invariants become operative only through an activated ToolchainProfile or explicitly adopted project-native equivalent (DCI-136–143).
 
 Discovered package manifests (`go.mod`, `package.json`, `pubspec.yaml`, `Cargo.toml`, etc.) serve as **discovery evidence** (`ObservedManifest`). They do not unilaterally define independent module boundaries. Adoption proposes module candidates for human confirmation, recording the approved catalog in `.devcadence/project.yaml` and journaling `ModuleCatalogRecorded` into canonical project state (ADR-0015).
 
@@ -481,6 +487,11 @@ Minimum gate:
 - canonical artifacts are committed;
 - major components and external interfaces are mapped;
 - build/test strategy is established;
+- applicable project/module toolchains are either explicitly activated, explicitly project-native, or honestly recorded as unsupported/unknown;
+- a versioned ProjectHealthContract is committed/configured for normal managed work;
+- existing native format/lint/test/coverage/CI policy has been mapped or explicitly superseded;
+- required mechanical-health gates pass, or inherited failures are represented by revision-pinned bounded debt/exception policy that does not silently permit new debt;
+- managed enforcement adapters are current with the accepted health contract where DevCadence owns those adapters;
 - material invariants are recorded;
 - material documentation/code contradictions are resolved or explicitly bounded as accepted risk;
 - critical product ambiguities are human-confirmed or explicitly deferred behind a safe boundary;
@@ -491,6 +502,8 @@ Minimum gate:
 - an AdoptionDecision records READY and references the baseline commit/evidence.
 
 The gate optimizes for **bounded uncertainty**, not exhaustive understanding of every file.
+
+Mechanical health readiness is likewise not "make an old repository perfect before adoption." Brownfield projects may enter READY with explicit historical health debt when the baseline is revision-pinned, future regression is prevented, cleanup responsibility is visible, and the debt does not invalidate safe managed execution. See [PROJECT_TOOLCHAINS_AND_HEALTH.md](PROJECT_TOOLCHAINS_AND_HEALTH.md).
 
 ## 16. No undocumented managed project
 
@@ -565,13 +578,11 @@ This workflow depends on capabilities delivered across earlier milestones:
 - **M4** is the early adaptive-cognition evidence gate and intentionally does
   not wait for the full brownfield reconstruction subsystem;
 - **M5** productizes semantic principal-host integration;
-- **M6** introduces Project Adoption and Retrospective Reconstruction as its
-  own full milestone.
+- **M6A** establishes the producer-neutral pack/conformance/toolchain/health substrate;
+- **M6B** implements Project Adoption and Retrospective Reconstruction, including pack recommendation/synthesis and inherited-debt baselining;
+- **M6C** implements greenfield project bootstrap over the same pack/health substrate.
 
-M6 should not delay the M4 evidence gate or basic M5 principal connectivity.
-Conversely, M4's adaptive-cognition result must not be misread as proof that
-arbitrary brownfield repositories are ready for managed work; that claim
-belongs to M6's Adoption Readiness verification.
+M6 remains after the M4 evidence gate and must not delay M4 or basic M5 principal connectivity. Conversely, M4's adaptive-cognition result must not be misread as proof that arbitrary brownfield repositories are ready for managed work; that claim belongs to M6B's Adoption Readiness verification.
 
 ## 20. Test strategy
 

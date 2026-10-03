@@ -262,23 +262,21 @@ devcadence project add \
 
 This syntax is illustrative until implemented.
 
-## 10. Validation setup
+## 10. Target-project capability packs and validation
 
-Each target project should define safe validation profiles through DevCadence configuration rather than allowing a model to invent arbitrary shell commands every run.
+Target-project support is resolved from observed evidence plus explicitly activated ProjectCapabilityPacks/project-native capability, not from model-invented commands.
 
-Example conceptual config:
+A pack may provide environment/version probes, build/run/test/health mechanics, Agent Skills, and structured result adapters. Packs can be built-in, project-local, home-library, explicitly fetched, or synthesized during adoption; all use one pack contract and preserve origin/revision/provenance.
 
-```yaml
-validation:
-  fast:
-    - ["go", "test", "./internal/..."]
-    - ["go", "vet", "./..."]
-  full:
-    - ["go", "test", "./..."]
-    - ["staticcheck", "./..."]
-```
+A resolved ToolchainProfile composes the module's actual language/runtime, package manager, framework, build/compiler, and check providers.
 
-Commands are argv arrays by default.
+The ProjectHealthContract selects which available checks are authoritative at presubmit/pre-push/review/integration. ValidationProfiles remain concrete execution projections.
+
+Existing native tooling is preserved/mapped when it already encodes project intent.
+
+Built-in packs may be embedded for offline bootstrap, but the same loader/contract should apply to other pack sources. Active packs never silently auto-update; later revisions are explicit revalidated upgrades.
+
+See [PROJECT_CAPABILITY_PACKS.md](PROJECT_CAPABILITY_PACKS.md) and [PROJECT_TOOLCHAINS_AND_HEALTH.md](PROJECT_TOOLCHAINS_AND_HEALTH.md).
 
 ## 11. Principal host integration
 

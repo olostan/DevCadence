@@ -228,6 +228,106 @@ The system SHOULD normalize supported invocation surfaces behind capability-nego
 ### FR-070 — Graceful portfolio degradation
 When portfolio resources disappear or become constrained, DevCadence MUST preserve unrelated deterministic/local-authority capabilities and SHOULD derive the best feasible reduced workflow.
 
+### FR-071 — Project capability packs
+The system MUST support versioned ProjectCapabilityPacks as the horizontal ecosystem-extension contract for discovery descriptors, deterministic mechanics, Agent Skills-format knowledge, result adapters, references, and fixtures.
+
+### FR-072 — Producer-neutral pack contract
+Built-in, human-authored, fetched, project-local, and LLM-generated packs MUST satisfy the same pack schema/compatibility contract; producer identity MUST NOT be treated as proof of correctness.
+
+### FR-073 — Pack identity, origin, and lineage
+An activated pack MUST record stable logical identity, exact revision/content digest, origin kind/locator when available, resolved source revision, acquisition provenance, and validation provenance sufficient to reproduce historical evidence.
+
+### FR-074 — Explicit pack upgrades
+The system MUST represent pack successor/upgrades as explicit proposals with compatibility/conformance revalidation and MUST NOT silently update an active project from a mutable source.
+
+### FR-075 — Agent Skills pack knowledge
+ProjectCapabilityPacks SHOULD use the open Agent Skills format for model-facing procedural knowledge and MUST keep mandatory project/system obligations outside advisory Skill authority.
+
+### FR-076 — Deterministic pack mechanics
+Packs SHOULD be able to describe environment/version probes, build/typecheck, run/dev, test, lint/static analysis, coverage, generated-code checks, install/device/deploy steps, and stable result interpretation where applicable.
+
+### FR-077 — Generic result interchange
+The system SHOULD normalize pack/tool results through structured interchange such as SARIF, JUnit, LCOV/Cobertura, or typed DevCadence findings when available; opaque exit-code-only integrations MUST be represented as a weaker evidence tier.
+
+### FR-078 — Pack conformance harness
+The system MUST provide deterministic pack conformance covering schema/compatibility, command execution, declared result parsing, module/path scoping, and advertised tool/version probes.
+
+### FR-079 — Independent seeded-failure validation
+For important pack health mechanics, the conformance harness MUST support a DevCadence-owned generic seed catalog by check class. Packs MAY provide ecosystem-specific seed-realization adapters and additional seeds, but validation MUST record seed provenance/independence and MUST NOT treat producer-authored-only seeds as equivalent to independent/core-owned validation.
+
+### FR-080 — Pack/Skill provenance
+Validation and health evidence MUST record relevant pack revision/digest, conformance/provenance class, contract revision, candidate/base identity, and concrete tool versions.
+
+### FR-081 — Pack recommendation and synthesis
+The system SHOULD allow Principals/LLMs to recommend packs from product needs or repository evidence and SHOULD allow brownfield adoption to synthesize candidate packs, while keeping compatibility validation and activation deterministic/policy-controlled.
+
+### FR-082 — Unsupported capability diagnostics
+When a selected/discovered stack lacks compatible capability support, the system MUST represent unsupported/partial status, missing capability classes, and bounded fallbacks rather than silently substituting another technology or inventing support.
+
+### FR-083 — Pack research pointers
+Packs MAY provide bounded provenance-bearing pointers to authoritative ecosystem/framework/tool documentation; M6 MUST NOT require a large curated library/package recommendation catalog.
+
+### FR-084 — Pack invariant candidates
+Packs MAY propose toolchain/framework invariant candidates, but those candidates MUST NOT become operative without explicit project/adoption authority.
+
+### FR-085 — Pack composition
+The system MUST resolve pack dependencies, compatibility, and conflicts deterministically and MUST NOT use incidental load order as semantic conflict resolution.
+
+### FR-086 — Compositional toolchains
+The system MUST support a module binding multiple capability components (for example language/runtime, package manager, framework, build system, compiler, and check providers) without requiring a monolithic identifier for every combination.
+
+### FR-087 — Explicit capability activation
+Observed manifests/configuration/executables MUST NOT by themselves activate toolchain/project policy. Activation/resolution of capabilities and project authority MUST remain explicit.
+
+### FR-088 — Project Health Contract
+Every normally managed project MUST expose a versioned ProjectHealthContract defining deterministic checks, lifecycle gates, candidate/base identity, result/fingerprint semantics, regression/debt baseline, and bounded exceptions.
+
+### FR-089 — Base-governed candidate acceptance
+A candidate that modifies any part of its accepted judge—including health contract, debt baseline, resolved ToolchainProfile composition, activated pack mechanics/result-adapter/fixture digest, or managed acceptance adapter—MUST be evaluated under the accepted base judge; the proposed successor MUST NOT govern acceptance of that same candidate.
+
+### FR-090 — Candidate-accurate health evidence and uncovered scope
+Presubmit, pre-push, pull-request, and integration health evidence MUST identify the actual candidate/base/ref set plus governing contract/pack/tool revisions. New files under an already-covered module/path remain covered by that module's checks. A new module, toolchain/capability component, check class, or executable/action surface outside base coverage MUST be reported as uncovered/unjudged and MUST NOT be treated as passing until successor policy/capability coverage is separately accepted. Greenfield/adoption bootstrap establishes the first accepted judge as part of readiness.
+
+### FR-091 — Brownfield no-new-debt
+The system MUST support revision-pinned inherited health debt and SHOULD use stable per-finding fingerprints where the underlying result format permits, so repairs cannot mask newly introduced debt.
+
+### FR-092 — Baseline reconciliation across tool changes
+When pack/tool/rule revisions materially change finding semantics, the system MUST perform explicit compatibility/re-baseline reconciliation rather than silently compare incompatible measurements.
+
+### FR-093 — Enforcement adapter consistency
+Where DevCadence manages hooks, CI, or equivalent enforcement adapters, they MUST be projections of the accepted ProjectHealthContract and carry sufficient provenance for drift detection.
+
+### FR-094 — Trust profiles
+The system SHOULD provide a small set of trust-profile presets (for example personal/permissive and team/strict) controlling confirmation/source defaults while preserving invariant evidence honesty, authority caps, candidate identity, isolation, and base-governed acceptance.
+
+### FR-095 — Requirement-driven technology selection
+For material greenfield technology choices, the system SHOULD compare credible alternatives against requirements/constraints/evidence and MUST represent DevCadence supportability separately from product/technical fit.
+
+### FR-096 — Project Blueprint
+The system MUST support a versioned ProjectBlueprint describing intended repository/module topology, application archetypes, selected technologies/frameworks, dependencies/boundaries, expected capability needs, canonical docs root, and initial health expectations.
+
+### FR-097 — Bounded greenfield materialization
+Greenfield repository creation SHOULD proceed through a bounded EWP using available pack Skills, ecosystem-native generators, and/or implementation models; DevCadence MUST NOT require a universal ScaffoldRecipe/template registry.
+
+### FR-098 — Greenfield execution provenance
+When generators/tools are used during initial materialization, the system SHOULD record the versions/arguments and execution evidence actually observed when available.
+
+### FR-099 — Initial managed baseline verification
+A created/adopted project MUST establish authoritative module/capability bindings, canonical project documentation, and applicable ProjectHealthContract gates before entering normal managed feature development, absent an explicit readiness exception.
+
+### FR-100 — Pack Skill trials
+The system SHOULD support trialing generated/changed Skills in disposable worktrees against representative tasks and real health gates, recording the result as validation provenance.
+
+### FR-101 — Governed pack learning
+Successful/failing pack and Skill trajectories MAY become M9 learning candidates, but promotion MUST remain explicit, versioned, evaluated, and reversible.
+
+### FR-102 — Horizontal extension verification
+M6 verification MUST include at least two materially different reference ecosystems and an unfamiliar synthesized ecosystem proving ordinary support can be added through a pack/conformance without ecosystem-specific core orchestration/state/authority branches.
+
+
+### FR-103 — Capability-separated successor-policy acceptance
+A proposed successor health/pack/toolchain policy MUST be accepted through an authority capability-separated from the candidate producer. The producing worker MUST NOT possess or obtain the credential/capability used to confirm, approve, persist, or promote the successor judge, and MUST NOT be able to invoke that approval path through its own shell, tools, subprocesses, writable state, or reachable control-plane API.
+
 ## 2A. Discovery and specification requirements
 
 ### FR-D-001 — ProblemModel

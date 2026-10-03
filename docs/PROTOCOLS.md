@@ -180,6 +180,66 @@ A bounded per-task topology compiled from task/risk requirements + CognitionPort
 ### PortfolioChangeProposal
 An explicit diff triggered by changed resources/policy/evidence. Applying it is auditable and reversible; learned evidence never silently mutates the active portfolio.
 
+## 3D. Project capability, toolchain, and health protocols [Planned - M6]
+
+### ProjectCapabilityPack
+
+Versioned producer-neutral ecosystem extension containing Agent Skills-format knowledge, DevCadence mechanical manifest data, compatibility/applicability metadata, fixtures, and provenance.
+
+Core identity/provenance fields include:
+
+- logical pack ID;
+- schema/revision/content digest;
+- origin kind/locator;
+- requested and resolved source revision where applicable;
+- acquisition/producer provenance;
+- conformance/Skill-trial provenance.
+
+### PackRecommendation
+
+Advisory Principal/LLM recommendation of candidate packs based on product needs, ProjectBlueprint choices, or observed repository evidence. Recommendation does not install or activate capability.
+
+### PackUpgradeProposal
+
+Explicit successor proposal for an activated pack. It references current/new exact revisions, mechanics/Skill diff, compatibility/conformance evidence, affected toolchain/health bindings, and revalidation/baseline-reconciliation requirements.
+
+### PackConformanceReport
+
+Deterministic evidence for schema/compatibility, command execution, declared result parsing, version probes, module/path scope, and seeded-failure checks where applicable.
+
+### SkillValidationResult
+
+Evidence from applying a generated/changed pack Skill to a bounded scratch-worktree task and evaluating the result through the real ProjectHealthContract.
+
+### ToolchainProfile
+
+Versioned resolved composition of module capabilities such as language/runtime, package manager, framework, build system/compiler, and check providers. A module may bind multiple pack/native components.
+
+Observed manifests are evidence only; capability resolution/activation is explicit.
+
+### ProjectHealthContract
+
+Versioned project authority identifying required checks, lifecycle gates, candidate/base semantics, result/fingerprint semantics, inherited-debt baseline, bounded exceptions, and managed-adapter provenance.
+
+Existing ValidationProfiles remain execution projections.
+
+### HealthBaseline / FindingFingerprint
+
+Revision-pinned accepted historical-debt state. Structured findings should use stable fingerprints where supported. Pack/tool/rule changes that alter finding semantics require explicit reconciliation rather than silent comparison.
+
+### UnsupportedCapabilityReport
+
+Structured unsupported/partial-state evidence identifying observed/selected technology, missing capability classes, available packs if any, and bounded fallbacks.
+
+### ProjectBlueprint
+
+Versioned greenfield architecture/repository intent: modules/archetypes, technologies/frameworks, boundaries/dependencies, expected capability needs, docs root, and initial health expectations. Actual materialization is a bounded EWP rather than a DevCadence-owned scaffold recipe.
+
+See [PROJECT_CAPABILITY_PACKS.md](PROJECT_CAPABILITY_PACKS.md),
+[PROJECT_TOOLCHAINS_AND_HEALTH.md](PROJECT_TOOLCHAINS_AND_HEALTH.md),
+[PROJECT_CREATION_AND_SCAFFOLDING.md](PROJECT_CREATION_AND_SCAFFOLDING.md),
+and ADR-0021..0023.
+
 ## 4. InvestigationRequest
 
 An InvestigationRequest asks local repository cognition to establish facts.

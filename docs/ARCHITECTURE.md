@@ -269,6 +269,42 @@ Registration alone does not imply readiness. Before adoption READY, normal manag
 
 The required canonical baseline and workflow are defined in [PROJECT_ADOPTION.md](PROJECT_ADOPTION.md).
 
+### 6.1C Project capability, toolchain, and health service [Planned - M6A]
+
+Owns the horizontal ecosystem-extension and deterministic health boundary.
+
+It separates:
+
+1. **observed evidence** — manifests, configs, executables, CI/project structure;
+2. **pack capability** — producer-neutral ProjectCapabilityPacks validated through schema/compatibility/conformance;
+3. **resolved module capability** — compositional ToolchainProfiles assembled from active pack/native capabilities;
+4. **project authority** — ProjectHealthContract and explicitly adopted project invariants.
+
+The service owns one PackRegistry, pack origin/lineage/provenance, explicit upgrade proposals, compatibility/conflict resolution, conformance/seeded-failure checks, trust-profile policy, and ProjectHealthContract projections into ValidationProfiles and managed enforcement adapters.
+
+Packs use open Agent Skills-format knowledge for advisory procedures plus a DevCadence mechanical manifest for environment/build/run/test/health/install mechanics and result adapters. Compiler-driven invocations admit applicable pack Skills deterministically and never let them expand authority.
+
+ToolchainProfile is a resolved composition, not a monolithic ecosystem identifier: one module may combine language/runtime, package manager, framework, build system/compiler, and check providers from multiple packs.
+
+The accepted base ProjectHealthContract/baseline governs any candidate proposing to change that judge. Candidate policy becomes authoritative only after acceptance.
+
+DevCadence itself is a dogfood/reference project, not universal doctrine.
+
+See [PROJECT_CAPABILITY_PACKS.md](PROJECT_CAPABILITY_PACKS.md),
+[PROJECT_TOOLCHAINS_AND_HEALTH.md](PROJECT_TOOLCHAINS_AND_HEALTH.md), ADR-0021 and ADR-0023.
+
+### 6.1D Greenfield project-bootstrap service [Planned - M6C]
+
+Owns the transition from specification-ready intent to an accepted initial repository baseline.
+
+It coordinates TechnologyOptionSet analysis, evidence/experiments, TechnologyDecision/ADR, ProjectBlueprint, and a bounded greenfield EWP. The EWP may use pack Skills, ecosystem-native generators, or implementation models; DevCadence does not maintain a universal ScaffoldRecipe/template registry.
+
+The service keeps technical fit separate from DevCadence supportability and records actual generator/tool execution evidence where available.
+
+Materialization remains candidate work until module/capability bindings, canonical docs, ProjectHealthContract, and required deterministic health pass.
+
+See [PROJECT_CREATION_AND_SCAFFOLDING.md](PROJECT_CREATION_AND_SCAFFOLDING.md) and ADR-0022.
+
 ### 6.2 Engineering State Model
 A compact semantic representation of the current project. See [PROJECT_STATE.md](PROJECT_STATE.md).
 
