@@ -110,16 +110,16 @@ func TestPortfolioValidator_ResourceDiagnosticsAreDeterministic(t *testing.T) {
 	slot := func(v int) *int { return &v }
 	states := map[string]*protocol.ResourceState{
 		"host-z": {
-			SchemaVersion:     protocol.SchemaVersion1,
-			HostID:            "host-z",
-			Timestamp:         "2026-10-03T16:00:00Z",
+			SchemaVersion:      protocol.SchemaVersion1,
+			HostID:             "host-z",
+			Timestamp:          "2026-10-03T16:00:00Z",
 			MaxConcurrentSlots: slot(1),
 			ActiveSlots:        slot(1),
 		},
 		"host-a": {
-			SchemaVersion:     protocol.SchemaVersion1,
-			HostID:            "host-a",
-			Timestamp:         "2026-10-03T16:00:00Z",
+			SchemaVersion:      protocol.SchemaVersion1,
+			HostID:             "host-a",
+			Timestamp:          "2026-10-03T16:00:00Z",
 			MaxConcurrentSlots: slot(1),
 			ActiveSlots:        slot(1),
 		},

@@ -302,7 +302,7 @@ func (m *ActivationManager) GetActivePortfolio(ctx context.Context) (*protocol.C
 	}
 
 	lineage, err := m.loadLineageLocked()
-	if err != nil {
+	if err != nil && errs.CategoryOf(err) != errs.CategoryNotFound {
 		return nil, nil, err
 	}
 
