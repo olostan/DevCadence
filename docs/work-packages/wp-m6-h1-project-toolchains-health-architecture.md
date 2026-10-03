@@ -2,7 +2,7 @@
 
 - **Milestone:** M6 — Project Bootstrap, Toolchains, and Adoption
 - **Kind:** architecture / protocol / roadmap
-- **Base commit:** `2c8c1faa0822811606d645405a738b5d29e23dbc`
+- **Base commit:** `c35b7efe2aee508b196357b43ed7a02f2e815604`
 - **Branch:** `architecture/project-health-contracts`
 - **Version:** 2.0
 - **Status:** Proposed — independent architecture review pending
@@ -85,3 +85,15 @@ Independent review should verify:
 - toolchain composition avoids combinatorial IDs;
 - M6/M8 and M4/M6 sequencing are clear;
 - all normative docs and invariant catalog/tests are synchronized.
+
+
+## M6A follow-up backlog
+
+These are non-blocking architecture/implementation details to resolve while decomposing M6A into executable work packages:
+
+- split pack provenance into orthogonal dimensions (origin × validation level × seed/trial independence) instead of a combinatorial class list;
+- define a concrete trust-profile action matrix and state the default profile, including fetch/install/conformance/activation/upgrade/policy-edit actions;
+- specify no-new-debt semantics for structured, parsed, and opaque result tiers (opaque checks are pass/fail or explicitly excepted, not silently ratcheted);
+- reconcile "auto-adopt where configured" with DCI-153: any automatic adoption/upgrade must be an explicit configured policy that still resolves, diffs, validates, records provenance, and remains reversible;
+- define how Agent Skills-declared permissions/tool pre-approvals are ignored or capped by active DevCadence authority, and pin the supported Agent Skills spec revision in the pack schema;
+- reconcile DCI-150 normative strength with FR-075 so optional/advisory Skill content is not accidentally made mandatory for every pack.
