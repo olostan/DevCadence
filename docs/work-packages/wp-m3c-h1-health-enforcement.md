@@ -13,7 +13,7 @@ Turn the existing DevCadence engineering-health principles into mechanically enf
 ## Required behavior
 
 1. Pre-commit validates the exact staged snapshot, not unstaged working-tree state.
-2. A commit is blocked by formatting errors, module drift, vet failures, test failures, schema/document contract failures, or statement-coverage regression against `HEAD`.
+2. A commit is blocked by formatting errors in staged Go files, module drift, vet failures, test failures, schema/document contract failures, or statement-coverage regression against `HEAD`.
 3. Pre-push validates committed `HEAD` in an isolated snapshot and includes race testing.
 4. GitHub Actions independently repeats the same Make-target policy from a clean checkout.
 5. Pull-request coverage is compared with the exact PR base SHA rather than a mutable checked-in percentage.
