@@ -127,6 +127,8 @@ If a health check is believed to be wrong:
 
 Once workflow names are stable, `main` should require the CI checks through GitHub branch protection or a repository ruleset.
 
+The reviewed ruleset definition is versioned at [`.github/rulesets/main.json`](../.github/rulesets/main.json). GitHub does not apply it automatically: a repository administrator imports or creates it (`gh api -X POST repos/<owner>/<repo>/rulesets --input .github/rulesets/main.json`, or Settings → Rules → Rulesets → Import a ruleset). It requires the `static`, `test-contracts`, `race` and `coverage` checks, an up-to-date branch, pull requests with resolved review threads and squash-only merging, and blocks force-pushes and deletion of `main` with no bypass actors. Changing the required check names in `.github/workflows/ci.yml` requires updating this file and the live ruleset together.
+
 GitHub account identity is not equivalent to DevCadence reviewer independence. Independent review remains governed by the DevCadence review/convergence protocol even when multiple agents operate through one GitHub account.
 
 ## 9. Evolution
