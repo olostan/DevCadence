@@ -335,6 +335,71 @@ literally the next file to open / function to write / test to run.>
    commit.
 ```
 
+## Autonomous delivery loop (manual emulation of automatic mode)
+
+Added after autonomous run 1 ([retrospective](docs/retrospectives/autonomous-run-1.md)).
+This is the loop a Principal session runs when delivering several
+pre-designed Work Packages without a human between steps. It is an
+emulation of the control plane's future automatic mode, using GitHub as the
+durable record. It changes no authority: acceptance, release and anything
+the owner reserved remain owner decisions.
+
+**Roles and isolation.** The Principal authors the EWP and owns merge
+decisions. An *implementor* works in its own isolated worktree on its own
+branch with a clean context containing only the EWP, `AGENTS.md` and the
+repository. *Reviewers* are separate clean-context sessions (never the
+author, never the implementor) and are read-only: they report, they do not
+push, comment as the author, or edit the PR branch. Authorship of every
+GitHub post is recorded in the post itself (role, lens, head SHA), because
+all roles share one GitHub account.
+
+**Sequence per WP.**
+
+1. EWP (template) committed on its own PR. Its factual claims about the
+   code are *verified claims* (file:line), not recollections.
+2. Independent readiness review. Any `NOT_READY`, or any *major* finding,
+   requires a **second** independent review of the revised EWP: revisions
+   routinely introduce new contradictions (run 1: two of three EWP
+   revisions did). After every revision the Principal sweeps the document
+   for the *old* wording of each changed decision and recomputes every
+   count in the Readiness Report.
+3. EWP merges only when all readiness findings are closed.
+4. Implementor builds it, gathers evidence, runs the EWP's mutation
+   catalog, opens a *draft* PR. It does not merge or self-accept.
+5. At least two reviews with distinct lenses; one of them MUST be a
+   mutation-testing lens that runs the EWP's mutation catalog plus its own
+   mutants. The contract lens alone does not catch weak tests (run 1: the
+   contract lens accepted PRs whose tests left real mutants alive).
+6. The Principal **verifies reviewer claims before relaying them** and
+   verifies the repair afterwards by re-running at least the previously
+   surviving mutants itself. A reviewer's "ACCEPT" is a signal, scoped by
+   the reviewer's own *not verified* list; unverified items are carried
+   into the record, never silently dropped.
+7. Findings travel as (a) a PR comment (durable) and (b) a message to the
+   implementor (fast). Repair rounds are bounded (max 3, DCI-049); a
+   round that closes findings without new tests for them is not a repair.
+8. Merge gate: no open blocker/major; every required lens reported;
+   CI green **on the exact head being merged**; change inside the EWP
+   envelope; PR description matches the diff (status words included).
+   Merge commits only; never rebase or force-push a branch someone else
+   built from.
+
+**Evidence conventions.** Give reviewers the base SHA and tell them to use
+the three-dot diff (`base...head`); a two-dot diff against a moved
+`origin/main` shows spurious reversions. Tests must not depend on git
+history (shallow CI checkouts). A "fix" is only a fix if a test fails
+without it: check that the change exercises the property rather than
+deleting what it exercises.
+
+**Operational notes.** Pre-commit/pre-push hooks take minutes: push in the
+background and poll. If the coverage gate fails by a statement or two on a
+tree with identical base and candidate code, the cached base measurement
+is stale; clear the entry for that base SHA under `.git/devcadence-coverage-cache`
+so both sides re-measure, disclose it in the PR, and open a follow-up
+about the measurement's nondeterminism. Never bypass hooks to land a
+candidate. Subagent worktrees under `.claude/worktrees/` are not
+repository content and must stay untracked.
+
 ## Per-WP checkpoints and review
 
 Deferring all review to one giant end-of-milestone diff lets a bad early

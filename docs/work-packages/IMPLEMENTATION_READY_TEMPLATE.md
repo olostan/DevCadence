@@ -68,6 +68,14 @@ Use stable IDs.
 
 For stateful work, include pre-state, committed state and failed/interrupted state semantics.
 
+## Verified facts about the current code
+
+Every assumption about existing code that the contract depends on, each with how it was verified. A reader who finds a row false returns the EWP to the Principal.
+
+| ID | Claim | Evidence (file:line / command) | Verified by |
+| --- | --- | --- | --- |
+| F-01 | ... | ... | Principal / reviewer |
+
 ## Interface / algorithm contract
 
 Provide exact interfaces, state transitions, pseudocode or algorithm semantics needed to prevent architectural invention by the implementer.
@@ -112,6 +120,7 @@ Acceptance scenarios are semantic. Validation commands below provide evidence th
 
 - command / deterministic check:
 - command / deterministic check:
+- mutation catalog (mutant → the ACC that must fail): list every plausible wrong implementation worth killing (flag ignored, wrong order, missing guard, fail-open default, name/enum typo). The implementer applies each and records the result; the mutation reviewer runs them and reports any it could not run as UNVERIFIED.
 - required independent review lens:
 - evidence to capture:
 
@@ -144,6 +153,13 @@ unresolved architecture choices: 0
 declared local-discretion choices: __
 readiness: READY_FOR_IMPLEMENTATION | NOT_READY
 ```
+
+### Consistency sweep (after every revision)
+
+- [ ] searched the document for the old wording of every decision that changed
+- [ ] requirement, failure-matrix, scenario and acceptance counts above recomputed
+- [ ] names used in the interface block match names in the requirements
+- [ ] a second independent review ran if any earlier review returned NOT_READY or a major finding
 
 ### Weaker-implementer check
 
