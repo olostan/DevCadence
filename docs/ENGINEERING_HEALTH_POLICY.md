@@ -117,7 +117,9 @@ CI runs with read-only repository permissions unless a future job has an explici
 
 ## 7. Exceptions
 
-`--no-verify` is for exceptional recovery/debugging, not normal agent operation.
+`--no-verify` is for exceptional recovery/debugging, not normal agent operation. The one sanctioned bootstrap exception is a change to `scripts/health/*` itself: hooks run those scripts from `HEAD`, so the old script gates the commit that fixes it. In that case run the fixed `scripts/health/precommit.sh` manually against the exact staged tree (with hook-style variables such as `GIT_INDEX_FILE` set if relevant), then commit with hooks disabled and record the bypass and the passing evidence in the commit message and PR. CI is the independent check.
+
+Agents enable the hooks with `make hooks-install` in every fresh clone or sandbox before their first commit ([AGENTS.md §12](../AGENTS.md#12-git-and-isolation)). `CLAUDE.md`, `GEMINI.md` and the Claude Code `SessionStart` hook in `.claude/settings.json` are conveniences that point tools at, or perform, that step; they carry no separate policy.
 
 If a health check is believed to be wrong:
 
