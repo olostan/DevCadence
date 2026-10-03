@@ -25,9 +25,13 @@ fmt-check:
 		exit 1; \
 	fi
 
-## diff-check: fail on whitespace errors in the working tree/index diff.
+## diff-check: fail on whitespace errors. Set DIFF_BASE in clean CI checkouts.
 diff-check:
-	git diff --check
+	@if [ -n "$(DIFF_BASE)" ]; then \
+		git diff --check "$(DIFF_BASE)...HEAD"; \
+	else \
+		git diff --check; \
+	fi
 
 ## mod-check: verify go.mod/go.sum already match go mod tidy.
 mod-check:
