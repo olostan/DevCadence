@@ -487,6 +487,8 @@ Dependency/completion graph:
 
 **Execution Work Package:** [docs/work-packages/wp-m3c-4-ewp.md](work-packages/wp-m3c-4-ewp.md)
 
+**Status:** BLOCKED on delegation prerequisites. The EWP (§0, §3A) records two prerequisites and five known gaps found by independent readiness review: evidence-escaper hardening, accepted-behavior for unknown quota, the unrepresentable "honest unknown opaque-session usage" deliverable, absent `WriteScope` enforcement and absent file-edit→lease-invalidation wiring. Deliverables below that the current protocol cannot satisfy are pending a Principal decision recorded in the EWP, not silently dropped.
+
 **Objective:** verify the integrated cognition substrate across heterogeneous portfolios and edge cases.
 
 **Deliverables:**
@@ -516,15 +518,17 @@ Dependency/completion graph:
 **Dependency/boundary:** this WP builds on the existing ReviewResult / ReviewCampaign / FindingDisposition / ClosureDecision contracts and M3C protocol conventions. It is deliberately numbered after the existing M3C-3/4 cards to avoid renumbering accepted roadmap identities, but it may proceed independently of WP-M3C-2/3/4 once WP-M3C-1 is accepted. Rich multi-review fan-out, lenses, falsification, aggregation policy and campaign automation remain M7.
 
 **Deliverables:**
-- `ReviewFinding` Go/schema twin with stable finding identity, raw ReviewResult observation refs, candidate/contract identity, canonical severity, canonical materiality, optional confidence, claim/evidence/requirement refs, verification method, and durable reviewer/producer provenance.
-- `FindingResolution` Go/schema twin representing author/implementer `fix_attempted | challenge` plus candidate/evidence and mandatory logical producer + invocation provenance.
-- `ResolutionVerification` Go/schema twin representing independent verification with mandatory verifier + invocation provenance; verifier-facing cognition is identity-blinded by default while the control plane compares durable provenance to enforce reviewer/author independence. Verification may return `re_adjudication_required`, but cannot itself create an authorized deferral.
-- Backward-compatible links to existing FindingDisposition and ClosureDecision semantics; a blocking `fix_attempted` remains open for closure until independent verification succeeds.
-- Focused role-specific projection tests proving clean-session reconstruction does not require the reviewer/author chat transcript.
+- `ReviewFinding` Go/schema twin with stable finding identity, raw ReviewResult observation refs, candidate/contract identity, canonical severity, canonical materiality, optional confidence, claim/evidence/requirement refs, verification method, and durable reviewer provenance. The record is immutable and has no stored status; lifecycle state is derived (EWP D-2).
+- `FindingResolution` Go/schema twin representing author/implementer `fix_attempted | challenge` plus candidate/evidence, a per-finding `attempt_no`, and mandatory logical producer + invocation provenance (`ActorProvenance`, EWP D-1).
+- `ResolutionVerification` Go/schema twin representing independent verification with mandatory verifier + invocation provenance. Outcomes: `verified_fixed | verified_dismissed | not_resolved | re_adjudication_required`. Verification may return `re_adjudication_required`, but no outcome or field can create an authorized deferral.
+- Two pure functions over the new records: `CheckVerification` (independence, link, candidate and kind×outcome rules, fail closed) and `DeriveFindingResolutionState` (`unresolved | verification_pending | verified_fixed | verified_dismissed | re_adjudication_required`). "Closure-eligible" is defined as `verified_fixed` or `verified_dismissed`.
+- Backward compatibility: `ReviewCampaign`, `FindingDisposition`, `ClosureDecision` and `ReviewResult` schemas, fixtures and Go types are byte-identical; their Go twins and all `ClosureDecision` wiring remain M7 (they are listed as awaiting implementation).
+- Clean-session reconstruction tests proving state derivation needs only decoded durable records, never a chat transcript.
+- **Deferred to M7 (EWP D-3):** Go twins for the three existing records, wiring of derived state into `ClosureDecision` counts and superseding `FindingDisposition=defer`, verifier-facing projection and identity blinding, normalization/deduplication, and ID minting.
 
-**MUST:** author/implementer self-verification is structurally rejected from durable producer/verifier provenance, including across clean sessions; severity/materiality vocabularies stay compatible with existing FindingDisposition; challenge verification is blind to producer identity unless identity is materially required evidence; verification cannot accept deferred risk; no new record grants closure authority by itself.
+**MUST:** author/implementer self-verification is structurally rejected from durable producer/verifier provenance, including across clean sessions (at the record level; provenance authenticity is a control-plane duty, stated as a limitation in the EWP); severity/materiality vocabularies stay compatible with existing FindingDisposition; verification cannot accept deferred risk; no new record grants closure authority by itself.
 
-**Acceptance criteria:** strict Go/schema parity and valid/invalid fixtures; normalized finding references and producer/verifier provenance round-trip; same-producer/self-verification is rejected after a clean-session handoff; an attempted blocking fix cannot satisfy ClosureDecision until verified; a verifier's deferral recommendation cannot satisfy ClosureDecision until an authorized superseding `FindingDisposition=defer` exists; challenge verification can reconstruct from durable state/evidence in a clean session; existing ReviewCampaign/FindingDisposition/ClosureDecision records retain compatibility.
+**Acceptance criteria:** strict Go/schema parity and valid/invalid fixtures; normalized finding references and producer/verifier provenance round-trip; same-producer/self-verification is rejected by `CheckVerification` across the cases enumerated in the EWP; an attempted fix never derives a verified state without an independent verification, and `re_adjudication_required` never derives a closure-eligible state; state reconstructs from decoded durable records in a clean session; existing ReviewCampaign/FindingDisposition/ClosureDecision records retain compatibility. Enforcement against `ClosureDecision` and superseding-deferral is M7.
 
 ## M3D — Adaptive portfolio and workflow synthesis
 

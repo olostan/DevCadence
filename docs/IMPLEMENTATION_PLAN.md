@@ -523,7 +523,7 @@ asking AI to choose the portfolio.
 - deterministic portfolio validator covering endpoint identity/capability
   provenance, source exposure, spending/overage, budget bindings, driver
   features and resource constraints;
-- separate WP-M3C-5 durable review-ledger foundation: stable ReviewFinding identity, author fix-attempt/challenge response, independent resolution verification and focused role-specific context projections, decoupled from WP-M3C-2 session/compiler delivery; rich fan-out/aggregation remains M7;
+- separate WP-M3C-5 durable review-ledger foundation: stable ReviewFinding identity, author fix-attempt/challenge response, independent resolution verification with record-level self-verification rejection and a derived resolution state, decoupled from WP-M3C-2 session/compiler delivery; Go twins for the existing campaign/disposition/closure records, ClosureDecision wiring, verifier projection/blinding, normalization and rich fan-out/aggregation remain M7;
 - no silent subscription/local → metered API fallback.
 
 M3C is deliberately deterministic infrastructure. It may validate an explicit

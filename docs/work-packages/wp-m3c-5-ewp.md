@@ -4,221 +4,338 @@
 - **Scope card:** docs/WORK_PACKAGES.md#wp-m3c-5--durable-review-ledger-primitives
 - **Work Package ID:** `WP-M3C-5`
 - **Task ID:** `task-m3c-5-durable-review-ledger-primitives`
-- **EWP revision:** `r1`
-- **Base commit:** `4e4a24b63b544f0bc3e7d0ff87ec359a0f59c2da` (origin/main, merge of PR #29 — post-M3C-3 hardening)
-- **Contract digest:** computed over this file's bytes at delegation (`git hash-object docs/work-packages/wp-m3c-5-ewp.md`) and recorded in the delegation manifest; any later edit is a new revision and requires re-delegation.
-- **Status:** READY_FOR_IMPLEMENTATION
+- **EWP revision:** `r2` (r1 was merged in PR #28 and failed independent readiness review)
+- **Base commit:** `1491543d00b718e215a32490fee61bbaf5b0fb18` (origin/main, merge of PR #28). If `main` has advanced at delegation, the Principal re-confirms that no file named in §9 or §2 changed, or re-reviews.
+- **Project state revision:** n/a (manual self-development; no ProjectState record is produced for this WP)
+- **Target implementation endpoint/profile:** unassigned. The delegation manifest records the chosen endpoint; the whole contract (§1–§13) MUST fit its effective context profile, otherwise split or route upward.
+- **Contract digest:** `git hash-object docs/work-packages/wp-m3c-5-ewp.md`, recorded in the delegation manifest. Any later edit is a new revision and requires re-delegation.
+- **Status:** `BLOCKED` — see §0. Not delegable until §0 is cleared.
 - **Purpose in DevCadence self-development:** manual Principal-authored EWP; no DevCadence self-hosting/runtime enforcement is required.
+
+## 0. Delegation prerequisites (BLOCKED until cleared)
+
+| ID | Prerequisite | Owner |
+| --- | --- | --- |
+| PRE-1 | Principal approves the three design decisions recorded in §1A: D-1 (logical actor identity, revised from r1), D-2 (resolution state machine), D-3 (scope: closure wiring, verifier projection and normalization are deferred; the scope card is amended to match). | Principal |
+| PRE-2 | Independent readiness re-review of this revision recorded (ADR-0024 gate). r1's self-assessed PASS was contradicted by independent review. | Reviewer |
 
 ## 1. Objective
 
-Implement the minimal backward-compatible durable state needed to carry normalized review findings, repair/challenge attempts and independent verification across clean sessions, while preserving the existing ReviewCampaign / FindingDisposition / ClosureDecision authority model.
+Add the minimal durable, backward-compatible review-ledger primitives needed to carry a normalized finding, an implementer's resolution attempt and an independent verification across clean sessions, and to **mechanically reject logical self-verification**: three new strict Go/schema twin records (`ReviewFinding`, `FindingResolution`, `ResolutionVerification`), one embedded provenance fragment (`ActorProvenance`), and two pure functions over them (`CheckVerification`, `DeriveFindingResolutionState`). It does not implement M7 multi-review orchestration and does not touch `ReviewCampaign`, `FindingDisposition` or `ClosureDecision`.
 
-This WP does not implement M7 multi-review orchestration.
+## 1A. Closed design decisions (the implementer MUST NOT alter these)
+
+**D-1 — Logical actor identity (revised from r1).** Current `main` has no logical producer/verifier identity: `ReviewResult` carries `attempt_id` plus free-text `reviewer_profile` and `model_identity`; `protocol.Actor` is a stable role/profile handle (DCI-081), not a per-assignment identity. Independence is therefore defined **only** over the `ActorProvenance` fragment in §4A, under the rule in §5.
+
+**D-2 — Resolution state machine.**
+- Resolution outcomes are four: `verified_fixed`, `verified_dismissed`, `not_resolved`, `re_adjudication_required`. `not_resolved` is added to the three in ADR-0020 §8 so that "not fixed / partially fixed" (fix) and "challenge not upheld" (challenge) have a representation that does not send a routine failed repair to Principal adjudication.
+- `ReviewFinding` is immutable and has **no stored status**. Lifecycle state is derived by `DeriveFindingResolutionState` (§5) from the records; nothing in this WP mutates a record.
+- Each `FindingResolution` carries a 1-based `attempt_no` per finding. A finding may have several resolutions (repair rounds) but each resolution has **at most one** `ResolutionVerification`; a re-verification requires a new attempt.
+
+**D-3 — Scope.** This WP adds no Go types for `ReviewCampaign`, `FindingDisposition` or `ClosureDecision` (they remain "awaiting implementation (M7)" in `tests/schema_fixtures_test.go`), no closure logic, no verifier projection or identity blinding, no normalization/deduplication algorithm and no ID minting. "Closure-eligible" is defined as: the derived state is `verified_fixed` or `verified_dismissed`; wiring that to `ClosureDecision` counts and to superseding `FindingDisposition=defer` is M7. The WORK_PACKAGES.md card is amended accordingly.
 
 ## 2. Semantic scope envelope
 
 ### Authorized domains
 
-- review-ledger protocol Go types and strict JSON schemas;
-- validation/parity logic and fixtures;
-- persistence/reducer wiring only as required to store/reconstruct the new records through existing canonical mechanisms;
-- focused tests for producer/verifier provenance and closure compatibility;
-- documentation synchronization for the new records.
+- `internal/protocol/review_ledger.go` (new) and package-local tests `internal/protocol/review_ledger*_test.go`;
+- `internal/protocol/protocol.go`: only the three `NewRecord` cases (§9);
+- `internal/schema/schema.go`: only the three `Name…` constants, three `RecordKindToSchema` entries and three `AllNames` entries (§9);
+- `schemas/review-finding.schema.json`, `schemas/finding-resolution.schema.json`, `schemas/resolution-verification.schema.json` (new), `schemas/README.md` listing;
+- `fixtures/protocol/review-finding.*`, `finding-resolution.*`, `resolution-verification.*` (new);
+- `tests/schema_fixtures_test.go` and `tests/twin_fields_test.go`: only the table entries named in §9;
+- documentation synchronization listed in §9.
 
-### Explicitly forbidden semantic expansion
+### Explicitly forbidden (require Principal amendment)
 
-Requires Principal amendment:
-
-- replacing ReviewCampaign, FindingDisposition or ClosureDecision;
-- giving FindingResolution or ResolutionVerification independent closure authority;
-- allowing an implementer to verify its own resolution;
-- introducing M7 fan-out/lens/aggregation orchestration;
-- adding new severity/materiality vocabularies incompatible with existing durable records;
-- allowing a verifier to authorize risk deferral.
+- modifying `schemas/review-campaign.schema.json`, `finding-disposition.schema.json`, `closure-decision.schema.json`, `review-result.schema.json`, their fixtures, `ReviewResult`/`Finding` Go types, or the `awaitingImplementation` entries;
+- Go types for `ReviewCampaign`, `FindingDisposition`, `ClosureDecision`; closure-eligibility logic against `ClosureDecision`;
+- giving any new record closure, disposition or deferral authority;
+- changing any identity, event, reducer, store, control-plane or `internal/ids` code (D-3);
+- new severity, materiality or confidence vocabularies;
+- M7 orchestration (fan-out, lenses, aggregation, campaign automation);
+- changing D-1/D-2/D-3.
 
 ### LOCAL_DISCRETION
 
-- exact source/test file split;
-- helper constructors;
-- validation helper organization;
-- package-local normalization utilities;
-- fixture organization.
+- private helper names and the file split inside the authorized files;
+- table-driven versus subtest organization in package-local tests;
+- the precise error message text (categories in §5 and §8 are fixed).
 
 ## 3. Material requirements
 
 | ID | Requirement |
 | --- | --- |
-| REQ-01 | Add durable `ReviewFinding` with stable identity, immutable candidate/contract identity, severity, materiality, optional confidence, claim/evidence/requirement refs, verification method and reviewer provenance. |
-| REQ-02 | Add durable `FindingResolution` with `fix_attempted | challenge`, candidate/evidence refs and mandatory producer/invocation provenance. |
-| REQ-03 | Add durable `ResolutionVerification` with verifier/invocation provenance and outcomes sufficient for fixed/dismissed/re-adjudication-required semantics. |
-| REQ-04 | Structurally reject logical self-verification, including across clean sessions under the same visible GitHub/user account, using exactly the identity model closed in §4A (decision ID-1). |
-| REQ-05 | Preserve existing FindingDisposition severity/materiality vocabulary and closure authority. |
-| REQ-06 | A blocking fix attempt remains unresolved until independent verification succeeds. |
-| REQ-07 | Verification may request re-adjudication but cannot authorize deferral/accepted risk. |
-| REQ-08 | Challenge verification is identity-blinded by default; identity is exposed only when materially relevant evidence requires it. |
-| REQ-09 | Existing accepted ReviewCampaign / FindingDisposition / ClosureDecision records remain backward-compatible. |
-| REQ-10 | Clean-session reconstruction requires durable state/evidence, not prior chat transcript. |
+| REQ-01 | Add `ReviewFinding` exactly as specified in §4B. |
+| REQ-02 | Add `FindingResolution` exactly as specified in §4C. |
+| REQ-03 | Add `ResolutionVerification` exactly as specified in §4D. |
+| REQ-04 | Add `ActorProvenance` (§4A) and enforce the per-position role. |
+| REQ-05 | Add `CheckVerification` implementing the independence rule, link equalities, candidate rules and kind×outcome matrix of §5, failing closed. |
+| REQ-06 | Add `DeriveFindingResolutionState` implementing §5. A `fix_attempted` record never yields a verified state by itself. |
+| REQ-07 | `severity` and `materiality` accept exactly the vocabularies already in `schemas/finding-disposition.schema.json`; `confidence` is `high | medium | low`; the three vocabularies are not interchangeable. |
+| REQ-08 | Existing review artifacts remain byte-identical and valid (§2 forbidden list). |
+| REQ-09 | New kinds are registered everywhere in §9 so persistence accepts them and rejects project mismatch (`ProjectScoped`). |
+| REQ-10 | State derivation needs only the decoded durable records, never a transcript (clean-session reconstruction). |
+| REQ-11 | Documentation is synchronized as in §9. |
 
-## 4A. Closed design decision ID-1 — logical actor identity
+## 4. Interface contract
 
-Current `main` has no logical producer/verifier identity: `ReviewResult` carries only `attempt_id` plus the free-text `reviewer_profile` and `model_identity` strings, which are not an independence basis. The Principal closes the design here; the implementer MUST NOT alter it and MUST NOT substitute account, provider or model strings.
+All three records: strict (`additionalProperties:false`; unknown fields rejected by `protocol.Unmarshal`), `schema_version` const `"1.0"`, `project_id` required, implement `Record` and `ProjectScoped` (`ProjectOf()`), Go and schema twins in parity (`tests/twin_fields_test.go`). Absent, null and zero are equivalent for optional fields (ADR-0003 convention used by `finding-disposition.schema.json`): optional strings are `type: ["string","null"]` in schema and `*string` with `omitempty` in Go. "Non-empty" means `strings.TrimSpace(x) != ""` in Go and `minLength: 1` plus `pattern: "\\S"` in schema. Timestamps are RFC3339 strings (`format: date-time`; Go parses `time.RFC3339Nano` then `time.RFC3339`). ID formats are control-plane convention and are **not** validated beyond non-empty (like existing `disposition_id`/`finding_id`): proposed prefixes `rf`, `rsl`, `rvf`, `act`, `ivk` (not `inv`, which `internal/setup/doctor.go` already uses for ResourceInventory).
 
-**`ActorProvenance`** (new record fragment, embedded as `producer` in `FindingResolution` and `verifier` in `ResolutionVerification`; strict Go/schema twin):
+### 4A. `ActorProvenance` (embedded; not a record)
 
-| Field | Type | Rule |
+| JSON | Go | Type | Rule |
+| --- | --- | --- | --- |
+| `actor_id` | `ActorID` | string | required, non-empty. Opaque; minted by the control plane when it assigns a role; never derived from account, provider, model, endpoint or session strings. |
+| `invocation_id` | `InvocationID` | string | required, non-empty. Opaque; one cognitive invocation. |
+| `role` | `Role` | enum `reviewer \| implementer \| verifier` | required. Must equal the position: `ReviewFinding.reviewer` is `reviewer`, `FindingResolution.producer` is `implementer`, `ResolutionVerification.verifier` is `verifier`; a mismatch is invalid. |
+| `lineage_actor_ids` | `LineageActorIDs` | []string | optional; items non-empty, unique; MUST NOT contain this record's own `actor_id`. The control plane populates the **transitive closure** of actors whose output this actor consumed as a basis for its work; the validators check direct membership only. |
+| `endpoint_ref` / `session_ref` / `model_ref` | `*string` each | optional | informational by-reference provenance (PROTOCOLS §FindingResolution/§ResolutionVerification); MUST NOT participate in any independence decision. |
+
+### 4B. `ReviewFinding` (REQ-01)
+
+| JSON | Go | Type | Rule |
+| --- | --- | --- | --- |
+| `finding_id` | `FindingID` | string | required, non-empty; the stable identity referenced by `ReviewCampaign.finding_refs` and `FindingDisposition.finding_id` (those remain free strings; no referential check). |
+| `project_id`, `campaign_id` | `ProjectID`, `CampaignID` | string | required, non-empty. |
+| `candidate_commit` | `CandidateCommit` | string | required, non-empty; immutable target candidate. |
+| `work_package_id` | `WorkPackageID` | string | required, non-empty. |
+| `contract_revision` | `ContractRevision` | int | required, `>= 1` (same meaning as `ReviewCampaign.work_package_version`). |
+| `severity` | `Severity` (`protocol.Severity`) | enum `info\|low\|medium\|high\|critical` | required; Go uses `Severity.ValidFinding()`. |
+| `materiality` | `Materiality` (new type) | enum `blocking\|material_non_blocking\|opportunistic` | required. |
+| `confidence` | `Confidence` | optional enum `high\|medium\|low` | absent means unknown. |
+| `claim`, `impact`, `verification_method` | strings | | required, non-empty. |
+| `why_now` | `*string` | optional | |
+| `evidence_refs` | []string | | required, at least 1 item, each non-empty. |
+| `requirement_refs` | []string | | optional; items non-empty when present. |
+| `source_observations` | []`ObservationRef{ReviewID string, FindingIndex int}` | | required, at least 1; `review_id` non-empty, `finding_index >= 0`. Points to `ReviewResult.review_id` and an index in that record's `findings`. No existence check; a superseded `ReviewResult` stays a valid historical link. |
+| `reviewer` | `Reviewer` (`ActorProvenance`) | | required; role `reviewer`. |
+| `recorded_at` | `RecordedAt` | string | required, RFC3339. |
+
+### 4C. `FindingResolution` (REQ-02)
+
+| JSON | Go | Type | Rule |
+| --- | --- | --- | --- |
+| `resolution_id`, `project_id`, `campaign_id`, `finding_id` | strings | | required, non-empty. |
+| `disposition_id` | `DispositionID` | string | required, non-empty; the `fix_now` `FindingDisposition` this answers. Not resolved or checked against any record in this WP. |
+| `contract_revision` | int | | required, `>= 1`. |
+| `attempt_no` | `AttemptNo` | int | required, `>= 1`. |
+| `kind` | `Kind` (`ResolutionKind`) | enum `fix_attempted \| challenge` | required. |
+| `target_candidate_commit` | string | | required, non-empty; the finding's `candidate_commit`. |
+| `resolved_candidate_commit` | `*string` | | required non-empty when `kind == fix_attempted`; MUST be absent or null when `kind == challenge`. Schema expresses this with `allOf` `if/then/else`. |
+| `rationale` | string | | required, non-empty (fix: what changed; challenge: the contradiction argument). |
+| `evidence_refs` | []string | | required, at least 1, each non-empty. |
+| `producer` | `ActorProvenance` | | required; role `implementer`. |
+| `recorded_at` | string | | required, RFC3339. |
+
+### 4D. `ResolutionVerification` (REQ-03)
+
+| JSON | Go | Type | Rule |
+| --- | --- | --- | --- |
+| `verification_id`, `project_id`, `campaign_id`, `finding_id`, `resolution_id` | strings | | required, non-empty. |
+| `contract_revision` | int | | required, `>= 1`. |
+| `verified_candidate_commit` | string | | required, non-empty; the candidate the verifier examined. |
+| `outcome` | `Outcome` (`VerificationOutcome`) | enum `verified_fixed \| verified_dismissed \| not_resolved \| re_adjudication_required` | required. |
+| `rationale` | string | | required, non-empty. |
+| `evidence_refs` | []string | | required, at least 1, each non-empty. |
+| `verifier` | `ActorProvenance` | | required; role `verifier`. |
+| `recorded_at` | string | | required, RFC3339. |
+
+Nothing in any record expresses deferral or risk acceptance: `re_adjudication_required` is evidence returned to the authorized Principal/Human, never an authorization.
+
+## 5. Algorithms (exact semantics)
+
+All failures below return `errs.CategoryValidationFailed` unless stated.
+
+**independent(a, b ActorProvenance) bool** = `a.ActorID != b.ActorID` ∧ `a.ActorID ∉ b.LineageActorIDs` ∧ `b.ActorID ∉ a.LineageActorIDs` ∧ `a.InvocationID != b.InvocationID`. Both `ActorID` and `InvocationID` on both sides MUST be non-empty, otherwise the pair is **not** independent (fail closed). Lineage is compared directly (no transitive computation).
+
+**`CheckVerification(f *ReviewFinding, r *FindingResolution, v *ResolutionVerification) error`** checks, in order, and returns on the first failure:
+
+1. `f`, `r`, `v` non-nil and each passes its own `Validate()`; a `Validate()` failure is returned wrapped (`errs.Wrap(errs.CategoryValidationFailed, err, …)`) so that every `CheckVerification` failure has category `CategoryValidationFailed`.
+2. Links: `r.ProjectID == f.ProjectID == v.ProjectID`; `r.CampaignID == f.CampaignID == v.CampaignID`; `r.FindingID == f.FindingID == v.FindingID`; `v.ResolutionID == r.ResolutionID`; `r.ContractRevision == f.ContractRevision == v.ContractRevision`; `r.TargetCandidateCommit == f.CandidateCommit`.
+3. Candidate rule: if `r.Kind == fix_attempted` then `v.VerifiedCandidateCommit == *r.ResolvedCandidateCommit`; if `r.Kind == challenge` then `v.VerifiedCandidateCommit == f.CandidateCommit`.
+4. Kind×outcome matrix: `fix_attempted` allows `verified_fixed`, `not_resolved`, `re_adjudication_required`; `challenge` allows `verified_dismissed`, `not_resolved`, `re_adjudication_required`. Any other combination fails.
+5. Independence: `independent(v.Verifier, r.Producer)` MUST hold. If `r.Kind == challenge`, `independent(v.Verifier, f.Reviewer)` MUST also hold (a reviewer cannot adjudicate a challenge to their own claim). For `fix_attempted`, the original reviewer MAY verify.
+
+**`DeriveFindingResolutionState(f *ReviewFinding, rs []FindingResolution, vs []ResolutionVerification) (FindingResolutionState, error)`**; `FindingResolutionState` values: `unresolved`, `verification_pending`, `verified_fixed`, `verified_dismissed`, `re_adjudication_required`.
+
+1. `f` non-nil and valid; every element of `rs`/`vs` valid; every `r` links to `f` (project, campaign, finding_id, contract_revision) else error.
+2. If `len(rs) == 0`: return `unresolved` (and `len(vs)` MUST be 0, else error).
+3. `attempt_no` values MUST be exactly `1..len(rs)` with no gaps or duplicates, else error. Order of input slices is irrelevant.
+4. Each `v` MUST reference exactly one existing `r.ResolutionID`; at most one `v` per `r`, else error. Each `(r, v)` pair MUST pass `CheckVerification`, else return that error (fail closed; an invalid verification never degrades to "ignored").
+5. Every resolution except the one with the highest `attempt_no` MUST have a verification with outcome `not_resolved`, else error (an attempt superseded without a failed verification).
+6. Let `R` be the highest-`attempt_no` resolution. No verification for `R`: return `verification_pending`. Otherwise map `v.Outcome`: `verified_fixed` → `verified_fixed`; `verified_dismissed` → `verified_dismissed`; `re_adjudication_required` → `re_adjudication_required`; `not_resolved` → `unresolved`.
+
+Closure-eligible (definition only): the derived state is `verified_fixed` or `verified_dismissed`. This WP does not consume it.
+
+## 6. Invariants / state rules
+
+| ID | Invariant | Requirements |
 | --- | --- | --- |
-| `actor_id` | string, required | Opaque logical-actor identifier minted by the control plane (`internal/ids`, prefix `actor`) when it assigns a role to work. One `actor_id` is minted per role assignment, never derived from account, provider, model, endpoint or session strings. |
-| `invocation_id` | string, required | Control-plane-minted identifier (`internal/ids`, prefix `inv`) of the single cognitive invocation that produced the record. Unique per invocation. |
-| `role` | enum, required | `implementer` for `FindingResolution.producer`, `verifier` for `ResolutionVerification.verifier`. |
-| `lineage_actor_ids` | []string, optional | `actor_id`s of every earlier actor whose output this actor consumed as a basis for the attempt (for example the implementer whose fix is being repaired). Empty means none. |
-| `endpoint_ref` | string, optional | Informational only. MUST NOT participate in any independence decision. |
+| INV-01 | Finding observation, disposition, resolution, verification and closure remain distinct authority layers; this WP writes none of the disposition or closure layers. | REQ-01..03 |
+| INV-02 | A verification is independently valid only under §5 step 5; absent or empty identifiers fail closed. | REQ-04, REQ-05 |
+| INV-03 | Account, provider, model, endpoint and session strings never decide independence. | REQ-04, REQ-05 |
+| INV-04 | A `fix_attempted` resolution never yields a verified state without a verification. | REQ-06 |
+| INV-05 | No outcome or field expresses deferral or accepted risk. | REQ-03 |
+| INV-06 | Severity is harm, materiality is current-candidate effect, confidence is evidence strength; their vocabularies are disjoint and not interchangeable. | REQ-07 |
+| INV-07 | Existing review schemas, fixtures and Go types are byte-identical after this WP. | REQ-08 |
+| INV-08 | State is derived from durable records alone. | REQ-10 |
 
-**Independence rule (the only definition of "independent"):** a `ResolutionVerification` is independently valid if and only if, with `R` the `FindingResolution` it verifies:
+## 7. Authority matrix
 
-1. `verifier.actor_id != R.producer.actor_id`;
-2. `verifier.actor_id` is not in `R.producer.lineage_actor_ids`;
-3. `R.producer.actor_id` is not in `verifier.lineage_actor_ids`;
-4. `verifier.invocation_id != R.producer.invocation_id`;
-5. all four identifier fields are present and non-empty on both sides.
+| Decision / effect | Authorized source | Forbidden substitute |
+| --- | --- | --- |
+| mint `actor_id`, `invocation_id`, `lineage_actor_ids` | control plane | model output, implementer, verifier, account/provider strings |
+| normalize and deduplicate raw findings, mint `finding_id` | control plane / Principal process (out of scope here) | the implementer |
+| disposition (`fix_now`, `defer`, …) | existing Principal/Human `FindingDisposition` | any new record |
+| attempt a fix or challenge | implementer-role actor | the verifier |
+| decide whether a resolution is verified | independent verifier-role actor | the producer, or a verifier failing §5 |
+| accept deferral / risk | Principal/Human via a superseding `FindingDisposition=defer` (M7) | a verifier outcome |
+| closure | existing `ClosureDecision` process (M7) | `DeriveFindingResolutionState` |
 
-Any violation, including an absent field, is a deterministic rejection with `errs.CategoryValidationFailed`. A verification that cannot be compared is invalid, never "assumed independent".
+## 8. Missing / unknown / stale / malformed input semantics
 
-**Authority:** only the control plane mints `actor_id` and `invocation_id`. Values in model output are never trusted; the validator checks only structure and the rule above. Verifying that an id was really minted by the control plane is out of scope for this WP (no minting registry is added) and remains a stated limitation: this WP enforces the independence rule over recorded provenance, not provenance authenticity.
+| Input | Missing | Unknown | Stale | Malformed / contradictory |
+| --- | --- | --- | --- | --- |
+| `producer` / `verifier` / `reviewer` provenance | record invalid (`errs.CategoryInvalidArgument`) | n/a | n/a | empty or whitespace id, bad role, self in lineage, duplicate lineage entry: invalid |
+| independence comparison | not independent: fail closed | n/a | n/a | n/a |
+| `confidence` | allowed (unknown) | allowed | n/a | out-of-vocabulary: invalid |
+| `severity` / `materiality` | invalid (both required) | n/a | n/a | out-of-vocabulary or cross-vocabulary value: invalid |
+| candidate or contract identity | invalid | n/a | mismatch between records: `CheckVerification` failure | n/a |
+| `resolved_candidate_commit` | required for `fix_attempted`, forbidden for `challenge` | n/a | n/a | violation: invalid |
+| `evidence_refs`, `source_observations` | invalid (minimum 1) | n/a | n/a | empty item: invalid |
+| verification for a resolution | `verification_pending` | n/a | n/a | two verifications for one resolution: error |
+| disposition for closure | not evaluated by this WP | n/a | n/a | n/a |
+| legacy review records | unchanged, no migration, no rewrite | n/a | n/a | n/a |
 
-**Same-model clean session:** a new session of the same model/provider, scheduled by the control plane with a fresh `actor_id` and no lineage link, is independent by this rule. Reuse of the producer's `actor_id` for verification is rejected. This is the intended behavior of ADR-0020 §8 (rejecting logical self-verification across clean sessions).
+## 9. Representability map and registration touchpoints
 
-## 4. Invariants / state rules
-
-| ID | Invariant |
+| Concept | Exact representation |
 | --- | --- |
-| INV-01 | Finding observation, disposition, resolution, verification and closure remain distinct authority layers. |
-| INV-02 | Producer and verifier logical identities must differ for independent verification. |
-| INV-03 | Same visible account/provider session metadata cannot substitute for logical producer/verifier provenance. |
-| INV-04 | A `fix_attempted` record never means “fixed” by itself. |
-| INV-05 | A verifier cannot create or imply authorized deferral/accepted risk. |
-| INV-06 | Severity = harm, materiality = effect on current candidate, confidence = evidence strength; they are not interchangeable. |
-| INV-07 | Existing durable records retain their prior meaning and remain readable/valid. |
-| INV-08 | Review state required for continuation survives clean-session handoff without transcript dependence. |
+| normalized finding / resolution / verification | `protocol.ReviewFinding`, `protocol.FindingResolution`, `protocol.ResolutionVerification` in `internal/protocol/review_ledger.go`, schemas `review-finding`, `finding-resolution`, `resolution-verification` |
+| provenance and independence | `protocol.ActorProvenance`, `ProvenanceRole`, §5 `independent` |
+| severity vocabulary | existing `protocol.Severity` and `ValidFinding()` |
+| materiality / confidence / kind / outcome | new string types `Materiality`, `FindingConfidence`, `ResolutionKind`, `VerificationOutcome` with `Valid()` |
+| raw observation link | `ObservationRef{ReviewID, FindingIndex}` |
+| derived state | `FindingResolutionState` and `DeriveFindingResolutionState` |
+| existing disposition / campaign / closure | schemas only; no Go types (D-3) |
 
-## 5. State transition contract
+Registration checklist (every item MUST be done; nothing else is wired):
+1. `internal/protocol/review_ledger.go`: types, `Validate`, `RecordKind`, `RecordID`, `SchemaVer`, `ProjectOf` for each record.
+2. `internal/protocol/protocol.go` `NewRecord`: cases `"ReviewFinding"`, `"FindingResolution"`, `"ResolutionVerification"`.
+3. `internal/schema/schema.go`: constants `NameReviewFinding`, `NameFindingResolution`, `NameResolutionVerification`; `RecordKindToSchema` entries; `AllNames()` entries; update the doc comment above the review-convergence constants.
+4. Three schema files in `schemas/`; list them under "Review convergence" in `schemas/README.md`.
+5. Fixtures in `fixtures/protocol/`: for each record one `*.valid.json` and the invalid fixtures in ACC-02.
+6. `tests/schema_fixtures_test.go`: add the three `*.valid.json` rows to the round-trip table (next to `refactoring-proposal.valid.json`), the three `*.invalid-` prefixes to `TestTheGoReaderRejectsWhatTheSchemaRejects`, and three cases to `recordKindFor`.
+7. `tests/twin_fields_test.go`: three rows.
+8. No change to `awaitingImplementation`, `internal/storage`, `internal/controlplane`, events or reducers; `internal/storage/schema_boundary_test.go` must pass because the kinds are registered.
 
-Allowed conceptual progression:
-
-```text
-raw ReviewResult observation
-  -> normalized ReviewFinding
-  -> existing FindingDisposition
-  -> FindingResolution(fix_attempted | challenge)
-  -> ResolutionVerification(verified_fixed | verified_dismissed | re_adjudication_required)
-  -> existing ClosureDecision when owning closure requirements are satisfied
-```
-
-Forbidden shortcuts:
-
-- FindingResolution -> ClosureDecision without required verification;
-- ResolutionVerification -> authorized defer/accepted-risk disposition;
-- producer verifies its own FindingResolution;
-- new record silently mutates historical FindingDisposition.
-
-## 6. Authority matrix
-
-| Decision | Authority |
-| --- | --- |
-| raw finding observation | reviewer |
-| finding normalization/dedup identity | normalization/control-plane process |
-| disposition (fix/defer/reject/etc.) | existing authorized adjudication/Principal/Human process |
-| repair/challenge attempt | implementer/author |
-| whether repair/challenge is independently verified | independent verifier |
-| whether risk may be deferred/accepted | existing authorized disposition owner, not verifier |
-| final closure | existing ClosureDecision process |
-
-## 7. Missing / unknown input semantics
-
-- missing producer provenance on FindingResolution: invalid;
-- missing verifier provenance on ResolutionVerification: invalid;
-- producer/verifier identity cannot be compared: verification is not independently valid; fail closed;
-- missing candidate/contract identity needed to anchor a finding: invalid;
-- unknown confidence: confidence may be omitted if protocol permits; severity/materiality may not silently become unknown if owning records require them;
-- challenge lacks evidence/rationale: invalid or non-verifiable per exact schema contract;
-- historical disposition absent when required for closure: no closure.
-
-## 8. Failure matrix
-
-| Failure / condition | Required behavior |
-| --- | --- |
-| same logical producer attempts verification | deterministic rejection |
-| clean-session verifier has no chat history | verification reconstructs from durable records/evidence |
-| verifier believes risk should be deferred | emit re-adjudication-required; no closure authority |
-| challenge verification succeeds | verified dismissal/re-adjudication path without rewriting historical evidence |
-| schema/Go representations diverge | parity test fails |
-| legacy record loaded | retains prior meaning; no mandatory migration rewrite |
-| duplicate raw findings normalize together | stable links preserve source observations; no evidence loss |
-| candidate/contract identity mismatch | reject as stale/wrong-target verification |
-
-## 9. Representability map
-
-| Concept | Representation |
-| --- | --- |
-| normalized finding | new `ReviewFinding` Go/schema twin |
-| repair/challenge attempt | new `FindingResolution` Go/schema twin |
-| independent verification | new `ResolutionVerification` Go/schema twin |
-| disposition authority | existing `FindingDisposition` |
-| campaign identity | existing `ReviewCampaign` |
-| final closure authority | existing `ClosureDecision` |
-| producer/verifier independence | `ActorProvenance` per §4A (`actor_id`, `invocation_id`, `role`, `lineage_actor_ids`) and the five-clause independence rule |
-
-The identity representation is closed by §4A; no further identity design is delegated to the implementer.
+Documentation synchronization: `docs/PROTOCOLS.md` (the ReviewFinding/FindingResolution/ResolutionVerification sections: state the D-1 representation and the four outcomes, remove `status` from the ReviewFinding field list because state is derived, and remove "do not yet have committed Go/schema twins"), `docs/REVIEW_AND_CONVERGENCE.md` (§3 no stored status, §6 provenance representation, §7 outcomes), `docs/adr/0020-…` §8 (add `not_resolved` and a pointer to D-1/D-2), `schemas/README.md`, `docs/IMPLEMENTATION_PLAN.md` and `docs/WORK_PACKAGES.md` status.
 
 ## 10. Acceptance scenarios
 
-| ID | Scenario | Expected result |
+Test and subtest names MUST contain `ReviewLedger` and their `ACC-xx` id.
+
+| ID | Setup | Action | Expected | Maps to |
+| --- | --- | --- | --- | --- |
+| ACC-01 | A `*.valid.json` fixture per record | schema-validate; `protocol.Unmarshal`; `protocol.Marshal`; re-validate; twin-fields test | schema accepts; Go round-trips byte-equivalent after canonical marshal; published and declared field sets equal | REQ-01..04, REQ-09 |
+| ACC-02 | Invalid fixtures, each rejected by BOTH the schema and the Go reader: `review-finding.invalid-` {`no-project-id`, `severity-blocking` (materiality value in severity), `materiality-high`, `confidence-critical`, `empty-evidence`, `empty-observations`, `reviewer-role-verifier`, `whitespace-actor-id`}; `finding-resolution.invalid-` {`fix-without-resolved-commit`, `challenge-with-resolved-commit`, `missing-invocation-id`, `producer-role-verifier`, `lineage-contains-self`, `duplicate-lineage`, `attempt-zero`}; `resolution-verification.invalid-` {`unknown-outcome`, `outcome-deferred`, `missing-verifier`, `empty-rationale`, plus one with an extra unknown field}; one wrong `schema_version` per record | schema validation and `protocol.Unmarshal` | every invalid fixture is rejected by both | REQ-01..04, REQ-07, INV-06 |
+| ACC-03 | Programmatic comparison of schema enum sets | compare `severity` and `materiality` enums in `review-finding.schema.json` with `finding-disposition.schema.json` | identical sets; `confidence` enum is exactly `high, medium, low` | REQ-07 |
+| ACC-04 | Baseline valid chain `f`, `r` (`fix_attempted`), `v` (`verified_fixed`) with independent provenance | `CheckVerification(f, r, v)` | passes | REQ-05 |
+| ACC-05 | Baseline chain, then one mutation per row | `CheckVerification` | each row returns `CategoryValidationFailed` except the rows marked PASS | REQ-05, INV-02, INV-03 |
+
+ACC-05 mutation table (each is a separate table-driven case):
+
+| # | Mutation | Expected |
 | --- | --- | --- |
-| ACC-01 | ReviewFinding round-trip through Go/schema | exact strict parity |
-| ACC-02 | FindingResolution produced and later verified in clean session | reconstruction succeeds from durable state |
-| ACC-03 | verifier reuses the producer's `actor_id`, or its `invocation_id`, or appears in lineage in either direction, or any of the four fields is empty | deterministic rejection for each variant (five table cases) |
-| ACC-04 | verifier has a fresh `actor_id`/`invocation_id`, no lineage overlap, same model string and same visible account as the producer | accepted as independent; verified-fixed state can contribute to existing closure flow |
-| ACC-05 | verifier recommends defer | re-adjudication required; closure still blocked until authorized disposition changes |
-| ACC-06 | challenge verified | dismissal/re-adjudication outcome recorded without hidden mutation |
-| ACC-07 | legacy campaign/disposition/closure fixtures | remain valid/backward-compatible |
-| ACC-08 | severity/materiality/confidence round-trip | vocabularies preserve their distinct semantics |
-| ACC-09 | candidate/contract mismatch | verification rejected |
-| ACC-10 | restart/clean process/session | no transcript required to continue review state |
+| a | `v.verifier.actor_id == r.producer.actor_id` | fail |
+| b | `v.verifier.invocation_id == r.producer.invocation_id` | fail |
+| c | `r.producer.actor_id ∈ v.verifier.lineage_actor_ids` | fail |
+| d | `v.verifier.actor_id ∈ r.producer.lineage_actor_ids` | fail |
+| e | empty `v.verifier.actor_id` (record invalid) | fail |
+| f | empty `r.producer.invocation_id` | fail |
+| g | verifier equals the original reviewer, `kind == fix_attempted` | PASS |
+| h | verifier `actor_id` equals `f.reviewer.actor_id`, `kind == challenge`, outcome `verified_dismissed` | fail |
+| i | `f.reviewer.actor_id ∈ v.verifier.lineage_actor_ids`, `kind == challenge` | fail |
+| j | same `endpoint_ref`, `model_ref`, `session_ref` on both sides, fresh distinct ids | PASS (informational fields are ignored) |
+| k | `v.project_id` differs | fail |
+| l | `v.campaign_id` differs | fail |
+| m | `v.finding_id` differs | fail |
+| n | `v.resolution_id` differs | fail |
+| o | `v.contract_revision` differs | fail |
+| p | `fix_attempted` and `v.verified_candidate_commit != r.resolved_candidate_commit` | fail |
+| q | `challenge` and `v.verified_candidate_commit != f.candidate_commit` | fail |
+| r | `fix_attempted` with outcome `verified_dismissed` | fail |
+| s | `challenge` with outcome `verified_fixed` | fail |
+| t | `r.target_candidate_commit != f.candidate_commit` | fail |
+| u | verifier role `implementer` on `v.verifier` | fail |
+
+| ID | Setup | Action | Expected | Maps to |
+| --- | --- | --- | --- | --- |
+| ACC-06 | Chains built from valid records | `DeriveFindingResolutionState`, one case per row of the table below | exact states/errors as listed | REQ-06, INV-04, INV-05 |
+| ACC-07 | A valid chain in memory | marshal each record to JSON bytes, decode with `protocol.Unmarshal` into fresh values, derive state from only the decoded values (no shared pointers, no transcript input) | state equals the state derived in memory | REQ-10, INV-08 |
+| ACC-08 | git base..head | `git diff --name-only <base>..HEAD` | no path matches the forbidden list in §2; `awaitingImplementation` unchanged; all existing review fixtures and schemas byte-identical; existing tests pass | REQ-08, INV-07 |
+| ACC-09 | Registered kinds | `NewRecord` for each kind; `TestEveryRecordKindHasASchema`; `internal/storage` schema-boundary tests; persist a record with a mismatching project | `NewRecord` returns the type; both tests pass; persistence refuses a project mismatch via `ProjectScoped` | REQ-09 |
+| ACC-10 | Docs edited per §9 | run documentation tests | `go test -count=1 ./tests -run 'Doc'` passes; PROTOCOLS no longer says the three records lack twins | REQ-11 |
+
+ACC-06 derivation table:
+
+| # | Input | Expected |
+| --- | --- | --- |
+| a | no resolutions, no verifications | `unresolved` |
+| b | one `fix_attempted`, no verification | `verification_pending` |
+| c | `fix_attempted` + `verified_fixed` | `verified_fixed` |
+| d | `fix_attempted` + `not_resolved` | `unresolved` |
+| e | attempt 1 `not_resolved`, attempt 2 `fix_attempted` + `verified_fixed` | `verified_fixed` |
+| f | attempt 1 with no verification and attempt 2 present | error |
+| g | attempt numbers 1 and 3 | error |
+| h | duplicate `attempt_no` | error |
+| i | two verifications for one resolution | error |
+| j | `challenge` + `verified_dismissed` | `verified_dismissed` |
+| k | `challenge` + `not_resolved` | `unresolved` |
+| l | `fix_attempted` + `re_adjudication_required` | `re_adjudication_required` (not closure-eligible) |
+| m | a verification that fails `CheckVerification` | error (never ignored) |
+| n | verification referencing an unknown resolution | error |
 
 ## 11. Validation
 
-Minimum evidence:
+Run from the repository root; record exit status, counts, base and head SHAs and the Go version:
 
-- strict schema fixture validation;
-- Go/schema parity tests;
-- `go test -count=1 ./...`
-- `go test -race ./...`
-- `go vet ./...`
-- targeted self-verification rejection and backward-compatibility tests.
+- `make hooks-install` once, then `make hooks-check` (AGENTS.md §12);
+- `go build ./...`, `go vet ./...`;
+- `go test -count=1 ./...` and `go test -race -count=1 ./...`;
+- `go test -count=1 -v -run 'ReviewLedger' ./internal/protocol ./tests`;
+- `make verify`;
+- `bash scripts/health/precommit.sh` on the staged tree.
+
+Required independent review lens: mutation-style review that every ACC-05 and ACC-06 row can fail when the corresponding rule is removed, plus a schema-versus-Go parity review.
 
 ## 12. Escalation triggers
 
-Stop implementation when:
+Return to the Principal, with the exact record, row id and observed behavior, when:
 
-- `internal/ids` cannot mint the `actor`/`inv` identifiers without changing its public API;
-- accepted FindingDisposition/ClosureDecision meaning would need to change;
-- a verifier would need direct closure/deferral authority;
-- M7 orchestration is required to complete the primitive;
-- backward compatibility cannot be preserved without a versioned migration decision.
+- any identifier named in §9 is missing or behaves differently at delegation (for example `NewRecord`, `RecordKindToSchema`, `Severity.ValidFinding`, `ProjectScoped`);
+- implementing a record would require modifying a path in the §2 forbidden list, or Go types for `ReviewCampaign`/`FindingDisposition`/`ClosureDecision`;
+- a rule in §5 is internally inconsistent with the fixtures or with an existing test;
+- schema and Go cannot express the same constraint (for example the `kind`/`resolved_candidate_commit` conditional);
+- a requirement appears to need M7 behavior (closure wiring, projection/blinding, normalization).
+
+A failing scenario is reported BLOCKED with evidence; it is never skipped, deleted or weakened.
 
 ## 13. Implementation Readiness Report
 
 ```text
-requirements represented: 10/10
-invariants specified: 8/8
-state transition shortcuts forbidden: 4
-failure classes specified: 8/8
+requirements represented: 11/11
+mandatory clauses resolved: DCI-134, DCI-135, DCI-081, DCI-092 cited; ADR-0020 §7/§8, PROTOCOLS review records, REVIEW_AND_CONVERGENCE §3/§6/§7
+state transitions specified: derivation steps 1-6 and the kind x outcome matrix (§5)
+failure cases specified: record-level (§8) + 21 independence mutations + 14 derivation rows
 authority decisions specified: 7/7
-missing/unknown input classes specified: 7/7
+missing/unknown input semantics: 10/10 rows (§8)
 acceptance scenarios mapped: 10/10
-unresolved architecture choices: 0 (identity model closed as ID-1)
-local-discretion classes: 5
-readiness: READY_FOR_IMPLEMENTATION
+closed design decisions: 3 (D-1, D-2, D-3) pending Principal approval (PRE-1)
+declared local-discretion choices: 3
+known limitations stated: lineage is control-plane supplied and not authenticated; lineage compared directly (transitive closure supplied by the control plane); invocation_id uniqueness is checked only between a verification and its resolution; provenance authenticity is not verified here
+readiness: NOT_READY (BLOCKED on PRE-1, PRE-2)
 ```
 
-Weaker-implementer check: **PASS** after closure of decision ID-1 (§4A). Self-assessment only; independent readiness review is required before delegation (WORK_PACKAGES.md readiness gate).
+Self-assessment only. This revision has not yet had an independent readiness review (PRE-2); the weaker-implementer check is therefore **not** claimed.
