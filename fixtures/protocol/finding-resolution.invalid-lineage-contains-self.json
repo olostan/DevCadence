@@ -1,0 +1,26 @@
+{
+  "schema_version": "1.0",
+  "resolution_id": "rsl-001",
+  "project_id": "proj-cadence-001",
+  "campaign_id": "cmp-2026-10-03-01",
+  "finding_id": "rf-001",
+  "disposition_id": "disp-001",
+  "contract_revision": 1,
+  "attempt_no": 1,
+  "kind": "fix_attempted",
+  "target_candidate_commit": "1491543d00b718e215a32490fee61bbaf5b0fb18",
+  "resolved_candidate_commit": "2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b",
+  "rationale": "Closed leaked connections in cleanup defer path",
+  "evidence_refs": [
+    "ev-fix-commit-001"
+  ],
+  "producer": {
+    "actor_id": "act-producer-1",
+    "invocation_id": "ivk-prod-001",
+    "role": "implementer",
+    "lineage_actor_ids": [
+      "act-producer-1"
+    ]
+  },
+  "recorded_at": "2026-10-03T12:30:00Z"
+}

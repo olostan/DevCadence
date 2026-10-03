@@ -1,0 +1,30 @@
+{
+  "schema_version": "2.0",
+  "finding_id": "rf-001",
+  "project_id": "proj-cadence-001",
+  "campaign_id": "cmp-2026-10-03-01",
+  "candidate_commit": "1491543d00b718e215a32490fee61bbaf5b0fb18",
+  "work_package_id": "WP-M3C-5",
+  "contract_revision": 1,
+  "severity": "high",
+  "materiality": "blocking",
+  "confidence": "high",
+  "claim": "Resource leak in session substrate connection pool",
+  "impact": "Exhausts file descriptors under long running review campaigns",
+  "verification_method": "Run connection pool stress test with 50 concurrent sessions",
+  "evidence_refs": [
+    "ev-pool-trace-001"
+  ],
+  "source_observations": [
+    {
+      "review_id": "rev-001",
+      "finding_index": 0
+    }
+  ],
+  "reviewer": {
+    "actor_id": "act-reviewer-1",
+    "invocation_id": "ivk-rev-001",
+    "role": "reviewer"
+  },
+  "recorded_at": "2026-10-03T12:00:00Z"
+}

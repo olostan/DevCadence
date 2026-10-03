@@ -1,0 +1,21 @@
+{
+  "schema_version": "1.0",
+  "verification_id": "rvf-001",
+  "project_id": "proj-cadence-001",
+  "campaign_id": "cmp-2026-10-03-01",
+  "finding_id": "rf-001",
+  "resolution_id": "rsl-001",
+  "contract_revision": 1,
+  "verified_candidate_commit": "2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b",
+  "outcome": "maybe_fixed",
+  "rationale": "Verified that 50 concurrent sessions complete without descriptor leak",
+  "evidence_refs": [
+    "ev-verify-trace-001"
+  ],
+  "verifier": {
+    "actor_id": "act-verifier-1",
+    "invocation_id": "ivk-ver-001",
+    "role": "verifier"
+  },
+  "recorded_at": "2026-10-03T13:00:00Z"
+}

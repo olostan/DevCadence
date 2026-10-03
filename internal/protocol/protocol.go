@@ -483,6 +483,12 @@ func NewRecord(kind string) (Record, error) {
 		return &PortfolioRecommendation{}, nil
 	case "WorkflowPlan":
 		return &WorkflowPlan{}, nil
+	case "ReviewFinding":
+		return &ReviewFinding{}, nil
+	case "FindingResolution":
+		return &FindingResolution{}, nil
+	case "ResolutionVerification":
+		return &ResolutionVerification{}, nil
 	}
 	return nil, errs.New(errs.CategoryInvalidArgument, "unknown record kind %q", kind)
 }
