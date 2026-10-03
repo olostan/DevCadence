@@ -6,6 +6,8 @@
 # Go
 bin/
 coverage.out
+coverage.txt
+coverage-summary.txt
 
 # Python / MLX helper environments
 .venv/

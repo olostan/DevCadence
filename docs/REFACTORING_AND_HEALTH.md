@@ -255,6 +255,10 @@ Example:
 - evaluation: replay against previous tasks / architecture review;
 - promotion: engineering skill or invariant if justified.
 
-## 16. Long-term objective
+## 16. Repository enforcement
+
+Concrete local-hook, CI, coverage-regression and documentation-integrity policy is defined in [ENGINEERING_HEALTH_POLICY.md](ENGINEERING_HEALTH_POLICY.md). Deterministic gates provide evidence and regression prevention; they do not replace the semantic review and Architecture Reconciliation described here.
+
+## 17. Long-term objective
 
 A mature DevCadence project should periodically emerge from refactoring with **less accidental complexity than before the preceding feature wave**, rather than accepting monotonically increasing entropy.

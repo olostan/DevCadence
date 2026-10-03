@@ -60,7 +60,7 @@ Use clean, lens-specific context: complete acceptance/contract requirements, app
 
 ## 10. Planned structural health
 
-Passing tests do not prove maintainability. Preserve health measurement, Refactoring Epochs, Architecture Reconciliation, duplication/dependency/API analysis and documentation drift detection under [docs/REFACTORING_AND_HEALTH.md](docs/REFACTORING_AND_HEALTH.md).
+Passing tests do not prove maintainability. Preserve health measurement, Refactoring Epochs, Architecture Reconciliation, duplication/dependency/API analysis and documentation drift detection under [docs/REFACTORING_AND_HEALTH.md](docs/REFACTORING_AND_HEALTH.md). Repository-local enforcement (hooks, CI, coverage-regression and documentation-integrity gates) is owned by [docs/ENGINEERING_HEALTH_POLICY.md](docs/ENGINEERING_HEALTH_POLICY.md); agents must not bypass or weaken those gates merely to land a candidate.
 
 ## 11. Governed learning
 

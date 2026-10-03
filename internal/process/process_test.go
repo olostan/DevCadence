@@ -356,3 +356,12 @@ func TestRunStreamingSinks(t *testing.T) {
 	}
 }
 
+// sortStrings is reached through map iteration, whose random order sometimes
+// delivers already-sorted keys; this pins the swapping path deterministically.
+func TestSortStringsOrdersUnsortedInput(t *testing.T) {
+	got := []string{"c", "a", "d", "b"}
+	sortStrings(got)
+	if want := "a,b,c,d"; strings.Join(got, ",") != want {
+		t.Fatalf("sortStrings = %v, want %s", got, want)
+	}
+}
