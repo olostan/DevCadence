@@ -50,16 +50,16 @@ func TestBudgetPoolValidation(t *testing.T) {
 
 	t.Run("table-driven regime constraints across all 6 regimes", func(t *testing.T) {
 		regimes := []struct {
-			regime                  protocol.EconomicRegime
-			allowFallbackToMetered  bool
-			allowOverage            bool
+			regime                 protocol.EconomicRegime
+			allowFallbackToMetered bool
+			allowOverage           bool
 		}{
-			{protocol.RegimeLocalCompute, false, false},
-			{protocol.RegimeSubscriptionQuota, false, false},
+			{protocol.RegimeLocalCompute, true, false},
+			{protocol.RegimeSubscriptionQuota, true, false},
 			{protocol.RegimeMeteredAPI, true, true},
-			{protocol.RegimePrepaidCredits, false, true},
-			{protocol.RegimeEnterpriseAllocation, false, true},
-			{protocol.RegimeUnknownCustom, false, false},
+			{protocol.RegimePrepaidCredits, true, true},
+			{protocol.RegimeEnterpriseAllocation, true, true},
+			{protocol.RegimeUnknownCustom, true, false},
 		}
 
 		for _, tc := range regimes {

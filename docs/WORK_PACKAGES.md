@@ -373,12 +373,14 @@ Dependency/completion graph:
 
 ### WP-M3C-3 — Deterministic portfolio validator and activation
 
+**Execution Work Package:** [docs/work-packages/wp-m3c-3-ewp.md](work-packages/wp-m3c-3-ewp.md)
+
 **Objective:** implement deterministic validation and safe versioned activation of candidate portfolios.
 
 **Deliverables:**
-- Deterministic portfolio validator in `internal/cognition` checking: endpoint existence, capability provenance, source-exposure policy, spending/overage limits, budget bindings, context/cache feature compatibility, and machine resource constraints.
-- Versioned portfolio activation and rollback primitives (`active-portfolio.json` management, rollback to prior known-good configuration).
-- Explanatory rejection reporting: when a portfolio is rejected, emit structured diagnostic reasons citing the exact violated policy or missing capability.
+- Deterministic portfolio validator in `internal/cognition` (`portfolio_validator.go`, `portfolio_validator_endpoints.go`, `portfolio_validator_economics.go`, `portfolio_validator_constraints.go`) checking: endpoint existence, capability provenance, source-exposure policy, spending/overage limits, budget bindings, context/cache feature compatibility, and machine resource constraints.
+- Versioned portfolio activation and rollback primitives (`portfolio_activation.go`, `active-portfolio.json` management, lineage tracking, and rollback to prior known-good configuration).
+- Explanatory rejection reporting: when a portfolio is rejected, emit structured diagnostic reasons (`portfolio_diagnostics.go`) citing the exact violated policy or missing capability.
 
 **MUST:** deterministic validation is an unbypassable gate; no AI recommendation can activate a portfolio without passing this validator; no silent spending expansion.
 
