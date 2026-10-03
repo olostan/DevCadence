@@ -213,6 +213,10 @@ If a contract repeatedly succeeds only with frontier coding models but fails wit
 
 The goal is to lower the delegation floor without lowering accepted quality.
 
+**Pre-declared falsification criteria:** The contract-completeness hypothesis is falsified for a given workload if:
+1. Providing a fully closed EWP (zero unresolved architecture/authority/state decisions) yields no statistically significant reduction in architectural repair rounds or repair findings compared to an open scope card for that capability class; or
+2. Smaller/local implementation models continue to require repeated architectural re-entry by the Principal despite all semantic choices being closed in the contract, indicating that the task intrinsically requires frontier-level cognitive synthesis rather than merely denser specification.
+
 ## Consequences
 
 ### Positive
