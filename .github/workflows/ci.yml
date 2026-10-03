@@ -29,6 +29,7 @@ jobs:
       - name: Formatting, module hygiene, vet, and diff checks
         env:
           DIFF_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
+          FMT_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
         run: make fmt-check diff-check mod-check vet
 
   test-contracts:
