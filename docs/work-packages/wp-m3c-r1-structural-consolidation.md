@@ -6,7 +6,7 @@
 - **Branch:** `refactor/m3c-structural-consolidation`
 - **Work Package ID:** `WP-M3C-R1`
 - **Version:** 1.0
-- **Status:** Implemented — independent acceptance pending
+- **Status:** Implemented — independent acceptance recorded (ACCEPT_WITH_CONDITIONS, see §Acceptance record); owner confirmation pending
 
 ---
 
@@ -560,3 +560,17 @@ The epoch succeeds when the next engineer or agent can answer, with materially l
 - Which behavior is safe to modify without understanding unrelated compiler mechanics?
 
 A successful refactor leaves **less accidental complexity, fewer mixed responsibilities, stronger local reasoning boundaries, and the same externally observable behavior**.
+
+---
+
+## Acceptance record (autonomous run 1, issue #36)
+
+Independent clean-context review of `688593d..23f2dc1` by a reviewer subagent that did not author R1. Verdict: **ACCEPT_WITH_CONDITIONS**. This is a model-review signal, not owner acceptance; the owner confirms.
+
+Deterministic evidence (reviewer-run, single runs): `go build`, `go vet`, `go test -count=1 ./...` pass at base and head; `go test -race ./...` and `make verify` pass at head; go/ast comparison of non-test declarations: 162 identical, 1 changed (`CompileInvocation`, decomposed into 11 unexported helpers), 0 removed; the head `equivalence_test.go` golden digests pass against the pre-refactor package (genuine pre-refactor constants); no protocol/schema/`go.mod` change; exported API (`go doc -all`) unchanged apart from comment text.
+
+Health note (corrects the PR #20 comment): `admission.go` 1666 → 336 lines; `CompileInvocation` 479 → **106** lines (the earlier "~70" claim was inaccurate); `admission_test.go` 1307 → 401; package total 5892 → 6384 lines (new test files and headers; no behavior added); top-level tests 42 → 47, test names 58 → 67, no test lost.
+
+Observations kept for the record: (1) `totalCatalogInvariants` is now read under the registry read lock (harmless; registry frozen); (2) `ResolveAdmittedRules` remains a 207-line function and `assembleContextPack` takes 10 parameters (placement/size nits, not required by this EWP); (3) a few "Finding/Pass/round" review-history comments remain in `evidence.go`, `profile.go`, `retrieval.go`; (4) repo-wide `gofmt -l .` lists 10 files in other packages at both commits (pre-existing debt, compiler package clean).
+
+Not verified by the reviewer: unchanged files beyond the AST function-body diff (imports/`init` order); assertion strength of moved tests line by line; flakiness (single runs); import-graph direction; inline PR review threads. Independence caveat: PR #20 reviews were posted under the repository owner's account, so author/reviewer identity separation could not be established from that evidence (cf. DCI-134; ActorProvenance in WP-M3C-5 exists to make this explicit).

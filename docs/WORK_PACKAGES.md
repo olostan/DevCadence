@@ -487,7 +487,7 @@ Dependency/completion graph:
 
 **Execution Work Package:** [docs/work-packages/wp-m3c-4-ewp.md](work-packages/wp-m3c-4-ewp.md)
 
-**Status:** IMPLEMENTED — Delivered integration test suite in `tests/m3c_substrate_test.go` covering ACC-01 through ACC-14; awaiting independent review and verification.
+**Status:** IMPLEMENTED — Delivered integration test suite in `tests/m3c_substrate_test.go` covering ACC-01 through ACC-14; merged (PR #35) after independent review; known gaps KG-1..KG-5 are encoded as tests and tracked below.
 
 **Objective:** verify the integrated cognition substrate across heterogeneous portfolios and edge cases.
 
