@@ -12,17 +12,17 @@ func (ctx *validatorContext) validatePolicyAndEconomics(diags *[]PortfolioDiagno
 	p := ctx.p
 
 	// 4. Source-exposure / Privacy Policy
-	if ctx.input.Policy != nil && ctx.input.Policy.MaxSourceExposure != "" {
-		if p.MaxSourceExposure.ExposureRank() > ctx.input.Policy.MaxSourceExposure.ExposureRank() {
+	if ctx.policy.MaxSourceExposure != "" {
+		if p.MaxSourceExposure.ExposureRank() > ctx.policy.MaxSourceExposure.ExposureRank() {
 			*diags = append(*diags, PortfolioDiagnostic{
 				Code:         CodeUnauthorizedSourceExposure,
 				Condition:    ConditionUnauthorized,
 				Target:       "portfolio.max_source_exposure",
 				ViolatedRule: "DCI-080, DCI-124",
 				Message: fmt.Sprintf("portfolio max_source_exposure %q exceeds policy limit %q",
-					p.MaxSourceExposure, ctx.input.Policy.MaxSourceExposure),
+					p.MaxSourceExposure, ctx.policy.MaxSourceExposure),
 				Observed: string(p.MaxSourceExposure),
-				Required: string(ctx.input.Policy.MaxSourceExposure),
+				Required: string(ctx.policy.MaxSourceExposure),
 			})
 		}
 	}
@@ -62,16 +62,16 @@ func (ctx *validatorContext) validatePolicyAndEconomics(diags *[]PortfolioDiagno
 				Required: string(p.MaxSourceExposure),
 			})
 		}
-		if ctx.input.Policy != nil && ctx.input.Policy.MaxSourceExposure != "" && epExposure.ExposureRank() > ctx.input.Policy.MaxSourceExposure.ExposureRank() {
+		if ctx.policy.MaxSourceExposure != "" && epExposure.ExposureRank() > ctx.policy.MaxSourceExposure.ExposureRank() {
 			*diags = append(*diags, PortfolioDiagnostic{
 				Code:         CodeUnauthorizedSourceExposure,
 				Condition:    ConditionUnauthorized,
 				Target:       target,
 				ViolatedRule: "DCI-080, DCI-124",
 				Message: fmt.Sprintf("endpoint %q requires source exposure %q, which exceeds project policy limit %q",
-					rb.EndpointID, epExposure, ctx.input.Policy.MaxSourceExposure),
+					rb.EndpointID, epExposure, ctx.policy.MaxSourceExposure),
 				Observed: string(epExposure),
-				Required: string(ctx.input.Policy.MaxSourceExposure),
+				Required: string(ctx.policy.MaxSourceExposure),
 			})
 		}
 
@@ -90,87 +90,85 @@ func (ctx *validatorContext) validatePolicyAndEconomics(diags *[]PortfolioDiagno
 					Required: string(p.MaxSourceExposure),
 				})
 			}
-			if ctx.input.Policy != nil && ctx.input.Policy.MaxSourceExposure != "" && fbExposure.ExposureRank() > ctx.input.Policy.MaxSourceExposure.ExposureRank() {
+			if ctx.policy.MaxSourceExposure != "" && fbExposure.ExposureRank() > ctx.policy.MaxSourceExposure.ExposureRank() {
 				*diags = append(*diags, PortfolioDiagnostic{
 					Code:         CodeUnauthorizedSourceExposure,
 					Condition:    ConditionUnauthorized,
 					Target:       fbTarget,
 					ViolatedRule: "DCI-080, DCI-124",
 					Message: fmt.Sprintf("fallback endpoint %q requires source exposure %q, which exceeds project policy limit %q",
-						fb.EndpointID, fbExposure, ctx.input.Policy.MaxSourceExposure),
+						fb.EndpointID, fbExposure, ctx.policy.MaxSourceExposure),
 					Observed: string(fbExposure),
-					Required: string(ctx.input.Policy.MaxSourceExposure),
+					Required: string(ctx.policy.MaxSourceExposure),
 				})
 			}
 		}
 	}
 
 	// 5. Economic & Budget Bindings
-	if ctx.input.Policy != nil {
-		if ctx.input.Policy.MaxCostClass != "" {
-			for i, rb := range p.RoleBindings {
-				cost := getEndpointCostClass(rb.EndpointID)
-				if cost.CostRank() > ctx.input.Policy.MaxCostClass.CostRank() {
+	if ctx.policy.MaxCostClass != "" {
+		for i, rb := range p.RoleBindings {
+			cost := getEndpointCostClass(rb.EndpointID)
+			if cost.CostRank() > ctx.policy.MaxCostClass.CostRank() {
+				*diags = append(*diags, PortfolioDiagnostic{
+					Code:         CodeUnauthorizedCostClass,
+					Condition:    ConditionUnauthorized,
+					Target:       fmt.Sprintf("role_bindings[%d]", i),
+					ViolatedRule: "DCI-124",
+					Message: fmt.Sprintf("endpoint %q cost class %q exceeds project policy %q",
+						rb.EndpointID, cost, ctx.policy.MaxCostClass),
+					Observed: string(cost),
+					Required: string(ctx.policy.MaxCostClass),
+				})
+			}
+			for j, fb := range rb.Fallbacks {
+				fbCost := getEndpointCostClass(fb.EndpointID)
+				if fbCost.CostRank() > ctx.policy.MaxCostClass.CostRank() {
 					*diags = append(*diags, PortfolioDiagnostic{
 						Code:         CodeUnauthorizedCostClass,
 						Condition:    ConditionUnauthorized,
-						Target:       fmt.Sprintf("role_bindings[%d]", i),
+						Target:       fmt.Sprintf("role_bindings[%d].fallbacks[%d]", i, j),
 						ViolatedRule: "DCI-124",
-						Message: fmt.Sprintf("endpoint %q cost class %q exceeds project policy %q",
-							rb.EndpointID, cost, ctx.input.Policy.MaxCostClass),
-						Observed: string(cost),
-						Required: string(ctx.input.Policy.MaxCostClass),
-					})
-				}
-				for j, fb := range rb.Fallbacks {
-					fbCost := getEndpointCostClass(fb.EndpointID)
-					if fbCost.CostRank() > ctx.input.Policy.MaxCostClass.CostRank() {
-						*diags = append(*diags, PortfolioDiagnostic{
-							Code:         CodeUnauthorizedCostClass,
-							Condition:    ConditionUnauthorized,
-							Target:       fmt.Sprintf("role_bindings[%d].fallbacks[%d]", i, j),
-							ViolatedRule: "DCI-124",
-							Message: fmt.Sprintf("fallback endpoint %q cost class %q exceeds project policy %q",
-								fb.EndpointID, fbCost, ctx.input.Policy.MaxCostClass),
-							Observed: string(fbCost),
-							Required: string(ctx.input.Policy.MaxCostClass),
-						})
-					}
-				}
-			}
-		}
-
-		if len(ctx.input.Policy.AllowedRegimes) > 0 {
-			allowedRegimes := make(map[protocol.EconomicRegime]bool)
-			for _, r := range ctx.input.Policy.AllowedRegimes {
-				allowedRegimes[r] = true
-			}
-			for i, bp := range p.BudgetPools {
-				if !allowedRegimes[bp.Regime] {
-					*diags = append(*diags, PortfolioDiagnostic{
-						Code:         CodeUnauthorizedEconomicRegime,
-						Condition:    ConditionUnauthorized,
-						Target:       fmt.Sprintf("budget_pools[%d](%s)", i, bp.PoolID),
-						ViolatedRule: "DCI-124",
-						Message:      fmt.Sprintf("economic regime %q is not permitted by policy", bp.Regime),
-						Observed:     string(bp.Regime),
+						Message: fmt.Sprintf("fallback endpoint %q cost class %q exceeds project policy %q",
+							fb.EndpointID, fbCost, ctx.policy.MaxCostClass),
+						Observed: string(fbCost),
+						Required: string(ctx.policy.MaxCostClass),
 					})
 				}
 			}
 		}
+	}
 
-		if ctx.input.Policy.ForbidMeteredAPI {
-			for i, bp := range p.BudgetPools {
-				if bp.Regime == protocol.RegimeMeteredAPI {
-					*diags = append(*diags, PortfolioDiagnostic{
-						Code:         CodeUnauthorizedEconomicRegime,
-						Condition:    ConditionUnauthorized,
-						Target:       fmt.Sprintf("budget_pools[%d](%s)", i, bp.PoolID),
-						ViolatedRule: "DCI-122, DCI-124",
-						Message:      "metered API regime is strictly forbidden by policy",
-						Observed:     string(bp.Regime),
-					})
-				}
+	if len(ctx.policy.AllowedRegimes) > 0 {
+		allowedRegimes := make(map[protocol.EconomicRegime]bool)
+		for _, r := range ctx.policy.AllowedRegimes {
+			allowedRegimes[r] = true
+		}
+		for i, bp := range p.BudgetPools {
+			if !allowedRegimes[bp.Regime] {
+				*diags = append(*diags, PortfolioDiagnostic{
+					Code:         CodeUnauthorizedEconomicRegime,
+					Condition:    ConditionUnauthorized,
+					Target:       fmt.Sprintf("budget_pools[%d](%s)", i, bp.PoolID),
+					ViolatedRule: "DCI-124",
+					Message:      fmt.Sprintf("economic regime %q is not permitted by policy", bp.Regime),
+					Observed:     string(bp.Regime),
+				})
+			}
+		}
+	}
+
+	if ctx.policy.ForbidMeteredAPI {
+		for i, bp := range p.BudgetPools {
+			if bp.Regime == protocol.RegimeMeteredAPI {
+				*diags = append(*diags, PortfolioDiagnostic{
+					Code:         CodeUnauthorizedEconomicRegime,
+					Condition:    ConditionUnauthorized,
+					Target:       fmt.Sprintf("budget_pools[%d](%s)", i, bp.PoolID),
+					ViolatedRule: "DCI-122, DCI-124",
+					Message:      "metered API regime is strictly forbidden by policy",
+					Observed:     string(bp.Regime),
+				})
 			}
 		}
 	}
@@ -182,17 +180,20 @@ func (ctx *validatorContext) validatePolicyAndEconomics(diags *[]PortfolioDiagno
 			for j, fb := range rb.Fallbacks {
 				fbPool, okF := ctx.poolMap[fb.BudgetPoolID]
 				if okF {
-					if fbPool.Regime == protocol.RegimeMeteredAPI && !primaryPool.FallbackAllowedToMetered {
-						*diags = append(*diags, PortfolioDiagnostic{
-							Code:         CodeUnauthorizedMeteredFallback,
-							Condition:    ConditionUnauthorized,
-							Target:       fmt.Sprintf("role_bindings[%d].fallbacks[%d]", i, j),
-							ViolatedRule: "DCI-122, ADR-0018 §9",
-							Message: fmt.Sprintf("fallback to metered pool %q from non-metered pool %q is forbidden without explicit authorization",
-								fbPool.PoolID, primaryPool.PoolID),
-							Observed: "fallback_allowed_to_metered: false",
-							Required: "fallback_allowed_to_metered: true",
-						})
+					if fbPool.Regime == protocol.RegimeMeteredAPI {
+						authorized := ctx.policy.AllowMeteredFallback || primaryPool.FallbackAllowedToMetered
+						if !authorized {
+							*diags = append(*diags, PortfolioDiagnostic{
+								Code:         CodeUnauthorizedMeteredFallback,
+								Condition:    ConditionUnauthorized,
+								Target:       fmt.Sprintf("role_bindings[%d].fallbacks[%d]", i, j),
+								ViolatedRule: "DCI-122, ADR-0018 §9",
+								Message: fmt.Sprintf("fallback to metered pool %q from non-metered pool %q is forbidden without explicit authorization",
+									fbPool.PoolID, primaryPool.PoolID),
+								Observed: "fallback_allowed_to_metered: false",
+								Required: "fallback_allowed_to_metered: true or allow_metered_fallback: true",
+							})
+						}
 					}
 				}
 			}

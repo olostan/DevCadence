@@ -59,17 +59,15 @@ func (ctx *validatorContext) validateEndpointsAndCapabilities(diags *[]Portfolio
 				Observed:     rb.ChannelID,
 			})
 		}
-		if ctx.input.ContextProfiles != nil {
-			if _, ok := ctx.input.ContextProfiles[rb.ContextProfileID]; !ok {
-				*diags = append(*diags, PortfolioDiagnostic{
-					Code:         CodeContextProfileNotFound,
-					Condition:    ConditionInvalid,
-					Target:       target,
-					ViolatedRule: "DCI-123",
-					Message:      fmt.Sprintf("role binding references nonexistent context profile %q", rb.ContextProfileID),
-					Observed:     rb.ContextProfileID,
-				})
-			}
+		if _, ok := ctx.input.ContextProfiles[rb.ContextProfileID]; !ok {
+			*diags = append(*diags, PortfolioDiagnostic{
+				Code:         CodeContextProfileNotFound,
+				Condition:    ConditionInvalid,
+				Target:       target,
+				ViolatedRule: "DCI-123",
+				Message:      fmt.Sprintf("role binding references nonexistent context profile %q", rb.ContextProfileID),
+				Observed:     rb.ContextProfileID,
+			})
 		}
 		if _, ok := ctx.poolMap[rb.BudgetPoolID]; !ok {
 			*diags = append(*diags, PortfolioDiagnostic{
@@ -95,17 +93,15 @@ func (ctx *validatorContext) validateEndpointsAndCapabilities(diags *[]Portfolio
 					Observed:     fb.ChannelID,
 				})
 			}
-			if ctx.input.ContextProfiles != nil {
-				if _, ok := ctx.input.ContextProfiles[fb.ContextProfileID]; !ok {
-					*diags = append(*diags, PortfolioDiagnostic{
-						Code:         CodeContextProfileNotFound,
-						Condition:    ConditionInvalid,
-						Target:       fbTarget,
-						ViolatedRule: "DCI-123",
-						Message:      fmt.Sprintf("fallback binding references nonexistent context profile %q", fb.ContextProfileID),
-						Observed:     fb.ContextProfileID,
-					})
-				}
+			if _, ok := ctx.input.ContextProfiles[fb.ContextProfileID]; !ok {
+				*diags = append(*diags, PortfolioDiagnostic{
+					Code:         CodeContextProfileNotFound,
+					Condition:    ConditionInvalid,
+					Target:       fbTarget,
+					ViolatedRule: "DCI-123",
+					Message:      fmt.Sprintf("fallback binding references nonexistent context profile %q", fb.ContextProfileID),
+					Observed:     fb.ContextProfileID,
+				})
 			}
 			if _, ok := ctx.poolMap[fb.BudgetPoolID]; !ok {
 				*diags = append(*diags, PortfolioDiagnostic{
@@ -172,7 +168,7 @@ func (ctx *validatorContext) validateBindingCapability(role, epID, chID, target 
 		})
 	}
 
-	// Auth check for non-local endpoints
+	// Auth check for non-local endpoints matching protocol.EndpointViable
 	if kind != protocol.EndpointLocalRuntime && locality != protocol.LocalityLocal {
 		switch auth {
 		case protocol.AuthAuthenticated, protocol.AuthNotApplicable:
@@ -183,12 +179,20 @@ func (ctx *validatorContext) validateBindingCapability(role, epID, chID, target 
 				Condition:    ConditionUnauthorized,
 				Target:       target,
 				ViolatedRule: "DCI-105",
-				Message:      fmt.Sprintf("endpoint %q authentication state is %q", epID, string(auth)),
+				Message:      fmt.Sprintf("endpoint %q authentication state is %q; non-local endpoints require verified authentication", epID, string(auth)),
 				Observed:     string(auth),
 				Required:     string(protocol.AuthAuthenticated),
 			})
 		default:
-			// Unknown authentication is recorded, acceptable for healthy endpoints unless strict
+			*diags = append(*diags, PortfolioDiagnostic{
+				Code:         CodeEndpointUnauthenticated,
+				Condition:    ConditionUnknown,
+				Target:       target,
+				ViolatedRule: "DCI-105",
+				Message:      fmt.Sprintf("endpoint %q authentication state is %q; non-local endpoints require verified authentication per protocol.EndpointViable", epID, string(auth)),
+				Observed:     string(auth),
+				Required:     string(protocol.AuthAuthenticated),
+			})
 		}
 	}
 
@@ -200,14 +204,26 @@ func (ctx *validatorContext) validateBindingCapability(role, epID, chID, target 
 
 	// Tool use
 	if req.RequireToolUse {
-		if inProfile && !(ep.ToolUse == protocol.FeatureProbePassed || ep.ToolUse == protocol.FeatureDeclared) {
+		if inProfile {
+			if !(ep.ToolUse == protocol.FeatureProbePassed || ep.ToolUse == protocol.FeatureDeclared) {
+				*diags = append(*diags, PortfolioDiagnostic{
+					Code:         CodeToolSupportMissing,
+					Condition:    ConditionUnsupported,
+					Target:       target,
+					ViolatedRule: "DCI-054",
+					Message:      fmt.Sprintf("role %q requires tool support, but endpoint %q tool_use is %q", role, epID, string(ep.ToolUse)),
+					Observed:     string(ep.ToolUse),
+					Required:     "probe_passed or declared",
+				})
+			}
+		} else {
 			*diags = append(*diags, PortfolioDiagnostic{
 				Code:         CodeToolSupportMissing,
-				Condition:    ConditionUnsupported,
+				Condition:    ConditionUnknown,
 				Target:       target,
 				ViolatedRule: "DCI-054",
-				Message:      fmt.Sprintf("role %q requires tool support, but endpoint %q tool_use is %q", role, epID, string(ep.ToolUse)),
-				Observed:     string(ep.ToolUse),
+				Message:      fmt.Sprintf("role %q requires tool support, but endpoint %q is not present in MachineCapabilityProfile (inventory summary lacks tool support facts)", role, epID),
+				Observed:     string(protocol.GradeUnknown),
 				Required:     "probe_passed or declared",
 			})
 		}
@@ -226,14 +242,26 @@ func (ctx *validatorContext) validateBindingCapability(role, epID, chID, target 
 
 	// Structured output
 	if req.RequireStructuredOutput {
-		if inProfile && !(ep.StructuredOutput == protocol.FeatureProbePassed || ep.StructuredOutput == protocol.FeatureDeclared) {
+		if inProfile {
+			if !(ep.StructuredOutput == protocol.FeatureProbePassed || ep.StructuredOutput == protocol.FeatureDeclared) {
+				*diags = append(*diags, PortfolioDiagnostic{
+					Code:         CodeStructuredOutputMissing,
+					Condition:    ConditionUnsupported,
+					Target:       target,
+					ViolatedRule: "DCI-054",
+					Message:      fmt.Sprintf("role %q requires structured output, but endpoint %q structured_output is %q", role, epID, string(ep.StructuredOutput)),
+					Observed:     string(ep.StructuredOutput),
+					Required:     "probe_passed or declared",
+				})
+			}
+		} else {
 			*diags = append(*diags, PortfolioDiagnostic{
 				Code:         CodeStructuredOutputMissing,
-				Condition:    ConditionUnsupported,
+				Condition:    ConditionUnknown,
 				Target:       target,
 				ViolatedRule: "DCI-054",
-				Message:      fmt.Sprintf("role %q requires structured output, but endpoint %q structured_output is %q", role, epID, string(ep.StructuredOutput)),
-				Observed:     string(ep.StructuredOutput),
+				Message:      fmt.Sprintf("role %q requires structured output, but endpoint %q is not present in MachineCapabilityProfile (inventory summary lacks structured output facts)", role, epID),
+				Observed:     string(protocol.GradeUnknown),
 				Required:     "probe_passed or declared",
 			})
 		}
@@ -289,7 +317,7 @@ func (ctx *validatorContext) validateBindingCapability(role, epID, chID, target 
 					Observed:     string(graded.Provenance),
 					Required:     "configured, measured, or evaluated",
 				})
-			} else if ctx.input.Policy != nil && ctx.input.Policy.RequireMeasuredProvenance && graded.Provenance != protocol.ProvenanceMeasured && graded.Provenance != protocol.ProvenanceEvaluated {
+			} else if ctx.policy.RequireMeasuredProvenance && graded.Provenance != protocol.ProvenanceMeasured && graded.Provenance != protocol.ProvenanceEvaluated {
 				*diags = append(*diags, PortfolioDiagnostic{
 					Code:         CodeCapabilityProvenanceInvalid,
 					Condition:    ConditionUnsupported,
@@ -300,13 +328,15 @@ func (ctx *validatorContext) validateBindingCapability(role, epID, chID, target 
 					Required:     "measured or evaluated",
 				})
 			}
-		} else if ctx.input.Policy != nil && ctx.input.Policy.RequireMeasuredProvenance {
+		} else {
 			*diags = append(*diags, PortfolioDiagnostic{
-				Code:         CodeCapabilityProvenanceInvalid,
+				Code:         CodeCapabilityMissing,
 				Condition:    ConditionUnknown,
 				Target:       target,
-				ViolatedRule: "DCI-005",
-				Message:      fmt.Sprintf("full machine capability profile is missing to verify capability provenance for role %q", role),
+				ViolatedRule: "DCI-005, DCI-123",
+				Message:      fmt.Sprintf("role %q requires %s capability grade at least %s, but endpoint %q is not present in MachineCapabilityProfile (inventory summary lacks capability facts)", role, req.Dimension, req.MinGrade, epID),
+				Observed:     string(protocol.GradeUnknown),
+				Required:     string(req.MinGrade),
 			})
 		}
 	}

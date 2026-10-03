@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
-	"strings"
 	"sync"
 	"time"
 
@@ -17,9 +15,10 @@ import (
 )
 
 const (
-	ActivePortfolioFileName = "active-portfolio.json"
-	LineageFileName         = "active-portfolio.lineage.json"
-	HistoryDirName          = "portfolio-history"
+	ActivePortfolioFileName   = "active-portfolio.json"
+	LineageFileName           = "active-portfolio.lineage.json"
+	HistoryDirName            = "portfolio-history"
+	PendingActivationFileName = "active-portfolio.pending.json"
 )
 
 // ActivationRecord represents an immutable point-in-time portfolio activation event.
@@ -32,6 +31,7 @@ type ActivationRecord struct {
 	Portfolio                  protocol.CognitionPortfolio `json:"portfolio"`
 	CandidateDigest            string                      `json:"candidate_digest"`
 	InventoryDigest            string                      `json:"inventory_digest"`
+	PolicyDigest               string                      `json:"policy_digest,omitempty"`
 	PreviousActivationID       string                      `json:"previous_activation_id,omitempty"`
 	PreviousPortfolioID        string                      `json:"previous_portfolio_id,omitempty"`
 	IsRollback                 bool                        `json:"is_rollback,omitempty"`
@@ -49,7 +49,15 @@ type PortfolioLineage struct {
 	PreviousPortfolioID      string             `json:"previous_portfolio_id,omitempty"`
 	InventoryDigest          string             `json:"inventory_digest,omitempty"`
 	CandidateDigest          string             `json:"candidate_digest,omitempty"`
+	PolicyDigest             string             `json:"policy_digest,omitempty"`
 	History                  []ActivationRecord `json:"history,omitempty"`
+}
+
+// PendingActivation holds an in-flight activation transaction for crash consistency.
+type PendingActivation struct {
+	Record          ActivationRecord `json:"record"`
+	Lineage         PortfolioLineage `json:"lineage"`
+	HistoryFileName string           `json:"history_file_name"`
 }
 
 // ActivationManager coordinates deterministic validation, atomic versioned activation,
@@ -61,7 +69,7 @@ type ActivationManager struct {
 	clock     clock.Clock
 }
 
-// NewActivationManager creates an ActivationManager storing state in dir.
+// NewActivationManager creates an ActivationManager storing state in dir and performs startup recovery.
 func NewActivationManager(dir string, validator *PortfolioValidator, clk clock.Clock) (*ActivationManager, error) {
 	if dir == "" {
 		return nil, errs.New(errs.CategoryInvalidArgument, "activation manager: dir is required")
@@ -75,11 +83,15 @@ func NewActivationManager(dir string, validator *PortfolioValidator, clk clock.C
 	if err := os.MkdirAll(filepath.Join(dir, HistoryDirName), 0755); err != nil {
 		return nil, errs.Wrap(errs.CategoryInternal, err, "failed to create history directory")
 	}
-	return &ActivationManager{
+	mgr := &ActivationManager{
 		dir:       dir,
 		validator: validator,
 		clock:     clk,
-	}, nil
+	}
+	if err := mgr.recoverStartupLocked(); err != nil {
+		return nil, err
+	}
+	return mgr, nil
 }
 
 // Dir returns the base directory used for activation files.
@@ -144,6 +156,7 @@ func (m *ActivationManager) Activate(ctx context.Context, input ValidationInput)
 		Portfolio:            *input.Portfolio,
 		CandidateDigest:      result.CandidateDigest,
 		InventoryDigest:      result.InventoryDigest,
+		PolicyDigest:         result.PolicyDigest,
 		PreviousActivationID: prevActID,
 		PreviousPortfolioID:  prevPortID,
 	}
@@ -160,6 +173,10 @@ func (m *ActivationManager) Activate(ctx context.Context, input ValidationInput)
 func (m *ActivationManager) RollbackToPrevious(ctx context.Context, revalidationInput *ValidationInput) (*ActivationRecord, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+
+	if revalidationInput == nil {
+		return nil, errs.New(errs.CategoryInvalidArgument, "rollback: revalidation input is mandatory")
+	}
 
 	lineage, err := m.loadLineageLocked()
 	if err != nil {
@@ -180,6 +197,9 @@ func (m *ActivationManager) RollbackToActivation(ctx context.Context, targetActi
 	if targetActivationID == "" {
 		return nil, errs.New(errs.CategoryInvalidArgument, "rollback: target_activation_id is required")
 	}
+	if revalidationInput == nil {
+		return nil, errs.New(errs.CategoryInvalidArgument, "rollback: revalidation input is mandatory")
+	}
 
 	lineage, err := m.loadLineageLocked()
 	if err != nil {
@@ -193,6 +213,10 @@ func (m *ActivationManager) RollbackToActivation(ctx context.Context, targetActi
 }
 
 func (m *ActivationManager) rollbackToLocked(ctx context.Context, targetActID string, lineage *PortfolioLineage, revalidationInput *ValidationInput) (*ActivationRecord, error) {
+	if revalidationInput == nil {
+		return nil, errs.New(errs.CategoryInvalidArgument, "rollback: revalidation input is mandatory")
+	}
+
 	var targetRecord *ActivationRecord
 	for _, rec := range lineage.History {
 		if rec.ActivationID == targetActID {
@@ -210,18 +234,16 @@ func (m *ActivationManager) rollbackToLocked(ctx context.Context, targetActID st
 		targetRecord = rec
 	}
 
-	// Revalidate target portfolio against current state if provided
-	if revalidationInput != nil {
-		valIn := *revalidationInput
-		valIn.Portfolio = &targetRecord.Portfolio
-		if valIn.Clock == nil {
-			valIn.Clock = m.clock
-		}
-		res := m.validator.Validate(valIn)
-		if !res.Valid {
-			return nil, errs.Wrap(errs.CategoryValidationFailed, res.Err(),
-				"rollback target %q is no longer valid against current environment/policy", targetActID)
-		}
+	// Mandatory revalidation against current environment and policy state
+	valIn := *revalidationInput
+	valIn.Portfolio = &targetRecord.Portfolio
+	if valIn.Clock == nil {
+		valIn.Clock = m.clock
+	}
+	res := m.validator.Validate(valIn)
+	if !res.Valid {
+		return nil, errs.Wrap(errs.CategoryValidationFailed, res.Err(),
+			"rollback target %q is no longer valid against current environment/policy", targetActID)
 	}
 
 	now := m.clock.Now().UTC()
@@ -235,8 +257,9 @@ func (m *ActivationManager) rollbackToLocked(ctx context.Context, targetActID st
 		PortfolioID:                targetRecord.PortfolioID,
 		PortfolioRevision:          targetRecord.PortfolioRevision,
 		Portfolio:                  targetRecord.Portfolio,
-		CandidateDigest:            targetRecord.CandidateDigest,
-		InventoryDigest:            targetRecord.InventoryDigest,
+		CandidateDigest:            res.CandidateDigest,
+		InventoryDigest:            res.InventoryDigest,
+		PolicyDigest:               res.PolicyDigest,
 		PreviousActivationID:       lineage.CurrentActivationID,
 		PreviousPortfolioID:        lineage.CurrentPortfolioID,
 		IsRollback:                 true,
@@ -300,126 +323,4 @@ func (m *ActivationManager) GetActivationHistory(ctx context.Context) ([]Activat
 	out := make([]ActivationRecord, len(lineage.History))
 	copy(out, lineage.History)
 	return out, nil
-}
-
-func (m *ActivationManager) persistActivationLocked(record ActivationRecord, existingHistory []ActivationRecord) error {
-	historyCopy := append(existingHistory, record)
-
-	// Sort history by sequence
-	sort.SliceStable(historyCopy, func(i, j int) bool {
-		return historyCopy[i].Sequence < historyCopy[j].Sequence
-	})
-
-	newLineage := PortfolioLineage{
-		CurrentActivationID:      record.ActivationID,
-		CurrentSequence:          record.Sequence,
-		CurrentPortfolioID:       record.PortfolioID,
-		CurrentPortfolioRevision: record.PortfolioRevision,
-		ActivatedAt:              record.ActivatedAt,
-		PreviousActivationID:     record.PreviousActivationID,
-		PreviousPortfolioID:      record.PreviousPortfolioID,
-		InventoryDigest:          record.InventoryDigest,
-		CandidateDigest:          record.CandidateDigest,
-		History:                  historyCopy,
-	}
-
-	// 1. Write historical snapshot in history/ directory
-	historyFileName := fmt.Sprintf("activation-%06d-%s.json", record.Sequence, record.ActivationID)
-	historyPath := filepath.Join(m.dir, HistoryDirName, historyFileName)
-	historyBytes, err := json.MarshalIndent(record, "", "  ")
-	if err != nil {
-		return errs.Wrap(errs.CategoryInternal, err, "failed to serialize activation record")
-	}
-	if err := atomicWriteFile(historyPath, historyBytes, 0644); err != nil {
-		return errs.Wrap(errs.CategoryInternal, err, "failed to write activation history record")
-	}
-
-	// 2. Write active-portfolio.json (pure CognitionPortfolio JSON conforming to schema)
-	portfolioBytes, err := json.MarshalIndent(record.Portfolio, "", "  ")
-	if err != nil {
-		return errs.Wrap(errs.CategoryInternal, err, "failed to serialize active portfolio")
-	}
-	activePath := filepath.Join(m.dir, ActivePortfolioFileName)
-	if err := atomicWriteFile(activePath, portfolioBytes, 0644); err != nil {
-		return errs.Wrap(errs.CategoryInternal, err, "failed to write active-portfolio.json")
-	}
-
-	// 3. Write active-portfolio.lineage.json
-	lineageBytes, err := json.MarshalIndent(newLineage, "", "  ")
-	if err != nil {
-		return errs.Wrap(errs.CategoryInternal, err, "failed to serialize lineage")
-	}
-	lineagePath := filepath.Join(m.dir, LineageFileName)
-	if err := atomicWriteFile(lineagePath, lineageBytes, 0644); err != nil {
-		return errs.Wrap(errs.CategoryInternal, err, "failed to write active-portfolio.lineage.json")
-	}
-
-	return nil
-}
-
-func (m *ActivationManager) loadLineageLocked() (*PortfolioLineage, error) {
-	lineagePath := filepath.Join(m.dir, LineageFileName)
-	data, err := os.ReadFile(lineagePath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, errs.New(errs.CategoryNotFound, "lineage file not found")
-		}
-		return nil, errs.Wrap(errs.CategoryInternal, err, "failed to read lineage file")
-	}
-
-	var lineage PortfolioLineage
-	if err := json.Unmarshal(data, &lineage); err != nil {
-		return nil, errs.Wrap(errs.CategoryIntegrity, err, "malformed lineage file")
-	}
-	return &lineage, nil
-}
-
-func (m *ActivationManager) readHistoryRecord(activationID string) (*ActivationRecord, error) {
-	histDir := filepath.Join(m.dir, HistoryDirName)
-	entries, err := os.ReadDir(histDir)
-	if err != nil {
-		return nil, err
-	}
-	for _, entry := range entries {
-		if strings.Contains(entry.Name(), activationID) {
-			data, err := os.ReadFile(filepath.Join(histDir, entry.Name()))
-			if err != nil {
-				return nil, err
-			}
-			var rec ActivationRecord
-			if err := json.Unmarshal(data, &rec); err != nil {
-				return nil, err
-			}
-			return &rec, nil
-		}
-	}
-	return nil, os.ErrNotExist
-}
-
-// atomicWriteFile safely writes data to targetPath by writing to a sibling temp file
-// and atomically renaming it into place.
-func atomicWriteFile(targetPath string, data []byte, perm os.FileMode) error {
-	dir := filepath.Dir(targetPath)
-	tmpFile, err := os.CreateTemp(dir, filepath.Base(targetPath)+".tmp.*")
-	if err != nil {
-		return err
-	}
-	tmpName := tmpFile.Name()
-	defer os.Remove(tmpName) // Clean up if rename fails
-
-	if _, err := tmpFile.Write(data); err != nil {
-		tmpFile.Close()
-		return err
-	}
-	if err := tmpFile.Sync(); err != nil {
-		tmpFile.Close()
-		return err
-	}
-	if err := tmpFile.Close(); err != nil {
-		return err
-	}
-	if err := os.Chmod(tmpName, perm); err != nil {
-		return err
-	}
-	return os.Rename(tmpName, targetPath)
 }

@@ -54,8 +54,11 @@
     "internal/cognition/portfolio_validator_economics.go",
     "internal/cognition/portfolio_validator_constraints.go",
     "internal/cognition/portfolio_activation.go",
+    "internal/cognition/portfolio_activation_storage.go",
     "internal/cognition/portfolio_validator_test.go",
-    "internal/cognition/portfolio_activation_test.go"
+    "internal/cognition/portfolio_validator_policy_test.go",
+    "internal/cognition/portfolio_activation_test.go",
+    "internal/cognition/portfolio_activation_recovery_test.go"
   ],
   "domains": [
     "cognition_portfolio",
@@ -151,8 +154,11 @@ Implement the deterministic control-plane gate that validates candidate cognitio
 - `internal/cognition/portfolio_validator_economics.go`
 - `internal/cognition/portfolio_validator_constraints.go`
 - `internal/cognition/portfolio_activation.go`
+- `internal/cognition/portfolio_activation_storage.go`
 - `internal/cognition/portfolio_validator_test.go`
+- `internal/cognition/portfolio_validator_policy_test.go`
 - `internal/cognition/portfolio_activation_test.go`
+- `internal/cognition/portfolio_activation_recovery_test.go`
 
 ### Requirements
 1. **Deterministic Portfolio Validator:**
@@ -181,4 +187,11 @@ Implement the deterministic control-plane gate that validates candidate cognitio
 ## 3. Verification & Evidence
 - Pure unit tests in `internal/cognition/portfolio_validator_test.go` covering all valid and invalid matrices.
 - Activation tests in `internal/cognition/portfolio_activation_test.go` covering atomic activation, rollback, failure recovery, and freshness.
+- Recovery and guarantee tests in `internal/cognition/portfolio_activation_recovery_test.go` covering crash journal roll-forward, stale temp cleanup, mandatory rollback revalidation, and digest preservation.
 - Full repository race and schema verification (`make verify`, `go test -race -count=1 ./...`).
+
+---
+
+## 4. Protocol Defect Escalation (DCI-122 Metered Fallback Authorization)
+- **Contradiction Identified**: In M3C-1, `BudgetPool.Validate` and `schemas/budget-pool.schema.json` enforce that `fallback_allowed_to_metered: true` is only valid when `regime == "metered_api"`. Concurrently, `CognitionPortfolio.Validate` and the DCI-122 invariant require that the primary (subscription or local) pool authorize fallback to metered spending (`primaryPool.FallbackAllowedToMetered`). Because non-metered pools cannot set `fallback_allowed_to_metered: true` without failing schema validation, `CognitionPortfolio` cannot authorize metered fallbacks via pool configuration alone without schema drift.
+- **WP-M3C-3 Resolution**: The portfolio validator introduces `ValidationPolicy.AllowMeteredFallback` to provide explicit policy authorization for metered fallback (strictly satisfying DCI-122: "without explicit policy/approval"), while preserving schema parity and escalating the contradiction for a unified protocol amendment in a subsequent milestone.

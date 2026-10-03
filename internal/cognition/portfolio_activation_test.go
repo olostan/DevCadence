@@ -260,7 +260,13 @@ func TestActivationManager(t *testing.T) {
 		}
 
 		// Attempt rollback
-		_, err = mgr.RollbackToPrevious(ctx, nil)
+		revalInput := cognition.ValidationInput{
+			MachineProfile:  makeTestMachineProfile(),
+			Inventory:       makeTestInventory(),
+			ContextProfiles: makeTestContextProfiles(),
+			Clock:           clk,
+		}
+		_, err = mgr.RollbackToPrevious(ctx, &revalInput)
 		if err == nil {
 			t.Fatalf("expected error rolling back with only 1 activation")
 		}

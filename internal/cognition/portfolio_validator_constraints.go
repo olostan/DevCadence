@@ -35,7 +35,7 @@ func (ctx *validatorContext) validateContextAndConstraints(diags *[]PortfolioDia
 			}
 		}
 
-		if ctx.input.Policy != nil && ctx.input.Policy.RequireKnownContextControl {
+		if ctx.policy.RequireKnownContextControl {
 			if ch.ContextControl == protocol.ContextControlUnknown || prof.ObservedContextControl == protocol.ContextControlUnknown {
 				*diags = append(*diags, PortfolioDiagnostic{
 					Code:         CodeContextControlMismatch,
@@ -63,17 +63,17 @@ func (ctx *validatorContext) validateContextAndConstraints(diags *[]PortfolioDia
 			}
 		}
 
-		if ctx.input.Policy != nil && ctx.input.Policy.MinContractLimitTokens > 0 {
-			if prof.ContractLimitTokens > 0 && prof.ContractLimitTokens < ctx.input.Policy.MinContractLimitTokens {
+		if ctx.policy.MinContractLimitTokens > 0 {
+			if prof.ContractLimitTokens > 0 && prof.ContractLimitTokens < ctx.policy.MinContractLimitTokens {
 				*diags = append(*diags, PortfolioDiagnostic{
 					Code:         CodeContextWindowInsufficient,
 					Condition:    ConditionUnsupported,
 					Target:       target,
 					ViolatedRule: "DCI-131, DCI-132",
 					Message: fmt.Sprintf("context profile contract_limit_tokens (%d) is below minimum policy requirement (%d)",
-						prof.ContractLimitTokens, ctx.input.Policy.MinContractLimitTokens),
+						prof.ContractLimitTokens, ctx.policy.MinContractLimitTokens),
 					Observed: fmt.Sprintf("%d", prof.ContractLimitTokens),
-					Required: fmt.Sprintf("%d", ctx.input.Policy.MinContractLimitTokens),
+					Required: fmt.Sprintf("%d", ctx.policy.MinContractLimitTokens),
 				})
 			}
 		}

@@ -18,6 +18,7 @@ type ValidationPolicy struct {
 	MaxCostClass                protocol.CostClass        `json:"max_cost_class"`
 	AllowedRegimes              []protocol.EconomicRegime `json:"allowed_regimes,omitempty"`
 	ForbidMeteredAPI            bool                      `json:"forbid_metered_api"`
+	AllowMeteredFallback        bool                      `json:"allow_metered_fallback,omitempty"`
 	RequireMeasuredProvenance   bool                      `json:"require_measured_provenance"`
 	RequireVerifiedAcceleration bool                      `json:"require_verified_acceleration"`
 	RequireKnownContextControl  bool                      `json:"require_known_context_control"`
@@ -37,14 +38,15 @@ func DefaultValidationPolicy() ValidationPolicy {
 
 // ValidationInput contains the complete factual context for deterministic validation.
 type ValidationInput struct {
-	Portfolio       *protocol.CognitionPortfolio
-	Inventory       *protocol.ResourceInventory
-	MachineProfile  *protocol.MachineCapabilityProfile
-	ContextProfiles map[string]*protocol.ContextProfile
-	BudgetStates    map[string]*protocol.BudgetState
-	ResourceStates  map[string]*protocol.ResourceState
-	Policy          *ValidationPolicy
-	Clock           clock.Clock
+	Portfolio               *protocol.CognitionPortfolio
+	Inventory               *protocol.ResourceInventory
+	MachineProfile          *protocol.MachineCapabilityProfile
+	ContextProfiles         map[string]*protocol.ContextProfile
+	BudgetStates            map[string]*protocol.BudgetState
+	ResourceStates          map[string]*protocol.ResourceState
+	Policy                  *ValidationPolicy
+	ExpectedInventoryDigest string
+	Clock                   clock.Clock
 }
 
 // PortfolioValidator executes pure deterministic validation over candidate portfolios.
@@ -58,6 +60,7 @@ func NewPortfolioValidator() *PortfolioValidator {
 // validatorContext bundles precomputed lookups for a validation run.
 type validatorContext struct {
 	input              ValidationInput
+	policy             ValidationPolicy
 	p                  *protocol.CognitionPortfolio
 	channelMap         map[string]protocol.AccessChannel
 	poolMap            map[string]protocol.BudgetPool
@@ -103,10 +106,28 @@ func (v *PortfolioValidator) Validate(input ValidationInput) ValidationResult {
 		invDigest = "sha256:" + hashBytes(invBytes)
 	}
 
-	polDigest := ""
+	effectivePolicy := DefaultValidationPolicy()
 	if input.Policy != nil {
-		polBytes, _ := protocol.CanonicalJSON(input.Policy)
-		polDigest = "sha256:" + hashBytes(polBytes)
+		effectivePolicy = *input.Policy
+	}
+	if len(effectivePolicy.RoleRequirements) == 0 {
+		effectivePolicy.RoleRequirements = DefaultRequirements()
+	}
+
+	polBytes, _ := protocol.CanonicalJSON(effectivePolicy)
+	polDigest := "sha256:" + hashBytes(polBytes)
+
+	// Freshness enforcement against explicit expected inventory digest
+	if input.ExpectedInventoryDigest != "" && input.ExpectedInventoryDigest != invDigest {
+		diagnostics = append(diagnostics, PortfolioDiagnostic{
+			Code:         CodeStaleValidationState,
+			Condition:    ConditionInvalid,
+			Target:       "validation_input.inventory",
+			ViolatedRule: "DCI-123",
+			Message:      fmt.Sprintf("validation state is stale: expected inventory digest %q, observed %q", input.ExpectedInventoryDigest, invDigest),
+			Observed:     invDigest,
+			Required:     input.ExpectedInventoryDigest,
+		})
 	}
 
 	// Basic Schema Validation
@@ -120,7 +141,7 @@ func (v *PortfolioValidator) Validate(input ValidationInput) ValidationResult {
 		})
 	}
 
-	ctx := newValidatorContext(input)
+	ctx := newValidatorContext(input, effectivePolicy)
 
 	// Dimension 1, 2, 3: Endpoint existence, capability compatibility & provenance
 	ctx.validateEndpointsAndCapabilities(&diagnostics)
@@ -141,7 +162,7 @@ func (v *PortfolioValidator) Validate(input ValidationInput) ValidationResult {
 	}
 }
 
-func newValidatorContext(input ValidationInput) *validatorContext {
+func newValidatorContext(input ValidationInput, policy ValidationPolicy) *validatorContext {
 	p := input.Portfolio
 
 	channelMap := make(map[string]protocol.AccessChannel, len(p.Channels))
@@ -173,20 +194,16 @@ func newValidatorContext(input ValidationInput) *validatorContext {
 		}
 	}
 
-	roleReqs := DefaultRequirements()
-	if input.Policy != nil && len(input.Policy.RoleRequirements) > 0 {
-		roleReqs = input.Policy.RoleRequirements
-	}
-
 	return &validatorContext{
 		input:              input,
+		policy:             policy,
 		p:                  p,
 		channelMap:         channelMap,
 		poolMap:            poolMap,
 		excludedMap:        excludedMap,
 		profileEndpoints:   profileEndpoints,
 		inventoryEndpoints: inventoryEndpoints,
-		roleReqs:           roleReqs,
+		roleReqs:           policy.RoleRequirements,
 	}
 }
 
