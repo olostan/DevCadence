@@ -38,6 +38,7 @@ Allowed paths:
 - `docs/README.md` (repair of health-check-detected stale internal references only)
 - `docs/REFACTORING_AND_HEALTH.md`
 - `docs/WORK_PACKAGES.md`
+- `internal/process/process_test.go` (amendment: one deterministic test for `sortStrings`; exact statement-count coverage comparison exposed that its swap block is hit or missed depending on random map iteration order, producing a 2-statement run-to-run coverage flap on unchanged code; no production code change)
 - this EWP
 
 ## Explicit non-goals
