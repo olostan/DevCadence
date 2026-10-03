@@ -939,18 +939,99 @@ func TestM3CSubstrate_ACC05_MandatoryAdmissionInviolability(t *testing.T) {
 
 	// 2. Retrieval states invariance
 	t.Run("ACC-05_RetrievalStatesInvariance", func(t *testing.T) {
-		// Across retrieval states, mandatory admission remains invariant:
-		man1, pack1, err1 := comp.Compile(ctx, baseReq)
-		man2, pack2, err2 := comp.Compile(ctx, baseReq)
-		man3, pack3, err3 := comp.Compile(ctx, baseReq)
-		if err1 != nil || err2 != nil || err3 != nil {
-			t.Fatalf("compilation across retrieval states failed")
+		// REQ-05 / INV-06: mandatory admission is a pure function of the admission parameters and is
+		// invariant under optional-retrieval state. CompileRequest has no retrieval input, so the
+		// property is shown by driving real retrieval engines in three states, running their search
+		// results through EnsureMandatoryInviolability, and proving the mandatory set is untouched.
+		baseMan, basePack, err := comp.Compile(ctx, baseReq)
+		if err != nil {
+			t.Fatalf("baseline compile failed: %v", err)
 		}
-		if !reflect.DeepEqual(man1.MandatoryClauses, man2.MandatoryClauses) || !reflect.DeepEqual(man1.MandatoryClauses, man3.MandatoryClauses) {
-			t.Errorf("MandatoryClauses must be identical across optional retrieval states")
+		if len(baseMan.MandatoryClauses) != 3 || len(basePack.NormativeClauses) != 3 {
+			t.Fatalf("baseline must admit exactly 3 clauses, got %d refs / %d texts",
+				len(baseMan.MandatoryClauses), len(basePack.NormativeClauses))
 		}
-		if !reflect.DeepEqual(pack1.NormativeClauses, pack2.NormativeClauses) || !reflect.DeepEqual(pack1.NormativeClauses, pack3.NormativeClauses) {
-			t.Errorf("NormativeClauses must be identical across optional retrieval states")
+
+		// State 1: empty engine.
+		engineEmpty := compiler.NewOptionalRetrievalEngine()
+
+		// State 2: items lexically identical to every clause text, plus one whose ID collides with
+		// a mandatory clause id.
+		engineLexical := compiler.NewOptionalRetrievalEngine()
+		for i, clause := range basePack.NormativeClauses {
+			item := compiler.OptionalItem{ID: fmt.Sprintf("opt-lex-%d", i), Kind: "rationale", Title: clause, Content: clause}
+			if err := engineLexical.RegisterItem(item); err != nil {
+				t.Fatalf("register lexical item: %v", err)
+			}
+		}
+		collidingClause := basePack.NormativeClauses[0]
+		if err := engineLexical.RegisterItem(compiler.OptionalItem{
+			ID: rAlways.ID, Kind: "rationale", Title: collidingClause, Content: collidingClause,
+		}); err != nil {
+			t.Fatalf("register colliding item: %v", err)
+		}
+
+		// State 3: items sharing no terms with any clause.
+		engineUnrelated := compiler.NewOptionalRetrievalEngine()
+		if err := engineUnrelated.RegisterItem(compiler.OptionalItem{
+			ID: "opt-unrelated", Kind: "rationale", Title: "Zebra", Content: "zebra xylophone quantum telescope",
+		}); err != nil {
+			t.Fatalf("register unrelated item: %v", err)
+		}
+
+		states := []struct {
+			name            string
+			engine          *compiler.OptionalRetrievalEngine
+			wantCandidates  bool
+			wantCollidingID bool
+		}{
+			{"empty", engineEmpty, false, false},
+			{"lexically-identical", engineLexical, true, true},
+			{"unrelated", engineUnrelated, false, false},
+		}
+		for _, st := range states {
+			var candidates []compiler.OptionalItem
+			for _, clause := range basePack.NormativeClauses {
+				candidates = append(candidates, st.engine.LexicalSearch(clause, 10)...)
+			}
+			if st.wantCandidates && len(candidates) == 0 {
+				t.Fatalf("state %s: lexical search returned no candidates; the retrieval engine is not exercised", st.name)
+			}
+			if !st.wantCandidates && len(candidates) != 0 {
+				t.Fatalf("state %s: expected no candidates, got %d", st.name, len(candidates))
+			}
+			collides := 0
+			for _, c := range candidates {
+				if c.ID == rAlways.ID {
+					collides++
+				}
+			}
+			if st.wantCollidingID && collides == 0 {
+				t.Fatalf("state %s: expected the colliding candidate to be retrieved", st.name)
+			}
+
+			safe := compiler.EnsureMandatoryInviolability(baseMan.MandatoryClauses, candidates)
+			for _, c := range safe {
+				if c.ID == rAlways.ID {
+					t.Errorf("state %s: EnsureMandatoryInviolability let a candidate colliding with mandatory clause %q through", st.name, c.ID)
+				}
+			}
+			if len(safe) != len(candidates)-collides {
+				t.Errorf("state %s: filtered %d candidates, want only the %d colliding ones removed (had %d)",
+					st.name, len(candidates)-len(safe), collides, len(candidates))
+			}
+
+			// Compile again after the retrieval activity: the mandatory set must be unchanged.
+			man, pack, err := comp.Compile(ctx, baseReq)
+			if err != nil {
+				t.Fatalf("state %s: compile failed: %v", st.name, err)
+			}
+			if !reflect.DeepEqual(man.MandatoryClauses, baseMan.MandatoryClauses) {
+				t.Errorf("state %s: MandatoryClauses changed under retrieval state", st.name)
+			}
+			if !reflect.DeepEqual(pack.NormativeClauses, basePack.NormativeClauses) {
+				t.Errorf("state %s: NormativeClauses changed under retrieval state", st.name)
+			}
 		}
 	})
 
