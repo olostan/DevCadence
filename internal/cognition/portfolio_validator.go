@@ -105,11 +105,7 @@ func (v *PortfolioValidator) Validate(input ValidationInput) ValidationResult {
 	candBytes, _ := protocol.CanonicalJSON(p)
 	candDigest := "sha256:" + hashBytes(candBytes)
 
-	invDigest := ""
-	if input.Inventory != nil {
-		invBytes, _ := protocol.CanonicalJSON(input.Inventory)
-		invDigest = "sha256:" + hashBytes(invBytes)
-	}
+	invDigest := InventoryDigest(input.Inventory)
 
 	effectivePolicy := DefaultValidationPolicy()
 	if input.Policy != nil {
@@ -210,6 +206,16 @@ func newValidatorContext(input ValidationInput, policy ValidationPolicy) *valida
 		inventoryEndpoints: inventoryEndpoints,
 		roleReqs:           policy.RoleRequirements,
 	}
+}
+
+// InventoryDigest returns the digest the validator reports for an inventory:
+// "" for nil, otherwise "sha256:" plus the hex SHA-256 of its canonical JSON.
+func InventoryDigest(inv *protocol.ResourceInventory) string {
+	if inv == nil {
+		return ""
+	}
+	invBytes, _ := protocol.CanonicalJSON(inv)
+	return "sha256:" + hashBytes(invBytes)
 }
 
 func hashBytes(data []byte) string {
