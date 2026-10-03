@@ -41,6 +41,15 @@ echo "health: measuring coverage for candidate snapshot"
 candidate_pct=$(run_coverage "$candidate_dir" "$candidate_profile" "$candidate_report")
 
 echo "health: coverage base=$base_pct% candidate=$candidate_pct% tolerance=$tolerance pp"
+
+if [ -n "${COVERAGE_EXPORT_DIR:-}" ]; then
+  mkdir -p "$COVERAGE_EXPORT_DIR"
+  cp "$candidate_profile" "$COVERAGE_EXPORT_DIR/coverage.out"
+  cp "$candidate_report" "$COVERAGE_EXPORT_DIR/coverage.txt"
+  delta=$(awk -v b="$base_pct" -v c="$candidate_pct" 'BEGIN { printf "%+.2f", c-b }')
+  printf "base=%s%%\ncandidate=%s%%\ndelta=%s pp\n" "$base_pct" "$candidate_pct" "$delta" > "$COVERAGE_EXPORT_DIR/coverage-summary.txt"
+fi
+
 awk -v base="$base_pct" -v candidate="$candidate_pct" -v tolerance="$tolerance" '
 BEGIN {
   if (candidate + tolerance + 0.000001 < base) {
