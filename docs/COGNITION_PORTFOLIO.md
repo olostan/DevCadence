@@ -148,6 +148,8 @@ The planner reasons over ResourceInventory, DevCadence role requirements, projec
 
 Where useful, it presents materially different candidates such as minimum monetary spend, balanced, maximum quality within policy, or privacy-first. A recommendation explains tradeoffs and does not grant authority.
 
+A recommendation record carries this explanation in optional fields: `set_id` (sibling alternatives), `intent` (`minimum_spend`, `balanced`, `maximum_quality_within_policy`, `privacy_first`), `tradeoffs`, `confidence` (`high`, `medium`, `low`) and `planner` provenance (`endpoint_id`, `driver_id`, optional `model_id`, `invocation_digest`). When `planner` is present the other four are required; `planner` absent means a non-AI/heuristic recommendation. These fields are informational only: they never grant, expand or substitute for deterministic validation or activation authority. The Go reader additionally rejects whitespace-only values (the schema cannot). See PROTOCOLS §3C.
+
 ## 10. Deterministic validation
 
 Before activation, validate that endpoints/budget pools exist, health/auth is sufficient, capability provenance is acceptable, required session features exist, source exposure and spending are authorized, credential handling stays opaque, resource claims are feasible, diversity claims are truthful, and setup/destructive authority is not expanded.

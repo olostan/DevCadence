@@ -553,6 +553,8 @@ from ResourceInventory + role needs + project characteristics + policy +
 available historical evidence. Include rationale/tradeoffs/confidence and no
 authority expansion.
 
+Split: WP-M3D-1A (see [wp-m3d-1a-recommendation-protocol.md](work-packages/wp-m3d-1a-recommendation-protocol.md)) adds the optional intent/tradeoffs/confidence/set_id/planner-provenance fields to `PortfolioRecommendation`; WP-M3D-1B is the planner service and depends on it.
+
 ### WP-M3D-2 — Workflow topology planner
 Compile task/risk + active portfolio + current resource state into a bounded
 WorkflowPlan. Explicitly support topology collapse, local-heavy iteration,
