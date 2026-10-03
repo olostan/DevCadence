@@ -247,3 +247,74 @@ func TestUnknownState_ACC14_NilPolicyDigestAndNilResourceEntry(t *testing.T) {
 		t.Fatalf("nil resource entry should be skipped, got %v", res.Diagnostics)
 	}
 }
+
+func TestUnknownState_ExhaustionDiagnosticsSortedByPoolID(t *testing.T) {
+	build := func() *protocol.CognitionPortfolio {
+		p := makeTestPortfolio()
+		for _, id := range []string{"pool-z-sub", "pool-a-sub", "pool-m-sub"} {
+			bp := p.BudgetPools[1]
+			bp.PoolID = id
+			p.BudgetPools = append(p.BudgetPools, bp)
+		}
+		return p
+	}
+	want := []string{"budget_pools[pool-a-sub]", "budget_pools[pool-m-sub]", "budget_pools[pool-sub]", "budget_pools[pool-z-sub]"}
+	for i := 0; i < 20; i++ {
+		in := unknownStateInput(build(), nil)
+		in.BudgetStates = map[string]*protocol.BudgetState{}
+		for _, id := range []string{"pool-z-sub", "pool-a-sub", "pool-m-sub", "pool-sub"} {
+			in.BudgetStates[id] = &protocol.BudgetState{PoolID: id, Status: protocol.BudgetStatusExhausted}
+		}
+		res := cognition.NewPortfolioValidator().Validate(in)
+		var got []string
+		for _, d := range diagsWithCode(res, cognition.CodeBudgetPoolExhausted) {
+			got = append(got, d.Target)
+		}
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("run %d: exhaustion diagnostics not in sorted pool-id order: got %v want %v", i, got, want)
+		}
+	}
+}
+
+func TestUnknownState_UndefinedPoolNotReportedAsUnknownBudget(t *testing.T) {
+	p := makeTestPortfolio()
+	p.RoleBindings[1].BudgetPoolID = "pool-undefined"
+	in := unknownStateInput(p, nil)
+	in.BudgetStates = map[string]*protocol.BudgetState{
+		"pool-sub": {PoolID: "pool-sub", Status: protocol.BudgetStatusHealthy},
+	}
+	res := cognition.NewPortfolioValidator().Validate(in)
+	if d := diagsWithCode(res, cognition.CodeUnknownBudgetState); len(d) != 0 {
+		t.Fatalf("undefined pool must not emit UNKNOWN_BUDGET_STATE, got %v", d)
+	}
+	if len(diagsWithCode(res, cognition.CodeBudgetPoolNotFound)) == 0 {
+		t.Fatalf("expected BUDGET_POOL_NOT_FOUND for undefined pool, got %v", res.Diagnostics)
+	}
+}
+
+func TestUnknownState_SharedPoolMultipleReferencesSingleDiagnostic(t *testing.T) {
+	// pool-sub (subscription_quota) is referenced by two primary bindings and a fallback.
+	p := makeTestPortfolio()
+	p.RoleBindings[0].BudgetPoolID = "pool-sub"
+	p.RoleBindings[1].BudgetPoolID = "pool-sub"
+	if p.RoleBindings[0].Fallbacks[0].BudgetPoolID != "pool-sub" {
+		t.Fatalf("test setup: fallback must reference pool-sub")
+	}
+	in := unknownStateInput(p, nil)
+	in.BudgetStates = unknownSub()
+	res := cognition.NewPortfolioValidator().Validate(in)
+	if d := diagsWithCode(res, cognition.CodeUnknownBudgetState); len(d) != 1 {
+		t.Fatalf("expected exactly one UNKNOWN_BUDGET_STATE for 3 references, got %v (all: %v)", d, res.Diagnostics)
+	}
+}
+
+func TestUnknownState_LocalComputePoolAbsentFromNonNilMap(t *testing.T) {
+	in := unknownStateInput(makeTestPortfolio(), nil)
+	in.BudgetStates = map[string]*protocol.BudgetState{
+		"pool-sub": {PoolID: "pool-sub", Status: protocol.BudgetStatusHealthy},
+	}
+	res := cognition.NewPortfolioValidator().Validate(in)
+	if !res.Valid || len(diagsWithCode(res, cognition.CodeUnknownBudgetState)) != 0 {
+		t.Fatalf("local_compute pool absent from map must not emit, got %v", res.Diagnostics)
+	}
+}
