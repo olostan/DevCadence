@@ -8,7 +8,7 @@ BIN_DIR ?= bin
 COVERAGE_PROFILE ?= coverage.out
 COVERAGE_REPORT ?= coverage.txt
 
-.PHONY: all build hooks-check fmt-check diff-check mod-check test vet race schemas docs-check coverage verify ci precommit prepush hooks-install clean
+.PHONY: all build hooks-check fmt-check diff-check mod-check test vet race schemas docs-check coverage verify ci precommit prepush hooks-install update-goldens clean
 
 all: verify
 
@@ -105,6 +105,10 @@ hooks-install:
 		fi; \
 	done; \
 	echo "Enabled DevCadence hooks: core.hooksPath=.githooks (pre-commit, pre-push). Hook updates apply on git pull."
+
+## update-goldens: regenerate compiler golden digests after an intentional INVARIANTS.md or invariant-catalog change (FORCE=1 overrides the guard).
+update-goldens:
+	@GO="$(GO)" sh scripts/health/update-goldens.sh
 
 clean:
 	rm -rf $(BIN_DIR) $(COVERAGE_PROFILE) $(COVERAGE_REPORT)
