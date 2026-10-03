@@ -1,4 +1,4 @@
 #!/bin/sh
 set -eu
 repo_root=$(git rev-parse --show-toplevel)
-exec "$repo_root/scripts/health/precommit.sh"
+exec sh "$repo_root/scripts/health/precommit.sh"
