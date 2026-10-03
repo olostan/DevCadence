@@ -90,13 +90,16 @@ requirement_refs:
 impact: ...
 why_now: ...
 verification_method: ...
-source:
-  reviewer: ...
-  lens: ...
-status: open
+source_observations:
+  - review_id: ...
+    finding_index: ...
+reviewer:
+  actor_id: ...
+  invocation_id: ...
+  role: reviewer
 ~~~
 
-The serialization is illustrative. The typed protocol may use different field names.
+The serialization is illustrative. ReviewFinding is immutable and has no stored status; lifecycle state is derived dynamically by `DeriveFindingResolutionState` (EWP D-2).
 
 ### Severity, materiality, and confidence
 
@@ -180,7 +183,7 @@ After the existing FindingDisposition selects a current-campaign repair (`fix_no
 
 An implementer MUST NOT mark its own resolution verified (DCI-134).
 
-Durable `ReviewFinding`, `FindingResolution`, and `ResolutionVerification` records must carry producer/verifier identity plus invocation provenance sufficient for the control plane to compare logical producers across clean sessions. For cognition-produced records that provenance includes endpoint/channel/session-or-invocation/model identity by reference; the verifier prompt may still be blinded to those identities.
+Durable `ReviewFinding`, `FindingResolution`, and `ResolutionVerification` records carry producer/verifier identity plus invocation provenance through `ActorProvenance` (EWP D-1: `actor_id`, `invocation_id`, per-position `role`, optional `lineage_actor_ids`, and informational `endpoint_ref`/`session_ref`/`model_ref` by reference). This enables the control plane and `CheckVerification` to structurally compare logical producers across clean sessions and reject logical self-verification; the verifier prompt may still be blinded to those identities.
 
 The runtime verifies that every required finding received a response; the implementer does not need the full lifecycle rules in its prompt.
 
@@ -215,11 +218,12 @@ A challenge is evaluated in an unbiased context containing:
 
 The verifier-facing projection is blinded by default to reviewer/challenger identity and model/provider. The control plane separately enforces independence and reveals identity only when it is materially relevant evidence. Do not prime the verifier with "the author says reviewer X was wrong" or load the conversational transcript.
 
-Conceptual verification outcomes:
+Verification outcomes:
 
-- `verified_fixed`;
-- `verified_dismissed`;
-- `re_adjudication_required`.
+- `verified_fixed` — repair independently established;
+- `verified_dismissed` — challenge independently established;
+- `not_resolved` — repair incomplete or challenge not upheld;
+- `re_adjudication_required` — evidence warrants reconsidering disposition.
 
 `re_adjudication_required` is evidence, not risk-acceptance authority. If verification supports deferral, the finding remains open until a Principal/Human issues a new/superseding `FindingDisposition=defer` with the existing required deferred target, reconsideration trigger and accepted-risk reference. "Future work" alone is not closure.
 

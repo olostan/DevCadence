@@ -888,11 +888,10 @@ A normalized stable material claim produced from one or more existing `ReviewRes
 - requirement/invariant references when applicable;
 - impact / why-now;
 - independent verification method;
-- source reviewer/lens;
-- durable producer provenance sufficient to distinguish logical producer and invocation across clean sessions (producer identity/reference, role, invocation reference, and endpoint/channel/session/model provenance when cognition-produced);
-- status.
+- source reviewer observation links (`ObservationRef{review_id, finding_index}`);
+- durable reviewer provenance via `ActorProvenance` (EWP D-1: opaque `actor_id`, `invocation_id`, `role: reviewer`, optional `lineage_actor_ids`, and informational `endpoint_ref`/`session_ref`/`model_ref`).
 
-Multiple reviewer observations may support one normalized ReviewFinding. Severity means harm if true; materiality means current-campaign significance; confidence means evidence strength. FindingDisposition copies the normalized finding's severity/materiality; reclassification occurs during normalization/adjudication with explicit rationale, not implicitly during repair.
+The record is immutable and carries no stored status; lifecycle state is derived dynamically by `DeriveFindingResolutionState` (EWP D-2). Multiple reviewer observations may support one normalized ReviewFinding. Severity means harm if true; materiality means current-campaign significance; confidence means evidence strength. FindingDisposition copies the normalized finding's severity/materiality; reclassification occurs during normalization/adjudication with explicit rationale, not implicitly during repair.
 
 ### FindingDisposition (existing compatibility record)
 
@@ -905,20 +904,21 @@ The implementer/author response to one accepted finding:
 - `fix_attempted`: identify candidate commit/files/evidence; or
 - `challenge`: provide reason/evidence that the finding is false, inapplicable or belongs at another boundary.
 
-The durable record MUST identify its logical producer and invocation provenance (producer reference/role plus invocation reference, with endpoint/channel/session/model provenance where cognition-produced). A FindingResolution is never self-verification.
+The durable record MUST identify its logical producer and invocation provenance via `ActorProvenance` (EWP D-1: opaque `actor_id`, `invocation_id`, `role: implementer`, optional `lineage_actor_ids`, and informational `endpoint_ref`/`session_ref`/`model_ref`). Each resolution carries an attempt number `attempt_no >= 1`. A FindingResolution is never self-verification.
 
 ### ResolutionVerification
 
-An independent decision over one finding + attempted resolution/challenge + focused evidence. The durable record MUST identify verifier/invocation provenance sufficient for the control plane to compare it with the ReviewFinding/FindingResolution producer provenance and mechanically reject self-verification across clean sessions. The cognitive verifier is blinded by default to reviewer/challenger identity and model/provider; the control plane separately checks required independence and exposes identity only when it is materially relevant evidence.
+An independent decision over one finding + attempted resolution/challenge + focused evidence. The durable record MUST identify verifier/invocation provenance via `ActorProvenance` (EWP D-1: opaque `actor_id`, `invocation_id`, `role: verifier`, optional `lineage_actor_ids`, and informational refs) sufficient for the control plane to compare it with the ReviewFinding/FindingResolution producer provenance and mechanically reject self-verification across clean sessions. The cognitive verifier is blinded by default to reviewer/challenger identity and model/provider; the control plane separately checks required independence and exposes identity only when it is materially relevant evidence.
 
-Conceptual outcomes are:
+Outcomes are:
 - `verified_fixed` — the accepted repair is independently established;
 - `verified_dismissed` — the challenge is independently established and the finding no longer requires repair;
+- `not_resolved` — the repair attempt was incomplete or failed, or the challenge was not upheld;
 - `re_adjudication_required` — verification produced evidence that the current disposition should change (including a possible deferral), but the verifier does **not** exercise Principal/Human risk-acceptance authority.
 
 A proposed deferral remains open until a Principal/Human writes a new/superseding `FindingDisposition{disposition=defer}` satisfying the existing deferred-target, reconsideration-trigger and accepted-risk requirements. Only that authorized disposition can make deferral eligible for closure.
 
-The exact v1 enum/schema may be smaller if needed, but it MUST preserve the authority split: author attempts; independent verification establishes facts; Principal/Human adjudication alone accepts risk/deferral; deterministic closure consumes those durable records.
+The authority split is strictly preserved: author attempts; independent verification establishes facts; Principal/Human adjudication alone accepts risk/deferral; deterministic closure consumes those durable records.
 
 ### ClosureDecision
 
@@ -947,7 +947,7 @@ flowchart LR
 
 The model-facing projection for each role contains only the state needed for that action. The runtime owns lifecycle legality, required-response completeness and self-verification prevention.
 
-Existing durable compatibility schemas are already implemented: `schemas/review-result.schema.json`, `schemas/review-campaign.schema.json`, `schemas/finding-disposition.schema.json`, and `schemas/closure-decision.schema.json`. The new `ReviewFinding`, `FindingResolution`, and `ResolutionVerification` records are planned for WP-M3C-5 and do not yet have committed Go/schema twins. Do not infer those new records are implemented from this semantic contract.
+Existing durable compatibility schemas are implemented: `schemas/review-result.schema.json`, `schemas/review-campaign.schema.json`, `schemas/finding-disposition.schema.json`, and `schemas/closure-decision.schema.json`. The companion `ReviewFinding`, `FindingResolution`, and `ResolutionVerification` records are implemented by WP-M3C-5 with committed Go and JSON Schema twins (`internal/protocol/review_ledger.go`, `schemas/review-finding.schema.json`, `schemas/finding-resolution.schema.json`, `schemas/resolution-verification.schema.json`). Campaign-level orchestration and closure wiring remain M7.
 
 ## 20. Credential references and authentication evidence
 

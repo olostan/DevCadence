@@ -237,7 +237,7 @@ A normalized **ReviewFinding** supplies the stable identity that the existing `R
 - verification method;
 - source reviewer/lens;
 - normalization links to raw ReviewResult observations;
-- status.
+- durable reviewer provenance (`ActorProvenance`). ReviewFinding is immutable and has no stored status; lifecycle state is derived dynamically by `DeriveFindingResolutionState` (EWP WP-M3C-5 D-2).
 
 These dimensions are intentionally distinct: **severity** is the harm if the claim is true; **materiality** is whether/how it affects the current candidate/campaign; **confidence** is the strength of the evidence. `FindingDisposition` must carry the normalized finding's severity/materiality values; any reclassification happens during normalization/adjudication with rationale rather than through a second vocabulary hidden in the prompt.
 
@@ -252,15 +252,16 @@ The implementer cannot mark a finding verified. The durable `FindingResolution` 
 
 A clean independent verifier evaluates an attempted fix. A challenged finding is evaluated in an unbiased adjudication context containing the original claim/evidence, the challenge argument, and the applicable normative material — not the accumulated conversation transcript. The cognitive verifier is **blinded by default** to the identities/model/provider of the original reviewer and challenger; independence/capability provenance is checked by the control plane and is exposed to the verifier only when identity itself is materially relevant evidence.
 
-Verification outcomes are conceptually:
+Verification outcomes:
 
 - `verified_fixed`;
 - `verified_dismissed`;
+- `not_resolved` (added in WP-M3C-5 to represent routine repair failure or unupheld challenge without requiring Principal re-adjudication);
 - `re_adjudication_required`.
 
 A verifier never accepts deferred risk. If verification supports deferral or another disposition change, `re_adjudication_required` carries the evidence back to the authorized Principal/Human, who must issue a new/superseding `FindingDisposition`. A deferral becomes closure-eligible only after that authorized disposition supplies the existing deferred-target, safety/accepted-risk evidence and reconsideration trigger. "Future work" without ownership is not closure.
 
-The exact durable schema/state machine belongs to its implementation WP; this ADR owns the authority split.
+The exact durable schema/state machine and independence rules are specified and implemented by WP-M3C-5 (see design decisions D-1 on logical actor identity and D-2 on the resolution state machine in `docs/work-packages/wp-m3c-5-ewp.md`).
 
 ### 9. Review verification is focused; broad rediscovery is exceptional
 

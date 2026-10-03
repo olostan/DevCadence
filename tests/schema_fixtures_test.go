@@ -177,6 +177,9 @@ func TestFixturesRoundTripWithoutSemanticLoss(t *testing.T) {
 		{"context-pack.valid.json", decodeInto[protocol.ContextPack]},
 		{"evidence-lease.valid.json", decodeInto[protocol.EvidenceLease]},
 		{"refactoring-proposal.valid.json", decodeInto[protocol.RefactoringProposal]},
+		{"review-finding.valid.json", decodeInto[protocol.ReviewFinding]},
+		{"finding-resolution.valid.json", decodeInto[protocol.FindingResolution]},
+		{"resolution-verification.valid.json", decodeInto[protocol.ResolutionVerification]},
 		{"budget-pool.valid.json", decodeInto[protocol.BudgetPool]},
 		{"cognition-portfolio.valid.json", decodeInto[protocol.CognitionPortfolio]},
 		{"portfolio-recommendation.valid.json", decodeInto[protocol.PortfolioRecommendation]},
@@ -375,6 +378,9 @@ func TestTheGoReaderRejectsWhatTheSchemaRejects(t *testing.T) {
 		"cognition-portfolio.invalid-",
 		"portfolio-recommendation.invalid-",
 		"workflow-plan.invalid-",
+		"review-finding.invalid-",
+		"finding-resolution.invalid-",
+		"resolution-verification.invalid-",
 	} {
 		for _, file := range fixtures(t, prefix) {
 			t.Run(filepath.Base(file), func(t *testing.T) {
@@ -432,6 +438,12 @@ func recordKindFor(t *testing.T, file string) string {
 		return "PortfolioRecommendation"
 	case strings.HasPrefix(base, "workflow-plan."):
 		return "WorkflowPlan"
+	case strings.HasPrefix(base, "review-finding."):
+		return "ReviewFinding"
+	case strings.HasPrefix(base, "finding-resolution."):
+		return "FindingResolution"
+	case strings.HasPrefix(base, "resolution-verification."):
+		return "ResolutionVerification"
 	}
 	t.Fatalf("no record kind is mapped for fixture %s", base)
 	return ""
