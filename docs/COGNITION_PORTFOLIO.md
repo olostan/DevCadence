@@ -152,6 +152,14 @@ Where useful, it presents materially different candidates such as minimum moneta
 
 Before activation, validate that endpoints/budget pools exist, health/auth is sufficient, capability provenance is acceptable, required session features exist, source exposure and spending are authorized, credential handling stays opaque, resource claims are feasible, diversity claims are truthful, and setup/destructive authority is not expanded.
 
+Unknown observed state fails closed (DCI-005). `DefaultValidationPolicy()` sets `RequireKnownResourceState` and `RequireKnownBudgetState` to true, and a nil `ValidationInput.Policy` enforces these defaults:
+
+- A supplied `ResourceState` with non-empty `UnknownMetrics` yields `UNKNOWN_RESOURCE_STATE`.
+- When `BudgetStates` is supplied (non-nil), each budget pool used by a role binding or fallback whose regime is not `local_compute` yields `UNKNOWN_BUDGET_STATE` if its entry is absent or nil (observed `missing`) or has `status=unknown` (observed `unknown`). Diagnostics are emitted in sorted pool-id order; `local_compute` pools and unused pools are exempt.
+- A nil `BudgetStates` or `ResourceStates` map means no observation was supplied and is not checked (documented residual).
+
+**Warning:** a `ValidationPolicy` built as a struct literal or decoded from JSON defaults both flags to false, which is a silent opt-out of these checks. Start from `DefaultValidationPolicy()` and clear the flags only as an explicit, deliberate opt-out.
+
 **AI proposes. Deterministic machinery authorizes.**
 
 ## 11. CognitionPortfolio

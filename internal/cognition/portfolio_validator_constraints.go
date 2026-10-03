@@ -169,6 +169,9 @@ func (ctx *validatorContext) validateContextAndConstraints(diags *[]PortfolioDia
 		sort.Strings(hostIDs)
 		for _, hostID := range hostIDs {
 			resState := ctx.input.ResourceStates[hostID]
+			if resState == nil {
+				continue
+			}
 			if resState.ActiveSlots != nil && resState.MaxConcurrentSlots != nil {
 				if *resState.ActiveSlots >= *resState.MaxConcurrentSlots {
 					*diags = append(*diags, PortfolioDiagnostic{
@@ -183,7 +186,7 @@ func (ctx *validatorContext) validateContextAndConstraints(diags *[]PortfolioDia
 					})
 				}
 			}
-			if ctx.input.Policy != nil && ctx.input.Policy.RequireKnownResourceState && len(resState.UnknownMetrics) > 0 {
+			if ctx.policy.RequireKnownResourceState && len(resState.UnknownMetrics) > 0 {
 				*diags = append(*diags, PortfolioDiagnostic{
 					Code:         CodeUnknownResourceState,
 					Condition:    ConditionUnknown,

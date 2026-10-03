@@ -2,6 +2,7 @@ package cognition
 
 import (
 	"fmt"
+	"sort"
 
 	"github.com/olostan/DevCadence/internal/protocol"
 )
@@ -197,10 +198,57 @@ func (ctx *validatorContext) validatePolicyAndEconomics(diags *[]PortfolioDiagno
 		}
 	}
 
+	// Unknown Budget State checks (DCI-005, KG-1): a supplied BudgetStates map
+	// that is unknown or missing for a used spend-bearing pool fails closed.
+	if ctx.policy.RequireKnownBudgetState && ctx.input.BudgetStates != nil {
+		used := make(map[string]struct{})
+		for _, rb := range p.RoleBindings {
+			used[rb.BudgetPoolID] = struct{}{}
+			for _, fb := range rb.Fallbacks {
+				used[fb.BudgetPoolID] = struct{}{}
+			}
+		}
+		usedIDs := make([]string, 0, len(used))
+		for id := range used {
+			usedIDs = append(usedIDs, id)
+		}
+		sort.Strings(usedIDs)
+		for _, poolID := range usedIDs {
+			bp, ok := ctx.poolMap[poolID]
+			if !ok || bp.Regime == protocol.RegimeLocalCompute {
+				continue
+			}
+			st := ctx.input.BudgetStates[poolID]
+			observed := ""
+			switch {
+			case st == nil:
+				observed = "missing"
+			case st.Status == protocol.BudgetStatusUnknown:
+				observed = "unknown"
+			default:
+				continue
+			}
+			*diags = append(*diags, PortfolioDiagnostic{
+				Code:         CodeUnknownBudgetState,
+				Condition:    ConditionUnknown,
+				Target:       fmt.Sprintf("budget_pools[%s]", poolID),
+				ViolatedRule: "DCI-005",
+				Message:      fmt.Sprintf("budget pool %q state is %s where certainty is required", poolID, observed),
+				Observed:     observed,
+			})
+		}
+	}
+
 	// Live Budget State checks
 	if ctx.input.BudgetStates != nil {
-		for poolID, bp := range ctx.poolMap {
-			if st, ok := ctx.input.BudgetStates[poolID]; ok {
+		poolIDs := make([]string, 0, len(ctx.poolMap))
+		for poolID := range ctx.poolMap {
+			poolIDs = append(poolIDs, poolID)
+		}
+		sort.Strings(poolIDs)
+		for _, poolID := range poolIDs {
+			bp := ctx.poolMap[poolID]
+			if st, ok := ctx.input.BudgetStates[poolID]; ok && st != nil {
 				if st.Status == protocol.BudgetStatusExhausted && !bp.AllowOverage {
 					*diags = append(*diags, PortfolioDiagnostic{
 						Code:         CodeBudgetPoolExhausted,
