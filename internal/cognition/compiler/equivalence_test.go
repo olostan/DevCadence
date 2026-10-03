@@ -11,30 +11,15 @@ import (
 	"github.com/olostan/DevCadence/internal/protocol"
 )
 
-const (
-	goldenNormativeSourceDigest     = "sha256:ae94b28606098e0ba8e9b50fbb11f2b9d005fda25021e651164203831773a9d0"
-	goldenAuthorityProjectionDigest = "sha256:1f7b8233d67a37a161e4731d9f0402f19903dc6d600f3a9e4cfaf235906d71da"
-	goldenCatalogDigest             = "sha256:f33655bd50a8e82afa6fd3c1fd823b9d7ad6a88e79be38fcb902e01bc40caab5"
-	goldenPackDigest                = "sha256:beb6cb6d93b1b900fd7e12ab4c005fe36886ee7ed9041f7216e64c63fc3b7d9c"
-	goldenInvocationDigestMarkdown  = "sha256:ffe1b46773d465841f32174b41b34583521bbdb346961caebe06a3b3ad26d3a0"
-	goldenInvocationDigestJSON      = "sha256:4b8b08091cf59c69c66e36101dc13bc91b4e5ed986f43db5fee68652685bd93c"
-)
-
 func TestEquivalence_CanonicalCatalogDigests(t *testing.T) {
 	reg, err := compiler.NewCanonicalRuleRegistry()
 	if err != nil {
 		t.Fatalf("failed to create canonical rule registry: %v", err)
 	}
 
-	if reg.NormativeSourceDigest() != goldenNormativeSourceDigest {
-		t.Errorf("NormativeSourceDigest mismatch:\ngot:  %s\nwant: %s", reg.NormativeSourceDigest(), goldenNormativeSourceDigest)
-	}
-	if reg.AuthorityProjectionDigest() != goldenAuthorityProjectionDigest {
-		t.Errorf("AuthorityProjectionDigest mismatch:\ngot:  %s\nwant: %s", reg.AuthorityProjectionDigest(), goldenAuthorityProjectionDigest)
-	}
-	if reg.CatalogDigest() != goldenCatalogDigest {
-		t.Errorf("CatalogDigest mismatch:\ngot:  %s\nwant: %s", reg.CatalogDigest(), goldenCatalogDigest)
-	}
+	checkGolden(t, goldenNormativeSource, reg.NormativeSourceDigest())
+	checkGolden(t, goldenAuthorityProjection, reg.AuthorityProjectionDigest())
+	checkGolden(t, goldenCatalog, reg.CatalogDigest())
 }
 
 func TestEquivalence_CompiledPackAndInvocationDigests(t *testing.T) {
@@ -86,12 +71,8 @@ func TestEquivalence_CompiledPackAndInvocationDigests(t *testing.T) {
 		t.Fatalf("CompileInvocation (Markdown) failed: %v", err)
 	}
 
-	if invMD.Pack.PackDigest != goldenPackDigest {
-		t.Errorf("PackDigest mismatch:\ngot:  %s\nwant: %s", invMD.Pack.PackDigest, goldenPackDigest)
-	}
-	if invMD.InvocationDigest != goldenInvocationDigestMarkdown {
-		t.Errorf("InvocationDigest (Markdown) mismatch:\ngot:  %s\nwant: %s", invMD.InvocationDigest, goldenInvocationDigestMarkdown)
-	}
+	checkGolden(t, goldenPack, invMD.Pack.PackDigest)
+	checkGolden(t, goldenInvocationMarkdown, invMD.InvocationDigest)
 
 	// Verify exact admitted rule IDs and deterministic order
 	var admittedIDs []string
@@ -109,7 +90,7 @@ func TestEquivalence_CompiledPackAndInvocationDigests(t *testing.T) {
 		t.Errorf("Admitted IDs mismatch:\ngot:  %v\nwant: %v", admittedIDs, expectedIDs)
 	}
 
-	// 2. JSON projection (PackDigest must match goldenPackDigest, InvocationDigest matches goldenInvocationDigestJSON)
+	// 2. JSON projection (same PackDigest, its own InvocationDigest)
 	reqJSON := req
 	reqJSON.Renderer = compiler.NewJSONRenderer()
 	invJSON, err := c.CompileInvocation(context.Background(), reqJSON)
@@ -117,12 +98,8 @@ func TestEquivalence_CompiledPackAndInvocationDigests(t *testing.T) {
 		t.Fatalf("CompileInvocation (JSON) failed: %v", err)
 	}
 
-	if invJSON.Pack.PackDigest != goldenPackDigest {
-		t.Errorf("PackDigest (JSON) mismatch:\ngot:  %s\nwant: %s", invJSON.Pack.PackDigest, goldenPackDigest)
-	}
-	if invJSON.InvocationDigest != goldenInvocationDigestJSON {
-		t.Errorf("InvocationDigest (JSON) mismatch:\ngot:  %s\nwant: %s", invJSON.InvocationDigest, goldenInvocationDigestJSON)
-	}
+	checkGolden(t, goldenPack, invJSON.Pack.PackDigest)
+	checkGolden(t, goldenInvocationJSON, invJSON.InvocationDigest)
 }
 
 func TestEquivalence_ToolAuthorityAndBindingGuarantees(t *testing.T) {

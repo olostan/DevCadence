@@ -67,7 +67,9 @@ Repository health policy is exposed through Make targets so local checks and Git
 - `make hooks-install`
 - `make hooks-check`
 
-Workflow YAML should orchestrate these targets rather than reimplementing repository policy.
+`make update-goldens` is a maintenance target, not a gate, and CI never runs it. After an intentional change to `INVARIANTS.md` or the invariant catalog it regenerates `internal/cognition/compiler/testdata/golden_digests.json`; commit the result with that change. It refuses to run when neither normative source differs from the revision that last changed the goldens (`FORCE=1` overrides), so a digest change without an invariant change stays visible as a compiler behavior change. The equivalence tests print this command when they fail.
+
+Workflow YAML should orchestrate the gate targets rather than reimplementing repository policy.
 
 ## 4. Coverage policy
 

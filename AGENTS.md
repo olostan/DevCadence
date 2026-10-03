@@ -82,6 +82,8 @@ Go control plane, SQLite canonical storage, typed Go plus versioned JSON Schemas
 
 Update affected owning contracts and references; verify overview, invariants, architecture, protocols, milestone status and schema agreement only where impacted. This is a dependency check, not a requirement to reload the corpus. A behavior change leaving normative prose misleading is incomplete. Future context linting is M3C work, not an existing command.
 
+When `INVARIANTS.md` or the invariant catalog (`internal/cognition/compiler/catalog.go`) changes, run `make update-goldens` and commit the regenerated `internal/cognition/compiler/testdata/golden_digests.json` in the same commit. Do not wait for CI to report stale digests, and do not hand-edit the file. The target refuses to run when no normative source changed, because digest drift without an invariant change is a compiler behavior change to review, not to regenerate.
+
 ## 15. Failure behavior
 
 State the uncertain/violated assumption, exact evidence, observation versus interpretation, bounded options and decision owner. Preserve failed trajectories; repeated failure escalates. Context shortage never authorizes guessing, truncating required clauses or relaxing policy.
