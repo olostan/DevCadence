@@ -98,9 +98,14 @@ which the SQLite driver requires; a newer toolchain is fetched automatically
 by recent Go releases.
 
 ```bash
-make verify        # go vet ./... && go test ./... && schema validation
+make hooks-install # once per clone: enable the versioned pre-commit/pre-push health hooks
+make verify        # fmt/whitespace/module checks, go vet, go test, schemas, docs integrity
 make build         # bin/devcadence
 ```
+
+Git does not install hooks on clone, so `make hooks-install` is required in every
+clone; `make build` and `make verify` warn when it has not been run. Policy:
+[ENGINEERING_HEALTH_POLICY.md](ENGINEERING_HEALTH_POLICY.md).
 
 The build needs no C toolchain: the SQLite driver is pure Go
 ([ADR-0002](adr/0002-control-plane-persistence.md)).

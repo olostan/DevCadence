@@ -32,6 +32,12 @@ if [ -n "$staged_go" ]; then
   done
 fi
 
+# Git exports repository-location variables (GIT_INDEX_FILE, GIT_DIR, ...) to
+# hooks. They were needed above to read the index being committed, but must not
+# leak into the candidate's build and tests, whose own git repositories they
+# would redirect.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_PREFIX GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES
+
 echo "health: validating staged snapshot"
 (
   cd "$candidate"

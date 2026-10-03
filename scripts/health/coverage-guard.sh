@@ -17,6 +17,8 @@ candidate_dir=$2
 tolerance=${COVERAGE_TOLERANCE:-0.00}
 repo_root=$(git rev-parse --show-toplevel)
 base_sha=$(git -C "$repo_root" rev-parse --verify "$base_ref^{commit}")
+# Hook-provided repository variables must not redirect git inside the tests.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_PREFIX GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES
 tmp_root=$(mktemp -d "${TMPDIR:-/tmp}/devcadence-coverage.XXXXXX")
 trap 'rm -rf "$tmp_root"' EXIT HUP INT TERM
 
