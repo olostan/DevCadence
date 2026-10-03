@@ -178,29 +178,6 @@
           }
         }
       }
-    },
-    {
-      "if": {
-        "properties": {
-          "producer": {
-            "properties": {
-              "actor_id": {
-                "const": "act-producer-1"
-              },
-              "lineage_actor_ids": {
-                "contains": {
-                  "const": "act-producer-1"
-                }
-              }
-            },
-            "required": [
-              "actor_id",
-              "lineage_actor_ids"
-            ]
-          }
-        }
-      },
-      "then": false
     }
   ]
 }

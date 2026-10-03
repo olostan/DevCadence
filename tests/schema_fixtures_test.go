@@ -115,6 +115,13 @@ func TestInvalidFixturesAreRejected(t *testing.T) {
 	}
 	for _, file := range files {
 		t.Run(filepath.Base(file), func(t *testing.T) {
+			// Some relational/semantic constraints cannot be expressed in JSON Schema (Draft 2020-12)
+			// without hard-coding sibling fixture values, such as ensuring a list
+			// does not contain a sibling field's value. These are enforced in Go
+			// (tested in TestTheGoReaderRejectsWhatTheSchemaRejects and unit tests).
+			if filepath.Base(file) == "finding-resolution.invalid-lineage-contains-self.json" {
+				t.Skip("skipping schema-only validation: JSON Schema cannot compare sibling fields (actor_id not in lineage_actor_ids); enforced in Go FindingResolution.Validate()")
+			}
 			name := schemaForFixture(t, file)
 			document := read(t, file)
 			if err := set.ValidateBytes(name, document); err == nil {

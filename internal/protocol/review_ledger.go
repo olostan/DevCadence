@@ -467,7 +467,7 @@ func (v ResolutionVerification) MarshalJSON() ([]byte, error) {
 //	b.ActorID ∉ a.LineageActorIDs ∧ a.InvocationID != b.InvocationID.
 //
 // Fails closed if either ActorID or InvocationID is empty or whitespace-only on either side.
-func Independent(a, b ActorProvenance) bool {
+func independent(a, b ActorProvenance) bool {
 	if strings.TrimSpace(a.ActorID) == "" || strings.TrimSpace(a.InvocationID) == "" ||
 		strings.TrimSpace(b.ActorID) == "" || strings.TrimSpace(b.InvocationID) == "" {
 		return false
@@ -489,10 +489,6 @@ func Independent(a, b ActorProvenance) bool {
 		}
 	}
 	return true
-}
-
-func independent(a, b ActorProvenance) bool {
-	return Independent(a, b)
 }
 
 // CheckVerification checks link equalities, candidate rules, kind×outcome matrix,
