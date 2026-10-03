@@ -23,14 +23,14 @@ Install repository hooks once per clone:
 make hooks-install
 ```
 
-The installed hooks invoke versioned repository scripts, so later policy improvements do not require reinstalling the hooks.
+The installed hooks invoke versioned repository scripts, so later policy improvements do not require reinstalling the hooks. Existing historical formatting debt is not grandfathered into changed code: formatting is enforced on staged files locally and on files changed from the exact merge base in CI.
 
 ### Pre-commit
 
 Pre-commit validates the exact Git index snapshot and blocks the commit if any of these fail:
 
 - staged diff whitespace validation;
-- Go formatting;
+- Go formatting for staged/changed files;
 - module metadata consistency;
 - `go vet`;
 - schema/fixture validation;
