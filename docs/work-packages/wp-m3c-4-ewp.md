@@ -2,6 +2,11 @@
 
 - **Milestone:** M3C — Cognition Resource and Session Substrate
 - **Scope card:** docs/WORK_PACKAGES.md#wp-m3c-4--substrate-integration-verification
+- **Work Package ID:** `WP-M3C-4`
+- **Task ID:** `task-m3c-4-substrate-integration-verification`
+- **EWP revision:** `r1`
+- **Base commit:** `4e4a24b63b544f0bc3e7d0ff87ec359a0f59c2da` (origin/main, merge of PR #29 — post-M3C-3 hardening)
+- **Contract digest:** computed over this file's bytes at delegation (`git hash-object docs/work-packages/wp-m3c-4-ewp.md`) and recorded in the delegation manifest; any later edit is a new revision and requires re-delegation.
 - **Status:** READY_FOR_IMPLEMENTATION
 - **Purpose in DevCadence self-development:** manual Principal-authored EWP; no DevCadence self-hosting/runtime enforcement is required.
 
@@ -46,14 +51,14 @@ Requires Principal amendment before implementation continues:
 | ID | Requirement |
 | --- | --- |
 | REQ-01 | Verify ExactStateless and OpaqueSession driver behavior through the same canonical substrate contract. |
-| REQ-02 | Verify oversized protected context fails with `CONTEXT_UNFIT` or equivalent authoritative rejection; mandatory obligations are never silently truncated. |
+| REQ-02 | Verify an oversized protected context yields `protocol.PackStatusContextUnfit` (`"context_unfit"`) on the `ContextPack` and an error satisfying `errors.Is(err, errs.ErrContextUnfit)` (category `errs.CategoryContextUnfit`) from `compiler.Compile`; mandatory obligations are never silently truncated. No other rejection form satisfies this requirement. |
 | REQ-03 | Verify stale normative/evidence projections and changed worktree evidence cannot be treated as current. |
 | REQ-04 | Verify mandatory admission classes survive low semantic similarity and optional ranking pressure. |
 | REQ-05 | Verify read authority and write authority remain independent. |
 | REQ-06 | Verify endpoint-specific renderers preserve identical canonical task/contract/evidence semantics, including hostile evidence delimiters. |
 | REQ-07 | Verify local, subscription, metered and mixed candidate portfolios pass/fail according to deterministic portfolio policy. |
 | REQ-08 | Verify missing/unknown resource/quota evidence degrades or rejects exactly as owning contracts specify; it must never fabricate availability. |
-| REQ-09 | Verify a third fake provider/driver integrates through existing interfaces without core semantic changes. |
+| REQ-09 | Verify a third fake provider/driver implements `drivers.SessionDriver` / `drivers.Session` and passes `drivers.RunDriverContractTestSuite` with no change to core packages. There is no driver registry in the current code; this WP MUST NOT add one. |
 | REQ-10 | Keep all verification deterministic and runnable without external credentials, paid APIs or real accelerators. |
 
 ## 4. Invariants / state rules
@@ -102,16 +107,19 @@ Requires Principal amendment before implementation continues:
 
 ## 8. Representability map
 
-| Concept | Representation |
+Every identifier below was checked against `main` at the base commit.
+
+| Concept | Exact current representation |
 | --- | --- |
-| mandatory rule admission | compiler rule registry / ContextPack |
-| context envelope | ContextProfile / compiler accounting |
-| stale evidence | EvidenceLease/source identity |
-| driver context behavior | session-driver interface + ContextControl |
-| render semantics | prompt renderer interface |
-| portfolio legality | PortfolioValidator / ValidationResult |
-| resource uncertainty | ResourceInventory / ResourceState / BudgetState |
-| provider extensibility | driver interface/registry |
+| mandatory rule admission | `internal/cognition/compiler` admission (`admission.go`) producing `protocol.ContextPack` |
+| context envelope / fit decision | `protocol.ContextProfile`; `compiler.Compile` sets `ContextPack.Status` |
+| context-unfit outcome | `protocol.PackStatusContextUnfit` + `errs.ErrContextUnfit` / `errs.CategoryContextUnfit` |
+| stale evidence | `protocol.EvidenceLease` (`EvidenceLeaseStatus`) and source identity in `internal/protocol/context.go` |
+| driver context behavior | `drivers.SessionDriver` / `drivers.Session` with `protocol.ContextControl` and `protocol.PrefixCache` |
+| render semantics | `compiler.PromptRenderer` interface (`Format`, `Render`); `compiler.TaggedMarkdownRenderer` |
+| portfolio legality | `cognition.PortfolioValidator` / `cognition.ValidationResult` / `cognition.ActivationManager` |
+| resource uncertainty | `protocol.ResourceInventory`, `protocol.ResourceState`, `protocol.BudgetState` |
+| provider extensibility | `drivers.SessionDriver` interface + `drivers.RunDriverContractTestSuite` (no registry exists) |
 
 If any listed concept cannot actually be represented by the current accepted implementation, stop and report the mismatch rather than inventing a local representation.
 

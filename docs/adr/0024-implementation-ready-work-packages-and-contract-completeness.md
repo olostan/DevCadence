@@ -1,6 +1,6 @@
 # ADR-0024: Implementation-Ready Work Packages and Contract Completeness
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-10-03
 - **Owners:** DevCadence architecture / Principal Engineering protocol
 - **Related:** AGENTS.md §6–7; PROTOCOLS §7; WORK_PACKAGES.md; PRINCIPAL_ENGINEER.md; LOCAL_AGENTS.md; ADR-0020
