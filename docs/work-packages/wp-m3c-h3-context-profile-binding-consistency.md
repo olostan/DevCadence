@@ -3,12 +3,12 @@
 ## Identity
 
 - Work Package ID: WP-M3C-H3
-- Revision: 2 (independent readiness review: READY_WITH_FIXES; 1 major + 6 minors incorporated; fixture probe found 0 inconsistent fixtures)
+- Revision: 3 (r2: first review READY_WITH_FIXES, 1 major + 6 minors fixed; r3: re-review READY_WITH_FIXES, implementability confirmed in a scratch copy, 1 stale line + 7 minors fixed)
 - Task ID: autonomous-run-1 (issue #36)
 - Base commit: `596019451e4cd55f4bc12e34ddc0c5bd97fffd43` (main after PR #43)
 - Contract digest: n/a (Markdown contract authoritative)
 - Target implementation endpoint/profile: competent Go implementer
-- Status: READY_FOR_IMPLEMENTATION (r2)
+- Status: READY_FOR_IMPLEMENTATION (r3)
 
 ## Objective
 
@@ -65,7 +65,7 @@ Helper names, test layout, message wording.
 | REQ-05 | MUST | A nonexistent profile id yields ONLY the existing `CONTEXT_PROFILE_NOT_FOUND` (no mismatch diagnostic). | no double report |
 | REQ-06 | MUST | Existing context checks (context-control mismatch, prefix-cache mismatch, contract limit, known-context-control policy) are UNCHANGED and still run against the referenced profile; a mismatched binding may therefore also produce them. | scope |
 | REQ-07 | MUST | One diagnostic per mismatched binding or fallback occurrence, even if the same profile id is referenced by several bindings. Emission order follows binding order, primary before its fallbacks; final order is the existing `SortedDiagnostics`. | determinism |
-| REQ-09 | MUST | Nil profile entries (r2, scope exception verified by the readiness review): a key present in `ContextProfiles` whose value is nil is treated as a NONEXISTENT profile — both not-found checks in `portfolio_validator_endpoints.go` (lines ~62 and ~96) emit `CONTEXT_PROFILE_NOT_FOUND` for it (`p, ok := ...; !ok || p == nil`), and `validateContextCompatibility` and the new check never dereference a nil profile. Today a nil entry counts as present, then `validateContextCompatibility` dereferences it (panic when the channel exists) — a pre-existing defect that is also fail-open. | DCI-123 |
+| REQ-09 | MUST | Nil profile entries (r2, scope exception verified by the readiness review): a key present in `ContextProfiles` whose value is nil is treated as a NONEXISTENT profile — both not-found checks in `portfolio_validator_endpoints.go` (lines ~62 and ~96) emit `CONTEXT_PROFILE_NOT_FOUND` for it (write `cp, ok := ...; !ok || cp == nil`; do not name it `p`, which shadows the portfolio variable of the enclosing function), and the early return at `constraints.go:20` becomes `if !okCh || !okProf || prof == nil` (the dereference is at :24), and the new check never dereferences a nil profile. Today a nil entry counts as present, then `validateContextCompatibility` dereferences it (panic when the channel exists) — a pre-existing defect that is also fail-open. | DCI-123 |
 | REQ-08 | MUST | `docs/COGNITION_PORTFOLIO.md` §10 lists the consistency check; the WORK_PACKAGES note records WP-M3C-H3 and that the planner (WP-M3D-1B) gets this check through the validator without code change. | docs sync |
 
 ## Invariants / state rules
@@ -132,18 +132,18 @@ Test names MUST contain `ContextProfileConsistency` and the `ACC-xx` id.
 | ID | Setup | Action | Expected | Maps |
 | --- | --- | --- | --- | --- |
 | ACC-01 | portfolio whose bindings and fallbacks reference profiles with matching endpoint and channel | `Validate` | no `CONTEXT_PROFILE_MISMATCH` | INV-03 |
-| ACC-02 | primary binding references a profile whose `EndpointID` differs | `Validate` | invalid; exactly one mismatch diagnostic; Target is literally `role_bindings[0]`; Observed/Required strings per REQ-03 | REQ-02, 03 |
-| ACC-03 | profile `ChannelID` differs, endpoint equal (cases: a different id, and an id differing only by letter case) | `Validate` | exactly one mismatch diagnostic for each case | REQ-02 |
-| ACC-04 | both differ | `Validate` | exactly one diagnostic (not two) | REQ-02 |
+| ACC-02 | exactly one binding references the mutated profile (use a dedicated profile id: a copy of `prof-local-01` with a new `ProfileID`, bound only to `RoleBindings[0]`, or truncate `RoleBindings` to the first binding — in the standard fixture two bindings share `prof-local-01`); that profile's `EndpointID` differs | `Validate` | invalid; exactly one mismatch diagnostic; Target is literally `role_bindings[0]`; Observed/Required strings per REQ-03 | REQ-02, 03 |
+| ACC-03 | (setup as ACC-02) profile `ChannelID` differs, endpoint equal (cases: a different id, and an id differing only by letter case) | `Validate` | exactly one mismatch diagnostic for each case | REQ-02 |
+| ACC-04 | (setup as ACC-02) both differ | `Validate` | exactly one diagnostic (not two) | REQ-02 |
 | ACC-05 | a fallback references a mismatched profile | `Validate` | one diagnostic whose Target is literally `role_bindings[0].fallbacks[0]` | REQ-02, 03 |
 | ACC-06 | binding references a nonexistent profile id | `Validate` | `CONTEXT_PROFILE_NOT_FOUND` present, no mismatch diagnostic | REQ-05 |
-| ACC-07 | binding's channel is missing from the portfolio and the profile's endpoint differs | `Validate` | mismatch diagnostic still emitted | REQ-02 |
+| ACC-07 | the scout binding (`RoleBindings[1]`) gets `ChannelID = "chan-missing"` and its profile's endpoint differs | `Validate` | a mismatch diagnostic with that binding's Target (`role_bindings[1]`) is still emitted | REQ-02 |
 | ACC-08 | one mismatched profile id referenced by two bindings | `Validate` | two diagnostics (one per binding), sorted deterministically | REQ-07 |
-| ACC-09 | `PolicyDigest` of a default-policy validation of the standard fixture | compare with a `const` in the new test file whose value the implementer captures by running `Validate` with `DefaultValidationPolicy()` on the BASE commit (a guard that no policy field was added) | unchanged | REQ-04 |
+| ACC-09 | `PolicyDigest` of a default-policy validation of the standard fixture | compare with a `const` in the new test file whose value (the `PolicyDigest` string `sha256:...` from the `ValidationResult`) the implementer captures by running `Validate` with `DefaultValidationPolicy()` on the BASE commit (a guard that no policy field was added) | unchanged | REQ-04 |
 | ACC-10 | same invalid input, 20 runs, ContextProfiles map built in different insertion orders | `Validate` | identical ordered diagnostics | INV-02 |
-| ACC-11 | planner (WP-M3D-1B) alternative referencing another endpoint's profile | `planner.Plan` with a fake invoker | alternative in `Rejected` with Reason `validation_failed` and the diagnostic code present | REQ-02 |
+| ACC-11 | build the alternative from `makeTestPortfolio()` in `internal/cognition/planner/fixtures_test.go` with `RoleBindings[0].ContextProfileID = "prof-cli-01"`, marshal it into the `portfolio` field of `alt(IntentBalanced)` and use `baseRequest(&scriptedInvoker{result: okResult(output(a))})` | `planner.Plan` | `OutcomeAllRejected`; one `Rejected` with Reason `validation_failed` containing exactly one `CONTEXT_PROFILE_MISMATCH` (CONTEXT_CONTROL_MISMATCH and PREFIX_CACHE_MISMATCH are also expected per REQ-06; do not assert the diagnostic list is only the mismatch) | REQ-02 |
 | ACC-12 | existing context-control mismatch / contract-limit tests | run unchanged | still pass (no assertion weakened) | REQ-06 |
-| ACC-14 | `ContextProfiles` contains the referenced key with a nil value, channel present in the portfolio | `Validate` | no panic; `CONTEXT_PROFILE_NOT_FOUND` for the binding (and for a fallback variant); no mismatch diagnostic | REQ-09 |
+| ACC-14 | in the standard fixture set both `prof-local-01` and `prof-cli-01` to nil (keys present, channels present) | `Validate` | no panic; exactly 3 `CONTEXT_PROFILE_NOT_FOUND` (implementer, scout, and `role_bindings[0].fallbacks[0]`) and 0 `CONTEXT_PROFILE_MISMATCH`; the test name carries both `ContextProfileConsistency` and `ACC-14` (the name token `ACC14` also exists in an unrelated unknown-state test) | REQ-09 |
 | ACC-13 | docs | `COGNITION_PORTFOLIO.md` §10 and WORK_PACKAGES | describe the check | REQ-08 |
 
 ## Validation
@@ -179,5 +179,5 @@ missing/unknown input semantics: 4/4
 acceptance scenarios mapped: 14/14
 unresolved architecture choices: 0
 declared local-discretion choices: 3
-readiness: pending independent readiness review
+readiness: READY_FOR_IMPLEMENTATION (two independent reviews, both READY_WITH_FIXES; all findings incorporated)
 ```
