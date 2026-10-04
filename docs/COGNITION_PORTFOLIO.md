@@ -142,11 +142,15 @@ flowchart TD
 
 The endpoint used to plan the portfolio need not be the endpoint ultimately preferred for Principal, implementation or review.
 
+**Implementation status (WP-M3D-1B).** The `Planner` step above exists as a pure service, `internal/cognition/planner`: given caller-supplied facts and an injected one-method `Invoker`, it builds a deterministic prompt, calls the invoker once (no retry), strictly decodes the output, assigns every identity, timestamp and provenance field in Go, and gates each alternative through the deterministic validator. Alternatives that fail are returned as structured rejections. It never activates or persists anything. Not yet implemented (WP-M3D-1C and later): planning-endpoint selection, the driver-backed `Invoker` adapter, compiler admission of the planner role, historical-evidence input and the link from a recommendation to activation.
+
 ## 9. Portfolio recommendation
 
 The planner reasons over ResourceInventory, DevCadence role requirements, project language/shape/risk/privacy, user policy/preferences, budget/resource state and evaluated historical outcomes.
 
 Where useful, it presents materially different candidates such as minimum monetary spend, balanced, maximum quality within policy, or privacy-first. A recommendation explains tradeoffs and does not grant authority.
+
+The planner service (WP-M3D-1B) is the first producer of these records; it consumes the inventory, project languages/risk tags, policy and budget/resource state as caller-supplied facts. Historical evidence is not yet an input. Rejection reasons are bounded by the planner, but diagnostics are validator output and are not truncated: consumers that log or persist a planner `Result` must bound diagnostics.
 
 A recommendation record carries this explanation in optional fields: `set_id` (sibling alternatives), `intent` (`minimum_spend`, `balanced`, `maximum_quality_within_policy`, `privacy_first`), `tradeoffs`, `confidence` (`high`, `medium`, `low`) and `planner` provenance (`endpoint_id`, `driver_id`, optional `model_id`, `invocation_digest`). When `planner` is present the other four are required; `planner` absent means a non-AI/heuristic recommendation. These fields are informational only: they never grant, expand or substitute for deterministic validation or activation authority. The Go reader additionally rejects whitespace-only values (the schema cannot). See PROTOCOLS §3C.
 
