@@ -174,7 +174,7 @@ Context profile consistency (WP-M3C-H3, always on, no policy flag): a context pr
 
 The active CognitionPortfolio is versioned configuration containing role eligibility/preferences/fallbacks, endpoint exclusions, budget policy/reserves, source-exposure constraints, escalation rules, diversity requirements, retry/review constraints and workflow defaults.
 
-It is distinct from transient BudgetState and human-readable deployment labels.
+It is distinct from transient BudgetState and human-readable deployment labels. Identity and free-text fields of portfolio, recommendation and workflow records reject whitespace-only values in Go, and the portfolio validator reads only the effective policy (WP-M3C-H4).
 
 ## 12. Adaptive workflow topology
 
@@ -183,6 +183,18 @@ For each task, a Workflow Planner combines task/risk requirements, CognitionPort
 It may choose one capable session plus deterministic validation; distinct Principal/Implementer/Reviewer endpoints; many local repair loops with scarce remote escalation; provider-diverse review for high-risk work; or deterministic/manual operation.
 
 The system is explicitly allowed to choose **less orchestration**.
+
+### Workflow plan validator
+
+`internal/cognition.WorkflowValidator` (WP-M3D-2A1) is the pure deterministic authority that decides whether a `WorkflowPlan` is usable against a given `CognitionPortfolio` and `WorkflowPolicy`; plans, planners and models propose, only this validator authorizes. It reads no clock, I/O or live budget/resource state and never mutates its inputs.
+
+Evaluation stops with one diagnostic when an input is missing (`WORKFLOW_INPUT_MISSING`), an explicit policy has a field `<= 0` (`WORKFLOW_POLICY_INVALID`), or the plan or portfolio fails its own `Validate` (`WORKFLOW_PLAN_INVALID`, `WORKFLOW_PORTFOLIO_INVALID`). Otherwise every rule is evaluated and all diagnostics are collected in `SortedDiagnostics` order:
+
+- Bounds: stage count (`max_stages`, default 8), per-stage retries (the portfolio `WorkflowDefaults.MaxRetries` when greater than zero, else `max_total_retries`), aggregate retries (`max_total_retries`, default 6, saturating `int64` sum) and per-stage timeout (`max_stage_timeout_seconds`, default 3600). `DefaultTimeoutSeconds` is a default, not a cap. An explicit policy is never completed with defaults.
+- Bindings: a cognition stage's role must have a role binding, and its provided endpoint, channel and context profile plus its budget pool must all match one single binding tuple (primary or fallback) of that role. Every stage's budget pool must exist. A deterministic stage must carry no endpoint, channel or context profile pointer.
+- Structure: an escalation target must name an existing stage with a strictly greater order; review stages must be cognition stages.
+
+A valid verdict is relative to the given portfolio and policy only; binding the portfolio to the active one is the caller's job. Live budget and metered-pool authorization is WP-M3D-2A2; the deterministic planner is WP-M3D-2B; the AI planner is WP-M3D-2C. Contract: [wp-m3d-2a1-workflow-plan-validator.md](work-packages/wp-m3d-2a1-workflow-plan-validator.md).
 
 ## 13. Adaptation
 
