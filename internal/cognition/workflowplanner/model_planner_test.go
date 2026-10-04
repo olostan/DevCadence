@@ -3,6 +3,7 @@ package workflowplanner
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/olostan/DevCadence/internal/cognition"
@@ -179,6 +180,9 @@ func TestModelPlanner_ACC01_ValidModelOutput(t *testing.T) {
 	if !res.UsedModel {
 		t.Errorf("expected UsedModel: true, got false (reason: %s)", res.FallbackReason)
 	}
+	if res.FallbackReason != "" {
+		t.Errorf("expected empty FallbackReason, got %q", res.FallbackReason)
+	}
 	if res.Plan == nil {
 		t.Fatalf("expected non-nil plan")
 	}
@@ -245,8 +249,8 @@ func TestModelPlanner_ACC03_InvokerErrorFallback(t *testing.T) {
 	if res.Plan == nil {
 		t.Fatalf("expected non-nil baseline plan")
 	}
-	if res.FallbackReason == "" {
-		t.Errorf("expected non-empty fallback reason")
+	if !strings.Contains(res.FallbackReason, "invoker_error") {
+		t.Errorf("expected invoker_error in fallback reason, got %s", res.FallbackReason)
 	}
 }
 
@@ -277,6 +281,9 @@ func TestModelPlanner_ACC04_MalformedOutputFallback(t *testing.T) {
 	}
 	if res.Plan == nil {
 		t.Fatalf("expected non-nil baseline plan")
+	}
+	if !strings.Contains(res.FallbackReason, "malformed_model_output") {
+		t.Errorf("expected malformed_model_output in fallback reason, got %s", res.FallbackReason)
 	}
 }
 
@@ -328,23 +335,35 @@ func TestModelPlanner_ACC06_BudgetUnauthorizedModelPlan(t *testing.T) {
 	p := validTestPortfolio()
 	inv := &mockInvoker{
 		invokeFn: func(ctx context.Context, inv planner.Invocation) (planner.InvocationResult, error) {
-			// Proposes using metered pool
+			// Proposes using metered pool with valid binding (reviewer has fallback on ep-cloud-01, but reviewer priority 1 is ep-cli-01 on pool-sub)
+			// Let's check: role reviewer has fallback ep-cloud-01 on pool-sub.
+			// Let's add metered pool to a role binding or create a portfolio with a role bound to pool-metered.
 			jsonOutput := `{
 				"stages": [
 					{
 						"stage_id": "model-s1",
-						"role": "implementer",
+						"role": "metered_worker",
 						"order": 1,
 						"budget_pool_id": "pool-metered",
-						"endpoint_id": "ep-local-01",
-						"channel_id": "chan-local-01",
-						"context_profile_id": "prof-local-01"
+						"endpoint_id": "ep-cloud-01",
+						"channel_id": "chan-cloud-01",
+						"context_profile_id": "prof-cloud-01"
 					}
 				]
 			}`
 			return planner.InvocationResult{Content: jsonOutput}, nil
 		},
 	}
+
+	// Add metered_worker binding to portfolio so WorkflowValidator passes R4
+	p.RoleBindings = append(p.RoleBindings, protocol.RoleBinding{
+		Role:             "metered_worker",
+		EndpointID:       "ep-cloud-01",
+		ChannelID:        "chan-cloud-01",
+		BudgetPoolID:     "pool-metered",
+		ContextProfileID: "prof-cloud-01",
+		Priority:         1,
+	})
 
 	// Metered pool is exhausted!
 	budgetStates := map[string]*protocol.BudgetState{
@@ -371,6 +390,9 @@ func TestModelPlanner_ACC06_BudgetUnauthorizedModelPlan(t *testing.T) {
 	}
 	if res.UsedModel {
 		t.Errorf("expected UsedModel: false due to exhausted budget")
+	}
+	if res.FallbackReason != "budget_unauthorized_model_plan" {
+		t.Errorf("expected budget_unauthorized_model_plan, got %s", res.FallbackReason)
 	}
 	if res.Plan == nil {
 		t.Fatalf("expected fallback baseline plan")
@@ -430,6 +452,219 @@ func TestModelPlanner_ACC08_ContextCanceled(t *testing.T) {
 	_, err := PlanWorkflowWithModel(ctx, req)
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("expected context.Canceled error, got %v", err)
+	}
+}
+
+func TestModelPlanner_ACC08_ContextCanceledDuringInvocation(t *testing.T) {
+	p := validTestPortfolio()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	inv := &mockInvoker{
+		invokeFn: func(innerCtx context.Context, inv planner.Invocation) (planner.InvocationResult, error) {
+			cancel() // cancel parent context during execution
+			return planner.InvocationResult{}, innerCtx.Err()
+		},
+	}
+
+	req := ModelPlanRequest{
+		Task: TaskSpec{
+			TaskID:        "task-acc08-during",
+			WorkPackageID: "wp-acc08-during",
+		},
+		Portfolio: p,
+		Invoker:   inv,
+	}
+
+	_, err := PlanWorkflowWithModel(ctx, req)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected context.Canceled error when canceled during invocation, got %v", err)
+	}
+}
+
+func TestModelPlanner_Invariant_IdentitySpoofingOverwritten(t *testing.T) {
+	// Mutant 6 kill: model returns its own malicious plan_id, task_id, schema_version
+	p := validTestPortfolio()
+	inv := &mockInvoker{
+		invokeFn: func(ctx context.Context, inv planner.Invocation) (planner.InvocationResult, error) {
+			jsonOutput := `{
+				"stages": [
+					{
+						"stage_id": "malicious-stage",
+						"role": "implementer",
+						"order": 1,
+						"budget_pool_id": "pool-local",
+						"endpoint_id": "ep-local-01",
+						"channel_id": "chan-local-01",
+						"context_profile_id": "prof-local-01"
+					}
+				]
+			}`
+			return planner.InvocationResult{Content: jsonOutput}, nil
+		},
+	}
+
+	req := ModelPlanRequest{
+		Task: TaskSpec{
+			TaskID:        "canonical-task-123",
+			WorkPackageID: "canonical-wp-456",
+		},
+		Portfolio:                p,
+		AllowUnknownLocalCompute: true,
+		Invoker:                  inv,
+	}
+
+	res, err := PlanWorkflowWithModel(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !res.UsedModel {
+		t.Fatalf("expected UsedModel: true, got false (reason: %s)", res.FallbackReason)
+	}
+	if res.Plan.TaskID != "canonical-task-123" {
+		t.Errorf("expected TaskID to be canonical-task-123, got %s", res.Plan.TaskID)
+	}
+	if res.Plan.WorkPackageID != "canonical-wp-456" {
+		t.Errorf("expected WorkPackageID to be canonical-wp-456, got %s", res.Plan.WorkPackageID)
+	}
+	if res.Plan.SchemaVersion != protocol.SchemaVersion1 {
+		t.Errorf("expected schema version %s, got %s", protocol.SchemaVersion1, res.Plan.SchemaVersion)
+	}
+	if res.Plan.PlanID != "plan-canonical-task-123" {
+		t.Errorf("expected PlanID plan-canonical-task-123, got %s", res.Plan.PlanID)
+	}
+	if res.Plan.Stages[0].StageID != "plan-canonical-task-123-stage-1" {
+		t.Errorf("expected stage ID sanitized, got %s", res.Plan.Stages[0].StageID)
+	}
+}
+
+func TestModelPlanner_REQ08_FallbackBaselineBudgetRejection(t *testing.T) {
+	// Baseline plan also gets rejected by budget authorizer -> returns res.Plan == nil with diagnostics
+	p := validTestPortfolio()
+	inv := &mockInvoker{
+		invokeFn: func(ctx context.Context, inv planner.Invocation) (planner.InvocationResult, error) {
+			return planner.InvocationResult{}, errors.New("provider failure")
+		},
+	}
+
+	// All budget pools exhausted, including pool-local used by baseline plan!
+	budgetStates := map[string]*protocol.BudgetState{
+		"pool-local": {
+			PoolID: "pool-local",
+			Status: protocol.BudgetStatusExhausted,
+		},
+		"pool-sub": {
+			PoolID: "pool-sub",
+			Status: protocol.BudgetStatusExhausted,
+		},
+	}
+
+	req := ModelPlanRequest{
+		Task: TaskSpec{
+			TaskID:        "task-req08",
+			WorkPackageID: "wp-req08",
+		},
+		Portfolio:    p,
+		BudgetStates: budgetStates,
+		Invoker:      inv,
+	}
+
+	res, err := PlanWorkflowWithModel(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if res.Plan != nil {
+		t.Errorf("expected res.Plan == nil when fallback baseline is rejected by budget authorizer")
+	}
+	if len(res.Diagnostics) == 0 {
+		t.Errorf("expected budget diagnostics on rejected fallback baseline")
+	}
+	if !strings.Contains(res.FallbackReason, "invoker_error") {
+		t.Errorf("expected invoker_error fallback reason, got %s", res.FallbackReason)
+	}
+}
+
+func TestModelPlanner_REQ05_HighRiskTopologyDowngradePrevented(t *testing.T) {
+	// High-risk task (RequiresDualReview: true) requires DualReview.
+	// Model returns a single stage (no review). Validator must reject it.
+	p := validTestPortfolio()
+	inv := &mockInvoker{
+		invokeFn: func(ctx context.Context, inv planner.Invocation) (planner.InvocationResult, error) {
+			// Single stage without review
+			jsonOutput := `{
+				"stages": [
+					{
+						"stage_id": "model-s1",
+						"role": "implementer",
+						"order": 1,
+						"budget_pool_id": "pool-local",
+						"endpoint_id": "ep-local-01",
+						"channel_id": "chan-local-01",
+						"context_profile_id": "prof-local-01"
+					}
+				]
+			}`
+			return planner.InvocationResult{Content: jsonOutput}, nil
+		},
+	}
+
+	req := ModelPlanRequest{
+		Task: TaskSpec{
+			TaskID:             "task-highrisk",
+			WorkPackageID:      "wp-highrisk",
+			RequiresDualReview: true,
+		},
+		Portfolio: p,
+		BudgetStates: map[string]*protocol.BudgetState{
+			"pool-sub": {
+				PoolID: "pool-sub",
+				Status: protocol.BudgetStatusHealthy,
+			},
+		},
+		AllowUnknownLocalCompute: true,
+		Invoker:                  inv,
+	}
+
+	res, err := PlanWorkflowWithModel(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if res.UsedModel {
+		t.Errorf("expected UsedModel: false when model downgrades high-risk dual review")
+	}
+	if res.FallbackReason != "validator_rejected_model_plan" {
+		t.Errorf("expected validator_rejected_model_plan, got %s", res.FallbackReason)
+	}
+	if res.Plan == nil {
+		t.Fatalf("expected non-nil fallback plan")
+	}
+	// Fallback plan must have dual review
+	if res.Plan.Topology != protocol.TopologyDualIndependentReview {
+		t.Errorf("expected fallback baseline to preserve TopologyDualIndependentReview, got %s", res.Plan.Topology)
+	}
+}
+
+func TestModelPlanner_BuildWorkflowPrompt_PolicyLimits(t *testing.T) {
+	p := validTestPortfolio()
+	task := TaskSpec{
+		TaskID:        "task-prompt",
+		WorkPackageID: "wp-prompt",
+	}
+	policy := &cognition.WorkflowPolicy{
+		MaxStages:              7,
+		MaxTotalRetries:        4,
+		MaxStageTimeoutSeconds: 450,
+	}
+
+	prompt, _ := BuildWorkflowPrompt(task, p, policy)
+	if !strings.Contains(prompt, "Max Stages: 7") {
+		t.Errorf("expected Max Stages: 7 in prompt, got:\n%s", prompt)
+	}
+	if !strings.Contains(prompt, "Max Total Retries: 4") {
+		t.Errorf("expected Max Total Retries: 4 in prompt, got:\n%s", prompt)
+	}
+	if !strings.Contains(prompt, "Max Stage Timeout Seconds: 450") {
+		t.Errorf("expected Max Stage Timeout Seconds: 450 in prompt, got:\n%s", prompt)
 	}
 }
 

@@ -199,6 +199,15 @@ func BuildWorkflowPrompt(task TaskSpec, portfolio *protocol.CognitionPortfolio, 
 		sb.WriteString(fmt.Sprintf("- PoolID: %s, Regime: %s, HardLimit: %d\n", bp.PoolID, bp.Regime, bp.HardLimit))
 	}
 
+	effectivePolicy := cognition.DefaultWorkflowPolicy()
+	if policy != nil && policy.MaxStages > 0 {
+		effectivePolicy = *policy
+	}
+	sb.WriteString("\nPolicy Limits:\n")
+	sb.WriteString(fmt.Sprintf("- Max Stages: %d\n", effectivePolicy.MaxStages))
+	sb.WriteString(fmt.Sprintf("- Max Total Retries: %d\n", effectivePolicy.MaxTotalRetries))
+	sb.WriteString(fmt.Sprintf("- Max Stage Timeout Seconds: %d\n", effectivePolicy.MaxStageTimeoutSeconds))
+
 	sb.WriteString("\nInstructions:\n")
 	sb.WriteString("Propose a workflow stage topology in JSON format: {\"stages\": [...]}.\n")
 	sb.WriteString("Each stage must specify role, budget_pool_id, order, timeout_seconds, and optional depends_on.\n")
