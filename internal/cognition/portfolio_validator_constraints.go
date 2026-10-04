@@ -161,7 +161,7 @@ func (ctx *validatorContext) validateContextAndConstraints(diags *[]PortfolioDia
 						Required: string(*accelBackend),
 					})
 				}
-				if ctx.input.Policy != nil && ctx.input.Policy.RequireVerifiedAcceleration && !accelVerified {
+				if ctx.policy.RequireVerifiedAcceleration && !accelVerified {
 					*diags = append(*diags, PortfolioDiagnostic{
 						Code:         CodeAccelerationUnverified,
 						Condition:    ConditionUnsupported,

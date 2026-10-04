@@ -174,7 +174,7 @@ Context profile consistency (WP-M3C-H3, always on, no policy flag): a context pr
 
 The active CognitionPortfolio is versioned configuration containing role eligibility/preferences/fallbacks, endpoint exclusions, budget policy/reserves, source-exposure constraints, escalation rules, diversity requirements, retry/review constraints and workflow defaults.
 
-It is distinct from transient BudgetState and human-readable deployment labels.
+It is distinct from transient BudgetState and human-readable deployment labels. Identity and free-text fields of portfolio, recommendation and workflow records reject whitespace-only values in Go, and the portfolio validator reads only the effective policy (WP-M3C-H4).
 
 ## 12. Adaptive workflow topology
 
