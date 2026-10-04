@@ -260,6 +260,84 @@ func TestWorkflowBudgetAuthorizer_ACC06_StopRules(t *testing.T) {
 	if resInvPlan.Authorized || len(resInvPlan.Diagnostics) != 1 || resInvPlan.Diagnostics[0].Code != cognition.CodeWorkflowPlanInvalid {
 		t.Fatalf("invalid plan failed stop rule: %+v", resInvPlan)
 	}
+
+	// Invalid portfolio
+	invPort := *port
+	invPort.PortfolioID = ""
+	resInvPort := cognition.AuthorizeWorkflowBudget(cognition.WorkflowBudgetInput{
+		Plan:      plan,
+		Portfolio: &invPort,
+	})
+	if resInvPort.Authorized || len(resInvPort.Diagnostics) != 1 || resInvPort.Diagnostics[0].Code != cognition.CodeWorkflowPortfolioInvalid {
+		t.Fatalf("invalid portfolio failed stop rule: %+v", resInvPort)
+	}
+}
+
+func TestWorkflowBudgetAuthorizer_UnknownStateMeteredPool(t *testing.T) {
+	port := makeTestBudgetPortfolio()
+	plan := wfSingle(wfCog("s1", 1, "implementer", "pool-metered"))
+	states := map[string]*protocol.BudgetState{
+		"pool-metered": {
+			SchemaVersion: protocol.SchemaVersion1,
+			PoolID:        "pool-metered",
+			Status:        protocol.BudgetStatusUnknown,
+			ObservedAt:    "2026-10-04T00:00:00Z",
+		},
+	}
+
+	res := cognition.AuthorizeWorkflowBudget(cognition.WorkflowBudgetInput{
+		Plan:         plan,
+		Portfolio:    port,
+		BudgetStates: states,
+	})
+	if res.Authorized || len(res.Diagnostics) != 1 || res.Diagnostics[0].Code != cognition.CodeWorkflowBudgetUnknown {
+		t.Fatalf("unknown metered pool status failed: %+v", res)
+	}
+	if res.Diagnostics[0].Condition != cognition.ConditionUnauthorized {
+		t.Fatalf("expected ConditionUnauthorized, got %s", res.Diagnostics[0].Condition)
+	}
+}
+
+func TestWorkflowBudgetAuthorizer_ExhaustionConditions(t *testing.T) {
+	port := makeTestBudgetPortfolio()
+	plan := wfSingle(wfCog("s1", 1, "implementer", "pool-metered"))
+
+	// Status exhausted alone (RemainingBalance nil)
+	statesExhaustedOnly := map[string]*protocol.BudgetState{
+		"pool-metered": {
+			SchemaVersion: protocol.SchemaVersion1,
+			PoolID:        "pool-metered",
+			Status:        protocol.BudgetStatusExhausted,
+			ObservedAt:    "2026-10-04T00:00:00Z",
+		},
+	}
+	res1 := cognition.AuthorizeWorkflowBudget(cognition.WorkflowBudgetInput{
+		Plan:         plan,
+		Portfolio:    port,
+		BudgetStates: statesExhaustedOnly,
+	})
+	if res1.Authorized || len(res1.Diagnostics) != 1 || res1.Diagnostics[0].Code != cognition.CodeWorkflowBudgetExhausted {
+		t.Fatalf("exhausted status alone failed: %+v", res1)
+	}
+
+	// Balance zero alone (Status healthy)
+	statesZeroBalanceOnly := map[string]*protocol.BudgetState{
+		"pool-metered": {
+			SchemaVersion:    protocol.SchemaVersion1,
+			PoolID:           "pool-metered",
+			Status:           protocol.BudgetStatusHealthy,
+			RemainingBalance: ptr[int64](0),
+			ObservedAt:       "2026-10-04T00:00:00Z",
+		},
+	}
+	res2 := cognition.AuthorizeWorkflowBudget(cognition.WorkflowBudgetInput{
+		Plan:         plan,
+		Portfolio:    port,
+		BudgetStates: statesZeroBalanceOnly,
+	})
+	if res2.Authorized || len(res2.Diagnostics) != 1 || res2.Diagnostics[0].Code != cognition.CodeWorkflowBudgetExhausted {
+		t.Fatalf("zero balance alone failed: %+v", res2)
+	}
 }
 
 func TestWorkflowBudgetAuthorizer_UnknownBudgetPool(t *testing.T) {
@@ -279,13 +357,20 @@ func TestWorkflowBudgetAuthorizer_UnknownBudgetPool(t *testing.T) {
 func TestWorkflowBudgetAuthorizer_Immutability(t *testing.T) {
 	port := makeTestBudgetPortfolio()
 	plan := wfSingle(wfCog("s1", 1, "implementer", "pool-metered"))
+	origState := protocol.BudgetState{
+		SchemaVersion:    protocol.SchemaVersion1,
+		PoolID:           "pool-metered",
+		Status:           protocol.BudgetStatusHealthy,
+		RemainingBalance: ptr[int64](5000),
+		ObservedAt:       "2026-10-04T00:00:00Z",
+	}
 	states := map[string]*protocol.BudgetState{
 		"pool-metered": {
-			SchemaVersion:    protocol.SchemaVersion1,
-			PoolID:           "pool-metered",
-			Status:           protocol.BudgetStatusHealthy,
+			SchemaVersion:    origState.SchemaVersion,
+			PoolID:           origState.PoolID,
+			Status:           origState.Status,
 			RemainingBalance: ptr[int64](5000),
-			ObservedAt:       "2026-10-04T00:00:00Z",
+			ObservedAt:       origState.ObservedAt,
 		},
 	}
 
@@ -303,5 +388,8 @@ func TestWorkflowBudgetAuthorizer_Immutability(t *testing.T) {
 	}
 	if !reflect.DeepEqual(*port, portCopy) {
 		t.Fatalf("portfolio was mutated during authorization")
+	}
+	if !reflect.DeepEqual(*states["pool-metered"], origState) {
+		t.Fatalf("budget state was mutated during authorization")
 	}
 }

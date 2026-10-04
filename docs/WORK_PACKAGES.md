@@ -553,14 +553,14 @@ from ResourceInventory + role needs + project characteristics + policy +
 available historical evidence. Include rationale/tradeoffs/confidence and no
 authority expansion.
 
-Split: WP-M3D-1A (see [wp-m3d-1a-recommendation-protocol.md](work-packages/wp-m3d-1a-recommendation-protocol.md)) adds the optional intent/tradeoffs/confidence/set_id/planner-provenance fields to `PortfolioRecommendation`; WP-M3D-1B (see [wp-m3d-1b-planner-service.md](work-packages/wp-m3d-1b-planner-service.md)) is the invoker-driven, validator-gated planner service in `internal/cognition/planner` and depends on it; it is implemented as a candidate pending review and acceptance. WP-M3D-1C is split: WP-M3D-1C1 (see [wp-m3d-1c1-driver-backed-invoker.md](work-packages/wp-m3d-1c1-driver-backed-invoker.md)) adds the driver-backed `Invoker` adapter in `internal/cognition/plannerdriver` and is implemented as a candidate pending review; the remainder (not started) adds endpoint selection, compiler admission of the planner role, historical-evidence input and the activation link.
+Split: WP-M3D-1A (see [wp-m3d-1a-recommendation-protocol.md](work-packages/wp-m3d-1a-recommendation-protocol.md)) adds the optional intent/tradeoffs/confidence/set_id/planner-provenance fields to `PortfolioRecommendation`; WP-M3D-1B (see [wp-m3d-1b-planner-service.md](work-packages/wp-m3d-1b-planner-service.md)) is the invoker-driven, validator-gated planner service in `internal/cognition/planner` and depends on it; it is implemented. WP-M3D-1C is split: WP-M3D-1C1 (see [wp-m3d-1c1-driver-backed-invoker.md](work-packages/wp-m3d-1c1-driver-backed-invoker.md)) adds the driver-backed `Invoker` adapter in `internal/cognition/plannerdriver` and is implemented; WP-M3D-1C2 (see [wp-m3d-1c2-invoker-pipeline-wiring.md](work-packages/wp-m3d-1c2-invoker-pipeline-wiring.md)) adds endpoint selection and planner pipeline wiring.
 
 ### WP-M3D-2 — Workflow topology planner
 Compile task/risk + active portfolio + current resource state into a bounded
 WorkflowPlan. Explicitly support topology collapse, local-heavy iteration,
 subscription-diverse review and metered-budget-constrained execution.
 
-Split: WP-M3D-2A1 (see [wp-m3d-2a1-workflow-plan-validator.md](work-packages/wp-m3d-2a1-workflow-plan-validator.md)) is the pure plan validator for structure, role/endpoint/pool bindings and bounds; it is implemented as a candidate pending review and acceptance. WP-M3D-2A2 (not started) adds live budget and metered-pool authorization, WP-M3D-2B (not started) the deterministic planner baseline, and WP-M3D-2C (not started) the AI-assisted planner.
+Split: WP-M3D-2A1 (see [wp-m3d-2a1-workflow-plan-validator.md](work-packages/wp-m3d-2a1-workflow-plan-validator.md)) is the pure plan validator for structure, role/endpoint/pool bindings and bounds; it is implemented. WP-M3D-2A2 (see [wp-m3d-2a2-workflow-budget-authorizer.md](work-packages/wp-m3d-2a2-workflow-budget-authorizer.md)) adds live budget and metered-pool authorization and is implemented; WP-M3D-2B (see [wp-m3d-2b-deterministic-workflow-planner.md](work-packages/wp-m3d-2b-deterministic-workflow-planner.md)) provides the deterministic planner baseline, and WP-M3D-2C (not started) the AI-assisted planner.
 
 ### WP-M3D-3 — Adaptation, versioning and rollback
 Support explicit portfolio-change proposals when resources/policy/evidence
