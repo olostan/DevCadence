@@ -14,4 +14,9 @@ const (
 	CodeWorkflowUnknownBudgetPool  = "WORKFLOW_UNKNOWN_BUDGET_POOL"
 	CodeWorkflowEscalationTarget   = "WORKFLOW_ESCALATION_TARGET"
 	CodeWorkflowReviewNotCognition = "WORKFLOW_REVIEW_NOT_COGNITION"
+
+	// Stable machine-readable reason codes for workflow plan budget authorization (WP-M3D-2A2).
+	CodeWorkflowBudgetExhausted    = "WORKFLOW_BUDGET_EXHAUSTED"
+	CodeWorkflowBudgetUnknown      = "WORKFLOW_BUDGET_UNKNOWN"
+	CodeWorkflowBudgetMissingState = "WORKFLOW_BUDGET_MISSING_STATE"
 )
