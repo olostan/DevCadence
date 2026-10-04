@@ -59,7 +59,7 @@ func (ctx *validatorContext) validateEndpointsAndCapabilities(diags *[]Portfolio
 				Observed:     rb.ChannelID,
 			})
 		}
-		if _, ok := ctx.input.ContextProfiles[rb.ContextProfileID]; !ok {
+		if cp, ok := ctx.input.ContextProfiles[rb.ContextProfileID]; !ok || cp == nil {
 			*diags = append(*diags, PortfolioDiagnostic{
 				Code:         CodeContextProfileNotFound,
 				Condition:    ConditionInvalid,
@@ -93,7 +93,7 @@ func (ctx *validatorContext) validateEndpointsAndCapabilities(diags *[]Portfolio
 					Observed:     fb.ChannelID,
 				})
 			}
-			if _, ok := ctx.input.ContextProfiles[fb.ContextProfileID]; !ok {
+			if cp, ok := ctx.input.ContextProfiles[fb.ContextProfileID]; !ok || cp == nil {
 				*diags = append(*diags, PortfolioDiagnostic{
 					Code:         CodeContextProfileNotFound,
 					Condition:    ConditionInvalid,

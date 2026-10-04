@@ -586,4 +586,6 @@ detailed scope cards only for work close enough to execute.
 
 ## Future M6 architecture work
 
+**WP-M3C-H3 — Context profile binding consistency** ([EWP](work-packages/wp-m3c-h3-context-profile-binding-consistency.md)) makes the portfolio validator reject a role or fallback binding whose context profile describes a different endpoint or channel (`CONTEXT_PROFILE_MISMATCH`) and treat nil profile entries as not found. The WP-M3D-1B planner gets this check through the validator without code change.
+
 **WP-M6-H1 — Extensible Project Bootstrap, Capability Packs, Toolchains, and Health** ([EWP](work-packages/wp-m6-h1-project-toolchains-health-architecture.md)) defines the producer-neutral pack/Skills/conformance boundary, compositional toolchains, base-governed ProjectHealthContract, brownfield pack synthesis, and bounded-EWP greenfield bootstrap. Implementation is sequenced as M6A pack/health core → M6B adoption+synthesis → M6C greenfield bootstrap, downstream of the M4 evidence gate. ADR-0021..0023 and the M6 architecture docs own the detailed semantics.
