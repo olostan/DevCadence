@@ -167,7 +167,7 @@ func runEnvironmentInspect(ctx context.Context, e *env, args []string) error {
 
 func runCognition(ctx context.Context, e *env, args []string) error {
 	if len(args) == 0 {
-		return errs.New(errs.CategoryInvalidArgument, "usage: devcadence cognition <list|probe|route>")
+		return errs.New(errs.CategoryInvalidArgument, "usage: devcadence cognition <list|probe|route|recommend|explain|apply>")
 	}
 	switch args[0] {
 	case "list":
@@ -176,6 +176,12 @@ func runCognition(ctx context.Context, e *env, args []string) error {
 		return runCognitionProbe(ctx, e, args[1:])
 	case "route":
 		return runCognitionRoute(ctx, e, args[1:])
+	case "recommend":
+		return runCognitionRecommend(ctx, e, args[1:])
+	case "explain":
+		return runCognitionExplain(ctx, e, args[1:])
+	case "apply":
+		return runCognitionApply(ctx, e, args[1:])
 	default:
 		return errs.New(errs.CategoryInvalidArgument, "unknown cognition subcommand %q", args[0])
 	}
