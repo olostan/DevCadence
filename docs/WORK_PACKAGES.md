@@ -585,7 +585,7 @@ Split: WP-M3D-2A1 (see [wp-m3d-2a1-workflow-plan-validator.md](work-packages/wp-
 ### WP-M3D-3 — Adaptation, versioning and rollback
 Support explicit portfolio-change proposals when resources/policy/evidence
 change, with auditable diffs, deterministic revalidation, activation,
-versioning and rollback. No silent learned/policy mutation.
+versioning and rollback. No silent learned/policy mutation. Contract: [wp-m3d-3-portfolio-adaptation-rollback.md](work-packages/wp-m3d-3-portfolio-adaptation-rollback.md); implemented.
 
 ### WP-M3D-4 — Adaptive setup and explanation UX
 Integrate recommend/explain/apply into the setup experience. Plain/JSON remains
