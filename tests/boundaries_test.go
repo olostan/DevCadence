@@ -84,6 +84,7 @@ var adapterPackages = []string{
 	"github.com/olostan/DevCadence/internal/cognition/mlx",
 	"github.com/olostan/DevCadence/internal/cognition/codingcli",
 	"github.com/olostan/DevCadence/internal/cognition/remoteapi",
+	"github.com/olostan/DevCadence/internal/cognition/plannerdriver",
 }
 
 // TestProviderAdaptersDoNotLeakIntoTheCore is the M3A half of DCI-055.
@@ -198,5 +199,30 @@ func TestPortfolioPlanner_ACC18_DependenciesExcludeDriversAdaptersAndPersistence
 				t.Errorf("planner depends on forbidden package %s", dep)
 			}
 		}
+	}
+}
+
+// TestPlannerDriverInvoker_ACC13_BoundaryIsNonVacuous (WP-M3D-1C1) checks that
+// the cognition core stays free of drivers and that the driver-backed planner
+// adapter really sits between planner and drivers. It fails rather than
+// passing vacuously when the adapter's dependency list is incomplete.
+func TestPlannerDriverInvoker_ACC13_BoundaryIsNonVacuous(t *testing.T) {
+	const (
+		drv = "github.com/olostan/DevCadence/internal/cognition/drivers"
+		pln = "github.com/olostan/DevCadence/internal/cognition/planner"
+	)
+	for _, dep := range dependenciesOf(t, "github.com/olostan/DevCadence/internal/cognition") {
+		if dep == drv {
+			t.Errorf("internal/cognition depends on %s", dep)
+		}
+	}
+	deps := dependenciesOf(t, "github.com/olostan/DevCadence/internal/cognition/plannerdriver")
+	var hasPlanner, hasDrivers bool
+	for _, dep := range deps {
+		hasPlanner = hasPlanner || dep == pln
+		hasDrivers = hasDrivers || dep == drv
+	}
+	if !hasPlanner || !hasDrivers {
+		t.Fatalf("plannerdriver dependency list lacks planner=%v drivers=%v (got %d deps); the check would be vacuous", hasPlanner, hasDrivers, len(deps))
 	}
 }
