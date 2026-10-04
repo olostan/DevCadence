@@ -214,6 +214,12 @@ A material resource change can trigger a PortfolioChangeProposal: a new or expir
 
 The proposal is a diff with rationale. It is validated, auditable and reversible. DevCadence does not silently rewrite user policy.
 
+### Portfolio semantic diff and adaptation service
+
+`internal/cognition.DiffPortfolios` (WP-M3D-3) calculates typed `PortfolioDiff` records comparing base and candidate portfolios across access channels (keyed by `ChannelID`), role bindings (keyed by composite `Role#Priority` to prevent priority collisions), budget pools (keyed by `PoolID`), and user policies. A zero-base candidate triggers initial bootstrap semantics where all candidate elements are recorded as `DeltaAdded`.
+
+`internal/cognition.CreateChangeProposal` formulates explicit `PortfolioChangeProposal` records requiring an authorized `ChangeTrigger` and non-blank rationale. `internal/cognition.AdaptationService` orchestrates proposal verification and atomic activation via `ActivationManager`, preventing stale lineage race conditions and guaranteeing deterministic rollback (`Rollback`) with mandatory revalidation against live environment facts before restoration (ADR-0018 §11, DCI-124). Contract: [wp-m3d-3-portfolio-adaptation-rollback.md](work-packages/wp-m3d-3-portfolio-adaptation-rollback.md).
+
 ## 14. Learning
 
 Track effectiveness against the complete context:
