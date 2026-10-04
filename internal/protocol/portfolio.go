@@ -2,6 +2,7 @@ package protocol
 
 import (
 	"strconv"
+	"strings"
 
 	"github.com/olostan/DevCadence/internal/errs"
 )
@@ -17,16 +18,16 @@ type FallbackBinding struct {
 // Validate checks FallbackBinding fields.
 func (f FallbackBinding) Validate() error {
 	const kind = "FallbackBinding"
-	if err := requireNonEmpty(kind, "endpoint_id", f.EndpointID); err != nil {
+	if err := requireNonEmptyTrimmed(kind, "endpoint_id", f.EndpointID); err != nil {
 		return err
 	}
-	if err := requireNonEmpty(kind, "channel_id", f.ChannelID); err != nil {
+	if err := requireNonEmptyTrimmed(kind, "channel_id", f.ChannelID); err != nil {
 		return err
 	}
-	if err := requireNonEmpty(kind, "budget_pool_id", f.BudgetPoolID); err != nil {
+	if err := requireNonEmptyTrimmed(kind, "budget_pool_id", f.BudgetPoolID); err != nil {
 		return err
 	}
-	if err := requireNonEmpty(kind, "context_profile_id", f.ContextProfileID); err != nil {
+	if err := requireNonEmptyTrimmed(kind, "context_profile_id", f.ContextProfileID); err != nil {
 		return err
 	}
 	return nil
@@ -46,19 +47,19 @@ type RoleBinding struct {
 // Validate checks RoleBinding fields.
 func (r RoleBinding) Validate() error {
 	const kind = "RoleBinding"
-	if err := requireNonEmpty(kind, "role", r.Role); err != nil {
+	if err := requireNonEmptyTrimmed(kind, "role", r.Role); err != nil {
 		return err
 	}
-	if err := requireNonEmpty(kind, "endpoint_id", r.EndpointID); err != nil {
+	if err := requireNonEmptyTrimmed(kind, "endpoint_id", r.EndpointID); err != nil {
 		return err
 	}
-	if err := requireNonEmpty(kind, "channel_id", r.ChannelID); err != nil {
+	if err := requireNonEmptyTrimmed(kind, "channel_id", r.ChannelID); err != nil {
 		return err
 	}
-	if err := requireNonEmpty(kind, "budget_pool_id", r.BudgetPoolID); err != nil {
+	if err := requireNonEmptyTrimmed(kind, "budget_pool_id", r.BudgetPoolID); err != nil {
 		return err
 	}
-	if err := requireNonEmpty(kind, "context_profile_id", r.ContextProfileID); err != nil {
+	if err := requireNonEmptyTrimmed(kind, "context_profile_id", r.ContextProfileID); err != nil {
 		return err
 	}
 	if r.Priority < 1 {
@@ -98,13 +99,13 @@ type EscalationRule struct {
 // Validate checks EscalationRule fields.
 func (e EscalationRule) Validate() error {
 	const kind = "EscalationRule"
-	if err := requireNonEmpty(kind, "from_role", e.FromRole); err != nil {
+	if err := requireNonEmptyTrimmed(kind, "from_role", e.FromRole); err != nil {
 		return err
 	}
-	if err := requireNonEmpty(kind, "to_role", e.ToRole); err != nil {
+	if err := requireNonEmptyTrimmed(kind, "to_role", e.ToRole); err != nil {
 		return err
 	}
-	if err := requireNonEmpty(kind, "trigger_condition", e.TriggerCondition); err != nil {
+	if err := requireNonEmptyTrimmed(kind, "trigger_condition", e.TriggerCondition); err != nil {
 		return err
 	}
 	if e.MaxEscalations < 1 {
@@ -169,13 +170,13 @@ func (c *CognitionPortfolio) Validate() error {
 	if err := c.SchemaVersion.Validate(kind); err != nil {
 		return err
 	}
-	if err := requireNonEmpty(kind, "portfolio_id", c.PortfolioID); err != nil {
+	if err := requireNonEmptyTrimmed(kind, "portfolio_id", c.PortfolioID); err != nil {
 		return err
 	}
 	if c.Revision < 1 {
 		return errs.New(errs.CategoryInvalidArgument, "%s: revision must be >= 1, got %d", kind, c.Revision)
 	}
-	if err := requireNonEmpty(kind, "created_at", c.CreatedAt); err != nil {
+	if err := requireNonEmptyTrimmed(kind, "created_at", c.CreatedAt); err != nil {
 		return err
 	}
 	if !c.MaxSourceExposure.Valid() {
@@ -401,19 +402,19 @@ func (p *PortfolioRecommendation) Validate() error {
 	if err := p.SchemaVersion.Validate(kind); err != nil {
 		return err
 	}
-	if err := requireNonEmpty(kind, "recommendation_id", p.RecommendationID); err != nil {
+	if err := requireNonEmptyTrimmed(kind, "recommendation_id", p.RecommendationID); err != nil {
 		return err
 	}
-	if err := requireNonEmpty(kind, "inventory_digest", p.InventoryDigest); err != nil {
+	if err := requireNonEmptyTrimmed(kind, "inventory_digest", p.InventoryDigest); err != nil {
 		return err
 	}
-	if err := requireNonEmpty(kind, "synthesized_at", p.SynthesizedAt); err != nil {
+	if err := requireNonEmptyTrimmed(kind, "synthesized_at", p.SynthesizedAt); err != nil {
 		return err
 	}
 	if err := p.RecommendedPortfolio.Validate(); err != nil {
 		return errs.New(errs.CategoryInvalidArgument, "%s: recommended_portfolio: %v", kind, err)
 	}
-	if err := requireNonEmpty(kind, "rationale", p.Rationale); err != nil {
+	if err := requireNonEmptyTrimmed(kind, "rationale", p.Rationale); err != nil {
 		return err
 	}
 	return p.validateExplanation(kind)
@@ -518,10 +519,10 @@ type WorkflowStage struct {
 // Validate checks WorkflowStage fields.
 func (w WorkflowStage) Validate() error {
 	const kind = "WorkflowStage"
-	if err := requireNonEmpty(kind, "stage_id", w.StageID); err != nil {
+	if err := requireNonEmptyTrimmed(kind, "stage_id", w.StageID); err != nil {
 		return err
 	}
-	if err := requireNonEmpty(kind, "role", w.Role); err != nil {
+	if err := requireNonEmptyTrimmed(kind, "role", w.Role); err != nil {
 		return err
 	}
 	if !w.Kind.Valid() {
@@ -531,14 +532,14 @@ func (w WorkflowStage) Validate() error {
 	if w.Order < 1 {
 		return errs.New(errs.CategoryInvalidArgument, "%s: order must be >= 1, got %d", kind, w.Order)
 	}
-	if err := requireNonEmpty(kind, "budget_pool_id", w.BudgetPoolID); err != nil {
+	if err := requireNonEmptyTrimmed(kind, "budget_pool_id", w.BudgetPoolID); err != nil {
 		return err
 	}
 	if w.TimeoutSeconds < 1 {
 		return errs.New(errs.CategoryInvalidArgument, "%s: timeout_seconds must be >= 1, got %d", kind, w.TimeoutSeconds)
 	}
 	if w.Kind == StageKindDeterministic {
-		if w.DeterministicGateID == nil || *w.DeterministicGateID == "" {
+		if w.DeterministicGateID == nil || strings.TrimSpace(*w.DeterministicGateID) == "" {
 			return errs.New(errs.CategoryInvalidArgument, "%s: deterministic_gate_id is required when kind is %q", kind, StageKindDeterministic)
 		}
 	} else if w.DeterministicGateID != nil && *w.DeterministicGateID != "" {
@@ -547,16 +548,16 @@ func (w WorkflowStage) Validate() error {
 	if w.RetryLimit < 0 {
 		return errs.New(errs.CategoryInvalidArgument, "%s: retry_limit cannot be negative, got %d", kind, w.RetryLimit)
 	}
-	if w.EndpointID != nil && *w.EndpointID == "" {
+	if w.EndpointID != nil && strings.TrimSpace(*w.EndpointID) == "" {
 		return errs.New(errs.CategoryInvalidArgument, "%s: endpoint_id cannot be empty if specified", kind)
 	}
-	if w.ChannelID != nil && *w.ChannelID == "" {
+	if w.ChannelID != nil && strings.TrimSpace(*w.ChannelID) == "" {
 		return errs.New(errs.CategoryInvalidArgument, "%s: channel_id cannot be empty if specified", kind)
 	}
-	if w.ContextProfileID != nil && *w.ContextProfileID == "" {
+	if w.ContextProfileID != nil && strings.TrimSpace(*w.ContextProfileID) == "" {
 		return errs.New(errs.CategoryInvalidArgument, "%s: context_profile_id cannot be empty if specified", kind)
 	}
-	if w.EscalationTarget != nil && *w.EscalationTarget == "" {
+	if w.EscalationTarget != nil && strings.TrimSpace(*w.EscalationTarget) == "" {
 		return errs.New(errs.CategoryInvalidArgument, "%s: escalation_target cannot be empty if specified", kind)
 	}
 	return nil
@@ -587,13 +588,13 @@ func (w *WorkflowPlan) Validate() error {
 	if err := w.SchemaVersion.Validate(kind); err != nil {
 		return err
 	}
-	if err := requireNonEmpty(kind, "plan_id", w.PlanID); err != nil {
+	if err := requireNonEmptyTrimmed(kind, "plan_id", w.PlanID); err != nil {
 		return err
 	}
-	if err := requireNonEmpty(kind, "task_id", w.TaskID); err != nil {
+	if err := requireNonEmptyTrimmed(kind, "task_id", w.TaskID); err != nil {
 		return err
 	}
-	if err := requireNonEmpty(kind, "work_package_id", w.WorkPackageID); err != nil {
+	if err := requireNonEmptyTrimmed(kind, "work_package_id", w.WorkPackageID); err != nil {
 		return err
 	}
 	if !w.Topology.Valid() {
