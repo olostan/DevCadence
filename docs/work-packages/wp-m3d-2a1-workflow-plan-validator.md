@@ -3,9 +3,9 @@
 ## Identity
 
 - Work Package ID: WP-M3D-2A1 (window 2026-10-A; first slice of WP-M3D-2 "Workflow topology planner")
-- Revision: 2 (window review probe: READY_WITH_FIXES; behavior-bearing findings 1,2,4,5 and wording findings fixed; contract implemented in a scratch copy, suite green)
+- Revision: 3 (r2: probe findings fixed; r3: window review — deterministic-stage pointers fail closed, int64 saturating retry sum, R1/R1b targets, doc anchors)
 - Base commit: current `origin/main` at implementation time (the implementor records the SHA)
-- Status: READY_FOR_IMPLEMENTATION (r2)
+- Status: READY_FOR_IMPLEMENTATION (r3)
 
 ## Objective
 
@@ -34,7 +34,7 @@
 ### Authorized domains
 
 - NEW files in `internal/cognition/`: `workflow_validator.go`, `workflow_validator_test.go` (and further `workflow_validator_*_test.go` if wanted), plus new diagnostic code constants in a new file `workflow_diagnostics.go`
-- `docs/COGNITION_PORTFOLIO.md` (a short subsection describing the workflow validator), `docs/WORK_PACKAGES.md` (M3D-2 split note: 2A1 done; 2A2 budget/metered, 2B deterministic planner, 2C AI planner remain)
+- `docs/COGNITION_PORTFOLIO.md`: add a NEW subsection titled `Workflow plan validator` (do not edit other sections of that file, to avoid merge conflicts with sibling WPs); `docs/WORK_PACKAGES.md`: edit only the M3D-2 section (note 2A1 implemented as a candidate pending review; 2A2 budget/metered, 2B deterministic planner, 2C AI planner remain). Sibling WPs in this window edit other anchors of the same files; there is no order dependency, resolve any textual conflict by keeping both.
 
 ### Forbidden
 
@@ -53,11 +53,12 @@ Helper names, file splits inside the new files, test layout, message wording.
 | REQ-02 | MUST | New diagnostic code constants (strings exact): `CodeWorkflowInputMissing = "WORKFLOW_INPUT_MISSING"`, `CodeWorkflowPolicyInvalid = "WORKFLOW_POLICY_INVALID"`, `CodeWorkflowPlanInvalid = "WORKFLOW_PLAN_INVALID"`, `CodeWorkflowPortfolioInvalid = "WORKFLOW_PORTFOLIO_INVALID"`, `CodeWorkflowUnboundedStages = "WORKFLOW_UNBOUNDED_STAGES"`, `CodeWorkflowRetryBound = "WORKFLOW_RETRY_BOUND"`, `CodeWorkflowTimeoutBound = "WORKFLOW_TIMEOUT_BOUND"`, `CodeWorkflowRoleUnbound = "WORKFLOW_ROLE_UNBOUND"`, `CodeWorkflowBindingMismatch = "WORKFLOW_BINDING_MISMATCH"`, `CodeWorkflowUnknownBudgetPool = "WORKFLOW_UNKNOWN_BUDGET_POOL"`, `CodeWorkflowEscalationTarget = "WORKFLOW_ESCALATION_TARGET"`, `CodeWorkflowReviewNotCognition = "WORKFLOW_REVIEW_NOT_COGNITION"`. |
 | REQ-03 | MUST | Evaluation order and stop rules: (R0) `Plan == nil` or `Portfolio == nil` ⇒ ONE diagnostic `WORKFLOW_INPUT_MISSING` (Target `plan` when the plan is nil — including when BOTH are nil — otherwise `portfolio`; Condition `ConditionInvalid`), `Valid=false`, STOP. (R0b) an explicit `Policy` with any field `<= 0` ⇒ ONE diagnostic `WORKFLOW_POLICY_INVALID` (Target `policy`), STOP. Effective policy = `*Policy` or `DefaultWorkflowPolicy()` (no merging of defaults into an explicit policy). (R1) `Plan.Validate()` error ⇒ ONE `WORKFLOW_PLAN_INVALID` (Message = the error text truncated to 256 bytes at a rune boundary), STOP. (R1b) `Portfolio.Validate()` error ⇒ ONE `WORKFLOW_PORTFOLIO_INVALID` (same truncation), STOP. On every stop (R0, R0b, R1, R1b) all three digests are EMPTY. Only then rules R2-R7 run, all of them, collecting every diagnostic. |
 | REQ-04 | MUST | (R2) `len(Stages) > MaxStages` ⇒ one `WORKFLOW_UNBOUNDED_STAGES`, Target `stages`, Observed the count, Required `<= <MaxStages>`. Exactly `MaxStages` stages is valid. |
-| REQ-05 | MUST | (R3) per-stage retry cap `c = Portfolio.WorkflowDefaults.MaxRetries` when `WorkflowDefaults != nil` AND `MaxRetries > 0`, else `MaxTotalRetries` (`max_retries` is `omitempty`, so 0 cannot be told apart from unset and means unset; a portfolio therefore cannot express "no retries" through its defaults — recorded limit). `c` may exceed `MaxTotalRetries`; the aggregate check is independent. A stage with `RetryLimit > c` ⇒ one `WORKFLOW_RETRY_BOUND` with Target `stages[<i>]`. If the sum of all `RetryLimit` exceeds `MaxTotalRetries` ⇒ one aggregate `WORKFLOW_RETRY_BOUND` with Target `stages`. (R3b) a stage with `TimeoutSeconds > MaxStageTimeoutSeconds` ⇒ one `WORKFLOW_TIMEOUT_BOUND`, Target `stages[<i>]`. `WorkflowDefaults.DefaultTimeoutSeconds` is a default, not a cap, and is not enforced. |
+| REQ-05 | MUST | (R3) per-stage retry cap `c = Portfolio.WorkflowDefaults.MaxRetries` when `WorkflowDefaults != nil` AND `MaxRetries > 0`, else `MaxTotalRetries` (`max_retries` is `omitempty`, so 0 cannot be told apart from unset and means unset; a portfolio therefore cannot express "no retries" through its defaults — recorded limit). `c` may exceed `MaxTotalRetries`; the aggregate check is independent. A stage with `RetryLimit > c` ⇒ one `WORKFLOW_RETRY_BOUND` with Target `stages[<i>]`. The aggregate is accumulated as `int64` with saturation at `math.MaxInt64` (compare after each addition, so a huge `RetryLimit` cannot wrap); if the sum exceeds `MaxTotalRetries` ⇒ one aggregate `WORKFLOW_RETRY_BOUND` with Target `stages`. (R3b) a stage with `TimeoutSeconds > MaxStageTimeoutSeconds` ⇒ one `WORKFLOW_TIMEOUT_BOUND`, Target `stages[<i>]`. `WorkflowDefaults.DefaultTimeoutSeconds` is a default, not a cap, and is not enforced. |
 | REQ-06 | MUST | (R4) for each stage with `Kind == cognition`: the stage `Role` MUST equal the `Role` of at least one `Portfolio.RoleBindings` entry, else `WORKFLOW_ROLE_UNBOUND` (Target `stages[<i>]`) and no binding checks for that stage. Candidates for that role are the binding's primary tuple and each of its fallback tuples, each tuple being `(EndpointID, ChannelID, ContextProfileID, BudgetPoolID)`; with several bindings for one role, all their tuples are candidates. A tuple matches the stage when every PROVIDED (non-nil) stage field among `EndpointID`, `ChannelID`, `ContextProfileID` equals the tuple's field AND the stage `BudgetPoolID` equals the tuple's `BudgetPoolID`. If no candidate matches ⇒ one `WORKFLOW_BINDING_MISMATCH` (Target `stages[<i>]`). Comparison is exact string equality. |
+| REQ-06b | MUST | (R4b) a stage with `Kind == deterministic` and ANY non-nil `EndpointID`, `ChannelID` or `ContextProfileID` ⇒ one `WORKFLOW_BINDING_MISMATCH` (Target `stages[<i>]`, `ConditionUnauthorized`, `DCI-123`, Observed = `"deterministic stage carries a cognition binding"`), because a deterministic stage routes through no endpoint and such pointers must never be routed on. |
 | REQ-07 | MUST | (R5) for EVERY stage (cognition or deterministic): `BudgetPoolID` MUST equal the `PoolID` of some `Portfolio.BudgetPools` entry, else `WORKFLOW_UNKNOWN_BUDGET_POOL` (Target `stages[<i>]`). For a cognition stage whose pool is unknown, REQ-06's match necessarily fails too; emit BOTH diagnostics (they have different codes). |
 | REQ-08 | MUST | (R6) a stage with non-nil `EscalationTarget` MUST name the `StageID` of an existing stage whose `Order` is strictly greater than this stage's `Order`, else `WORKFLOW_ESCALATION_TARGET` (Target `stages[<i>]`). (R7) a stage with `IsReview == true` and `Kind != cognition` ⇒ `WORKFLOW_REVIEW_NOT_COGNITION` (Target `stages[<i>]`). |
-| REQ-09 | MUST | Diagnostic fields per code (`Message` is free text; for R1/R1b it is the error text truncated to 256 bytes at a rune boundary without ellipsis): INPUT_MISSING, POLICY_INVALID, PLAN_INVALID, PORTFOLIO_INVALID: Condition `ConditionInvalid`, ViolatedRule `DCI-123`, Observed/Required empty. R2 UNBOUNDED_STAGES: `ConditionOverBudget`, `FR-066`, Observed = the stage count, Required = `<= <MaxStages>`. R3 per-stage RETRY_BOUND: `ConditionOverBudget`, `FR-066`, Observed = the stage `RetryLimit`, Required = `<= <c>`; aggregate RETRY_BOUND: Observed = the sum, Required = `<= <MaxTotalRetries>`. R3b TIMEOUT_BOUND: `ConditionOverBudget`, `FR-066`, Observed = the stage `TimeoutSeconds`, Required = `<= <MaxStageTimeoutSeconds>`. R4 ROLE_UNBOUND and BINDING_MISMATCH and R5 UNKNOWN_BUDGET_POOL: `ConditionUnauthorized`, `DCI-123`, Observed = the stage role (ROLE_UNBOUND), `"<endpoint>/<channel>/<profile>/<pool>"` with `-` for nil pointers (BINDING_MISMATCH), the stage pool id (UNKNOWN_BUDGET_POOL); Required empty. R6 ESCALATION_TARGET: `ConditionInvalid`, `DCI-123`, Observed = the target stage id, Required empty. R7 REVIEW_NOT_COGNITION: `ConditionInvalid`, `DCI-123`, Observed = the stage kind. Ordering is `SortedDiagnostics` verbatim (lexical Target, then Code; do NOT re-sort numerically, so `stages[10]` sorts before `stages[2]`). |
+| REQ-09 | MUST | Diagnostic fields per code (`Message` is free text; for R1/R1b it is the error text truncated to 256 bytes at a rune boundary without ellipsis): INPUT_MISSING, POLICY_INVALID, PLAN_INVALID, PORTFOLIO_INVALID: Target `plan` / `policy` / `plan` / `portfolio` respectively (INPUT_MISSING: see REQ-03), Condition `ConditionInvalid`, ViolatedRule `DCI-123`, Observed/Required empty. R2 UNBOUNDED_STAGES: `ConditionOverBudget`, `FR-066`, Observed = the stage count, Required = `<= <MaxStages>`. R3 per-stage RETRY_BOUND: `ConditionOverBudget`, `FR-066`, Observed = the stage `RetryLimit`, Required = `<= <c>`; aggregate RETRY_BOUND: Observed = the sum, Required = `<= <MaxTotalRetries>`. R3b TIMEOUT_BOUND: `ConditionOverBudget`, `FR-066`, Observed = the stage `TimeoutSeconds`, Required = `<= <MaxStageTimeoutSeconds>`. R4/R4b ROLE_UNBOUND and BINDING_MISMATCH and R5 UNKNOWN_BUDGET_POOL: `ConditionUnauthorized`, `DCI-123`, Observed = the stage role (ROLE_UNBOUND), `"<endpoint>/<channel>/<profile>/<pool>"` with `-` for nil pointers (BINDING_MISMATCH), the stage pool id (UNKNOWN_BUDGET_POOL); Required empty. R6 ESCALATION_TARGET: `ConditionInvalid`, `DCI-123`, Observed = the target stage id, Required empty. R7 REVIEW_NOT_COGNITION: `ConditionInvalid`, `DCI-123`, Observed = the stage kind. Ordering is `SortedDiagnostics` verbatim (lexical Target, then Code; do NOT re-sort numerically, so `stages[10]` sorts before `stages[2]`). |
 | REQ-10 | MUST | `Valid == (len(Diagnostics) == 0)`. Digests: `PlanDigest` and `PortfolioDigest` are `"sha256:" + hex(sha256(protocol.CanonicalJSON(x)))` of the inputs; `PolicyDigest` of the effective policy; set only when evaluation reaches R2 (empty on every R0/R0b/R1/R1b stop). No timestamp field exists (pure function). |
 | REQ-11 | MUST | Pure and deterministic: no clock, I/O, goroutines or global state; inputs are not mutated; same input ⇒ identical result. |
 | REQ-12 | MUST | Docs per the envelope. |
@@ -66,7 +67,7 @@ Helper names, file splits inside the new files, test layout, message wording.
 
 | ID | Statement |
 | --- | --- |
-| INV-01 | A plan with `Valid == true` references only roles, endpoints, channels, context profiles and budget pools that exist in the given portfolio, within the stated bounds. |
+| INV-01 | A plan with `Valid == true` references only roles, endpoints, channels, context profiles and budget pools that exist in the given portfolio, within the stated bounds, and carries no endpoint/channel/profile pointer on a deterministic stage (REQ-06b). It is valid only relative to the GIVEN portfolio under the GIVEN policy: the validator does not assert that the portfolio is the active one or that it passed `PortfolioValidator`; the caller (M3D-2B and activation) owns that binding. `WorkflowPolicy` is supplied by the owner or Go, never by a plan or a model. |
 | INV-02 | An explicit policy is never silently completed with defaults. |
 | INV-03 | The validator reads no live state (budget or resource), so its verdict depends only on the plan, the portfolio and the policy. |
 
@@ -130,6 +131,8 @@ Test names MUST contain `WorkflowValidator` and the ACC id (one top-level test p
 | ACC-11 | `IsReview` stage with `Kind` deterministic (otherwise valid for the topology) | `Validate` | REVIEW_NOT_COGNITION |
 | ACC-12 | one input with several violations that include an aggregate target (`stages`) and per-stage targets (including a two-digit index such as `stages[10]`, which needs 11 stages and a policy `MaxStages` of 12), produced in a non-sorted generation order | `Validate` | all collected and ordered by `SortedDiagnostics`; repeated 20 times ⇒ identical; every ACC-02..11 scenario asserts `Valid == false` and the passing scenarios `Valid == true` |
 | ACC-13 | deep-copy inputs before (the plan's stages given in NON-ascending `Order` in the slice), compare after; digests of two equal inputs | `Validate` | inputs unchanged (stage slice order intact); digests equal; digest of an explicit-default policy equals the nil-policy digest |
+| ACC-16 | a deterministic stage with a non-nil `EndpointID`, then `ChannelID`, then `ContextProfileID` (three cases); and a deterministic stage with all three nil | `Validate` | the first three: one BINDING_MISMATCH each; the last valid |
+| ACC-17 | a stage `RetryLimit` of `math.MaxInt` repeated in two stages with `WorkflowDefaults.MaxRetries = math.MaxInt` | `Validate` | aggregate RETRY_BOUND (no wrap-around) |
 | ACC-14 | a stage list containing a nil-pointer `EndpointID`, `ChannelID`, `ContextProfileID` | `Validate` | not compared (valid when role and pool match) |
 | ACC-15 | docs | read | describe the validator, defaults and the 2A2/2B/2C split |
 
@@ -160,12 +163,12 @@ Known limits: provenance, rationale and source-portfolio linkage are not represe
 ## Implementation Readiness Report
 
 ```text
-requirements represented: 12/12
+requirements represented: 13/13
 mandatory clauses resolved: 5/5
-failure cases specified: 11/11
+failure cases specified: 11/11 (plus the deterministic-pointer case, ACC-16)
 authority decisions specified: 2/2
 missing/unknown input semantics: 5/5
-acceptance scenarios mapped: 15/15
+acceptance scenarios mapped: 17/17
 unresolved architecture choices: 0
 readiness: READY_FOR_IMPLEMENTATION (window review r1: implementability probe passed, findings incorporated)
 ```

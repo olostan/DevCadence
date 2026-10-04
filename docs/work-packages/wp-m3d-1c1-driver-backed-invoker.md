@@ -3,9 +3,9 @@
 ## Identity
 
 - Work Package ID: WP-M3D-1C1 (window 2026-10-A; first slice of WP-M3D-1C)
-- Revision: 1
+- Revision: 2 (window review probe: READY_WITH_FIXES; adapter implemented against the real fake driver, race-clean; behavior-bearing findings fixed)
 - Base commit: current `origin/main` at implementation time (the implementor records the SHA)
-- Status: READY_FOR_IMPLEMENTATION once the window review closes
+- Status: READY_FOR_IMPLEMENTATION (r2)
 
 ## Objective
 
@@ -15,7 +15,7 @@ Provide one concrete `planner.Invoker` that runs a planner prompt as a single, t
 
 - read-authority: `internal/cognition/planner/planner.go` (Invoker, Invocation, InvocationResult), `internal/cognition/drivers/{driver,types,fake_driver}.go`, `tests/boundaries_test.go`
 - risk tags: tool-less enforcement, secret leakage via error text, driver lifecycle (session close), determinism of tests
-- normative clauses: DCI-124 (planner cannot expand authority), DCI-054/055 (adapters replaceable, no provider coupling in core), DCI-005 (unknown ≠ healthy)
+- normative clauses: DCI-124 (planner cannot expand authority), DCI-054/055 (adapters replaceable, no provider coupling in core)
 - re-resolution triggers: any need to change `drivers`, `planner`, or boundaries tests beyond the listed additions
 
 ## Verified facts (the implementor re-verifies each as step 0 and reports any false row)
@@ -29,15 +29,17 @@ Provide one concrete `planner.Invoker` that runs a planner prompt as a single, t
 | F-05 | `TurnResult` has `Content`, `ToolCalls`, `Usage`, `PausedReason`; nothing in the drivers rejects non-empty `ToolCalls` | `drivers/types.go` |
 | F-06 | The fake driver stores `SetTurnHandler(turnID, fn)` on the driver, looked up by `TurnInput.TurnID` | `fake_driver.go` |
 | F-07 | `drivers` imports `credentials, errs, process, protocol, tools`; it does not import `internal/cognition` or `planner`, so an adapter importing both creates no cycle; no test forbids a package importing both; planner's own dependency test (ACC-18) must keep passing | scout, `tests/boundaries_test.go` |
-| F-08 | CLI driver errors can carry subprocess stderr in the error message | `cli_wrapper.go` run error path |
+| F-08 | CLI driver errors can carry subprocess stderr in the error message; a CLI driver also rejects any `ModelID` unless it has a `ModelFlag` or `InvocationMapper` (surfaces as a `start` failure of category Unsupported) | `cli_wrapper.go` run error path, `:157` |
+| F-09 | A CLI driver runs its process in `opts.DefaultDir` when `WorktreeScope` is nil, so native tooling/filesystem access of a CLI-wrapped driver is invisible to the adapter; such drivers declare `Capabilities().NativeWorktreeAccess == true` | `cli_wrapper.go:376-379`, `drivers/types.go` |
+| F-10 | `errs.CategoryOf(err)` returns the category of an `errs` error and `CategoryInternal` for foreign errors; `context.WithoutCancel` is available (go.mod `go 1.25.0`); `FakeDriver` has no session accessor and `ResumeSession` reopens a closed fake session, so closure and config are observed through a test-local driver wrapper | window probe |
 
 ## Semantic scope envelope
 
 ### Authorized domains
 
 - NEW package `internal/cognition/plannerdriver/` (non-test and test files)
-- `tests/boundaries_test.go`: add a test asserting that `internal/cognition/planner` (and `internal/cognition`) still have no dependency on `internal/cognition/drivers` or the new package, and that the new package does NOT depend on storage, controlplane, state or events (non-vacuous: assert a known dependency such as the planner package IS present)
-- `docs/COGNITION_PORTFOLIO.md` (one paragraph: what exists), `docs/WORK_PACKAGES.md` (M3D-1C split note: 1C1 done; selection, compiler admission, evidence input, activation link remain)
+- `tests/boundaries_test.go`: add `github.com/olostan/DevCadence/internal/cognition/plannerdriver` to `adapterPackages` (this single line makes the existing tests forbid core packages and the planner from importing it, and forbid it from importing storage, controlplane, state or events); add one test that `internal/cognition` does not depend on `internal/cognition/drivers`, and that the plannerdriver dependency list is non-vacuous (contains both `github.com/olostan/DevCadence/internal/cognition/planner` and `github.com/olostan/DevCadence/internal/cognition/drivers`)
+- `docs/COGNITION_PORTFOLIO.md`: edit ONLY the sentence at about line 145 that says the driver-backed Invoker is "Not yet implemented" (now: implemented as a candidate pending review, with the package name); `docs/WORK_PACKAGES.md`: edit ONLY the sentence at about line 556 that says WP-M3D-1C is "not started" (now: 1C1 implemented as a candidate pending review; selection, compiler admission, evidence input and activation link remain). Sibling WPs in this window edit other anchors of the same files; there is no order dependency, keep both on conflict.
 
 ### Forbidden
 
@@ -52,13 +54,13 @@ Internal helper names, test layout, comment wording.
 | ID | Strength | Requirement |
 | --- | --- | --- |
 | REQ-01 | MUST | API (names exact): `type Config struct { EndpointID string; ModelID string; SessionIDPrefix string; Timeout time.Duration; IncludeErrorText bool }`; `func NewInvoker(driver drivers.SessionDriver, cfg Config) (*Invoker, error)`; `func (i *Invoker) Invoke(ctx context.Context, inv planner.Invocation) (planner.InvocationResult, error)` (implements `planner.Invoker`; add a compile-time assertion `var _ planner.Invoker = (*Invoker)(nil)`). |
-| REQ-02 | MUST | `NewInvoker` returns `errs.CategoryInvalidArgument` when `driver == nil` or `strings.TrimSpace(EndpointID)`/`ModelID` is empty or `Timeout < 0`. `SessionIDPrefix` empty defaults to `"planner"`. |
-| REQ-03 | MUST | Each `Invoke` uses a fresh session id `<prefix>-<n>` where `n` is a per-`Invoker` atomic counter starting at 1 (so a reused driver never sees a duplicate id, and tests can predict the id). The turn id is the constant `"planner-turn-1"`. |
+| REQ-02 | MUST | `NewInvoker` returns `errs.CategoryInvalidArgument` when `driver == nil` or `strings.TrimSpace(EndpointID)`/`ModelID` is empty or `Timeout < 0`. `SessionIDPrefix` empty defaults to `"planner"`. `driver.Capabilities().NativeWorktreeAccess == true` ⇒ `errs.CategoryInvalidArgument` (a driver with native filesystem tooling cannot be made tool-less by configuration; see F-09). `ModelID` and `EndpointID` are passed verbatim (never normalized). |
+| REQ-03 | MUST | Each `Invoke` uses a fresh session id `<prefix>-<n>` where `n` is a per-`Invoker` atomic counter starting at 1 (so a reused driver never sees a duplicate id, and tests can predict the id). The turn id is the constant `"planner-turn-1"`, passed as `TurnInput.TurnID`. The counter is incremented AFTER the entry `ctx.Err()` check, so a call refused by an already-done context consumes no id; a failed `StartSession` does consume one. |
 | REQ-04 | MUST | Session configuration is tool-less and worktree-less: `SessionConfig{SessionID, ModelID: cfg.ModelID}` with `SystemPrompt` empty, `Tools` nil, `WorktreeScope` nil, `Mediator` nil, `Options` nil. The prompt text is passed verbatim as `TurnInput.Prompt` (no `ToolResults`). |
-| REQ-05 | MUST | Flow: if `ctx.Err() != nil` return it raw; if `cfg.Timeout > 0` derive `context.WithTimeout`; `StartSession`; `defer` `session.Close` on a context that is NOT already cancelled (use `context.WithoutCancel(ctx)` bounded by the same Timeout when set, else as is) and ignore its error; `ExecuteTurn`; build the result. |
-| REQ-06 | MUST | Fail closed on anything the planner contract does not allow: a non-empty `TurnResult.ToolCalls` ⇒ error (category `errs.CategoryInvalidArgument`, message `planner session returned tool calls`); non-empty `PausedReason` ⇒ error (`planner session paused: <PausedReason truncated to 64 bytes>`); the session status after the turn equal to a paused/error status ⇒ same error class. An empty `Content` is returned as-is (the planner reports it as a malformed-output rule). |
+| REQ-05 | MUST | Flow: if `ctx.Err() != nil` return it raw; if `cfg.Timeout > 0` derive `context.WithTimeout`; `StartSession`; `defer` `session.Close` on a context that is NOT already cancelled (use `context.WithoutCancel(ctx)` bounded by the same Timeout when set, else as is) and ignore its error; `ExecuteTurn`; then, whether it returned success or error, if the derived call context has `Err() != nil` return that error raw; build the result. |
+| REQ-06 | MUST | Fail closed on anything the planner contract does not allow: a non-empty `TurnResult.ToolCalls` ⇒ error (category `errs.CategoryInvalidArgument`, message `planner session returned tool calls`); non-empty `PausedReason` ⇒ error with message `planner session paused` (the driver-supplied `PausedReason` text is appended as `: <text>` only when `IncludeErrorText` is true, truncated to at most 64 bytes at a rune boundary by the adapter's own helper); `session.Status()` after the turn not equal to `SessionStatusActive` (paused, error or closed) ⇒ the same error class (`errs.CategoryInvalidTransition`, message `planner session not active`). An empty `Content` is returned as-is (the planner reports it as a malformed-output rule). |
 | REQ-07 | MUST | Result: `InvocationResult{Content: TurnResult.Content, EndpointID: cfg.EndpointID, DriverID: session.DriverID(), ModelID: cfg.ModelID}`. Provenance is exactly what the caller bound and the driver reports; nothing from model output. |
-| REQ-08 | MUST | Error text hygiene (F-08): driver/session errors are returned wrapped as `errs.New(category, "planner driver call failed: <stage>")` where `<stage>` is `start`, `execute` or `timeout`, and category is the original `errs` category when the error has one, else `errs.CategoryInternal`. The original error text is included ONLY when `cfg.IncludeErrorText` is true. Context cancellation/deadline errors (`errors.Is(err, context.Canceled/DeadlineExceeded)` after the call) are returned raw so `planner.Plan` can classify them. |
+| REQ-08 | MUST | Error text hygiene (F-08): driver/session errors are returned wrapped as `errs.New(category, "planner driver call failed: <stage>")` where `<stage>` is `start` or `execute`, and category is `errs.CategoryOf(err)` (it already yields `CategoryInternal` for foreign errors; do not hand-roll it). The original error text is included ONLY when `cfg.IncludeErrorText` is true. Context cancellation/deadline errors (`errors.Is(err, context.Canceled/DeadlineExceeded)` after the call) are returned raw so `planner.Plan` can classify them. |
 | REQ-09 | MUST | `Invoke` holds no state beyond the counter; concurrent `Invoke` calls on one `Invoker` are safe (race-clean). |
 | REQ-10 | MUST | Docs updated per the envelope. |
 
@@ -66,9 +68,9 @@ Internal helper names, test layout, comment wording.
 
 | ID | Statement |
 | --- | --- |
-| INV-01 | The adapter never enables tools, worktree access or a mediator. |
+| INV-01 | The adapter configures no tools, worktree scope, mediator or system prompt, rejects returned tool calls, and rejects drivers that declare native worktree access. Native tooling of a driver that does NOT declare it is the driver-selection WP's responsibility. |
 | INV-02 | Provenance is Go/driver-assigned, never model-derived. |
-| INV-03 | With `IncludeErrorText` false, no driver-provided error text reaches the returned error. |
+| INV-03 | With `IncludeErrorText` false, no driver-provided text (errors from `StartSession`/`ExecuteTurn`, `PausedReason`) reaches the returned error. |
 | INV-04 | Every started session is closed, including on error and cancellation. |
 
 ## Authority matrix
@@ -96,7 +98,9 @@ Internal helper names, test layout, comment wording.
 | ctx cancelled before/during | raw ctx error; session closed when started | ACC-06 |
 | driver returns tool calls | error, session closed | ACC-07 |
 | driver paused | error, session closed | ACC-08 |
-| Timeout elapses | `DeadlineExceeded` raw (so Plan returns it) | ACC-09 |
+| Timeout elapses (even if the driver ignores ctx and succeeds, or returns a non-ctx error after the deadline) | `DeadlineExceeded` raw (via the post-turn call-context check) | ACC-09 |
+| session not active after the turn (paused/error/closed) | error, session closed | ACC-14 |
+| driver declares native worktree access | `NewInvoker` InvalidArgument | ACC-10 |
 
 ## Acceptance scenarios
 
@@ -104,19 +108,20 @@ Test names MUST contain `PlannerDriverInvoker` and the ACC id. Use the existing 
 
 | ID | Setup | Action | Expected |
 | --- | --- | --- | --- |
-| ACC-01 | fake driver with a handler returning `{Content: "OK"}`; Config with endpoint `ep-1`, model `m-1` | `Invoke` | result Content "OK", EndpointID `ep-1`, ModelID `m-1`, DriverID = fake driver id; session closed (driver reports closed) |
-| ACC-02 | handler asserts it received the exact prompt, no ToolResults; the started session's config has no tools/worktree/mediator/system prompt | `Invoke` | assertions hold (INV-01) |
-| ACC-03 | `Invoke` twice on one Invoker and one driver | | session ids `planner-1`, `planner-2`; no Conflict |
-| ACC-04..09 | the six failure-matrix rows (StartSession failure via pre-existing session id `planner-1`; handler error with a secret-looking message; cancelled ctx; handler returning ToolCalls; handler returning PausedReason; handler delay > Timeout) | `Invoke` | per matrix; for the handler-error case the returned error text does NOT contain the secret-looking string when `IncludeErrorText` is false and DOES when true (INV-03); errors keep the original category |
-| ACC-10 | `NewInvoker` with nil driver, blank endpoint, blank model, negative timeout | | InvalidArgument each |
+| ACC-01 | a test-local `drivers.SessionDriver` wrapper around the fake driver that records the `Session` returned by `StartSession` (the fake has no session accessor, and `ResumeSession` would reopen a closed session, so do not use it to check closure); handler returning `{Content: "OK"}`; Config with endpoint `ep-1`, model `m-1` | `Invoke` | result Content "OK", EndpointID `ep-1`, ModelID `m-1`, DriverID = fake driver id; the recorded session reports `SessionStatusClosed` |
+| ACC-02 | handler asserts it received the exact prompt, `TurnID` `planner-turn-1` and no ToolResults; the recorded session's `Config()` has nil `Tools`, `WorktreeScope`, `Mediator`, `Options` and an empty `SystemPrompt` | `Invoke` | assertions hold (INV-01) |
+| ACC-03 | `Invoke` twice on one Invoker and one driver (ids observed through the recording wrapper; a call with an already-cancelled context consumes no id) | | session ids `planner-1`, `planner-2`; no Conflict |
+| ACC-04..09 | the six failure-matrix rows (StartSession failure via pre-existing session id `planner-1`; handler error with a secret-looking message; cancelled ctx; handler returning ToolCalls; handler returning PausedReason (message `planner session paused` without the flag; with `IncludeErrorText` the reason text appended and truncated at a rune boundary); handler delay > Timeout, and a handler that ignores ctx and returns success after the deadline) | `Invoke` | per matrix; for the handler-error case the returned error text does NOT contain the secret-looking string when `IncludeErrorText` is false and DOES when true (INV-03); errors keep the original category |
+| ACC-10 | `NewInvoker` with nil driver, blank endpoint, blank model, negative timeout, and a driver whose `Capabilities().NativeWorktreeAccess` is true (fake driver built with that capability) | | InvalidArgument each |
 | ACC-11 | 16 goroutines calling `Invoke` | `-race` | no race, 16 distinct session ids |
-| ACC-12 | `planner.Plan` with this Invoker and a handler returning a valid planner JSON (reuse the planner test fixtures' output builder by copying the needed minimal builders into this package's tests) | `Plan` | `OutcomeRecommended`; Planner provenance endpoint/driver/model equal the Config/driver values |
+| ACC-12 | `planner.Plan` with this Invoker and a handler returning a valid planner JSON (the probe found the needed builders are NOT minimal: copy `internal/cognition/planner/fixtures_test.go` (about 277 lines: portfolio, machine profile, inventory, context profiles, ptr) into this package's tests plus about 20 lines for the alternative and output; do not export test helpers from `planner`) | `Plan` | `OutcomeRecommended`; Planner provenance endpoint/driver/model equal the Config/driver values |
+| ACC-14 | a test-local `Session` wrapper whose `Status()` returns `SessionStatusPausedBudgetExceeded`, then `SessionStatusError`, then `SessionStatusClosed` after the turn (the fake never produces these itself) | `Invoke` | error (`planner session not active`) each, session closed | REQ-06 |
 | ACC-13 | boundary tests | `go test ./tests/...` | planner and cognition still do not depend on drivers; the new package does not depend on storage/controlplane/state/events (non-vacuous) |
 
 ## Validation
 
 - build, vet, gofmt on changed files, `go test -count=1 ./...`, `go test -race -count=1 ./internal/cognition/... ./tests/...`, `make docs-check`; hooks, no bypass
-- mutation catalog (mutant ⇒ ACC that must fail): enable a tool/mediator/worktree in the session config ⇒ ACC-02; reuse one session id ⇒ ACC-03; skip Close on the error path ⇒ ACC-05/ACC-07/ACC-08 (closed-session assertion); ignore ToolCalls ⇒ ACC-07; ignore PausedReason ⇒ ACC-08; always include the error text ⇒ ACC-05 (secret absent); never include it even when the flag is true ⇒ ACC-05; wrap ctx errors (non-raw) ⇒ ACC-06/09; ModelID taken from anywhere but Config ⇒ ACC-01; DriverID hard-coded ⇒ ACC-01; counter not atomic ⇒ ACC-11 under `-race`; Timeout ignored ⇒ ACC-09
+- mutation catalog (mutant ⇒ ACC that must fail): enable a tool/mediator/worktree in the session config ⇒ ACC-02; reuse one session id ⇒ ACC-03; skip Close on the error path ⇒ ACC-05/ACC-07/ACC-08 (closed-session assertion); ignore ToolCalls ⇒ ACC-07; ignore PausedReason ⇒ ACC-08; include PausedReason text without the flag ⇒ ACC-08; skip the post-turn status check ⇒ ACC-14; skip the post-turn call-context check ⇒ ACC-09 (success-after-deadline case); allow NativeWorktreeAccess drivers ⇒ ACC-10; always include the error text ⇒ ACC-05 (secret absent); never include it even when the flag is true ⇒ ACC-05; wrap ctx errors (non-raw) ⇒ ACC-06/09; ModelID taken from anywhere but Config ⇒ ACC-01; DriverID hard-coded ⇒ ACC-01; counter not atomic ⇒ ACC-11 under `-race`; Timeout ignored ⇒ ACC-09
 - required review lenses: contract/authority; mutation. A robustness lens is optional (no untrusted parsing; error-text handling is covered by ACC-05)
 
 ## Escalation triggers
@@ -132,10 +137,10 @@ D-1 Separate package, not inside `planner`: the planner package's dependency tes
 ```text
 requirements represented: 10/10
 mandatory clauses resolved: 3/3
-failure cases specified: 6/6
+failure cases specified: 8/8
 authority decisions specified: 3/3
 missing/unknown input semantics: 3/3
-acceptance scenarios mapped: 13/13
+acceptance scenarios mapped: 14/14
 unresolved architecture choices: 0
-readiness: pending window review
+readiness: READY_FOR_IMPLEMENTATION (window review: implementability probe passed, findings incorporated)
 ```

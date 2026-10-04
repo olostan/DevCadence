@@ -3,9 +3,9 @@
 ## Identity
 
 - Work Package ID: WP-M3C-H4 (window 2026-10-A, with WP-M3D-1C1 and WP-M3D-2A1)
-- Revision: 1
+- Revision: 2 (window review probe: READY_WITH_FIXES, wording only; REQ-01 and REQ-02 implemented in a scratch copy: zero existing tests or fixtures break)
 - Base commit: current `origin/main` at implementation time (the implementor records the SHA)
-- Status: READY_FOR_IMPLEMENTATION once the window review closes (see Implementation Readiness Report)
+- Status: READY_FOR_IMPLEMENTATION (r2)
 
 ## Objective
 
@@ -15,7 +15,7 @@ Two mechanical hardenings that remove latent fail-open edges: (1) the one remain
 
 - read-authority: `internal/cognition/portfolio_validator*.go`, `internal/protocol/portfolio.go`, `internal/protocol/review_ledger.go` (`requireNonEmptyTrimmed`), protocol fixtures and tests
 - risk tags: validator authority, record validation strictness
-- normative clauses: DCI-123, DCI-005 (unknown is not healthy; whitespace is not a value)
+- normative clauses: DCI-123 (validator authority); the stricter-record rule follows the fail-closed pattern of WP-M3D-1A INV-03
 - re-resolution triggers: any need to change a JSON schema, a fixture, `ValidationPolicy`, or `DefaultValidationPolicy()`
 
 ## Verified facts about the current code (the implementor re-verifies each as step 0 and reports any false row)
@@ -25,7 +25,7 @@ Two mechanical hardenings that remove latent fail-open edges: (1) the one remain
 | F-01 | The only validator read of `ctx.input.Policy` besides the effective-policy builder is `RequireVerifiedAcceleration` in `portfolio_validator_constraints.go` (search `ctx.input.Policy`) | grep |
 | F-02 | `DefaultValidationPolicy()` leaves `RequireVerifiedAcceleration` false, so switching that read to `ctx.policy` is behavior-preserving for nil and default policies | `portfolio_validator.go` |
 | F-03 | `requireNonEmpty` (protocol.go) is a plain `value == ""` check; `requireNonEmptyTrimmed` (review_ledger.go) trims | source |
-| F-04 | In `portfolio.go` the untrimmed checks are in the `Validate` methods of: FallbackBinding (endpoint_id, channel_id, budget_pool_id, context_profile_id), RoleBinding (role, endpoint_id, channel_id, budget_pool_id, context_profile_id), EscalationRule (from_role, to_role, trigger_condition), CognitionPortfolio (portfolio_id, created_at), PortfolioRecommendation (recommendation_id, inventory_digest, synthesized_at, rationale), WorkflowStage (stage_id, role, budget_pool_id; optional pointers endpoint_id, channel_id, context_profile_id, escalation_target, deterministic_gate_id), WorkflowPlan (plan_id, task_id, work_package_id) | scout report, grep `requireNonEmpty(` in portfolio.go |
+| F-04 | In `portfolio.go` (verified by `grep 'requireNonEmpty('`; no extra and no missing sites) the untrimmed checks are in the `Validate` methods of: FallbackBinding (endpoint_id, channel_id, budget_pool_id, context_profile_id), RoleBinding (role, endpoint_id, channel_id, budget_pool_id, context_profile_id), EscalationRule (from_role, to_role, trigger_condition), CognitionPortfolio (portfolio_id, created_at), PortfolioRecommendation (recommendation_id, inventory_digest, synthesized_at, rationale), WorkflowStage (stage_id, role, budget_pool_id; optional pointers endpoint_id, channel_id, context_profile_id, escalation_target, deterministic_gate_id), WorkflowPlan (plan_id, task_id, work_package_id) | scout report, grep `requireNonEmpty(` in portfolio.go |
 | F-05 | JSON schemas use `minLength:1`, which accepts whitespace-only strings; Go being stricter than the schema is allowed (a schema-rejected value is still Go-rejected) | WP-M3D-1A INV-03 |
 
 ## Semantic scope envelope
@@ -51,7 +51,7 @@ Test layout; table-driven structure; helper names.
 | --- | --- | --- |
 | REQ-01 | MUST | The `RequireVerifiedAcceleration` check reads `ctx.policy.RequireVerifiedAcceleration` (effective policy), not `ctx.input.Policy`. |
 | REQ-02 | MUST | Every field listed in F-04 uses `requireNonEmptyTrimmed(kind, "<json key>", value)`; optional pointer fields that are set use the same trimmed check on the pointed-to value (the existing "if set must be non-empty" semantics are kept, now trimmed). |
-| REQ-03 | MUST | A nil optional pointer remains valid. A whitespace-only value is rejected with `errs.CategoryInvalidArgument` and a message naming the JSON key. Stored values are never normalized. |
+| REQ-03 | MUST | A nil optional pointer remains valid. A whitespace-only value is rejected with `errs.CategoryInvalidArgument` and a message containing the JSON key (exact wording is LOCAL_DISCRETION; for optional pointer fields `requireNonEmptyTrimmed`'s wording "is required and must not be empty or whitespace-only" is acceptable). `deterministic_gate_id` has two branches: the one required for deterministic stages MUST be trimmed (test it on a deterministic stage); the one forbidden for cognition stages already rejects any non-nil value. Stored values are never normalized. |
 | REQ-04 | MUST | Docs state the stricter rule (one sentence each). |
 
 ## Invariants
@@ -90,13 +90,13 @@ Test names MUST contain `EffectivePolicyAndTrimmedFields` and the ACC id.
 | ACC-01 | table over EVERY required field in F-04, each set to `"   "` on an otherwise valid record | `Validate()` | each rejected; the error names that field's JSON key |
 | ACC-02 | table over every optional pointer in F-04 set to pointer-to-`"  "` | `Validate()` | each rejected; nil still valid |
 | ACC-03 | all existing protocol fixtures and tests | run unchanged | pass (INV-01) |
-| ACC-04 | explicit `ValidationPolicy{RequireVerifiedAcceleration: true}` with a binding whose acceleration is not verified; and nil policy with the same input | `Validate` | explicit ⇒ diagnostic as before; nil ⇒ unchanged output; the digest of nil-policy validation equals the explicit-default digest |
+| ACC-04 | an input with a role binding whose inventory endpoint has `Kind` local_runtime (or `Locality` local), a non-CPU, non-unknown `AccelerationBackend` (e.g. metal) and `AccelerationVerified` false (the diagnostic fires only for such an endpoint); (a) through public `Validate` with explicit `ValidationPolicy{RequireVerifiedAcceleration: true}` ⇒ the `ACCELERATION_UNVERIFIED` diagnostic as before; nil policy ⇒ unchanged output; the digest of nil-policy validation equals the explicit-default digest; (b) a NEW `package cognition` (internal) test file, because every existing cognition test is `package cognition_test`: build a context with `newValidatorContext(input, effective)` where `input.Policy == nil` and `effective.RequireVerifiedAcceleration == true`, call `validateContextAndConstraints(&diags)`, assert `ACCELERATION_UNVERIFIED` | (a) as stated; (b) the diagnostic is present with the fix and absent under the REQ-01 mutant (`ctx.input.Policy`) |
 | ACC-05 | docs | read | the sentences exist |
 
 ## Validation
 
 - `go build ./... && go vet ./... && gofmt -l <changed files>`; `go test -count=1 ./...`; `go test -race -count=1 ./internal/cognition/... ./internal/protocol/... ./tests/...`; `make docs-check`; hooks, no bypass
-- mutation catalog: for EACH field site in F-04 revert it to the untrimmed check ⇒ the ACC-01/02 table entry for that field fails; revert REQ-01 to `ctx.input.Policy` ⇒ ACC-04 behavior test fails when the explicit policy and a modified default are exercised (the implementor adds a test that temporarily constructs a validator context with an effective policy that differs from `input.Policy`, e.g. via the internal test hook, if one exists; if none exists, state it as UNVERIFIED and cover it by code inspection)
+- mutation catalog: for EACH field site in F-04 revert it to the untrimmed check ⇒ the ACC-01/02 table entry for that field fails; revert REQ-01 to `ctx.input.Policy` ⇒ ACC-04(b) fails
 - required review lenses: contract/authority; mutation
 
 ## Escalation triggers
@@ -117,5 +117,5 @@ authority decisions specified: 1/1
 missing/unknown input semantics: 3/3
 acceptance scenarios mapped: 5/5
 unresolved architecture choices: 0
-readiness: pending window review
+readiness: READY_FOR_IMPLEMENTATION (window review: implementability probe passed, findings incorporated)
 ```
