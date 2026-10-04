@@ -553,7 +553,7 @@ from ResourceInventory + role needs + project characteristics + policy +
 available historical evidence. Include rationale/tradeoffs/confidence and no
 authority expansion.
 
-Split: WP-M3D-1A (see [wp-m3d-1a-recommendation-protocol.md](work-packages/wp-m3d-1a-recommendation-protocol.md)) adds the optional intent/tradeoffs/confidence/set_id/planner-provenance fields to `PortfolioRecommendation`; WP-M3D-1B is the planner service and depends on it.
+Split: WP-M3D-1A (see [wp-m3d-1a-recommendation-protocol.md](work-packages/wp-m3d-1a-recommendation-protocol.md)) adds the optional intent/tradeoffs/confidence/set_id/planner-provenance fields to `PortfolioRecommendation`; WP-M3D-1B (see [wp-m3d-1b-planner-service.md](work-packages/wp-m3d-1b-planner-service.md)) is the invoker-driven, validator-gated planner service in `internal/cognition/planner` and depends on it; it is implemented as a candidate pending review and acceptance. WP-M3D-1C (not started) adds endpoint selection, the driver-backed `Invoker` adapter, compiler admission of the planner role, historical-evidence input and the activation link.
 
 ### WP-M3D-2 — Workflow topology planner
 Compile task/risk + active portfolio + current resource state into a bounded

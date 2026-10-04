@@ -100,6 +100,7 @@ var adapterPackages = []string{
 func TestProviderAdaptersDoNotLeakIntoTheCore(t *testing.T) {
 	core := append([]string{
 		"github.com/olostan/DevCadence/internal/cognition",
+		"github.com/olostan/DevCadence/internal/cognition/planner",
 		"github.com/olostan/DevCadence/internal/environment",
 		"github.com/olostan/DevCadence/internal/principalhosts",
 		"github.com/olostan/DevCadence/internal/controlplane",
@@ -166,4 +167,36 @@ func dependenciesOf(t *testing.T, pattern string) []string {
 		t.Skipf("go list unavailable in this environment: %v", err)
 	}
 	return strings.Fields(string(out))
+}
+
+// TestPortfolioPlanner_ACC18_DependenciesExcludeDriversAdaptersAndPersistence keeps the
+// planner service free of driver, adapter and persistence coupling (WP-M3D-1B
+// REQ-12, DCI-054/055). It fails rather than skipping when the dependency list
+// cannot be resolved, so it can never pass vacuously.
+func TestPortfolioPlanner_ACC18_DependenciesExcludeDriversAdaptersAndPersistence(t *testing.T) {
+	const pkg = "github.com/olostan/DevCadence/internal/cognition/planner"
+	deps := dependenciesOf(t, pkg)
+	present := false
+	for _, dep := range deps {
+		if dep == "github.com/olostan/DevCadence/internal/protocol" {
+			present = true
+		}
+	}
+	if !present {
+		t.Fatalf("dependency list of %s does not contain internal/protocol; the check would be vacuous (got %d deps)", pkg, len(deps))
+	}
+	forbidden := append([]string{
+		"github.com/olostan/DevCadence/internal/cognition/drivers",
+		"github.com/olostan/DevCadence/internal/storage",
+		"github.com/olostan/DevCadence/internal/controlplane",
+		"github.com/olostan/DevCadence/internal/state",
+		"github.com/olostan/DevCadence/internal/events",
+	}, adapterPackages...)
+	for _, dep := range deps {
+		for _, f := range forbidden {
+			if dep == f {
+				t.Errorf("planner depends on forbidden package %s", dep)
+			}
+		}
+	}
 }
