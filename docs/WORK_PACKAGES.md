@@ -560,7 +560,7 @@ Compile task/risk + active portfolio + current resource state into a bounded
 WorkflowPlan. Explicitly support topology collapse, local-heavy iteration,
 subscription-diverse review and metered-budget-constrained execution.
 
-Split: WP-M3D-2A1 (see [wp-m3d-2a1-workflow-plan-validator.md](work-packages/wp-m3d-2a1-workflow-plan-validator.md)) is the pure plan validator for structure, role/endpoint/pool bindings and bounds; it is implemented. WP-M3D-2A2 (see [wp-m3d-2a2-workflow-budget-authorizer.md](work-packages/wp-m3d-2a2-workflow-budget-authorizer.md)) adds live budget and metered-pool authorization and is implemented; WP-M3D-2B (see [wp-m3d-2b-deterministic-workflow-planner.md](work-packages/wp-m3d-2b-deterministic-workflow-planner.md)) provides the deterministic planner baseline, and WP-M3D-2C (not started) the AI-assisted planner.
+Split: WP-M3D-2A1 (see [wp-m3d-2a1-workflow-plan-validator.md](work-packages/wp-m3d-2a1-workflow-plan-validator.md)) is the pure plan validator for structure, role/endpoint/pool bindings and bounds; it is implemented. WP-M3D-2A2 (see [wp-m3d-2a2-workflow-budget-authorizer.md](work-packages/wp-m3d-2a2-workflow-budget-authorizer.md)) adds live budget and metered-pool authorization and is implemented; WP-M3D-2B (see [wp-m3d-2b-deterministic-workflow-planner.md](work-packages/wp-m3d-2b-deterministic-workflow-planner.md)) provides the deterministic planner baseline and is implemented; and WP-M3D-2C (not started) the AI-assisted planner.
 
 ### WP-M3D-3 — Adaptation, versioning and rollback
 Support explicit portfolio-change proposals when resources/policy/evidence
