@@ -88,6 +88,35 @@ func TestContextProfileConsistency_ACC05_FallbackMismatch(t *testing.T) {
 	}
 }
 
+func TestContextProfileConsistency_ACC05b_SecondFallback(t *testing.T) {
+	build := func(firstBad, secondBad bool) cognition.ValidationInput {
+		in := unknownStateInput(makeTestPortfolio(), nil)
+		rb := &in.Portfolio.RoleBindings[0]
+		rb.Fallbacks = append(rb.Fallbacks, rb.Fallbacks[0])
+		for idx, bad := range []bool{firstBad, secondBad} {
+			id := fmt.Sprintf("prof-fb-%d", idx)
+			cp := *in.ContextProfiles["prof-cli-01"]
+			cp.ProfileID = id
+			if bad {
+				cp.EndpointID = "ep-local-01"
+			}
+			in.ContextProfiles[id] = &cp
+			rb.Fallbacks[idx].ContextProfileID = id
+		}
+		return in
+	}
+	res := cognition.NewPortfolioValidator().Validate(build(false, true))
+	got := diagsWithCode(res, cognition.CodeContextProfileMismatch)
+	if len(got) != 1 || got[0].Target != "role_bindings[0].fallbacks[1]" {
+		t.Fatalf("second only: %v", got)
+	}
+	res = cognition.NewPortfolioValidator().Validate(build(true, true))
+	got = diagsWithCode(res, cognition.CodeContextProfileMismatch)
+	if len(got) != 2 || got[0].Target != "role_bindings[0].fallbacks[0]" || got[1].Target != "role_bindings[0].fallbacks[1]" {
+		t.Fatalf("both: %v", got)
+	}
+}
+
 func TestContextProfileConsistency_ACC06_NonexistentProfile(t *testing.T) {
 	in := unknownStateInput(makeTestPortfolio(), nil)
 	in.Portfolio.RoleBindings[0].ContextProfileID = "prof-nonexistent"
