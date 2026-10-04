@@ -799,7 +799,7 @@ ConsultationResult contains:
 - recommendation;
 - uncertainty.
 
-## 16. LessonCandidate
+## 16. LessonCandidate and Project Memory
 
 See [LEARNING.md](LEARNING.md).
 
@@ -812,6 +812,8 @@ A LessonCandidate includes:
 - possible counterexamples;
 - evaluation plan;
 - promotion authority.
+
+Promoted `LessonCandidate`s scoped to `project` form canonical entries in **Project Memory**, admitted deterministically into worker Context Packs by the Cognitive Invocation Compiler (`internal/cognition/compiler`). Retrospectives at planning window or milestone boundaries emit candidate records for review, and background "Dreaming Mode" may propose exploratory candidates during idle quota periods.
 
 ## 17. Protocol state transitions
 

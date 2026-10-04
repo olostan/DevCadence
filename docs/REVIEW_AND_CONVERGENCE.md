@@ -45,9 +45,9 @@ immutable candidate + contract revision
 
 The normal campaign is:
 
-1. broad independent review;
-2. normalization/adjudication;
-3. at most one consolidated repair packet;
+1. broad independent review (dual lenses in parallel);
+2. normalization/adjudication (filter stylistic noise vs. material defects);
+3. at most one **Consolidated Polish / Repair Round** addressing all actionable non-blocking and blocking findings in a single commit, preventing serial churn;
 4. focused verification;
 5. closure decision.
 
@@ -230,6 +230,29 @@ Verification outcomes:
 ## 8. Review independence
 
 Reviewers start from clean role/lens-specific Context Packs and do not inherit author reasoning.
+
+### Reviewer Context Pack
+
+To prevent token waste, anchoring bias, and context pollution, review subagents MUST NOT receive the full repository documentation, author session logs, or historical deliberations. A Reviewer Context Pack strictly contains:
+1. **Target Candidate Manifest:** exact candidate branch/commit, base commit, and filtered file diff (`git diff base...HEAD`).
+2. **Authoritative Execution Contract:** the bounded EWP (`REQ-*`, `INV-*`, `ACC-*`, scope envelope, forbidden scope).
+3. **Exact Normative Clauses:** only the specific clauses cited by the EWP (e.g. specific DCI invariant numbers).
+4. **Relevant Source Files:** the touched candidate implementation and test files.
+5. **Deterministic Evidence:** exit codes, test outputs, and coverage figures from deterministic validation.
+6. **Assigned Review Lens & Prompt:** the specific lens focus (Contract/Authority vs. Test Adequacy/Mutation).
+
+### Standard Dual Review Lenses
+
+For implementation candidates, DevCadence standardizes on two complementary review lenses:
+1. **Contract & Authority Lens:**
+   - Evaluates REQ-01..N and INV-01..N conformance.
+   - Verifies package dependency direction and boundary isolation (`boundaries_test.go`).
+   - Verifies authority decisions (fail-closed budget, opaque credentials, rejection of forbidden drivers/tools).
+   - Validates that errors do not leak secrets or credentials.
+2. **Test Adequacy & Mutation Lens:**
+   - Evaluates scenario coverage (ACC-01..N) and test assertion strength.
+   - Evaluates test independence and mock fidelity (rejects tautological mocks).
+   - Tests code against the EWP's **Mutation Catalog**: verifies that plausible code mutations, condition flips, boundary omissions, or skipped status checks would break existing tests.
 
 For systemic/high-risk candidates, independence may require:
 

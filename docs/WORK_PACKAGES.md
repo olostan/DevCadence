@@ -36,6 +36,26 @@ concurrently, under this v1 protocol.
 
 ---
 
+## Rolling Planning Windows
+
+To prevent the high specification overhead and myopia of planning, reviewing, repairing, and executing single work packages in isolation ("plan one -> review one -> implement one -> repeat"), DevCadence employs **Rolling Planning Windows** of approximately 3–5 coherent work packages.
+
+Each planning window is captured in an overview document (e.g. `docs/work-packages/window-<id>-overview.md`) and follows a two-tier review lifecycle:
+
+1. **Window-Level Architecture Review:**
+   - Evaluates the entire window as a single coherent system before any implementation begins.
+   - Resolves cross-WP boundaries, ownership, authority rules, interface contracts, shared invariants, failure semantics, dependency direction, and representability gaps once across all participating EWPs.
+   - Reviewed by at least two clean-context specialized reviewers (e.g. Architecture/Contract and Implementability/Failure-Semantics).
+   - Findings across the entire window are consolidated into a single repair round.
+   - Once approved, the window architecture is frozen and MUST NOT be reopened merely due to stylistic preferences of subsequent worker sessions.
+
+2. **Per-WP Implementation Readiness Gate:**
+   - Individual EWPs in the window are frozen for execution one at a time (or concurrently across disjoint branches if dependency structure permits).
+   - Resolves only current base commit, exact file paths/interfaces, scenario coverage, and deterministic test commands.
+   - Workers implement strictly within their bounded EWP and local discretion without redesigning frozen window architecture.
+
+---
+
 ## Execution Contract and Context Manifest
 
 **Effective now for new or amended delegated EWPs.** Scope cards below are roadmap entries, never substitutes for an approved EWP. Existing accepted EWPs remain historical artifacts; do not rewrite their accepted requirements or schema records retroactively.
