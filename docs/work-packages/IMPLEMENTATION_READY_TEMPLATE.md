@@ -112,7 +112,11 @@ Acceptance scenarios are semantic. Validation commands below provide evidence th
 
 - command / deterministic check:
 - command / deterministic check:
-- required independent review lens:
+- mutation testing: [declare one: "mutation testing required: <scope/tool>" | "mutation review sufficient: <adversarial catalog below>" | "not applicable: <reason>"]
+- mutation catalog (mutant => scenario/check that fails):
+  - [mutant 1 description] => [ACC-XX fails]
+  - [mutant 2 description] => [ACC-YY fails]
+- required independent review lens: [contract/authority, mutation/test-adequacy, ...]
 - evidence to capture:
 
 ## Escalation triggers

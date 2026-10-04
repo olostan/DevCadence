@@ -119,6 +119,8 @@ The deterministic manifest can cover the full project lifecycle.
 
 **Health:** formatting, lint/static analysis, unit/integration tests, coverage, generated-code drift, API/schema checks, dependency hygiene.
 
+**Mutation testing:** whether ecosystem-native mutation testing is supported (`supported`, `unsupported`, `unavailable/unknown`), tool provider and version/provenance, invocation argv/flags, scope mechanism (e.g. package, path, changed-files diff), timeout expectations, result adapter/parser, and known limitations. Core orchestration treats mutation testing as an optional generic verification capability. If a project policy or high-risk EWP requests mutation testing and the pack supports it, the pack's mutation mechanic runs; otherwise the system falls back to an explicit adversarial mutation review.
+
 **Run/dev:** local run command, dev server, emulator/simulator lifecycle, readiness probes.
 
 **Install/deploy:** artifact install, simulator/device install, optional deployment and post-deploy probes.

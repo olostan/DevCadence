@@ -484,6 +484,13 @@ Small synthetic Git repos that exercise:
 ### End-to-end bootstrap tests
 A tiny target repository where the full scout -> Work Package -> implement -> validate -> review path can be replayed.
 
+### Mutation and test-strength testing
+Coverage is not correctness. For critical deterministic logic (validators, policy guards, state machines, reducers, protocol parsers, deterministic planners, budget gating), tests must be evaluated against plausible mutations (inverted operators, skipped checks, dropped fail-closed handling, bypassed provenance, unhandled error states).
+- Where practical tooling exists, targeted automated mutation testing SHOULD run against the changed packages.
+- Where automated tooling is unavailable or out-of-scope, an explicit adversarial mutation catalog (mutant $\to$ scenario) MUST be evaluated.
+- Meaningful surviving mutants must produce permanent regression tests or an explicit justified disposition.
+- EWPs for critical logic must declare mutation requirements explicitly (`mutation testing required`, `mutation review sufficient`, or `not applicable`).
+
 ### Evaluation suites
 Frozen trajectories used to compare prompts, cognition endpoints, reviewers and routing policies.
 
