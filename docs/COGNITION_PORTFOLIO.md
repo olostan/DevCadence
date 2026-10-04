@@ -194,7 +194,15 @@ Evaluation stops with one diagnostic when an input is missing (`WORKFLOW_INPUT_M
 - Bindings: a cognition stage's role must have a role binding, and its provided endpoint, channel and context profile plus its budget pool must all match one single binding tuple (primary or fallback) of that role. Every stage's budget pool must exist. A deterministic stage must carry no endpoint, channel or context profile pointer.
 - Structure: an escalation target must name an existing stage with a strictly greater order; review stages must be cognition stages.
 
-A valid verdict is relative to the given portfolio and policy only; binding the portfolio to the active one is the caller's job. Live budget and metered-pool authorization is WP-M3D-2A2; the deterministic planner is WP-M3D-2B; the AI planner is WP-M3D-2C. Contract: [wp-m3d-2a1-workflow-plan-validator.md](work-packages/wp-m3d-2a1-workflow-plan-validator.md).
+A valid verdict is relative to the given portfolio and policy only; binding the portfolio to the active one is the caller's job. Contract: [wp-m3d-2a1-workflow-plan-validator.md](work-packages/wp-m3d-2a1-workflow-plan-validator.md).
+
+### Workflow budget authorizer
+
+`internal/cognition.AuthorizeWorkflowBudget` (WP-M3D-2A2) evaluates a `WorkflowPlan` against live `BudgetState` records. It enforces fail-closed semantics for exhausted or missing budget states on metered and capped regimes, while permitting local compute regimes to proceed when `AllowUnknownLocalCompute` is enabled. Contract: [wp-m3d-2a2-workflow-budget-authorizer.md](work-packages/wp-m3d-2a2-workflow-budget-authorizer.md).
+
+### Deterministic workflow topology planner
+
+`internal/cognition/workflowplanner.PlanWorkflow` (WP-M3D-2B) provides a pure, deterministic baseline planner that compiles a `TaskSpec` and active `CognitionPortfolio` into a valid `WorkflowPlan`. It collapses low-risk tasks to single-pass execution, synthesizes dual-review topology with endpoint disambiguation for high-risk or security-sensitive work, emits deterministic-only plans with gate IDs for tool-only tasks, and verifies every synthesized plan through `WorkflowValidator` before returning. Contract: [wp-m3d-2b-deterministic-workflow-planner.md](work-packages/wp-m3d-2b-deterministic-workflow-planner.md). AI-assisted workflow planning is WP-M3D-2C.
 
 ## 13. Adaptation
 
