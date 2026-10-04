@@ -233,24 +233,52 @@ Possible causes:
 
 Do not default to blaming the implementer.
 
-## 11A. Inter-Milestone "What Learned" Retrospectives
+## 11A. Retrospective Epochs and Learning Cycles
 
-At every milestone boundary, before the system transitions to planning or executing the next milestone, an explicit **Milestone Retrospective** is conducted (ADR-0019 §6).
+Retrospectives are not merely inter-milestone postmortems; they are structured, configurable reflection epochs that reshape future execution:
 
-The retrospective is a structured, versioned Markdown engineering artifact (stored under `docs/retrospectives/<milestone>.md`), serving as an auditable bridge between milestones rather than a premature database schema:
+1. **Retrospective Epoch Triggers:**
+   - **Inter-Milestone Boundary:** mandatory review before initiating the next roadmap phase (e.g. M3C to M3D).
+   - **Planning Window Boundary:** optional/configurable check at the conclusion of a rolling window (e.g. Window 2026-10-B) to calibrate token usage, reviewer friction, and prompt precision before launching the next window.
+   - **Goal Attainment / Incident:** triggered upon completing major initiatives or encountering unexpected failure cascades.
 
-1. **Success Patterns Inventory**:
-   - What architectural decisions, EWP formats, or verification patterns accelerated delivery?
-   - Examples from M3B: explicit keep/adapt/deprecate/delete pre-checks prevented duplicate logic; deterministic CLI exit codes (0–6) eliminated ambiguous test assertions; dual independent review caught subtle blind spots.
-2. **Friction & Anti-Pattern Analysis**:
-   - What process deviations or execution traps occurred?
-   - Examples from M3B: committing EWPs in the same commit as implementation collapsed the Principal/Implementer boundary; writing decorative/tautological tests with synthetic mocks bypassed real discovery; declaring docs "accepted" preemptively before review completion.
-3. **Repository & Artifact Reconciliation**:
-   - Reconcile and prune temporary development/session artifacts (e.g. deleting temporary handoff trackers like `HANDOFF.md` before final closure).
-   - Verify that all EWPs, ADRs, and canonical documentation reflect final as-built reality.
-4. **Governed Promotion**:
-   - Emits standard `LessonCandidate` records (`schemas/lesson-candidate.schema.json`) and `DecisionRecord` / ADR amendments for formal promotion into project invariants, standards, or verification profiles.
+2. **Core Retrospective Deliverables:**
+   - **Success Patterns Inventory:** practices, EWP patterns, or verification strategies that yielded high efficiency.
+   - **Friction & Anti-Pattern Analysis:** process deviations, reviewer blind spots, or unnecessary cognitive churn.
+   - **Action Points & Governed Promotion:** emits structured `LessonCandidate` records (`schemas/lesson-candidate.schema.json`) and `RefactoringProposal` records. Action points are categorized into *Project-Specific Memory* vs *Global Invariants*.
 
+## 11B. Project Memory Architecture
+
+DevCadence maintains a durable **Project Memory** to ensure hard-won operational insights, architectural realities, and project-specific idioms persist across disjoint agent sessions without polluting global prompts:
+
+1. **Non-Self-Modifying Invariant (DCI-123/124/DCI-071):**
+   - Project Memory is **not** unconstrained prompt self-editing or arbitrary fine-tuning.
+   - Project Memory consists of canonical, typed records stored in SQLite and versioned control-plane documents:
+     - `ProjectState` (current component state, baseline, active milestones);
+     - `AmbiguityLedger` (unresolved domain questions and resolutions);
+     - `Decisions` / ADRs (frozen architectural choices);
+     - Promoted `LessonCandidate`s (project-scoped lessons tagged with specific component or language keys).
+2. **Deterministic Context Admission:**
+   - The Cognitive Invocation Compiler (`internal/cognition/compiler`) admits relevant project memory items into worker/reviewer Context Packs based on matching domains, tags, or components.
+   - Workers receive project-specific learnings deterministically, ensuring past errors are never repeated while keeping total token context strictly bounded.
+
+## 11C. Background "Dreaming Mode" (Idle Quota Utilization & Self-Reflection)
+
+When development is idle and compute quota / token budget remains available (e.g. overnight or between developer sessions), DevCadence supports an optional **Dreaming Mode** for background reflection, exploration, and pre-computation:
+
+1. **Strict Sandboxing and Non-Disruption:**
+   - Runs in isolated, ephemeral worktrees (`internal/worktrees`) created off the current canonical baseline.
+   - Never commits directly to protected branches or disrupts ongoing active development.
+2. **Economic & Budget Bounding:**
+   - Governed by the Workflow Budget Authorizer (`internal/cognition`).
+   - Uses low-cost / surplus budget pools with `AllowOverage: false` and strict token/time limits.
+3. **Exploratory Tasks:**
+   - **Mutation Testing Runs:** runs mechanical or adversarial mutation sweeps on untested edge cases.
+   - **Dead Code & Dependency Hygiene:** detects unused helpers, duplicate abstractions, and documentation drift.
+   - **Architecture Reconciliation & Ideas:** analyzes recent trajectory pain points and prepares candidate refactorings or optimization proposals.
+4. **Governed Output Gate:**
+   - "Dreams" produce **strictly proposals** (`LessonCandidate`, `RefactoringProposal`, or draft EWP candidates) staged in the control plane for Human or Principal engineer review.
+   - Dreaming mode NEVER possesses autonomous write or promotion authority.
 
 ## 12. Cross-project vs project-specific learning
 

@@ -119,7 +119,22 @@ The deterministic manifest can cover the full project lifecycle.
 
 **Health:** formatting, lint/static analysis, unit/integration tests, coverage, generated-code drift, API/schema checks, dependency hygiene.
 
-**Mutation testing:** whether ecosystem-native mutation testing is supported (`supported`, `unsupported`, `unavailable/unknown`), tool provider and version/provenance, invocation argv/flags, scope mechanism (e.g. package, path, changed-files diff), timeout expectations, result adapter/parser, and known limitations. Core orchestration treats mutation testing as an optional generic verification capability. If a project policy or high-risk EWP requests mutation testing and the pack supports it, the pack's mutation mechanic runs; otherwise the system falls back to an explicit adversarial mutation review.
+**Mutation testing:** whether ecosystem-native mutation testing is supported (`supported`, `unsupported`, `unavailable/unknown`), tool provider and version/provenance, invocation argv/flags, scope mechanism (e.g. package, path, changed-files diff), timeout expectations, result adapter/parser, and known limitations.
+Pack manifests declare a `mutation_testing` mechanic section when available:
+```json
+{
+  "support": "supported",
+  "tool": "go-mutesting",
+  "command": ["go-mutesting", "--timeout", "30s"],
+  "scope_mode": "package_or_diff",
+  "output_format": "text_or_json",
+  "min_mutation_score": 0.80
+}
+```
+Core orchestration implements a **dual execution path**:
+1. *Mechanical Path:* If the active capability pack advertises `supported` and the tool passes environment probes, the mutation mechanic executes against scoped packages or diffs, reporting the empirical mutation score.
+2. *Adversarial Model Path:* If mutation tooling is unsupported, unavailable, or too resource-intensive for rapid iteration, the system uses the EWP's explicit **Mutation Catalog** where an independent Test Adequacy & Mutation Reviewer verifies that all cataloged plausible mutations fail existing tests.
+Neither path is allowed to silently pass if the contract mandates mutation verification for a high-risk package.
 
 **Run/dev:** local run command, dev server, emulator/simulator lifecycle, readiness probes.
 
