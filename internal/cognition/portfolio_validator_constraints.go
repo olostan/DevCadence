@@ -17,7 +17,7 @@ func (ctx *validatorContext) validateContextAndConstraints(diags *[]PortfolioDia
 	validateContextCompatibility := func(chID, profID, target string) {
 		ch, okCh := ctx.channelMap[chID]
 		prof, okProf := ctx.input.ContextProfiles[profID]
-		if !okCh || !okProf {
+		if !okCh || !okProf || prof == nil {
 			return
 		}
 
@@ -80,12 +80,35 @@ func (ctx *validatorContext) validateContextAndConstraints(diags *[]PortfolioDia
 		}
 	}
 
+	// validateContextProfileConsistency reports a profile that does not describe
+	// the binding's own endpoint and channel (WP-M3C-H3). A missing or nil
+	// profile is reported by the endpoints dimension as CONTEXT_PROFILE_NOT_FOUND.
+	validateContextProfileConsistency := func(endpointID, chID, profID, target string) {
+		prof := ctx.input.ContextProfiles[profID]
+		if prof == nil {
+			return
+		}
+		if prof.EndpointID != endpointID || prof.ChannelID != chID {
+			*diags = append(*diags, PortfolioDiagnostic{
+				Code:         CodeContextProfileMismatch,
+				Condition:    ConditionInvalid,
+				Target:       target,
+				ViolatedRule: "DCI-123",
+				Message:      fmt.Sprintf("context profile %q describes a different endpoint/channel than the binding", profID),
+				Observed:     fmt.Sprintf("endpoint_id=%s channel_id=%s", prof.EndpointID, prof.ChannelID),
+				Required:     fmt.Sprintf("endpoint_id=%s channel_id=%s", endpointID, chID),
+			})
+		}
+	}
+
 	if ctx.input.ContextProfiles != nil {
 		for i, rb := range p.RoleBindings {
 			target := fmt.Sprintf("role_bindings[%d]", i)
+			validateContextProfileConsistency(rb.EndpointID, rb.ChannelID, rb.ContextProfileID, target)
 			validateContextCompatibility(rb.ChannelID, rb.ContextProfileID, target)
 			for j, fb := range rb.Fallbacks {
 				fbTarget := fmt.Sprintf("role_bindings[%d].fallbacks[%d]", i, j)
+				validateContextProfileConsistency(fb.EndpointID, fb.ChannelID, fb.ContextProfileID, fbTarget)
 				validateContextCompatibility(fb.ChannelID, fb.ContextProfileID, fbTarget)
 			}
 		}

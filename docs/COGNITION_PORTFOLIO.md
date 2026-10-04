@@ -164,6 +164,8 @@ Unknown observed state fails closed (DCI-005). `DefaultValidationPolicy()` sets 
 - When `BudgetStates` is supplied (non-nil), each budget pool used by a role binding or fallback whose regime is not `local_compute` yields `UNKNOWN_BUDGET_STATE` if its entry is absent or nil (observed `missing`) or has `status=unknown` (observed `unknown`). Diagnostics are emitted in sorted pool-id order; `local_compute` pools and unused pools are exempt.
 - A nil `BudgetStates` or `ResourceStates` map means no observation was supplied and is not checked (documented residual).
 
+Context profile consistency (WP-M3C-H3, always on, no policy flag): a context profile referenced by a role or fallback binding must describe that binding's own endpoint and channel (`ContextProfile.EndpointID`/`ChannelID`, exact string equality). Otherwise one `CONTEXT_PROFILE_MISMATCH` diagnostic is emitted per offending binding or fallback, even when the binding's channel is missing. A nonexistent or nil profile entry yields only `CONTEXT_PROFILE_NOT_FOUND`.
+
 **Warning:** a `ValidationPolicy` built as a struct literal or decoded from JSON defaults both flags to false, which is a silent opt-out of these checks. Start from `DefaultValidationPolicy()` and clear the flags only as an explicit, deliberate opt-out.
 
 **AI proposes. Deterministic machinery authorizes.**

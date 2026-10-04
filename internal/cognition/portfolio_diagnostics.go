@@ -46,6 +46,7 @@ const (
 	CodeBudgetPoolExhausted         = "BUDGET_POOL_EXHAUSTED"
 	CodeBudgetReservationExceeded   = "BUDGET_RESERVATION_EXCEEDED"
 	CodeContextProfileNotFound      = "CONTEXT_PROFILE_NOT_FOUND"
+	CodeContextProfileMismatch      = "CONTEXT_PROFILE_MISMATCH"
 	CodeContextControlMismatch      = "CONTEXT_CONTROL_MISMATCH"
 	CodePrefixCacheMismatch         = "PREFIX_CACHE_MISMATCH"
 	CodeContextWindowInsufficient   = "CONTEXT_WINDOW_INSUFFICIENT"
