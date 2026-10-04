@@ -194,18 +194,57 @@ Measure:
 
 This allows empirical routing rather than intuition about model strength.
 
-## 9. Mutation/property/fuzz testing
+## 9. Mutation, property, and test-strength verification
 
-Because local compute is cheap and time is flexible, high-value tasks may use deeper automated techniques.
+Because local compute is cheap and time is flexible, high-value tasks use deeper automated techniques alongside standard suites:
+- mutation testing or adversarial mutation review for critical deterministic logic;
+- property tests for serialization, parsers, and state machines;
+- fuzzing for external/untrusted input and protocol boundaries;
+- race detector for concurrency and lifecycle orchestration;
+- long soak tests for process and service management.
 
-Examples:
-- mutation testing for business logic;
-- property tests for serialization/state machines;
-- fuzzing parsers/protocol boundaries;
-- race detector for concurrency;
-- long soak tests for process management.
+### Risk-based mutation testing policy
 
-These are especially useful overnight.
+Coverage is not correctness. Line or branch coverage measures only execution reach, not whether assertions detect material regressions. For implementation ecosystems with practical mutation-testing tooling, high-risk deterministic logic SHOULD undergo automated mutation testing or equivalent structured mutation review.
+
+**Targeted scope, not universal runs:** Whole-repository mutation testing on every change is prohibitively expensive and uninformative. Mutation testing MUST be scoped to changed packages, critical control-plane components, or explicit high-risk semantic boundaries.
+
+**Critical logic categories:**
+- validators and structural boundary checkers;
+- authorization, credential gating, and policy boundaries;
+- state machines, lifecycle transitions, and reducers;
+- protocol normalization and schema compatibility logic;
+- deterministic planners and routing algorithms;
+- budget/resource gating, leases, and saturation arithmetic;
+- acceptance, closure, and verification decision logic;
+- security-sensitive parsing and error sanitization;
+- code whose correctness depends on combinations of conditions rather than basic execution coverage.
+
+**Test-strength rule:**
+For critical code, reviewers and authors MUST ask: *"What plausible broken implementation would still pass these tests?"*
+Examples of plausible mutations that tests must detect:
+- inverting a predicate or swapping comparison operators (`<` vs `<=`);
+- skipping a bounds check or saturation guard;
+- omitting fail-closed behavior on unknown or error state;
+- bypassing provenance or authority verification;
+- returning success after a timeout or context expiration;
+- accepting an unknown enum or malformed discriminant;
+- dropping a persistence validation or unclosed resource cleanup.
+
+**Disposition of surviving mutants:**
+Surviving mutations that represent plausible broken behavior MUST result in stronger permanent regression tests or an explicit, justified disposition recorded in review evidence. Mutation score alone MUST NOT become a vanity metric or acceptance substitute; deterministic tests and semantic invariants remain authoritative.
+
+**EWP verification selection:**
+For critical logic, every Engineering Work Package's verification plan MUST explicitly declare one of:
+- `mutation testing required`: automated mutation tool run against declared scope with surviving mutants adjudicated;
+- `mutation review sufficient`: structured adversarial mutation catalog (mutant $\to$ scenario) evaluated by an independent review lens;
+- `not applicable`: with an explicit short reason (e.g. documentation-only, thin glue DTO, generated code).
+
+**Capability-pack ownership of mutation tooling:**
+Mutation testing tooling is owned by the target ecosystem's **Project Capability Pack**, not hardcoded into core orchestration. Core DevCadence reasons over a generic capability:
+- if risk is high and the active pack advertises `mutation_testing` support: mutation testing SHOULD be included in the EWP verification plan according to project policy;
+- if unsupported or unavailable: fall back to an explicit adversarial mutation review with targeted negative test cases;
+- lack of mutation tooling MUST NOT make an otherwise supported language unusable.
 
 ## 10. Test generation independence
 
