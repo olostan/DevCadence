@@ -229,3 +229,35 @@ func TestExecutePlanning_ACC05_NilGuards(t *testing.T) {
 		t.Fatalf("expected InvalidArgument on nil resolver, got %v", err)
 	}
 }
+
+func TestExecutePlanning_FallbackToNextViableEndpointOnResolutionError(t *testing.T) {
+	// First endpoint (ep-local-01) errors on resolution; second endpoint (ep-cli-01) succeeds
+	content := validPlannerOutput(protocol.IntentMinimumSpend)
+	drv := newRec(okHandler(content))
+
+	resolver := &testResolver{
+		drivers: map[string]drivers.SessionDriver{
+			"ep-cli-01": drv,
+		},
+		models: map[string]string{
+			"ep-cli-01": "claude-3-7-sonnet",
+		},
+		errs: map[string]error{
+			"ep-local-01": errs.New(errs.CategoryInternal, "connection refused"),
+		},
+	}
+
+	req := makeBasePlannerRequest()
+	cfg := ExecutionConfig{Timeout: 5 * time.Second}
+
+	res, err := ExecutePlanning(context.Background(), req, resolver, cfg)
+	if err != nil {
+		t.Fatalf("ExecutePlanning failed: %v", err)
+	}
+	if res == nil || res.Outcome != planner.OutcomeRecommended {
+		t.Fatalf("expected OutcomeRecommended on fallback endpoint, got: %+v", res)
+	}
+	if len(res.Accepted) != 1 || res.Accepted[0].Planner.EndpointID != "ep-cli-01" {
+		t.Fatalf("expected plan bound to fallback endpoint ep-cli-01, got: %+v", res.Accepted[0].Planner)
+	}
+}
