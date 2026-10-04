@@ -202,7 +202,11 @@ A valid verdict is relative to the given portfolio and policy only; binding the 
 
 ### Deterministic workflow topology planner
 
-`internal/cognition/workflowplanner.PlanWorkflow` (WP-M3D-2B) provides a pure, deterministic baseline planner that compiles a `TaskSpec` and active `CognitionPortfolio` into a valid `WorkflowPlan`. It collapses low-risk tasks to single-pass execution, synthesizes dual-review topology with endpoint disambiguation for high-risk or security-sensitive work, emits deterministic-only plans with gate IDs for tool-only tasks, and verifies every synthesized plan through `WorkflowValidator` before returning. Contract: [wp-m3d-2b-deterministic-workflow-planner.md](work-packages/wp-m3d-2b-deterministic-workflow-planner.md). AI-assisted workflow planning is WP-M3D-2C.
+`internal/cognition/workflowplanner.PlanWorkflow` (WP-M3D-2B) provides a pure, deterministic baseline planner that compiles a `TaskSpec` and active `CognitionPortfolio` into a valid `WorkflowPlan`. It collapses low-risk tasks to single-pass execution, synthesizes dual-review topology with endpoint disambiguation for high-risk or security-sensitive work, emits deterministic-only plans with gate IDs for tool-only tasks, and verifies every synthesized plan through `WorkflowValidator` before returning. Contract: [wp-m3d-2b-deterministic-workflow-planner.md](work-packages/wp-m3d-2b-deterministic-workflow-planner.md).
+
+### Model-assisted workflow topology planner
+
+`internal/cognition/workflowplanner.PlanWorkflowWithModel` (WP-M3D-2C) provides model-assisted workflow stage synthesis via an injected `planner.Invoker`. When available, the model can propose specialized stage topologies and decompositions. If no invoker is provided, the invoker errors, the model output is malformed, or the proposed plan fails either deterministic validation (`WorkflowValidator`) or budget authorization (`AuthorizeWorkflowBudget`), the system degrades gracefully and returns the deterministic baseline plan (DCI-104). Model-proposed stage IDs are sanitized and their DAG dependencies (`DependsOn`, `EscalationTarget`) are safely remapped Go-side (DCI-129). Contract: [wp-m3d-2c-model-workflow-planner.md](work-packages/wp-m3d-2c-model-workflow-planner.md).
 
 ## 13. Adaptation
 
