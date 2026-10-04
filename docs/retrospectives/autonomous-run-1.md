@@ -50,6 +50,20 @@ Authority note: all merges in this run were executed by the Principal session th
 - `AGENT_HANDOFF_PROTOCOL.md`: new "Autonomous delivery loop" section (merge authority only under explicit owner delegation, roles and isolation, per-WP sequence, mandatory mutation lens plus a robustness lens for untrusted-input parsers, second review after NOT_READY or any major, Principal verification of reviewer claims that supplements but does not replace independent verification, repair per REVIEW_AND_CONVERGENCE §1 with the run's ceiling stated as local policy, durable posting of readiness reviews, merge gate, evidence conventions, operational notes). These are proposals for owner review; this PR was itself reviewed by an independent accuracy/consistency reviewer, whose findings on overclaims, DCI-049 attribution, merge authority and force-push wording are incorporated.
 - `IMPLEMENTATION_READY_TEMPLATE.md`: "Verified facts about the current code" table, mutation catalog in Validation, and a consistency-sweep checklist after revisions.
 
+## Process v2 (owner suggestion, adopted for the rest of the run)
+
+Observation by the owner mid-run: reviewing individual EWPs took longer than implementing them, and a lot of time went into syncing EWPs. The data agrees: implementation lenses found no design flaw in H2, 1A or H3; the costly defects were seam defects between WPs (1B's prompt omitting identifiers the validator requires; the profile-to-binding gap) and wording drift introduced by revisions. Proposed process, with three refinements from this run:
+
+1. Keep a rolling lookahead of 3-5 WPs and architecture-review the whole window together, at contract level only: interfaces, authority, failure and missing-input semantics, representability. Code-level facts (target strings, line numbers, fixture setups) are bound late, at implementation time against merged code, so lookahead EWPs do not go stale as earlier WPs land.
+2. Make EWPs narrower and more mechanical. The implementor verifies the EWP's "verified facts" table as step 0 and reports any false row; the Principal no longer pre-verifies every code claim.
+3. Reopen upstream architecture only on genuinely new evidence from implementation (DCI-048/049; escalation triggers).
+4. Replace the second textual readiness review with an *implementability probe*: a reviewer implements the contract in a scratch copy and runs the suite. Both re-reviews that did this (1B r3, H3 r3) confirmed feasibility empirically and also found real defects (for example the nil profile entry panic).
+5. Triage review findings: behavior-bearing (blocker/major) findings are fixed and probed again; wording-only findings are batched into one commit without a re-review. Do not spend further rounds on wording that cannot change implementation behavior.
+
+Not changed here (owner decision): pushes through the pre-push hook took 5-8 minutes each and duplicate CI; in this run they cost more wall-clock than any review round.
+
+Other lessons added late in the run: a finished subagent with a lingering background process re-sends its hand-back repeatedly (about a dozen duplicates from one implementor), so implementors are told to send exactly one final report and leave no watchers, and a finished agent is stopped; `make docs-check` should be run before committing docs because the link checker reads raw text (a bracketed index immediately followed by a parenthesis, as in some diagnostic target strings, parses as a link); the Principal's own consistency sweep missed a stale "readiness: pending" line that the re-review caught, so the sweep checklist must name the Status and Readiness lines explicitly.
+
 ## Open items for the owner (not decided autonomously)
 
 1. Coverage gate nondeterminism and the pre-push/CI duplication (policy change to a protected gate).
