@@ -3,6 +3,7 @@ package gate
 import (
 	"time"
 
+	"github.com/olostan/DevCadence/internal/benchmark/experiments"
 	"github.com/olostan/DevCadence/internal/benchmark/telemetry"
 )
 
@@ -59,18 +60,22 @@ type CriterionResult struct {
 	Passed    bool    `json:"passed"`
 	Threshold float64 `json:"threshold"`
 	Observed  float64 `json:"observed"`
-	Actual    float64 `json:"actual,omitempty"`
-	Details   string  `json:"details,omitempty"`
+	// ObservedUndefined marks criteria whose observed value is undefined, missing or malformed;
+	// Observed is then 0 (never +Inf, which is not JSON-serializable).
+	ObservedUndefined bool   `json:"observed_undefined,omitempty"`
+	Details           string `json:"details,omitempty"`
 }
 
 // GateEvaluationResult encapsulates the overall decision, criterion breakdown, and recommendations (REQ-03).
 type GateEvaluationResult struct {
-	Decision            GateDecision                `json:"decision"`
-	CriteriaEvaluations []CriterionResult           `json:"criteria_evaluations"`
-	Criteria            []CriterionResult           `json:"criteria,omitempty"`
-	Summary             string                      `json:"summary"`
-	Recommendations     []string                    `json:"recommendations,omitempty"`
-	AggregatedReport    *telemetry.AggregatedReport `json:"aggregated_report,omitempty"`
-	ReportDigest        string                      `json:"report_digest,omitempty"`
-	EvaluatedAt         time.Time                   `json:"evaluated_at"`
+	Decision            GateDecision      `json:"decision"`
+	CriteriaEvaluations []CriterionResult `json:"criteria_evaluations"`
+	// FalsificationResults preserves the delegation-floor inputs so a persisted result can be
+	// re-evaluated (reproducibility); the key matches campaign.CampaignSummary.
+	FalsificationResults map[string]*experiments.FalsificationResult `json:"falsification_results,omitempty"`
+	Summary              string                                      `json:"summary"`
+	Recommendations      []string                                    `json:"recommendations,omitempty"`
+	AggregatedReport     *telemetry.AggregatedReport                 `json:"aggregated_report,omitempty"`
+	ReportDigest         string                                      `json:"report_digest,omitempty"`
+	EvaluatedAt          time.Time                                   `json:"evaluated_at"`
 }

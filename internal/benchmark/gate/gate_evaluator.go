@@ -53,7 +53,6 @@ func EvaluateM4Gate(
 		return &GateEvaluationResult{
 			Decision:            DecisionInconclusive,
 			CriteriaEvaluations: []CriterionResult{},
-			Criteria:            []CriterionResult{},
 			Summary:             fmt.Sprintf("Insufficient completed runs: %d completed out of %d required", report.TotalSnapshots, criteria.MinCompletedRuns),
 			Recommendations: []string{
 				"Execute full benchmark campaign to collect required sample size before formal gate evaluation.",
@@ -86,13 +85,19 @@ func EvaluateM4Gate(
 			Passed:    passed,
 			Threshold: threshold,
 			Observed:  observed,
-			Actual:    observed,
 			Details:   details,
 		}
 		criteriaEvaluations = append(criteriaEvaluations, cr)
 		if !passed && details != "" {
 			recommendations = append(recommendations, details)
 		}
+	}
+	// recordUndefined records a criterion whose observed value cannot be expressed as a
+	// finite number (undefined, missing or malformed input). Observed stays 0 so the result
+	// remains JSON-serializable; ObservedUndefined carries the sentinel.
+	recordUndefined := func(name string, passed bool, threshold float64, details string) {
+		recordCriterion(name, passed, threshold, 0, details)
+		criteriaEvaluations[len(criteriaEvaluations)-1].ObservedUndefined = true
 	}
 
 	// Helper to find a group by strategy and capability
@@ -109,13 +114,31 @@ func EvaluateM4Gate(
 	strat4 := string(benchmark.StrategyHybrid4Layer)
 	strat1 := string(benchmark.StrategyFullHistory)
 
-	// 4. Pairwise Tier Evaluation across each capability tier C
+	// Fail closed: a report without any capability tier cannot support a Go decision.
+	if len(tiers) == 0 {
+		recordUndefined("capability_tiers_present", false, 1,
+			"No capability tiers present in report: Strategy 4 versus Strategy 1 comparison is impossible")
+	}
+
+	// 4. Pairwise Tier Evaluation across each capability tier C.
+	// Every tier requires a Strategy 4 defect-catch criterion and a Strategy 4 vs Strategy 1
+	// resource-efficiency criterion; missing groups or inputs record FAILED criteria (fail closed).
 	for _, capClass := range tiers {
 		s4Group := findGroup(strat4, capClass)
 		s1Group := findGroup(strat1, capClass)
 
 		// a. Quality (Defect Catch Rate) for Strategy 4
-		if s4Group != nil && s4Group.DefectCatchRateApplicable {
+		switch {
+		case s4Group == nil:
+			recordUndefined("defect_catch_rate_"+capClass, false, criteria.MinDefectCatchRate,
+				fmt.Sprintf("Strategy 4 group missing in tier %s: defect catch rate cannot be evaluated", capClass))
+		case !s4Group.DefectCatchRateApplicable:
+			recordUndefined("defect_catch_rate_"+capClass, false, criteria.MinDefectCatchRate,
+				fmt.Sprintf("Defect catch rate not applicable for Strategy 4 in tier %s: no defect-bearing runs, quality criterion unverified", capClass))
+		case !validFraction(s4Group.DefectCatchRate):
+			recordUndefined("defect_catch_rate_"+capClass, false, criteria.MinDefectCatchRate,
+				fmt.Sprintf("Malformed Strategy 4 defect catch rate in tier %s: %v", capClass, s4Group.DefectCatchRate))
+		default:
 			pass := s4Group.DefectCatchRate >= criteria.MinDefectCatchRate
 			details := fmt.Sprintf("Strategy 4 catch rate in tier %s: %.1f%% (threshold >= %.1f%%)",
 				capClass, s4Group.DefectCatchRate*100, criteria.MinDefectCatchRate*100)
@@ -127,43 +150,62 @@ func EvaluateM4Gate(
 		}
 
 		// b. Resource Efficiency: compare Strategy 4 vs Strategy 1 within the same tier
-		if s4Group != nil && s1Group != nil {
-			if s4Group.ResourcePerAcceptedResult.IsUndefined {
-				// Strategy 4 has 0 accepted runs -> fail closed
-				recordCriterion("resource_efficiency_"+capClass, false, criteria.MaxResourceRatioVersusBaseline, math.Inf(1),
-					fmt.Sprintf("Resource efficiency failed in tier %s: Strategy 4 has 0 accepted runs (undefined resource per accepted result)", capClass))
-			} else if s1Group.ResourcePerAcceptedResult.IsUndefined {
-				// Baseline Strategy 1 has 0 accepted runs while Strategy 4 has accepted runs -> passes
-				recordCriterion("resource_efficiency_"+capClass, true, criteria.MaxResourceRatioVersusBaseline, 0.0,
-					fmt.Sprintf("Resource efficiency passed in tier %s: Strategy 4 accepted runs while baseline Strategy 1 has 0 accepted runs", capClass))
-			} else {
-				baselineVal := s1Group.ResourcePerAcceptedResult.Value
-				if baselineVal <= 0 {
-					baselineVal = 1.0
-				}
-				ratio := s4Group.ResourcePerAcceptedResult.Value / baselineVal
-				pass := ratio <= criteria.MaxResourceRatioVersusBaseline
-				details := fmt.Sprintf("Resource ratio in tier %s: %.2fx versus baseline Strategy 1 (threshold <= %.2fx)",
-					capClass, ratio, criteria.MaxResourceRatioVersusBaseline)
-				if !pass {
-					details = fmt.Sprintf("Resource inefficiency in tier %s: Strategy 4 resource ratio %.2fx exceeds baseline threshold %.2fx",
-						capClass, ratio, criteria.MaxResourceRatioVersusBaseline)
-				}
-				recordCriterion("resource_efficiency_"+capClass, pass, criteria.MaxResourceRatioVersusBaseline, ratio, details)
+		resName := "resource_efficiency_" + capClass
+		switch {
+		case s4Group == nil || s1Group == nil:
+			missing := "Strategy 4"
+			if s4Group != nil {
+				missing = "Strategy 1 baseline"
+			} else if s1Group == nil {
+				missing = "Strategy 4 and Strategy 1 baseline"
 			}
+			recordUndefined(resName, false, criteria.MaxResourceRatioVersusBaseline,
+				fmt.Sprintf("Resource efficiency cannot be evaluated in tier %s: %s group missing", capClass, missing))
+		case s4Group.ResourcePerAcceptedResult.IsUndefined:
+			// Strategy 4 has 0 accepted runs -> fail closed
+			recordUndefined(resName, false, criteria.MaxResourceRatioVersusBaseline,
+				fmt.Sprintf("Resource efficiency failed in tier %s: Strategy 4 has 0 accepted runs (undefined resource per accepted result)", capClass))
+		case !validResource(s4Group.ResourcePerAcceptedResult.Value):
+			recordUndefined(resName, false, criteria.MaxResourceRatioVersusBaseline,
+				fmt.Sprintf("Malformed Strategy 4 resource per accepted result in tier %s: %v", capClass, s4Group.ResourcePerAcceptedResult.Value))
+		case s1Group.ResourcePerAcceptedResult.IsUndefined:
+			// Baseline Strategy 1 has 0 accepted runs while Strategy 4 has accepted runs -> passes (EWP)
+			recordUndefined(resName, true, criteria.MaxResourceRatioVersusBaseline,
+				fmt.Sprintf("Resource efficiency passed in tier %s: Strategy 4 accepted runs while baseline Strategy 1 has 0 accepted runs", capClass))
+		case !validResource(s1Group.ResourcePerAcceptedResult.Value):
+			recordUndefined(resName, false, criteria.MaxResourceRatioVersusBaseline,
+				fmt.Sprintf("Malformed Strategy 1 baseline resource per accepted result in tier %s: %v", capClass, s1Group.ResourcePerAcceptedResult.Value))
+		default:
+			// EWP formula: ratio = S4 / max(S1, 1.0)
+			baselineVal := math.Max(s1Group.ResourcePerAcceptedResult.Value, 1.0)
+			ratio := s4Group.ResourcePerAcceptedResult.Value / baselineVal
+			pass := ratio <= criteria.MaxResourceRatioVersusBaseline
+			details := fmt.Sprintf("Resource ratio in tier %s: %.2fx versus baseline Strategy 1 (threshold <= %.2fx)",
+				capClass, ratio, criteria.MaxResourceRatioVersusBaseline)
+			if !pass {
+				details = fmt.Sprintf("Resource inefficiency in tier %s: Strategy 4 resource ratio %.2fx exceeds baseline threshold %.2fx",
+					capClass, ratio, criteria.MaxResourceRatioVersusBaseline)
+			}
+			recordCriterion(resName, pass, criteria.MaxResourceRatioVersusBaseline, ratio, details)
 		}
 
 		// c. Peak Resident Tokens check (if threshold configured)
-		if criteria.MaxResidentContextRatioBaseline > 0.0 && s4Group != nil && s1Group != nil && s1Group.AvgPeakResidentTokens > 0 {
-			peakRatio := s4Group.AvgPeakResidentTokens / s1Group.AvgPeakResidentTokens
-			pass := peakRatio <= criteria.MaxResidentContextRatioBaseline
-			details := fmt.Sprintf("Peak resident context ratio in tier %s: %.2fx (threshold <= %.2fx)",
-				capClass, peakRatio, criteria.MaxResidentContextRatioBaseline)
-			if !pass {
-				details = fmt.Sprintf("Peak resident context excess in tier %s: %.2fx exceeds threshold %.2fx",
+		if criteria.MaxResidentContextRatioBaseline > 0.0 && s4Group != nil && s1Group != nil {
+			peakName := "peak_resident_context_" + capClass
+			if !validResource(s4Group.AvgPeakResidentTokens) || !validResource(s1Group.AvgPeakResidentTokens) || s1Group.AvgPeakResidentTokens <= 0 {
+				recordUndefined(peakName, false, criteria.MaxResidentContextRatioBaseline,
+					fmt.Sprintf("Peak resident context cannot be evaluated in tier %s: missing or malformed baseline/Strategy 4 peak tokens", capClass))
+			} else {
+				peakRatio := s4Group.AvgPeakResidentTokens / s1Group.AvgPeakResidentTokens
+				pass := peakRatio <= criteria.MaxResidentContextRatioBaseline
+				details := fmt.Sprintf("Peak resident context ratio in tier %s: %.2fx (threshold <= %.2fx)",
 					capClass, peakRatio, criteria.MaxResidentContextRatioBaseline)
+				if !pass {
+					details = fmt.Sprintf("Peak resident context excess in tier %s: %.2fx exceeds threshold %.2fx",
+						capClass, peakRatio, criteria.MaxResidentContextRatioBaseline)
+				}
+				recordCriterion(peakName, pass, criteria.MaxResidentContextRatioBaseline, peakRatio, details)
 			}
-			recordCriterion("peak_resident_context_"+capClass, pass, criteria.MaxResidentContextRatioBaseline, peakRatio, details)
 		}
 	}
 
@@ -186,7 +228,9 @@ func EvaluateM4Gate(
 			totalApplicable++
 			if fals.HypothesisFalsified {
 				falsifiedCount++
-				recordCriterion("delegation_floor_"+k, false, 0.0, 1.0,
+				// With RequireZeroFalsifications each falsification fails the gate; otherwise the
+				// per-task record is informational and the aggregate rate criterion decides.
+				recordCriterion("delegation_floor_"+k, !criteria.RequireZeroFalsifications, 0.0, 1.0,
 					fmt.Sprintf("Delegation floor hypothesis falsified for %s: %s", k, fals.Reason))
 			} else {
 				recordCriterion("delegation_floor_"+k, true, 0.0, 0.0,
@@ -217,23 +261,30 @@ func EvaluateM4Gate(
 		}
 	}
 
+	failedCount := 0
+	for _, c := range criteriaEvaluations {
+		if !c.Passed {
+			failedCount++
+		}
+	}
+
 	decision := DecisionGo
 	summaryText := "All Milestone M4 gate criteria passed. Empirical evidence supports progressing to Milestone M5."
 
 	if !allPassed {
 		decision = DecisionRevise
-		summaryText = fmt.Sprintf("Milestone M4 gate failed: %d criteria did not meet normative thresholds. Revision required before Milestone M5.", len(recommendations))
+		summaryText = fmt.Sprintf("Milestone M4 gate failed: %d criteria did not meet normative thresholds. Revision required before Milestone M5.", failedCount)
 	}
 
 	return &GateEvaluationResult{
-		Decision:            decision,
-		CriteriaEvaluations: criteriaEvaluations,
-		Criteria:            criteriaEvaluations,
-		Summary:             summaryText,
-		Recommendations:     recommendations,
-		AggregatedReport:    report,
-		ReportDigest:        reportDigest,
-		EvaluatedAt:         evaluatedAt,
+		Decision:             decision,
+		CriteriaEvaluations:  criteriaEvaluations,
+		FalsificationResults: falsifications,
+		Summary:              summaryText,
+		Recommendations:      recommendations,
+		AggregatedReport:     report,
+		ReportDigest:         reportDigest,
+		EvaluatedAt:          evaluatedAt,
 	}, nil
 }
 
@@ -308,7 +359,7 @@ func SynthesizeEvidenceReport(eval *GateEvaluationResult) (string, error) {
 				obsStr = fmt.Sprintf("%.1f%%", c.Observed*100)
 			} else if strings.HasPrefix(c.Name, "resource_efficiency") {
 				threshStr = fmt.Sprintf("<= %.2fx", c.Threshold)
-				if math.IsInf(c.Observed, 1) {
+				if c.ObservedUndefined {
 					obsStr = "Undefined (0 accepted)"
 				} else {
 					obsStr = fmt.Sprintf("%.2fx", c.Observed)
@@ -350,4 +401,14 @@ func SynthesizeEvidenceReport(eval *GateEvaluationResult) (string, error) {
 	}
 
 	return sb.String(), nil
+}
+
+// validFraction reports whether v is a finite value in [0, 1].
+func validFraction(v float64) bool {
+	return !math.IsNaN(v) && !math.IsInf(v, 0) && v >= 0 && v <= 1
+}
+
+// validResource reports whether v is a finite, non-negative measurement.
+func validResource(v float64) bool {
+	return !math.IsNaN(v) && !math.IsInf(v, 0) && v >= 0
 }

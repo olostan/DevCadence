@@ -2,8 +2,8 @@
 
 ## Executive Summary
 
-- **Evaluated At:** 2026-10-05T07:34:49Z
-- **Telemetry Report Digest:** `sha256:77be2d319a44a1ef825e1f13ad566f8b91c9cbd7625e2718ae51c5d7ba8aeab4`
+- **Evaluated At:** 2026-10-05T08:18:23Z
+- **Telemetry Report Digest:** `sha256:f816651558ef9f9183e78cbe8f1a66183ad9a9ff35d83fb07877493b9c2a5097`
 - **Gate Decision:** **GO**
 - **Summary:** All Milestone M4 gate criteria passed. Empirical evidence supports progressing to Milestone M5.
 
@@ -66,7 +66,7 @@
 
 # Empirical Benchmark Telemetry Report
 
-- Generated: 2026-10-05T07:34:49Z
+- Generated: 2026-10-05T08:18:17Z
 - Total Snapshots: 264
 
 ## Aggregated Performance by Strategy & Capability

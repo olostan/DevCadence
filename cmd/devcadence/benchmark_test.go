@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -207,9 +208,12 @@ func TestCLIBenchmark_SnapshotArrayAndCampaignSummary(t *testing.T) {
 	critBytes, _ := json.Marshal(crit)
 	_ = os.WriteFile(critPath, critBytes, 0o644)
 
+	// Snapshots carry no defect-catch or peak-resident data, so the gate fails closed (revise,
+	// exit 1) rather than inconclusive (exit 2): custom MinCompletedRuns=2 was honored.
 	_, _, err = c.run("benchmark", "evaluate-gate", "--snapshots", snapsPath, "--criteria", critPath)
-	if err != nil {
-		t.Fatalf("expected custom criteria gate evaluation to succeed, got: %v", err)
+	var ge *gateExitError
+	if !errors.As(err, &ge) || ge.ExitCode() != 1 {
+		t.Fatalf("expected fail-closed revise exit (1) with custom criteria, got: %v", err)
 	}
 
 	// 3. Invalid / missing flags error cases

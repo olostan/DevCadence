@@ -483,6 +483,7 @@ func TestBaselineUndefinedResourcePasses(t *testing.T) {
 		FirstPassAcceptanceRate:   0.5,
 		DefectCatchRate:           1.0,
 		DefectCatchRateApplicable: true,
+		AvgPeakResidentTokens:     500,
 		ResourcePerAcceptedResult: telemetry.ResourceEfficiency{
 			Value:       500,
 			IsUndefined: false,
@@ -496,6 +497,7 @@ func TestBaselineUndefinedResourcePasses(t *testing.T) {
 		FirstPassAcceptanceRate:   0,
 		DefectCatchRate:           0.5,
 		DefectCatchRateApplicable: true,
+		AvgPeakResidentTokens:     1000,
 		ResourcePerAcceptedResult: telemetry.ResourceEfficiency{
 			Value:       0,
 			IsUndefined: true,
@@ -616,21 +618,31 @@ func TestGenerateCanonicalEvidenceFiles(t *testing.T) {
 		t.Fatalf("marshal json failed: %v", err)
 	}
 
-	evidenceDir := "../../../docs/evidence"
-	if err := os.MkdirAll(evidenceDir, 0755); err != nil {
-		t.Fatalf("mkdir evidence dir failed: %v", err)
+	// Never write into the tracked tree during `go test`. The campaign summary (including
+	// snapshots and falsification results) is written to DEVCADENCE_EVIDENCE_OUT when set,
+	// otherwise to t.TempDir(). Committed evidence is regenerated deliberately via the CLI:
+	//   DEVCADENCE_EVIDENCE_OUT=<dir> go test ./internal/benchmark/gate -run TestGenerateCanonicalEvidenceFiles
+	//   devcadence benchmark evaluate-gate --snapshots <dir>/campaign_summary.json --json --output docs/evidence/m4-evidence-report.json
+	//   devcadence benchmark evaluate-gate --snapshots <dir>/campaign_summary.json --output docs/evidence/m4-evidence-report.md
+	outDir := os.Getenv("DEVCADENCE_EVIDENCE_OUT")
+	if outDir == "" {
+		outDir = t.TempDir()
 	}
-
+	if err := os.MkdirAll(outDir, 0o755); err != nil {
+		t.Fatalf("mkdir out dir failed: %v", err)
+	}
+	summaryBytes, err := json.MarshalIndent(summary, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal summary failed: %v", err)
+	}
 	files := map[string][]byte{
-		filepath.Join(evidenceDir, "m4_empirical_evidence.json"): jsonBytes,
-		filepath.Join(evidenceDir, "m4_empirical_evidence.md"):   []byte(mdReport),
-		filepath.Join(evidenceDir, "m4-evidence-report.json"):    jsonBytes,
-		filepath.Join(evidenceDir, "m4-evidence-report.md"):      []byte(mdReport),
+		"campaign_summary.json":   summaryBytes,
+		"m4-evidence-report.json": jsonBytes,
+		"m4-evidence-report.md":   []byte(mdReport),
 	}
-
-	for p, content := range files {
-		if err := os.WriteFile(p, content, 0644); err != nil {
-			t.Fatalf("failed to write %s: %v", p, err)
+	for name, content := range files {
+		if err := os.WriteFile(filepath.Join(outDir, name), content, 0o644); err != nil {
+			t.Fatalf("failed to write %s: %v", name, err)
 		}
 	}
 }
