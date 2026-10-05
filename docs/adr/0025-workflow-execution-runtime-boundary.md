@@ -65,8 +65,8 @@ Existing `WorkflowPlan` / `WorkflowStage` fields fall into distinct semantic cla
 | `BudgetPoolID` | binding authority/resource constraint | Charges/authorizes the logical stage against the specified budget pool. |
 | `TimeoutSeconds` | binding logical-stage bound | Bounds the logical stage execution/attempt as defined by DevCadence; it is not automatically a timeout for every runtime-private subtask. |
 | `RetryLimit` | binding logical-stage bound | Caps DevCadence-authorized retries of the logical stage; private runtime operations cannot use it to silently expand authorized retries. |
-| `EndpointID`, `ChannelID`, `ContextProfileID` | optional binding when present | If populated, the stage is bound to those authorized resources/profile. If absent, an executor may resolve eligible resources under the validated portfolio/policy. |
-| `EscalationTarget` | optional binding when present | Constrains an authorized logical escalation path; it does not prescribe a runtime-private subtask graph. |
+| `EndpointID`, `ChannelID`, `ContextProfileID` | optional binding when present | If populated, the stage is bound to those authorized resources/profile. If absent, an executor may resolve eligible resources under the validated portfolio/policy; executor-resolved bindings MUST satisfy the same review-independence constraints, and the resolved endpoint for each logical stage attempt MUST be recorded as evidence so DevCadence can re-check independence. |
+| `EscalationTarget` | optional binding when present | Constrains an authorized logical escalation path; a stage named as an escalation target MUST NOT start merely because it is otherwise ready and becomes eligible only when an authorized escalation referencing it fires. It does not prescribe a runtime-private subtask graph. |
 | `DeterministicGateID` | binding verification obligation | Identifies the deterministic gate that DevCadence must execute/verify for a deterministic stage. |
 
 This table describes the current protocol; changing a field from binding to advisory (or the reverse) requires an explicit protocol decision rather than an executor-specific interpretation.
