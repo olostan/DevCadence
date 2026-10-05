@@ -1,82 +1,35 @@
-# ADR-0025: Workflow Execution Runtime Boundary and Knowledge-Driven Activation
+# ADR-0025: Workflow Execution Runtime Boundary
 
-- **Status:** Accepted
+- **Status:** Proposed
 - **Date:** 2026-10-04
 - **Decision owner:** Human / Principal
 - **Supersedes:** none
 - **Superseded by:** none
-- **Related:** ADR-0004, ADR-0016, ADR-0018, ADR-0019, ADR-0020, ADR-0024
+- **Related:** ADR-0004, ADR-0018, ADR-0019, ADR-0020, ADR-0024
 - **Related invariants:** DCI-123, DCI-124, DCI-125, DCI-131, DCI-159, DCI-160, DCI-161
 - **Related tasks:** M4, M7, M9, M10
 
 ## Context
 
-DevCadence already separates engineering policy and cognition routing from provider-specific model execution. `WorkflowPlan` is a typed logical workflow; `SessionDriver` normalizes individual cognition sessions across local runtimes, authenticated CLIs and APIs; canonical project state, evidence, review and acceptance live outside model conversations.
+DevCadence already separates engineering policy and cognition routing from provider-specific model execution. `WorkflowPlan` describes a task-specific workflow, `SessionDriver` normalizes one cognition session, and canonical project state, evidence, review and acceptance live outside model conversations.
 
-A future Cognitive Orchestration System (COS), authored independently from DevCadence, is a materially different kind of runtime. It is not merely another model endpoint or `SessionDriver`. Its useful responsibilities include two mechanisms that sit above an individual inference session:
+M4 is where DevCadence begins to materialize reusable workflow execution. The architectural risk is not that the native executor will be too simple; it is that its scheduling details could accidentally become the meaning of `WorkflowPlan` and ProjectState. If that happens, a later alternative execution runtime would require changes to engineering semantics rather than merely a different execution mechanism.
 
-1. **Activation and suspension:** deciding when a runtime task should execute, sleep, resume or react to a changed condition, rather than requiring a model loop to poll continuously.
-2. **Hierarchical knowledge scopes:** maintaining task-local and ancestor-derived knowledge/blackboard state, with references to facts and artifacts, so runtime tasks can share relevant knowledge without flattening all state into one conversational context. A sensory/event mechanism may wake suspended tasks when matching knowledge facts or signals appear.
-
-The native DevCadence implementation does not need those mechanisms today. Designing COS itself into DevCadence now would be speculative coupling. However, allowing the native scheduler/executor to become the *definition* of DevCadence workflow semantics would make a later COS-backed implementation require unnecessary refactoring and would weaken an important future experiment: execute the same DevCadence engineering contracts through the native runtime and through COS, then compare quality, scarce-resource use, latency and human intervention.
-
-This ADR therefore introduces one narrow dependency-inversion boundary without requiring an external runtime, a plugin system, receptors/ligands, hierarchical blackboards, or distributed scheduling in the current implementation.
-
-## Verified facts
-
-- `WorkflowPlan` already describes logical stages, dependencies, role, budget, timeout, retry and optional endpoint/channel/context binding.
-- Workflow endpoint/channel bindings are not mandatory for every stage.
-- `SessionDriver` is an individual cognition-session abstraction, not a workflow-orchestration abstraction.
-- Canonical ProjectState, task state, evidence and review state are already control-plane concepts independent of one model conversation.
-- ADR-0018 explicitly allows workflow topology to collapse or expand according to task and resources rather than imposing one fixed agent pipeline.
-- ADR-0019/0020 already treat durable state and evidence as external memory and compile bounded task-specific working sets.
-
-## Decision criteria
-
-- preserve current simplicity and avoid speculative implementation;
-- keep DevCadence engineering semantics authoritative;
-- allow a future external cognitive runtime to execute DevCadence work without rewriting the control plane;
-- preserve provider/session neutrality already established by M3C/M3D;
-- keep deterministic validation, evidence lineage, policy, budget and acceptance enforceable outside the runtime;
-- allow event-driven suspension and hierarchical task knowledge without forcing those concepts into today's native scheduler;
-- enable fair native-vs-COS experiments over the same DevCadence contracts.
+A future external cognitive runtime such as COS is one motivating example, but this ADR does not design for COS. The durable requirement is narrower: DevCadence engineering contracts must remain independent of one executor's private scheduling, decomposition, memory or placement strategy.
 
 ## Decision
 
-### 1. WorkflowPlan is an engineering contract, not an execution trace
+### 1. WorkflowPlan is the logical engineering contract, not an execution trace
 
-A DevCadence `WorkflowPlan` describes the **logical engineering obligations and ordering constraints** that must be satisfied.
+A `WorkflowPlan` describes policy-significant engineering obligations and ordering constraints that every executor must preserve.
 
-It does not prescribe the complete runtime task graph.
+An executor may internally decompose work, run private subtasks, retry internal actions, wait for events, retain private working state, or use another scheduling strategy. Those operations do not become canonical DevCadence stages merely because one executor uses them.
 
-An execution runtime may internally:
+Conversely, private execution strategy cannot erase DevCadence obligations. Deterministic gates, budget/source-exposure limits, review requirements, explicit bindings, and acceptance authority remain enforceable by DevCadence.
 
-- split one logical stage into many runtime tasks;
-- create temporary scouts, critics, experiments or local planners;
-- recursively decompose work;
-- schedule tasks concurrently or serially within allowed constraints;
-- suspend and resume runtime tasks;
-- retain or reconstruct runtime-private knowledge;
-- retry or reroute within the authorized budget/policy envelope.
+### 2. Workflow execution is a responsibility above SessionDriver
 
-Those internal operations do not become canonical DevCadence workflow stages merely because the runtime used them.
-
-Conversely, runtime decomposition cannot erase DevCadence obligations. If the logical workflow requires independent review, deterministic validation, a source-exposure bound, a budget limit, or a separate acceptance authority, an execution runtime must preserve those semantics.
-
-### 2. Introduce a workflow-execution runtime boundary above SessionDriver
-
-The durable conceptual boundary is:
-
-```go
-type WorkflowExecutor interface {
-    Start(ctx context.Context, req ExecutionRequest) (ExecutionHandle, error)
-    Observe(ctx context.Context, h ExecutionHandle) (ExecutionEventStream, error)
-    Cancel(ctx context.Context, h ExecutionHandle) error
-    Result(ctx context.Context, h ExecutionHandle) (ExecutionResult, error)
-}
-```
-
-The exact Go API is **not** required by this ADR and may change when implementation begins. The durable requirement is the responsibility boundary:
+The responsibility boundary is:
 
 ```text
 DevCadence policy / EWP / WorkflowPlan / evidence / acceptance
@@ -86,260 +39,140 @@ DevCadence policy / EWP / WorkflowPlan / evidence / acceptance
                     boundary
                   /          \
                  /            \
-       native executor      external executor
+       native executor      alternate executor
              |                   |
-      SessionDrivers        private runtime graph
-      tools / validators    tasks / knowledge / wake logic
+      SessionDrivers        private execution strategy
+      tools / validators
 ```
 
-The existing `SessionDriver` abstraction remains below this boundary. A COS integration is therefore not modeled as a fake single model session.
+`SessionDriver` remains an abstraction for one cognition endpoint/session. It is not the abstraction for an entire workflow.
 
-### 3. ExecutionRequest carries authority and references, not runtime topology
+This ADR intentionally does **not** define a Go `WorkflowExecutor` interface. M4 should extract the smallest concrete seam from demonstrated native execution needs rather than turn an illustrative API into a de facto protocol.
 
-A future `ExecutionRequest` should provide only information required to execute the authorized logical work, such as:
+### 3. WorkflowPlan field semantics
 
-- WorkflowPlan identity/revision/digest;
-- EWP / Execution Contract identity;
-- project/base/candidate identity as applicable;
-- applicable policy and budget envelope;
-- references to ContextPacks, evidence and artifacts;
-- required output/evidence contracts;
-- runtime-independent cancellation/deadline information.
+Existing `WorkflowPlan` / `WorkflowStage` fields fall into distinct semantic classes. This classification prevents a native scheduler from treating every field as private scheduler state, while also preventing incidental implementation details from becoming workflow authority.
 
-It must not require the caller to describe COS-specific worker trees, receptors, ligands, blackboard layout, planner promotion rules, or equivalent native-scheduler internals.
+| Field | Classification | Semantics |
+| --- | --- | --- |
+| `PlanID`, `TaskID`, `WorkPackageID` | binding identity | Identify the authorized logical plan/task/work package revision context. |
+| `Topology` | binding workflow obligation | Constrains the logical workflow shape and topology-specific validation requirements. |
+| `StageID` | binding logical identity | Stable identity of a logical stage; must not be replaced by process/goroutine/worker identity. |
+| `Role`, `Kind` | binding obligation | Define the logical role and cognition-vs-deterministic responsibility of the stage. |
+| `IsReview` | binding review marker | Marks a review stage. Independence is established by topology plus deterministic validation/portfolio constraints, not by this flag alone. |
+| `DependsOn` | binding precedence | A stage may not logically complete before its declared dependencies. Executors may run independent stages concurrently. |
+| `Order` | deterministic plan ordering, not serial scheduling | Provides stable total ordering and constrains dependency references to earlier stages. Absent a dependency or other binding obligation, lower `Order` does **not** require one stage to finish before a higher-`Order` stage starts. |
+| `BudgetPoolID` | binding authority/resource constraint | Charges/authorizes the logical stage against the specified budget pool. |
+| `TimeoutSeconds` | binding logical-stage bound | Bounds the logical stage execution/attempt as defined by DevCadence; it is not automatically a timeout for every runtime-private subtask. |
+| `RetryLimit` | binding logical-stage bound | Caps DevCadence-authorized retries of the logical stage; private runtime operations cannot use it to silently expand authorized retries. |
+| `EndpointID`, `ChannelID`, `ContextProfileID` | optional binding when present | If populated, the stage is bound to those authorized resources/profile. If absent, an executor may resolve eligible resources under the validated portfolio/policy. |
+| `EscalationTarget` | optional binding when present | Constrains an authorized logical escalation path; it does not prescribe a runtime-private subtask graph. |
+| `DeterministicGateID` | binding verification obligation | Identifies the deterministic gate that DevCadence must execute/verify for a deterministic stage. |
 
-### 4. Runtime activation is separate from canonical DevCadence task legality
+This table describes the current protocol; changing a field from binding to advisory (or the reverse) requires an explicit protocol decision rather than an executor-specific interpretation.
 
-An execution runtime owns the question **"when should this runtime execution unit run?"** inside an authorized logical stage.
+### 4. DevCadence authority remains outside the executor
 
-A runtime may implement activation using dependencies, timers, external signals, knowledge predicates, event subscriptions, polling-free wait primitives, or another mechanism.
+Executor-private state is non-authoritative. It may consume revision-pinned DevCadence facts and artifacts and may return candidate outputs/evidence, but it cannot directly:
 
-For COS, receptors and ligands plus the Sensory Cortex can implement this responsibility. A native DevCadence executor may initially use ordinary queues, futures, process completion and explicit dependency checks.
+- mutate accepted project truth;
+- weaken policy, budgets, source exposure or tool authority;
+- satisfy or close independent review by assertion;
+- replace deterministic validation results;
+- establish acceptance.
 
-DevCadence does not standardize receptor/ligand vocabulary in its canonical protocol now.
+Policy-significant lifecycle and evidence outcomes cross the boundary through DevCadence-governed records and checks.
 
-Only policy-significant or user-visible lifecycle facts need cross the runtime boundary, for example:
+An alternate executor is not required to expose every internal subtask or model call as a DevCadence stage. It must, however, stay within the authority envelope granted for the logical work and return the evidence/provenance/usage that DevCadence requires to evaluate the contract.
 
-- logical stage started/completed/failed;
-- stage is blocked on human/policy/external dependency;
-- budget or deadline pause;
-- evidence/artifact produced;
-- cancellation;
-- terminal result.
+### 5. Execution placement is not workflow authority
 
-A runtime-private child sleeping while another child works is not automatically canonical ProjectState.
+A logical DevCadence task or stage does not gain engineering meaning or authority from the process, host, node, scheduler instance or worker that happens to execute it unless an explicit locality/security/tool constraint is part of the task contract.
 
-### 5. Runtime knowledge may be hierarchical, but DevCadence authority stays external
+The native executor may remain single-process and single-host. A future executor may use different placement internally without changing `WorkflowPlan` semantics. Any concrete distributed integration must separately solve its own ownership, duplicate-execution, source/artifact locality, credential, recovery and consistency requirements; this ADR does not pre-design those mechanisms.
 
-An execution runtime may maintain a hierarchical knowledge substrate for its own tasks.
+### 6. The native executor stays deliberately simple
 
-For COS this may be a task/ancestor blackboard structure where a child sees local knowledge plus inherited or referenced ancestor knowledge, and where fact changes can trigger sensory events. The runtime may store summaries, hypotheses, intermediate results, task relationships and references to durable artifacts.
+The native DevCadence executor is a reference implementation needed to make DevCadence work, not a general cognitive runtime.
 
-The boundary distinguishes three classes:
-
-1. **Authoritative DevCadence facts** — project state, accepted decisions, invariants, EWP contract, review state, validated evidence and policy. These remain owned by DevCadence.
-2. **Runtime-private knowledge** — hypotheses, temporary task state, blackboard facts, internal subtask outputs and scheduling metadata. These may disappear or be restructured without changing canonical DevCadence state.
-3. **Returned candidate evidence/facts** — runtime outputs proposed for DevCadence ingestion. They acquire canonical meaning only through the normal evidence, validation, review or acceptance path.
-
-References/digests are preferred to duplicating large payloads. Existing ContextPack/EvidenceLease/artifact mechanisms remain the source of bounded content delivery; an external runtime may index or mirror them but does not become their authority.
-
-### 6. Knowledge-driven wakeup stays behind the runtime boundary
-
-A runtime may subscribe a sleeping task to a condition over its knowledge/environment and wake it when a matching fact or event appears.
-
-COS may realize this as:
-
-```text
-blackboard fact changes
-        |
-      ligand
-        |
-  sensory cortex
-        |
- matching receptor
-        |
-   wake runtime task
-```
-
-DevCadence needs the semantic effect, not those implementation types.
-
-This permits a future COS adapter to retain its own architecture rather than forcing COS concepts into DevCadence core. It also permits the native executor to remain much simpler.
-
-### 7. The native executor is intentionally dumb
-
-The native DevCadence executor is the reference implementation needed to make DevCadence work, not a second attempt to build a general cognitive operating system.
-
-Its default design target is deliberately boring:
+Its default design target is:
 
 - one DevCadence control-plane instance;
-- one host unless a current requirement proves otherwise;
+- single-node/process-local execution unless a current requirement proves otherwise;
 - direct execution of ready logical stages;
 - ordinary dependency checks;
-- existing SessionDrivers, process runner, worktrees and validators;
+- reuse of existing `SessionDriver`, process, worktree and validator machinery;
 - simple bounded concurrency where useful;
-- explicit completion/failure/cancellation;
-- no distributed task ownership or synchronization;
-- no hierarchical blackboard unless a concrete native DevCadence requirement independently needs one;
-- no generic sensory/event fabric beyond the events already required by current workflows.
+- explicit completion, failure and cancellation.
 
-A sophisticated external runtime should add sophistication **behind** the execution boundary rather than forcing the native executor to predict it.
+Do not add a plugin framework, generic event fabric, hierarchical blackboard, distributed task store, leases, consensus, recursive planner machinery or other speculative runtime infrastructure solely to preserve future substitutability.
 
-This ADR therefore does **not** require implementing:
+### 7. Extract the concrete seam from M4 evidence
 
-- a plugin framework;
-- an external executor today;
-- hierarchical blackboards;
-- receptors or ligands;
-- durable runtime-task persistence beyond current requirements;
-- distributed workers;
-- dynamic recursive planning;
-- generic pub/sub infrastructure.
+M4 should keep workflow execution behind one narrow internal entry point, but the exact executable interface must be derived from real native orchestration requirements.
 
-Until there is an actual second execution runtime or the native scheduler needs the abstraction for M4/M10, DevCadence should implement only the smallest seam required by current work.
+A useful architectural test is that a second/fake executor can satisfy the same logical plan while scheduling independent stages differently (for example asynchronously or out of total-order execution) without requiring changes to EWP, policy, ProjectState, evidence or acceptance semantics.
 
-When substantial workflow execution is first materialized, code should depend inward on the workflow-execution contract rather than on one concrete native scheduler.
-
-### 8. Future task placement and synchronization remain executor concerns
-
-A future execution runtime may distribute its private runtime tasks across machines while preserving the same DevCadence logical workflow.
-
-For example, a future COS Nexus may provide nodes that persist tasks and allow COS Runtime instances to synchronize or acquire those tasks. That can eventually make a COS-backed DevCadence execution distributed without requiring today's DevCadence control plane to implement distributed task scheduling.
-
-The compatibility requirement is intentionally weak:
-
-- canonical DevCadence workflow semantics must not assume that every runtime task executes in the same process or on the same machine;
-- logical task/stage identity must not derive authority from executor process/node identity;
-- source, artifact, credential, worktree and validation locality remain explicit constraints where they matter;
-- an external runtime is responsible for its own task synchronization, ownership, recovery and internal consistency;
-- DevCadence still receives policy-significant outcomes/evidence through the workflow-execution boundary.
-
-This does **not** claim that current DevCadence is distributed-ready. A real distributed integration will require concrete designs for authentication, source/artifact availability, worktree placement, failure/retry semantics, secret exposure, evidence provenance and split-brain/duplicate execution. Those are future requirements and must not be pre-implemented speculatively.
-
-The native executor remains free to be single-process and single-host.
-
-### 9. Runtime-private topology must not leak into stable protocol without independent need
-
-Do not add fields to canonical `WorkflowPlan` merely to mirror one executor's machinery.
-
-Examples that remain runtime-private unless a separate DevCadence requirement justifies them:
-
-- parent worker identifiers;
-- arbitrary nested subtask depth;
-- planner-promotion state;
-- blackboard storage layout;
-- receptor/ligand representation;
-- reflection loop counters;
-- model transcript structure.
-
-Protocol additions require an engineering-semantic need, not parity with COS or the native implementation.
-
-## COS mapping (non-normative)
-
-| COS capability | DevCadence boundary interpretation |
-| --- | --- |
-| persistent/suspendable task | runtime execution unit |
-| task state machine / scheduler | executor-private activation machinery |
-| receptor + ligand | executor-private wait/wake mechanism |
-| Sensory Cortex | executor-private event router |
-| hierarchical / holographic blackboard | executor-private knowledge substrate |
-| fractal sub-DAG / worker promoted to planner | executor-private decomposition |
-| model router | may reuse DevCadence authorized cognition resources beneath the executor |
-| task result / evidence | returned through DevCadence evidence/result contracts |
-| COS Nexus task storage/synchronization | executor-private placement, persistence and multi-node coordination |
-
-The mapping is deliberately one-way. DevCadence is not required to reimplement COS terminology.
+If that test exposes native-scheduler assumptions, fix the semantic leak rather than expanding the stable protocol to mirror the native executor.
 
 ## Consequences
 
 ### Positive
 
-- a future COS-backed executor can be introduced without redefining DevCadence engineering policy;
-- the existing native executor remains simple;
-- native and COS execution can be compared against the same frozen EWP/WorkflowPlan corpus;
-- event-driven sleep/wake and hierarchical knowledge become available later without contaminating canonical project state;
-- individual model/session adapters remain reusable under either executor;
-- COS can evolve independently while DevCadence preserves stable engineering semantics.
-- a future COS Nexus can add distributed task placement/synchronization without requiring the native DevCadence executor to become distributed.
+- native scheduling details do not become stable workflow semantics;
+- an alternate runtime can later execute the same engineering contracts;
+- `SessionDriver` remains reusable and correctly scoped to individual cognition sessions;
+- DevCadence retains deterministic authority over policy, evidence, review and acceptance;
+- the native implementation can remain intentionally small.
 
 ### Negative
 
-- there is one more architectural boundary to preserve;
-- some lifecycle facts will need careful classification as canonical versus runtime-private when the executor is implemented;
-- an external runtime may need adapters for DevCadence evidence/artifact/context references.
+- the architecture must maintain a real distinction between logical lifecycle and executor-private lifecycle;
+- some future M4 lifecycle records may need explicit classification as canonical versus executor-private;
+- alternate executors may need adapters for DevCadence context, artifact, evidence and authority envelopes.
 
-### New risks
+### Risks and mitigations
 
-- **Leaky abstraction:** native or COS implementation details creep into WorkflowPlan. Mitigation: DCI-159 and contract-focused review.
-- **Shadow authority:** runtime blackboard facts are accidentally treated as accepted project truth. Mitigation: DCI-160 and normal evidence/acceptance ingestion.
-- **Double scheduling:** DevCadence and an external runtime both try to own the same internal scheduling decision. Mitigation: DevCadence owns logical legality/obligations; executor owns runtime activation inside an authorized stage.
-- **Lost observability:** runtime-private tasks hide material failure. Mitigation: require policy-significant lifecycle/evidence/resource outcomes at the boundary without mirroring every internal event.
-- **Premature distribution tax:** future multi-node possibilities distort the simple native executor. Mitigation: DCI-161; keep placement/runtime ownership non-semantic while explicitly deferring distributed correctness mechanisms until a concrete runtime needs them.
+- **Leaky abstraction:** executor details creep into `WorkflowPlan`. Mitigation: DCI-159 and field classification above.
+- **Shadow authority:** executor-private state is treated as accepted project truth. Mitigation: DCI-160 and DevCadence-owned evidence/acceptance.
+- **Double scheduling:** DevCadence and an alternate runtime both attempt to own the same private scheduling decision. Mitigation: DevCadence owns logical legality/obligations; the executor owns private execution strategy inside that envelope.
+- **Premature distribution tax:** future placement possibilities distort the native executor. Mitigation: DCI-161 and the deliberately simple native target.
 
 ## Implementation guidance
 
 ### Now
 
-- document the boundary and invariants;
-- keep `WorkflowPlan` logical;
-- do not introduce COS-specific types;
-- do not implement an executor plugin system solely for this future possibility.
-- keep the native executor single-node and straightforward unless a current DevCadence requirement proves a more complex mechanism necessary;
-- do not implement Nexus-like synchronization, consensus, leases, distributed queues or replicated task stores in DevCadence merely for future compatibility.
+- preserve DCI-159–161;
+- keep `WorkflowPlan` logical according to the field classification above;
+- keep `SessionDriver` below workflow execution;
+- do not introduce a generalized executor/plugin framework solely for future compatibility.
 
-### When M4 materializes a reusable orchestration harness
+### When M4 materializes execution
 
-Prefer a narrow internal workflow-execution seam so the reference/native executor is one implementation rather than the semantic definition of DevCadence.
+- build the smallest native executor sufficient for the evidence-gate workload;
+- use stable logical stage/attempt identity rather than process/goroutine identity;
+- keep DevCadence-owned deterministic gates, evidence and acceptance outside executor assertions;
+- allow independent logical stages to execute in any order consistent with binding dependencies/constraints;
+- add a cheap alternate/fake-executor test if it helps expose native-scheduler assumptions;
+- extract an interface only when the native implementation demonstrates the required operations and failure semantics.
 
-The first implementation can be intentionally small. An interface should be extracted from demonstrated native needs, not guessed from COS.
+### When a real alternate runtime exists
 
-### When COS is available as an executable/package
+Define an adapter from the demonstrated execution boundary. Add only cross-runtime semantics proven necessary by that integration. Runtime-specific task graphs, memory systems, wake mechanisms, worker kinds or distributed placement remain private unless a separate DevCadence requirement makes them policy-significant.
 
-Add a COS adapter at the workflow-execution boundary. Map DevCadence logical stages and references into COS mission/tasks; allow COS to create its own private hierarchical graph/blackboards/wake conditions; map only semantic outcomes and evidence back. If COS Nexus is present, COS may also place/synchronize those private tasks across Nexus nodes; that remains an executor implementation detail unless a concrete DevCadence policy needs to constrain placement.
+## Verification
 
-Do not bypass DevCadence validators, policy, independent-review rules or acceptance authority.
+Review should be able to answer each concern with one owner:
 
-### Experimental use
+- engineering legality, policy, evidence and acceptance -> DevCadence;
+- private scheduling/decomposition/working state -> executor;
+- individual model/session access -> `SessionDriver` for the native path;
+- explicit plan bindings/limits -> preserved by every executor.
 
-Run the same revision-pinned workload corpus through:
+A representative `WorkflowPlan` should be executable by a native reference executor and by a deliberately different fake executor without changing the plan's engineering meaning.
 
-```text
-WorkflowPlan -> native executor
-WorkflowPlan -> COS executor
-```
+## Rollback / supersession
 
-Measure at least:
+If no meaningful alternate runtime emerges and the boundary adds unjustified implementation complexity, the executable seam may remain internal or collapse into the native executor. The semantic distinction that `WorkflowPlan` is not an execution trace remains useful independently.
 
-- accepted correctness / regressions;
-- scarce frontier or subscription usage;
-- total local inference/compute;
-- context/input volume where measurable;
-- retries and repair rounds;
-- wall time;
-- human interventions;
-- policy violations/refusals;
-- evidence completeness;
-- recovery from waits/failures.
-
-A later DevCadence rewrite using COS should preserve the frozen specification and compare against a control implementation so that gains are attributable rather than anecdotal.
-
-## Verification plan
-
-1. Architecture review can identify a single ownership answer for each concern: DevCadence logical policy or execution-runtime mechanism.
-2. A future fake second executor can run representative WorkflowPlans without changes to task/EWP/policy/acceptance semantics.
-3. Native and external executors can consume the same logical plan and produce comparable semantic results/evidence.
-4. Runtime-private knowledge cannot directly mutate accepted ProjectState or close review/acceptance obligations.
-5. Independent-review requirements remain enforceable even when one runtime internally uses many workers.
-6. A task can remain dormant in an external runtime without DevCadence requiring repeated model polling.
-
-## Rollback / supersession strategy
-
-If experience shows that no meaningful second runtime exists and the boundary adds unjustified complexity, the interface may remain internal or collapse into the native executor while retaining the semantic distinction that WorkflowPlan is not an execution trace.
-
-If COS or another runtime proves that additional cross-runtime semantics are truly required, amend this ADR from demonstrated integration requirements rather than preemptively modeling the full external runtime.
-
-## Follow-up
-
-- [ ] Preserve this boundary when M4 introduces reusable orchestration code.
-- [ ] Add executable interface/types only when a concrete native implementation needs them.
-- [ ] Add a COS adapter only when COS has a stable callable runtime/package boundary.
-- [ ] Define the native-vs-COS benchmark corpus before claiming improvement.
+If a real integration proves that additional cross-runtime semantics are necessary, amend this ADR from demonstrated requirements rather than preemptively modeling the external runtime.
