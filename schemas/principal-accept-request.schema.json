@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/olostan/DevCadence/schemas/principal-accept-request.schema.json",
+  "title": "DevCadence Principal accept request",
+  "description": "Acceptance is hard-disabled in this slice: a well-formed request always receives NEEDS_PRINCIPAL.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "meta",
+    "candidate",
+    "validation_ids",
+    "review_ids",
+    "reason"
+  ],
+  "properties": {
+    "meta": {
+      "$ref": "devcadence:///principal-call-meta.schema.json"
+    },
+    "candidate": {
+      "$ref": "devcadence:///principal-candidate-ref.schema.json"
+    },
+    "validation_ids": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 16,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128,
+        "pattern": "^[^\\p{Cc}]*\\S[^\\p{Cc}]*$"
+      }
+    },
+    "review_ids": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 16,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128,
+        "pattern": "^[^\\p{Cc}]*\\S[^\\p{Cc}]*$"
+      }
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2048,
+      "pattern": "\\S"
+    }
+  }
+}

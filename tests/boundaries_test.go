@@ -57,7 +57,7 @@ func TestCoreDomainHasNoExternalDependencies(t *testing.T) {
 func TestNoPackageDependsOnAModelProviderSDK(t *testing.T) {
 	forbidden := []string{
 		"ollama", "mlx", "openai", "anthropic", "google.golang.org/genai",
-		"langchain", "huggingface", "modelcontextprotocol", "tiktoken",
+		"langchain", "huggingface", "tiktoken",
 	}
 	for _, dep := range dependenciesOf(t, "./...") {
 		firstSegment, _, _ := strings.Cut(dep, "/")
@@ -73,6 +73,56 @@ func TestNoPackageDependsOnAModelProviderSDK(t *testing.T) {
 				t.Errorf("the module depends on the third-party package %s; "+
 					"model integrations must stay behind adapters that speak protocol types", dep)
 			}
+		}
+	}
+}
+
+// TestMCPSDKIsConfinedToTheAdapter keeps the official Model Context Protocol Go
+// SDK (WP-M5-2) out of the core, the facade and persistence: only the thin
+// transport adapter and its launcher binary may import it, so semantics stay
+// host-neutral (I1, DCI-054/055). The adapter dependency check fails rather than
+// skipping, so it cannot pass vacuously.
+func TestMCPSDKIsConfinedToTheAdapter(t *testing.T) {
+	const (
+		module = "github.com/olostan/DevCadence/"
+		sdk    = "github.com/modelcontextprotocol/go-sdk"
+	)
+	hasSDK := func(deps []string) bool {
+		for _, dep := range deps {
+			if strings.HasPrefix(dep, sdk+"/") || dep == sdk {
+				return true
+			}
+		}
+		return false
+	}
+	if !hasSDK(dependenciesOf(t, module+"internal/mcpadapter")) {
+		t.Fatal("internal/mcpadapter does not depend on the MCP SDK; the confinement check would be vacuous")
+	}
+	for _, pkg := range append([]string{
+		module + "internal/principal", module + "internal/principal/facade",
+		module + "internal/controlplane", module + "internal/storage",
+	}, coreDomainPackages...) {
+		if hasSDK(dependenciesOf(t, pkg)) {
+			t.Errorf("%s depends on the MCP SDK; only internal/mcpadapter and cmd/devcadence-mcp may", pkg)
+		}
+	}
+	cmd := exec.Command("go", "list", "-f", "{{.ImportPath}} {{join .Imports \" \"}}", "./...")
+	cmd.Dir = ".."
+	out, err := cmd.Output()
+	if err != nil {
+		t.Skipf("go list unavailable in this environment: %v", err)
+	}
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) == 0 {
+			continue
+		}
+		pkg := fields[0]
+		if pkg == module+"internal/mcpadapter" || pkg == module+"cmd/devcadence-mcp" {
+			continue
+		}
+		if hasSDK(fields[1:]) {
+			t.Errorf("%s imports the MCP SDK directly; only the adapter and its launcher may", pkg)
 		}
 	}
 }

@@ -1,0 +1,10 @@
+{
+  "schema_version": "1.0",
+  "evidence_refs": [],
+  "error": {
+    "code": "OPERATION_LOST",
+    "message": "The operation handle is no longer available.",
+    "evidence_refs": [],
+    "retryable": false
+  }
+}

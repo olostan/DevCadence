@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/olostan/DevCadence/schemas/principal-create-work-package-request.schema.json",
+  "title": "DevCadence Principal create_work_package request",
+  "description": "Strict request of the create_work_package tool (WP-M5-2). No actor, grant or policy: the caller comes from the launch binding.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "meta",
+    "work_package"
+  ],
+  "properties": {
+    "meta": {
+      "allOf": [
+        {
+          "$ref": "devcadence:///principal-call-meta.schema.json"
+        },
+        {
+          "required": [
+            "expected_state_revision"
+          ]
+        }
+      ]
+    },
+    "work_package": {
+      "$ref": "devcadence:///engineering-work-package.schema.json"
+    }
+  }
+}

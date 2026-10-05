@@ -1,0 +1,15 @@
+{
+  "schema_version": "1.0",
+  "state_revision": "ps_000000042",
+  "evidence_refs": [],
+  "result": {
+    "focus": "project",
+    "source_revision": "ps_000000042"
+  },
+  "error": {
+    "code": "STALE_PROJECT_STATE",
+    "message": "The project state changed since the expected revision.",
+    "evidence_refs": [],
+    "retryable": true
+  }
+}

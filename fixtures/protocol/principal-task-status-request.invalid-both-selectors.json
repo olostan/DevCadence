@@ -1,0 +1,14 @@
+{
+  "meta": {
+    "schema_version": "1.0",
+    "project_id": "example",
+    "correlation_id": "corr-0001"
+  },
+  "task_id": "tsk_00000000000000000000000C",
+  "operation": {
+    "id": "op_000001",
+    "instance_id": "inst_0123456789abcdef",
+    "kind": "validate",
+    "status": "running"
+  }
+}

@@ -89,6 +89,10 @@ type Projection struct {
 	// reducer-internal and never rendered into ProjectState.
 	validations map[string]evidenceRef
 	reviews     map[string]evidenceRef
+
+	// proposals holds the highest proposed version per Work Package id. It is
+	// reducer-private, rebuilt from the journal, and never rendered.
+	proposals map[string]int
 }
 
 // RecentSemanticChangeLimit bounds how many semantic deltas ProjectState
@@ -109,6 +113,7 @@ func New() *Projection {
 		discovery:         newDiscoveryState(),
 		validations:       map[string]evidenceRef{},
 		reviews:           map[string]evidenceRef{},
+		proposals:         map[string]int{},
 		Validation:        protocol.ValidationState{Status: protocol.ValidationUnknown},
 		Health:            protocol.HealthState{Status: protocol.HealthUnknown},
 	}

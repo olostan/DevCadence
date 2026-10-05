@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/olostan/DevCadence/schemas/principal-reject-request.schema.json",
+  "title": "DevCadence Principal reject request",
+  "description": "Strict request of the reject tool (WP-M5-2). No actor, grant or policy: the caller comes from the launch binding.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "meta",
+    "candidate",
+    "reason",
+    "requested_repairs"
+  ],
+  "properties": {
+    "meta": {
+      "allOf": [
+        {
+          "$ref": "devcadence:///principal-call-meta.schema.json"
+        },
+        {
+          "required": [
+            "expected_state_revision"
+          ]
+        }
+      ]
+    },
+    "candidate": {
+      "$ref": "devcadence:///principal-candidate-ref.schema.json"
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2048,
+      "pattern": "\\S"
+    },
+    "requested_repairs": {
+      "type": "array",
+      "maxItems": 32,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 2048,
+        "pattern": "\\S"
+      }
+    }
+  }
+}

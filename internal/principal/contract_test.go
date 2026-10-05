@@ -168,10 +168,12 @@ func TestStateRevisionSyntax(t *testing.T) {
 }
 
 func TestCommitAndDigestFormats(t *testing.T) {
-	if principal.ValidateCommit("c", strings.Repeat("a", 40)) != nil || principal.ValidateCommit("c", strings.Repeat("a", 64)) != nil {
-		t.Fatal("a valid object id was refused")
+	for _, good := range []string{"91acd8273f1", strings.Repeat("a", 7), strings.Repeat("a", 40), strings.Repeat("a", 64)} {
+		if principal.ValidateCommit("c", good) != nil {
+			t.Fatalf("a valid object id %q was refused", good)
+		}
 	}
-	for _, bad := range []string{"", strings.Repeat("a", 39), strings.Repeat("a", 41), strings.Repeat("A", 40), strings.Repeat("g", 40)} {
+	for _, bad := range []string{"", strings.Repeat("a", 6), strings.Repeat("a", 65), strings.Repeat("A", 40), strings.Repeat("g", 40)} {
 		if principal.ValidateCommit("c", bad) == nil {
 			t.Errorf("commit %q was accepted", bad)
 		}
@@ -301,6 +303,11 @@ func TestSchemasAreTheTwinOfTheGoTypes(t *testing.T) {
 		name := schema.Name(base[:strings.Index(base, ".")])
 		decode, ok := decoders[name]
 		if !ok {
+			// Tool request/response fixtures (WP-M5-2) are checked against their
+			// strict Go readers by internal/principal/facade.
+			if strings.HasSuffix(string(name), "-request") || strings.HasSuffix(string(name), "-response") {
+				continue
+			}
 			t.Fatalf("fixture %s names no principal schema", base)
 		}
 		document, err := os.ReadFile(file)

@@ -95,6 +95,12 @@ var wireOnlySchemas = map[schema.Name]string{
 	schema.NamePrincipalOperationRef:   "internal/principal.OperationRef",
 }
 
+func init() {
+	for _, name := range schema.PrincipalToolSchemaNames() {
+		wireOnlySchemas[name] = "internal/principal/facade (strict request/response DTOs)"
+	}
+}
+
 // TestValidFixturesValidate is the positive half of the corpus contract.
 func TestValidFixturesValidate(t *testing.T) {
 	set, err := schema.Default()

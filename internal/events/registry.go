@@ -103,6 +103,8 @@ func CorrelationFor(payload Payload) Correlation {
 		return Correlation{TaskID: p.TaskID}
 	case *TaskDesignStarted:
 		return Correlation{TaskID: p.TaskID}
+	case *WorkPackageProposed:
+		return Correlation{TaskID: p.TaskID, WorkPackageID: p.WorkPackageID}
 	case *WorkPackageApproved:
 		return Correlation{TaskID: p.TaskID, WorkPackageID: p.WorkPackageID}
 	case *TaskDelegated:

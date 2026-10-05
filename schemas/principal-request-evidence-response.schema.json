@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/olostan/DevCadence/schemas/principal-request-evidence-response.schema.json",
+  "title": "DevCadence Principal request_evidence response",
+  "description": "Response of the request_evidence tool (WP-M5-2): the same value for a Go and an MCP caller. state_revision is the prefix observed or committed and is omitted when the call was refused before any read.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "evidence_refs"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "state_revision": {
+      "type": "string",
+      "pattern": "^ps_([0-9]{9}|[1-9][0-9]{9,})$"
+    },
+    "evidence_refs": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128,
+        "pattern": "^[^\\p{Cc}]*\\S[^\\p{Cc}]*$"
+      }
+    },
+    "error": {
+      "$ref": "devcadence:///principal-semantic-error.schema.json"
+    },
+    "result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind"
+      ],
+      "oneOf": [
+        {
+          "required": [
+            "evidence_packet"
+          ]
+        },
+        {
+          "required": [
+            "operation"
+          ]
+        }
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "summary",
+            "search",
+            "symbol",
+            "snippet",
+            "diff"
+          ]
+        },
+        "evidence_packet": {
+          "$ref": "devcadence:///evidence-packet.schema.json"
+        },
+        "operation": {
+          "$ref": "devcadence:///principal-operation-ref.schema.json"
+        }
+      }
+    }
+  },
+  "oneOf": [
+    {
+      "required": [
+        "result"
+      ],
+      "not": {
+        "required": [
+          "error"
+        ]
+      }
+    },
+    {
+      "required": [
+        "error"
+      ],
+      "not": {
+        "required": [
+          "result"
+        ]
+      }
+    }
+  ]
+}

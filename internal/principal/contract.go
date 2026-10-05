@@ -227,13 +227,20 @@ func ValidateDigest(field, value string) error {
 	return nil
 }
 
-// ValidateCommit checks a lower-case Git object ID of 40 or 64 hex digits.
-// Matching the length to a registered repository's hash format needs the
-// repository and is the caller's check; this function never guesses it.
+// MinCommitHexDigits and MaxCommitHexDigits bound a wire commit identifier.
+// Short abbreviated ids are accepted because the control plane stores base
+// commits in short form; resolving an abbreviation against a repository is the
+// caller's check, and equality between stored and wire ids is by exact string.
+const (
+	MinCommitHexDigits = 7
+	MaxCommitHexDigits = 64
+)
+
+// ValidateCommit checks a lower-case hex Git object id of 7 to 64 digits.
 func ValidateCommit(field, value string) error {
-	if (len(value) != 40 && len(value) != 64) || !isLowerHex(value) {
+	if len(value) < MinCommitHexDigits || len(value) > MaxCommitHexDigits || !isLowerHex(value) {
 		return errs.New(errs.CategoryInvalidArgument,
-			"%s must be a 40 or 64 digit lower-case hex Git object id", field)
+			"%s must be a %d to %d digit lower-case hex Git object id", field, MinCommitHexDigits, MaxCommitHexDigits)
 	}
 	return nil
 }
@@ -422,6 +429,11 @@ func decodeStrict(document []byte, out any) error {
 	}
 	return requireEOF(decoder)
 }
+
+// DecodeStrict decodes exactly one JSON document into out, refusing unknown
+// keys, explicit nulls, trailing data and type mismatches. Principal request
+// documents use it so that every wire decoder shares one definition of strict.
+func DecodeStrict(document []byte, out any) error { return decodeStrict(document, out) }
 
 func requireEOF(d *json.Decoder) error {
 	if _, err := d.Token(); err != io.EOF {

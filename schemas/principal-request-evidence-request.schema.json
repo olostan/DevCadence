@@ -1,0 +1,302 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/olostan/DevCadence/schemas/principal-request-evidence-request.schema.json",
+  "title": "DevCadence Principal request_evidence request",
+  "description": "Closed evidence union selected by kind. Content is always worker-mediated, at most 8192 bytes and 200 lines; line spans are enforced by the Go reader.",
+  "type": "object",
+  "required": [
+    "meta",
+    "kind",
+    "max_bytes"
+  ],
+  "properties": {
+    "meta": {
+      "$ref": "devcadence:///principal-call-meta.schema.json"
+    },
+    "kind": {
+      "enum": [
+        "summary",
+        "search",
+        "symbol",
+        "snippet",
+        "diff"
+      ]
+    },
+    "max_bytes": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 8192
+    }
+  },
+  "$defs": {
+    "relPath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024,
+      "pattern": "^[^/\\\\\\p{Cc}][^\\\\\\p{Cc}]*$",
+      "allOf": [
+        {
+          "not": {
+            "pattern": "(^|/)\\.\\.(/|$)"
+          }
+        },
+        {
+          "not": {
+            "pattern": "^[A-Za-z]:"
+          }
+        }
+      ]
+    },
+    "filePath": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/relPath"
+        },
+        {
+          "not": {
+            "const": "."
+          }
+        }
+      ]
+    }
+  },
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "meta",
+        "kind",
+        "max_bytes",
+        "record_kind",
+        "record_id",
+        "record_version",
+        "digest"
+      ],
+      "properties": {
+        "meta": {
+          "$ref": "devcadence:///principal-call-meta.schema.json"
+        },
+        "kind": {
+          "const": "summary"
+        },
+        "max_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8192
+        },
+        "record_kind": {
+          "enum": [
+            "EvidencePacket",
+            "ValidationResult",
+            "ReviewResult",
+            "DecisionRecord"
+          ]
+        },
+        "record_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[^\\p{Cc}]*\\S[^\\p{Cc}]*$"
+        },
+        "record_version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "meta",
+        "kind",
+        "max_bytes",
+        "base_commit",
+        "scope_paths",
+        "query",
+        "max_matches"
+      ],
+      "properties": {
+        "meta": {
+          "$ref": "devcadence:///principal-call-meta.schema.json"
+        },
+        "kind": {
+          "const": "search"
+        },
+        "max_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8192
+        },
+        "base_commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{7,64}$"
+        },
+        "scope_paths": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/relPath"
+          }
+        },
+        "query": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "pattern": "\\S"
+        },
+        "max_matches": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "meta",
+        "kind",
+        "max_bytes",
+        "base_commit",
+        "path",
+        "symbol"
+      ],
+      "properties": {
+        "meta": {
+          "$ref": "devcadence:///principal-call-meta.schema.json"
+        },
+        "kind": {
+          "const": "symbol"
+        },
+        "max_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8192
+        },
+        "base_commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{7,64}$"
+        },
+        "path": {
+          "$ref": "#/$defs/filePath"
+        },
+        "symbol": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "pattern": "\\S"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "meta",
+        "kind",
+        "max_bytes",
+        "base_commit",
+        "path",
+        "start_line",
+        "end_line",
+        "reason"
+      ],
+      "properties": {
+        "meta": {
+          "$ref": "devcadence:///principal-call-meta.schema.json"
+        },
+        "kind": {
+          "const": "snippet"
+        },
+        "max_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8192
+        },
+        "base_commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{7,64}$"
+        },
+        "path": {
+          "$ref": "#/$defs/filePath"
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024,
+          "pattern": "\\S"
+        },
+        "hit_ref": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[^\\p{Cc}]*\\S[^\\p{Cc}]*$"
+        },
+        "start_line": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "end_line": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "meta",
+        "kind",
+        "max_bytes",
+        "candidate",
+        "path",
+        "start_line",
+        "end_line",
+        "reason"
+      ],
+      "properties": {
+        "meta": {
+          "$ref": "devcadence:///principal-call-meta.schema.json"
+        },
+        "kind": {
+          "const": "diff"
+        },
+        "max_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8192
+        },
+        "candidate": {
+          "$ref": "devcadence:///principal-candidate-ref.schema.json"
+        },
+        "path": {
+          "$ref": "#/$defs/filePath"
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024,
+          "pattern": "\\S"
+        },
+        "start_line": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "end_line": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    }
+  ]
+}

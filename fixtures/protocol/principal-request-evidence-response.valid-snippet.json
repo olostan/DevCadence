@@ -1,0 +1,14 @@
+{
+  "schema_version": "1.0",
+  "state_revision": "ps_000000042",
+  "evidence_refs": [],
+  "result": {
+    "kind": "snippet",
+    "operation": {
+      "id": "op_000001",
+      "instance_id": "inst_0123456789abcdef",
+      "kind": "snippet",
+      "status": "running"
+    }
+  }
+}

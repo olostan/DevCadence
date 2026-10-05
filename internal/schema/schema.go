@@ -109,6 +109,24 @@ const (
 	NamePrincipalOperationRef   Name = "principal-operation-ref"
 )
 
+// principalTools are the base tools of the semantic Principal interface
+// (WP-M5-2), in hyphenated schema-name form.
+var principalTools = []string{
+	"project-state", "investigate", "create-work-package", "delegate", "task-status",
+	"validate", "review", "request-evidence", "accept", "reject", "record-decision",
+}
+
+// PrincipalToolSchemaNames returns the 22 strict request and response schema
+// names of the eleven base principal tools (WP-M5-2). Like the WP-M5-1
+// identities they govern wire objects, not durable records.
+func PrincipalToolSchemaNames() []Name {
+	out := make([]Name, 0, 2*len(principalTools))
+	for _, tool := range principalTools {
+		out = append(out, Name("principal-"+tool+"-request"), Name("principal-"+tool+"-response"))
+	}
+	return out
+}
+
 // RecordKindToSchema maps a Go record kind to the schema that governs it.
 // It is the explicit statement of which twin belongs to which, so that a new
 // protocol type cannot be added without deciding on its schema.
@@ -304,6 +322,7 @@ func AllNames() []Name {
 		NamePrincipalCallMeta, NamePrincipalWorkPackageRef, NamePrincipalCandidateRef,
 		NamePrincipalSemanticError, NamePrincipalOperationRef,
 	}
+	names = append(names, PrincipalToolSchemaNames()...)
 	sort.Slice(names, func(i, j int) bool {
 		if len(names[i]) != len(names[j]) {
 			return len(names[i]) > len(names[j])

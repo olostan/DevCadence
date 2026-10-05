@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/olostan/DevCadence/schemas/principal-investigate-request.schema.json",
+  "title": "DevCadence Principal investigate request",
+  "description": "Question is untrusted data handed verbatim to the scout runtime; maxLength counts characters here and bytes (2048) in the Go reader.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "meta",
+    "question",
+    "base_commit",
+    "scope_paths",
+    "max_bytes"
+  ],
+  "properties": {
+    "meta": {
+      "$ref": "devcadence:///principal-call-meta.schema.json"
+    },
+    "question": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2048,
+      "pattern": "\\S"
+    },
+    "base_commit": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{7,64}$"
+    },
+    "scope_paths": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 16,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/relPath"
+      }
+    },
+    "max_bytes": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 8192
+    }
+  },
+  "$defs": {
+    "relPath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024,
+      "pattern": "^[^/\\\\\\p{Cc}][^\\\\\\p{Cc}]*$",
+      "allOf": [
+        {
+          "not": {
+            "pattern": "(^|/)\\.\\.(/|$)"
+          }
+        },
+        {
+          "not": {
+            "pattern": "^[A-Za-z]:"
+          }
+        }
+      ]
+    }
+  }
+}

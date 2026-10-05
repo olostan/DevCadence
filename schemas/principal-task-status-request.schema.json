@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/olostan/DevCadence/schemas/principal-task-status-request.schema.json",
+  "title": "DevCadence Principal task_status request",
+  "description": "Strict request of the task_status tool (WP-M5-2). No actor, grant or policy: the caller comes from the launch binding.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "meta"
+  ],
+  "properties": {
+    "meta": {
+      "$ref": "devcadence:///principal-call-meta.schema.json"
+    },
+    "task_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[^\\p{Cc}]*\\S[^\\p{Cc}]*$"
+    },
+    "operation": {
+      "$ref": "devcadence:///principal-operation-ref.schema.json"
+    }
+  },
+  "oneOf": [
+    {
+      "required": [
+        "task_id"
+      ],
+      "not": {
+        "required": [
+          "operation"
+        ]
+      }
+    },
+    {
+      "required": [
+        "operation"
+      ],
+      "not": {
+        "required": [
+          "task_id"
+        ]
+      }
+    }
+  ]
+}

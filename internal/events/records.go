@@ -65,6 +65,40 @@ func mismatch(event, field string, claimed, stored any) error {
 		event, field, claimed, stored)
 }
 
+// --- WorkPackageProposed -----------------------------------------------
+
+// ReferencedRecord implements RecordReferencing.
+func (p *WorkPackageProposed) ReferencedRecord() RecordRef {
+	return RecordRef{Kind: "EngineeringWorkPackage", ID: p.WorkPackageID, Version: p.Version, Digest: p.RecordDigest}
+}
+
+// CheckReferencedRecord implements RecordReferencing. The identity, task and
+// planning baseline of the stored blueprint must equal the compact claims, so
+// a proposal cannot name one record and describe another.
+func (p *WorkPackageProposed) CheckReferencedRecord(document []byte) error {
+	var wp protocol.EngineeringWorkPackage
+	if err := protocol.Unmarshal(document, &wp); err != nil {
+		return err
+	}
+	const event = "WorkPackageProposed"
+	if wp.WorkPackageID != p.WorkPackageID {
+		return mismatch(event, "work_package_id", p.WorkPackageID, wp.WorkPackageID)
+	}
+	if wp.Version != p.Version {
+		return mismatch(event, "version", p.Version, wp.Version)
+	}
+	if wp.TaskID != p.TaskID {
+		return mismatch(event, "task_id", p.TaskID, wp.TaskID)
+	}
+	if wp.ProjectStateRevision != p.ProjectStateRevision {
+		return mismatch(event, "project_state_revision", p.ProjectStateRevision, wp.ProjectStateRevision)
+	}
+	if wp.BaseCommit != p.BaseCommit {
+		return mismatch(event, "base_commit", p.BaseCommit, wp.BaseCommit)
+	}
+	return nil
+}
+
 // --- WorkPackageApproved -----------------------------------------------
 
 // ReferencedRecord implements RecordReferencing.
