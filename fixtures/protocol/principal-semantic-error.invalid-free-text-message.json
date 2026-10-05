@@ -1,0 +1,6 @@
+{
+  "code": "INTERNAL",
+  "message": "sqlite3: database is locked at /home/user/x.db",
+  "evidence_refs": [],
+  "retryable": false
+}

@@ -602,6 +602,8 @@ new-resource addition, topology collapse and future-driver extensibility. Verifi
 
 The [2026-10-F planning window](work-packages/window-2026-10-f-overview.md) indexes the five proposed M5 preparation EWPs and owns their shared planning status, runtime prerequisites and required M4 reevaluation. Each EWP retains its own implementation readiness gates.
 
+**WP-M5-1 status:** implemented in the working tree under an explicit repository-owner authorization as a disclosed gate exception (the EWP header remained DRAFT/NOT_READY and no independent Contract/Authority or Test Adequacy review had occurred at implementation time). Independent review and the mutation observation by a separate reviewer remain required before acceptance. See [the EWP](work-packages/wp-m5-1-semantic-contract-ewp.md#implementation-record).
+
 ## Future milestones
 
 Add a new `## <Milestone>` section here, following the same shape (branch

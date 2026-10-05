@@ -249,3 +249,17 @@ Readiness: **NOT_READY (independent review/current-base gate pending)**. Require
 - r1: initial contract and batch/freshness design; preserved historical WP planning revision and separated start guard from candidate operations.
 
 - r2: consolidated transaction-guard and SQLite contention repair: bounded read-only transaction guards, early SQLite write-intent serialization and cancellation-aware contention semantics.
+
+## Implementation record
+
+Implemented from base `2c0a3d4` (the EWP base `bd6c424` plus the documentation-only M5 preparation commits) in the working tree, **without commit**. Authorization: the repository owner explicitly authorized implementation as a disclosed gate exception while the header status remained DRAFT/NOT_READY; no independent Contract/Authority or Test Adequacy review had run. This record does not change the contract above.
+
+Interpretations and deviations, each needing reviewer confirmation:
+
+1. Prefix comparison for an uninitialised project uses the empty prefix `ps_000000000`; the first event must still be `ProjectInitialized`.
+2. "Task-significant events since approval" is implemented as any journal event correlated with the task after its latest `WorkPackageApproved` event (strictest reading; no state-specific allowlist).
+3. "Repository-backed" means the projection has a non-empty `RepositoryPath`; the accepted-base comparison is skipped for projects with none. The registered repository's hash format cannot be consulted from the control plane, so commit equality is by exact string; the wire `ValidateCommit` accepts 40 or 64 hex and callers must match the repository's format.
+4. The contention budget bounds only the wait for the connection and the write lock; the transaction body and commit run under the caller's context so a long journal replay is never cut off by the 2 s budget. Per-attempt busy waits are set with `PRAGMA busy_timeout` on the dedicated connection and restored to 5000 ms before release.
+5. The `CONSULTANT_UNAVAILABLE` code of the earlier informal MCP_API list is not in the EWP's closed enum and is not defined in v1.
+6. Existing durable Work Packages and events may carry short commit identifiers; the 40/64 hex rule applies to principal wire objects only, and the guard compares the stored string exactly.
+7. The mutant "treat Correlation as dedup" has no code to mutate (no dedup exists); A10 asserts the opposite behaviour.

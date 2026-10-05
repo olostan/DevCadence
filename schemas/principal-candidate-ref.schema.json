@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/olostan/DevCadence/schemas/principal-candidate-ref.schema.json",
+  "title": "DevCadence Principal CandidateRef",
+  "description": "Candidate commit of one attempt against one exact Work Package (WP-M5-1).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "task_id",
+    "attempt_id",
+    "work_package",
+    "commit"
+  ],
+  "properties": {
+    "task_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[^\\p{Cc}]*\\S[^\\p{Cc}]*$",
+      "description": "Task identifier."
+    },
+    "attempt_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[^\\p{Cc}]*\\S[^\\p{Cc}]*$",
+      "description": "Attempt identifier."
+    },
+    "work_package": {
+      "$ref": "devcadence:///principal-work-package-ref.schema.json"
+    },
+    "commit": {
+      "type": "string",
+      "pattern": "^([0-9a-f]{40}|[0-9a-f]{64})$"
+    }
+  }
+}

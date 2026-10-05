@@ -1,0 +1,8 @@
+{
+  "schema_version": "1.0",
+  "project_id": "example",
+  "correlation_id": "corr-0001",
+  "allowed_actions": [
+    "accept"
+  ]
+}

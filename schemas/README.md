@@ -54,6 +54,16 @@ inference.
 - `lesson-candidate.schema.json`
 - `refactoring-proposal.schema.json`
 
+### Principal wire identities (WP-M5-1)
+
+- `principal-call-meta.schema.json`
+- `principal-work-package-ref.schema.json`
+- `principal-candidate-ref.schema.json`
+- `principal-semantic-error.schema.json`
+- `principal-operation-ref.schema.json`
+
+These govern wire objects of the principal interface, **not durable records**: they have no record kind and are never stored. They are strict (`additionalProperties: false`, no actor/grant fields) and independent of the durable protocol versions. Their Go twin is `internal/principal`; closed enums and the fixed error messages are checked against the schemas by that package's tests. See [../docs/PROTOCOLS.md](../docs/PROTOCOLS.md#3c-1-principal-wire-identities-implemented---wp-m5-1).
+
 ### Cognition resources, adaptive context, economics, and portfolios (M3C, ADR-0018, ADR-0019)
 
 - `access-channel.schema.json`

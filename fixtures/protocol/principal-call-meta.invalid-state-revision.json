@@ -1,0 +1,6 @@
+{
+  "schema_version": "1.0",
+  "project_id": "example",
+  "expected_state_revision": "ps_12",
+  "correlation_id": "corr-0001"
+}

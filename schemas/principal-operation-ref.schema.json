@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/olostan/DevCadence/schemas/principal-operation-ref.schema.json",
+  "title": "DevCadence Principal OperationRef",
+  "description": "Process-scoped operation handle (WP-M5-1). instance_id names the issuing process; no durability is claimed.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "instance_id",
+    "kind",
+    "status"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[^\\p{Cc}]*\\S[^\\p{Cc}]*$",
+      "description": "Operation handle."
+    },
+    "instance_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[^\\p{Cc}]*\\S[^\\p{Cc}]*$",
+      "description": "Issuing process instance."
+    },
+    "kind": {
+      "enum": [
+        "investigate",
+        "delegate",
+        "validate",
+        "review",
+        "snippet",
+        "review_specification"
+      ]
+    },
+    "status": {
+      "enum": [
+        "queued",
+        "running",
+        "completed",
+        "blocked",
+        "failed",
+        "cancelled",
+        "lost"
+      ]
+    }
+  }
+}

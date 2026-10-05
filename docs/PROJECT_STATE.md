@@ -248,6 +248,12 @@ The accepted commit advances when integration validation passes, not when a
 change is accepted: an accepted candidate still has to survive the integration
 worktree (ARCHITECTURE.md §11).
 
+### 7.1a Guarded writes and start-execution freshness (WP-M5-1)
+
+`controlplane.ApplyBatch` is the guarded write path of the principal interface. The revision is compared **for exact equality as a generated string** (`ps_%09d`, at least nine digits; `ps_000000000` is the empty prefix) and never ordered lexically. The comparison happens inside the write transaction, after the store has taken SQLite write intent through the `principal_write_serialization` row and before any other read; a mismatch returns `ErrStaleProjectState` and commits no record, event or projection change. A batch commits all members, in order, against one working projection and persists the final projection once; any member, guard or reference failure rolls everything back.
+
+The optional **Work Package guard is the start-execution guard only**. It requires the task to be `READY`, the task's approved tuple and the latest `WorkPackageApproved` event to equal the guard's ID, version, digest and base commit, the digest-verified stored record to agree, no event correlated with the task after that approval, and, for a repository-backed project, the registered accepted base to equal the Work Package base (a missing accepted base blocks execution). The Work Package's planning revision is **not** compared with the current global prefix: approval itself advanced the prefix, and events of other tasks or of discovery do not make the plan stale. Mismatch returns `ErrStaleWorkPackage`. Accept, reject, validation and review check candidate lineage separately and do not use this guard. Exhausted lock contention returns `ErrStorageBusy`, never a staleness verdict. The existing `Apply` is unchanged and carries no expected prefix.
+
 ### 7.2 Task buckets
 
 `tasks.{ready,running,blocked,awaiting_principal}` are derived from task state

@@ -55,6 +55,9 @@ func TestEveryRecordKindHasASchema(t *testing.T) {
 		if _, deliberate := awaitingImplementation[name]; deliberate {
 			continue
 		}
+		if _, wire := wireOnlySchemas[name]; wire {
+			continue
+		}
 		t.Errorf("schema %s has no Go record kind mapped to it; add the protocol type, "+
 			"or list it in awaitingImplementation with the milestone that will implement it", name)
 	}
@@ -79,6 +82,17 @@ var awaitingImplementation = map[schema.Name]string{
 	"review-campaign":     "M7 — bounded review convergence (ADR-0010)",
 	"finding-disposition": "M7 — bounded review convergence (ADR-0010)",
 	"closure-decision":    "M7 — bounded review convergence (ADR-0010)",
+}
+
+// wireOnlySchemas names schemas that govern principal wire objects rather than
+// durable records, so they have no record kind by design (WP-M5-1). Their Go
+// twins live in internal/principal and are checked by that package's tests.
+var wireOnlySchemas = map[schema.Name]string{
+	schema.NamePrincipalCallMeta:       "internal/principal.CallMeta",
+	schema.NamePrincipalWorkPackageRef: "internal/principal.WorkPackageRef",
+	schema.NamePrincipalCandidateRef:   "internal/principal.CandidateRef",
+	schema.NamePrincipalSemanticError:  "internal/principal.SemanticError",
+	schema.NamePrincipalOperationRef:   "internal/principal.OperationRef",
 }
 
 // TestValidFixturesValidate is the positive half of the corpus contract.

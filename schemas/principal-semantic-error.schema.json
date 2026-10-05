@@ -1,0 +1,379 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/olostan/DevCadence/schemas/principal-semantic-error.schema.json",
+  "title": "DevCadence Principal SemanticError",
+  "description": "Closed-set failure report with a fixed safe message (WP-M5-1). Raw provider, shell or SQL text is never carried; an error is not an authority statement.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "code",
+    "message",
+    "evidence_refs",
+    "retryable"
+  ],
+  "properties": {
+    "code": {
+      "enum": [
+        "INVALID_ARGUMENT",
+        "UNSUPPORTED_SCHEMA_VERSION",
+        "NOT_FOUND",
+        "INTEGRITY",
+        "STALE_PROJECT_STATE",
+        "STALE_WORK_PACKAGE",
+        "POLICY_DENIED",
+        "VALIDATION_FAILED",
+        "REVIEW_DISAGREEMENT",
+        "NEEDS_PRINCIPAL",
+        "NEEDS_HUMAN",
+        "MODEL_UNAVAILABLE",
+        "CONTEXT_UNFIT",
+        "CONTRADICTED_ASSUMPTION",
+        "OPERATION_LOST",
+        "CANCELLED",
+        "INTERNAL"
+      ]
+    },
+    "message": {
+      "type": "string",
+      "maxLength": 512
+    },
+    "evidence_refs": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128,
+        "pattern": "^[^\\p{Cc}]*\\S[^\\p{Cc}]*$",
+        "description": "Authorized project-scoped immutable evidence handle."
+      }
+    },
+    "retryable": {
+      "type": "boolean"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "code": {
+            "const": "INVALID_ARGUMENT"
+          }
+        },
+        "required": [
+          "code"
+        ]
+      },
+      "then": {
+        "properties": {
+          "message": {
+            "const": "The request is malformed or contradictory."
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "code": {
+            "const": "UNSUPPORTED_SCHEMA_VERSION"
+          }
+        },
+        "required": [
+          "code"
+        ]
+      },
+      "then": {
+        "properties": {
+          "message": {
+            "const": "The schema version is not supported."
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "code": {
+            "const": "NOT_FOUND"
+          }
+        },
+        "required": [
+          "code"
+        ]
+      },
+      "then": {
+        "properties": {
+          "message": {
+            "const": "The requested item does not exist."
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "code": {
+            "const": "INTEGRITY"
+          }
+        },
+        "required": [
+          "code"
+        ]
+      },
+      "then": {
+        "properties": {
+          "message": {
+            "const": "Stored data failed an integrity check."
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "code": {
+            "const": "STALE_PROJECT_STATE"
+          }
+        },
+        "required": [
+          "code"
+        ]
+      },
+      "then": {
+        "properties": {
+          "message": {
+            "const": "The project state changed since the expected revision."
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "code": {
+            "const": "STALE_WORK_PACKAGE"
+          }
+        },
+        "required": [
+          "code"
+        ]
+      },
+      "then": {
+        "properties": {
+          "message": {
+            "const": "The Work Package is no longer the current approved plan."
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "code": {
+            "const": "POLICY_DENIED"
+          }
+        },
+        "required": [
+          "code"
+        ]
+      },
+      "then": {
+        "properties": {
+          "message": {
+            "const": "Policy does not permit this action."
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "code": {
+            "const": "VALIDATION_FAILED"
+          }
+        },
+        "required": [
+          "code"
+        ]
+      },
+      "then": {
+        "properties": {
+          "message": {
+            "const": "Deterministic validation failed."
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "code": {
+            "const": "REVIEW_DISAGREEMENT"
+          }
+        },
+        "required": [
+          "code"
+        ]
+      },
+      "then": {
+        "properties": {
+          "message": {
+            "const": "Independent reviews disagree."
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "code": {
+            "const": "NEEDS_PRINCIPAL"
+          }
+        },
+        "required": [
+          "code"
+        ]
+      },
+      "then": {
+        "properties": {
+          "message": {
+            "const": "A principal decision is required."
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "code": {
+            "const": "NEEDS_HUMAN"
+          }
+        },
+        "required": [
+          "code"
+        ]
+      },
+      "then": {
+        "properties": {
+          "message": {
+            "const": "A human decision is required."
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "code": {
+            "const": "MODEL_UNAVAILABLE"
+          }
+        },
+        "required": [
+          "code"
+        ]
+      },
+      "then": {
+        "properties": {
+          "message": {
+            "const": "No model is available for this work."
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "code": {
+            "const": "CONTEXT_UNFIT"
+          }
+        },
+        "required": [
+          "code"
+        ]
+      },
+      "then": {
+        "properties": {
+          "message": {
+            "const": "The required context does not fit the selected endpoint."
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "code": {
+            "const": "CONTRADICTED_ASSUMPTION"
+          }
+        },
+        "required": [
+          "code"
+        ]
+      },
+      "then": {
+        "properties": {
+          "message": {
+            "const": "A recorded assumption was contradicted by evidence."
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "code": {
+            "const": "OPERATION_LOST"
+          }
+        },
+        "required": [
+          "code"
+        ]
+      },
+      "then": {
+        "properties": {
+          "message": {
+            "const": "The operation handle is no longer available."
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "code": {
+            "const": "CANCELLED"
+          }
+        },
+        "required": [
+          "code"
+        ]
+      },
+      "then": {
+        "properties": {
+          "message": {
+            "const": "The operation was cancelled."
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "code": {
+            "const": "INTERNAL"
+          }
+        },
+        "required": [
+          "code"
+        ]
+      },
+      "then": {
+        "properties": {
+          "message": {
+            "const": "An internal error occurred."
+          }
+        }
+      }
+    }
+  ]
+}

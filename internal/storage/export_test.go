@@ -32,3 +32,10 @@ func (t *Tx) ExecWithoutImmutabilityForTest(ctx context.Context, statement strin
 	_, err := t.tx.ExecContext(ctx, statement, args...)
 	return err
 }
+
+// QueryIntForTest runs a statement returning one integer, such as a PRAGMA.
+func (t *Tx) QueryIntForTest(ctx context.Context, statement string, args ...any) (int, error) {
+	var value int
+	err := t.tx.QueryRowContext(ctx, statement, args...).Scan(&value)
+	return value, err
+}
