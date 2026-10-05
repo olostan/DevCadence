@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "devcadence": {
+      "command": "/EXECUTABLE",
+      "env": {
+        "DEVCADENCE_HOME": "/HOME",
+        "DEVCADENCE_PROJECT_ID": "proj"
+      }
+    }
+  }
+}

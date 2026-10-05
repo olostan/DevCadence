@@ -12,9 +12,13 @@ The initial supported host scope is deliberately narrow:
 
 Additional hosts are future integration candidates, not bootstrap commitments.
 
-## M5 preparation status
+## M5 host integration status (WP-M5-4)
 
-See the [M5 preparation window](work-packages/window-2026-10-f-overview.md) for shared planning status and [WP-M5-4](work-packages/wp-m5-4-host-integration-ewp.md) for proposed recipes, adapter ownership, installed-host evidence and source-boundary tests.
+Implemented in `internal/principalhosts` (see the [EWP implementation record](work-packages/wp-m5-4-host-integration-ewp.md#implementation-record)): read-only detection reporting absent, detected, incompatible, unknown and ambiguous states; digest-bound plans rendering the Antigravity and Cursor no-argument stdio recipes, persistent rules and the Antigravity skill; manual approved application; a stdio `project_state` smoke against the real `devcadence-mcp` bytes; and strict/assisted verification reports bound to host, version, OS, session, policy and file/executable identities. VS Code is guidance and samples only ([integrations/vscode](../integrations/vscode/README.md)).
+
+- **Application is manual.** No enforced exclusive operator-owned mutation channel exists, and M3 setup has no host-configuration operation kind, so `ApplyApproved` never writes: it validates the digest, approval and preimages and hands the operator the exact bytes. Automatic apply, rooted per-write checks and rollback are not built.
+- **Strict readiness is blocked until independently tested.** `strict_ready` requires fresh denial evidence for every enabled native route (absolute-path read, search/index, write, terminal read/write, unsandboxed or alternate shell, other tools) from a live session. No installed host was available, so no host has been verified and no real prober ships; every live check is "unavailable" until an operator supplies session evidence. `assisted_ready` is a separate label that records isolation failures and unknowns and is never relabelled strict.
+- **No host is mandatory**, and tool approval authorizes host invocation only; accepted authority and CAS stay server-side.
 
 ## 1. Host versus cognition endpoint
 
