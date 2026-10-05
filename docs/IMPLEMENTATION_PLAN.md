@@ -692,6 +692,8 @@ go/revise gate, not a ceremonial demo. Working-set context must preserve predecl
 
 ## M5 — Semantic principal integration and host portability
 
+**Preparation status (2026-10-05):** the [2026-10-F window](work-packages/window-2026-10-f-overview.md) is a draft design candidate. It explicitly records missing production task/review execution and empirical candidate verification as follow-on work; transport connectivity and synthetic benchmark results do not satisfy this milestone's exit. No M5 implementation or live campaign is claimed by the planning documents.
+
 ### Goal
 Productize the semantic principal boundary after the adaptive cognition
 hypothesis has passed or been revised through M4. Allow a capable principal to

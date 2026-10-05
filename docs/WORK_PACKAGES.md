@@ -598,6 +598,12 @@ Cover Apple/MLX, NVIDIA/local, one subscription, multiple subscriptions,
 paid-API allowed/forbidden, mixed portfolios, endpoint loss, quota pressure,
 new-resource addition, topology collapse and future-driver extensibility. Verified across recommendation synthesis matrix, model-assisted and deterministic workflow planning, adaptation diffing, atomic lineage activation, revalidation-gated rollback, and schema conformance in `tests/m3d_cross_portfolio_test.go`; implemented. Milestone M3D exit criteria satisfied.
 
+## M5 — Semantic principal preparation (draft window)
+
+The [2026-10-F planning window](work-packages/window-2026-10-f-overview.md) proposes five review units: guarded semantic identities/batch persistence, application facade and stdio MCP, Discovery persistence, host integration, and the bounded real-evidence re-evaluation contract. The window is **DRAFT / NOT FROZEN**, not implementation authority or evidence of milestone completion.
+
+Current main contains lifecycle/benchmark primitives but no production task/review executor or real candidate verifier. The overview records a required follow-on runtime window; nil executors fail closed. The M4 real-endpoint re-evaluation remains mandatory M5 exit work. Freeze individual EWPs only after dependency/current-base resolution and independent Implementation Readiness review.
+
 ## Future milestones
 
 Add a new `## <Milestone>` section here, following the same shape (branch

@@ -12,6 +12,10 @@ The initial supported host scope is deliberately narrow:
 
 Additional hosts are future integration candidates, not bootstrap commitments.
 
+## M5 preparation status
+
+The [draft M5 host EWP](work-packages/wp-m5-4-host-integration-ewp.md) proposes Antigravity reference and Cursor portability recipes, with VS Code guidance. Installed-version/OS smoke and negative access tests remain required evidence; source-free workspace layout alone does not prove the information firewall. No empirical host readiness is claimed in this planning change.
+
 ## 1. Host versus cognition endpoint
 
 A principal host is the user-facing environment in which the principal operates.

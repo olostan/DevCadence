@@ -14,6 +14,10 @@ Antigravity is the reference host; Cursor and Visual Studio Code are also initia
 
 See [PRINCIPAL_HOSTS.md](PRINCIPAL_HOSTS.md) and [ANTIGRAVITY_INTEGRATION.md](ANTIGRAVITY_INTEGRATION.md).
 
+## M5 preparation status
+
+The [draft M5 window](work-packages/window-2026-10-f-overview.md) proposes the guarded application/stdio boundary and explicit unavailable-runtime behavior. It is not an implemented API or approved execution contract. The accepted [ADR-0016 evidence-tier amendment](adr/0016-validation-services-bounded-tools-and-context-compaction.md#amendment-2026-09-23-evidence-tiers-within-the-bounded-tools-boundary) governs the depth examples below: search/symbol may be direct compact evidence; source content is bounded execution-agent-mediated, never a principal raw file or pager operation.
+
 ## 1. API design principle
 
 ```mermaid
