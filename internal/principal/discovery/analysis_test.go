@@ -267,6 +267,10 @@ type fakeSource struct {
 	inner     *controlplane.Service
 	extra     []events.Event
 	bumpModel bool
+	// dropModel hides the stored ProblemModel record.
+	dropModel bool
+	// mutateLedger rewrites the stored AmbiguityLedger document.
+	mutateLedger func(*protocol.AmbiguityLedger)
 }
 
 func (f fakeSource) Events(ctx context.Context, q storage.EventQuery) ([]events.Event, error) {
@@ -276,8 +280,146 @@ func (f fakeSource) Events(ctx context.Context, q storage.EventQuery) ([]events.
 
 func (f fakeSource) LatestRecord(ctx context.Context, p, kind, id string) (*storage.StoredRecord, error) {
 	rec, err := f.inner.LatestRecord(ctx, p, kind, id)
+	if err == nil && rec != nil && f.dropModel && kind == "ProblemModel" {
+		return nil, nil
+	}
+	if err == nil && rec != nil && f.mutateLedger != nil && kind == "AmbiguityLedger" {
+		var l protocol.AmbiguityLedger
+		if jerr := json.Unmarshal([]byte(rec.Document), &l); jerr != nil {
+			return nil, jerr
+		}
+		f.mutateLedger(&l)
+		b, jerr := json.Marshal(&l)
+		if jerr != nil {
+			return nil, jerr
+		}
+		cp := *rec
+		cp.Document = string(b)
+		rec = &cp
+	}
 	if err == nil && rec != nil && f.bumpModel && kind == "ProblemModel" {
 		rec.Version++
 	}
 	return rec, err
+}
+
+func (e *env) state() *protocol.ProjectState {
+	e.t.Helper()
+	st, err := e.h.Service.ProjectState(context.Background(), project)
+	if err != nil {
+		e.t.Fatal(err)
+	}
+	return st
+}
+
+func (e *env) analyzeWith(src discovery.Source, st *protocol.ProjectState) *discovery.Analysis {
+	e.t.Helper()
+	a, err := discovery.Analyze(context.Background(), src, st)
+	if err != nil {
+		e.t.Fatal(err)
+	}
+	return a
+}
+
+// The journal prefix is bounded by the supplied state's watermark: events
+// appended after that state was read must not leak into the analysis.
+func TestAnalyzeIsBoundedByTheStateWatermark(t *testing.T) {
+	e := newEnv(t, filepath.Join(t.TempDir(), "w.db"))
+	e.revise(1)
+	human := entry("AQ-001", protocol.ResolveByHuman, protocol.ImpactHigh, protocol.AmbiguityAwaitingHuman)
+	e.open(human, controlplane.RecordToStore{Version: 1, Record: ledger(human)})
+	old := e.state()
+
+	// Later discovery events: a new open question, then a resolution of the first.
+	late := entry("AQ-002", protocol.ResolveByPrincipal, protocol.ImpactLow, protocol.AmbiguityOpen)
+	e.open(late)
+	e.append(&events.AmbiguityResolved{AmbiguityID: "AQ-001", Outcome: events.AmbiguityOutcomeResolved,
+		Resolution: "r", ResolvedBy: protocol.ResolveByHuman})
+
+	a := e.analyzeWith(e.h.Service, old)
+	if len(a.OpenQuestions) != 1 || a.OpenQuestions[0].ID != "AQ-001" {
+		t.Fatalf("later events leaked past the watermark: %+v", a.OpenQuestions)
+	}
+	if has(codes(a), discovery.ViolationProjectionDisagree+":open_material_ambiguities") {
+		t.Fatalf("old state disagreed with its own prefix: %v", codes(a))
+	}
+
+	fresh := e.analyze()
+	if len(fresh.OpenQuestions) != 1 || fresh.OpenQuestions[0].ID != "AQ-002" {
+		t.Fatalf("fresh state must include later events: %+v", fresh.OpenQuestions)
+	}
+}
+
+func TestLedgerIdentityMismatchIsReported(t *testing.T) {
+	for name, mut := range map[string]func(*protocol.AmbiguityLedger){
+		"project": func(l *protocol.AmbiguityLedger) { l.ProjectID = "other" },
+		"ledger":  func(l *protocol.AmbiguityLedger) { l.AmbiguityLedgerID = "al_other" },
+	} {
+		t.Run(name, func(t *testing.T) {
+			e := newEnv(t, filepath.Join(t.TempDir(), "i.db"))
+			e.revise(1)
+			q := entry("AQ-001", protocol.ResolveByPrincipal, protocol.ImpactLow, protocol.AmbiguityOpen)
+			e.open(q, controlplane.RecordToStore{Version: 1, Record: ledger(q)})
+			if v := codes(e.analyze()); len(v) != 0 {
+				t.Fatalf("baseline not clean: %v", v)
+			}
+			a := e.analyzeWith(fakeSource{inner: e.h.Service, mutateLedger: mut}, e.state())
+			if !has(codes(a), discovery.ViolationLedgerIdentity+":al_1") {
+				t.Fatalf("identity mismatch not reported: %v", codes(a))
+			}
+		})
+	}
+}
+
+func TestJournalFoldAnomaliesDuplicateOpenAndDecisionOfUnopened(t *testing.T) {
+	e := newEnv(t, filepath.Join(t.TempDir(), "a.db"))
+	e.revise(1)
+	q := entry("AQ-001", protocol.ResolveByPrincipal, protocol.ImpactLow, protocol.AmbiguityOpen)
+	e.open(q)
+	src := fakeSource{inner: e.h.Service, extra: []events.Event{
+		{Payload: &events.AmbiguityOpened{AmbiguityID: "AQ-001", AmbiguityLedgerID: "al_1",
+			ResolutionAuthority: protocol.ResolveByPrincipal, ArchitecturalImpact: protocol.ImpactLow}},
+		{Payload: &events.ProductDecisionRecorded{ProductDecisionID: "pd_1", Status: protocol.ProductDecisionConfirmed,
+			ResolvesAmbiguity: "AQ-Y"}},
+	}}
+	a := e.analyzeWith(src, e.state())
+	got := codes(a)
+	for _, want := range []string{discovery.ViolationJournalFold + ":AQ-001", discovery.ViolationJournalFold + ":AQ-Y"} {
+		if !has(got, want) {
+			t.Errorf("missing %s in %v", want, got)
+		}
+	}
+	if len(a.DecisionStatuses) != 1 || a.DecisionStatuses[0].DecisionID != "pd_1" {
+		t.Fatalf("decision status %+v", a.DecisionStatuses)
+	}
+}
+
+func TestProjectionCountDisagreementIsReported(t *testing.T) {
+	e := newEnv(t, filepath.Join(t.TempDir(), "d.db"))
+	e.revise(1)
+	human := entry("AQ-001", protocol.ResolveByHuman, protocol.ImpactHigh, protocol.AmbiguityAwaitingHuman)
+	e.open(human, controlplane.RecordToStore{Version: 1, Record: ledger(human)})
+	if v := codes(e.analyze()); len(v) != 0 {
+		t.Fatalf("baseline not clean: %v", v)
+	}
+	st := e.state()
+	d := *st.Discovery
+	d.OpenMaterialAmbiguities, d.AwaitingHumanAmbiguities = 0, 0
+	st.Discovery = &d
+	got := codes(e.analyzeWith(e.h.Service, st))
+	for _, want := range []string{discovery.ViolationProjectionDisagree + ":open_material_ambiguities",
+		discovery.ViolationProjectionDisagree + ":awaiting_human_ambiguities"} {
+		if !has(got, want) {
+			t.Errorf("missing %s in %v", want, got)
+		}
+	}
+}
+
+func TestMissingProblemModelRecordBlocks(t *testing.T) {
+	e := newEnv(t, filepath.Join(t.TempDir(), "m.db"))
+	e.revise(1)
+	a := e.analyzeWith(fakeSource{inner: e.h.Service, dropModel: true}, e.state())
+	if !has(a.Blockers, discovery.BlockerProblemModelUnbound) || has(a.Blockers, discovery.BlockerNoProblemModel) {
+		t.Fatalf("blockers %v", a.Blockers)
+	}
 }
