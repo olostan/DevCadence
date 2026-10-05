@@ -1,6 +1,7 @@
 package facade
 
 import (
+	"github.com/olostan/DevCadence/internal/principal/discovery"
 	"path"
 	"strings"
 	"unicode"
@@ -54,7 +55,10 @@ type ProjectStateResult struct {
 	ProjectState   *protocol.ProjectState   `json:"project_state,omitempty"`
 	Task           *TaskStatus              `json:"task,omitempty"`
 	Discovery      *protocol.DiscoveryState `json:"discovery,omitempty"`
-	Repository     *RepositoryObservation   `json:"repository,omitempty"`
+	// DiscoveryAnalysis is the read-only reconstruction of discovery from
+	// durable records (focus discovery at the current revision only).
+	DiscoveryAnalysis *discovery.Analysis    `json:"discovery_analysis,omitempty"`
+	Repository        *RepositoryObservation `json:"repository,omitempty"`
 }
 
 // ProjectStateResponse is the project_state response.

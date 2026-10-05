@@ -1,0 +1,38 @@
+{
+  "schema_version": "1.0",
+  "state_revision": "ps_000000007",
+  "evidence_refs": [],
+  "result": {
+    "focus": "discovery",
+    "source_revision": "ps_000000007",
+    "discovery_analysis": {
+      "problem_model_id": "PM-001",
+      "problem_model_revision": 1,
+      "ambiguity_ledger_id": "AL-001",
+      "ambiguity_ledger_revision": 1,
+      "open_questions": [
+        {
+          "id": "AQ-001",
+          "resolution_authority": "human",
+          "architectural_impact": "high"
+        }
+      ],
+      "decision_statuses": [],
+      "violations": [
+        {
+          "code": "ledger_live_entry_not_open_in_journal",
+          "subject": "AQ-002"
+        }
+      ],
+      "blockers": [
+        "open_material_ambiguities",
+        "awaiting_human_questions",
+        "consistency_violations",
+        "human_reflection_unverifiable",
+        "independent_review_unverifiable",
+        "no_recorded_readiness"
+      ],
+      "positive_readiness": false
+    }
+  }
+}

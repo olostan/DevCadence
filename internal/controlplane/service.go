@@ -416,3 +416,16 @@ func (s *Service) Record(ctx context.Context, projectID, kind, id string, versio
 	})
 	return out, err
 }
+
+// LatestRecord returns the digest-verified highest-versioned stored record of
+// the kind and id, or nil when the project has none. It is a read for
+// reconstruction; it never selects "latest" as evidence for a mutation.
+func (s *Service) LatestRecord(ctx context.Context, projectID, kind, id string) (*storage.StoredRecord, error) {
+	var out *storage.StoredRecord
+	err := s.store.Read(ctx, func(tx *storage.Tx) error {
+		record, err := tx.LatestRecord(ctx, projectID, kind, id)
+		out = record
+		return err
+	})
+	return out, err
+}

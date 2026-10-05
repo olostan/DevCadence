@@ -3,6 +3,7 @@ package facade
 import (
 	"context"
 	"encoding/json"
+	discoveryanalysis "github.com/olostan/DevCadence/internal/principal/discovery"
 	"log/slog"
 	"reflect"
 	"regexp"
@@ -365,6 +366,13 @@ func (s *Service) ProjectState(ctx context.Context, caller CallerContext, req Pr
 		}
 		copied := *discovery
 		result.Discovery = &copied
+		if req.AtRevision == "" {
+			analysis, aerr := discoveryanalysis.Analyze(ctx, s.opts.ControlPlane, st)
+			if aerr != nil {
+				return ProjectStateResponse{Envelope: s.refuse(ToolProjectState, req.Meta, st.StateRevision, aerr)}, nil
+			}
+			result.DiscoveryAnalysis = analysis
+		}
 	case FocusTask:
 		d, err := s.loadTask(ctx, req.Meta.ProjectID, req.TaskID)
 		if err != nil {
