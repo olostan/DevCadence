@@ -13,7 +13,7 @@ Run ledger: issue #36. Emulation of DevCadence automatic mode over pre-designed 
 | WP-M3C-H2 fail-closed unknown resource/budget state (closes KG-1 for supplied-but-unknown state) | EWP #37, impl #39 | Merged `33525f0` after 2 reviewers and 1 test-only repair round. |
 | WP-M3D-1A recommendation explanation/provenance fields | EWP #40, impl #41 | Merged `eb9f218` after 2 reviewers and 1 test-only repair round. |
 | WP-M3D-1B validator-gated planner service | EWP #42, impl (in review at time of writing) | EWP merged `5f11254`. |
-| This retrospective and process changes | this PR | — |
+| This retrospective and process changes | PR #44 (abandoned) → PR #65 (salvage) | Historical evidence preserved; old process policy not resurrected. |
 
 ## What the data says
 
@@ -50,7 +50,7 @@ Authority note: all merges in this run were executed by the Principal session th
 
 ## Process changes proposed by the original PR #44 (historical)
 
-- The abandoned PR proposed an `AGENT_HANDOFF_PROTOCOL.md` "Autonomous delivery loop" section (merge authority only under explicit owner delegation, roles and isolation, per-WP sequence, mandatory mutation lens plus a robustness lens for untrusted-input parsers, second review after NOT_READY or any major, Principal verification of reviewer claims that supplements but does not replace independent verification, repair per REVIEW_AND_CONVERGENCE §1 with the run's ceiling stated as local policy, durable posting of readiness reviews, merge gate, evidence conventions, operational notes). These are proposals for owner review; this PR was itself reviewed by an independent accuracy/consistency reviewer, whose findings on overclaims, DCI-049 attribution, merge authority and force-push wording are incorporated.
+- The abandoned PR proposed an `AGENT_HANDOFF_PROTOCOL.md` "Autonomous delivery loop" section (merge authority only under explicit owner delegation, roles and isolation, per-WP sequence, mandatory mutation lens plus a robustness lens for untrusted-input parsers, second review after NOT_READY or any major, Principal verification of reviewer claims that supplements but does not replace independent verification, repair per REVIEW_AND_CONVERGENCE §1 with the run's ceiling stated as local policy, durable posting of readiness reviews, merge gate, evidence conventions, operational notes). These were proposals for owner review; PR #44 itself was reviewed by an independent accuracy/consistency reviewer, whose findings on overclaims, DCI-049 attribution, merge authority and force-push wording were incorporated before that draft was abandoned.
 - The abandoned PR proposed `IMPLEMENTATION_READY_TEMPLATE.md` additions: a "Verified facts about the current code" table, mutation catalog in Validation, and a consistency-sweep checklist after revisions. Mutation/review requirements later evolved independently; this salvage PR only re-evaluates the still-useful verified-facts and consistency-sweep ideas against the current template.
 
 ## Process v2 used/proposed during the run (historical)
@@ -67,12 +67,14 @@ Not changed here (owner decision): pushes through the pre-push hook took 5-8 min
 
 Other lessons added late in the run: a finished subagent with a lingering background process re-sends its hand-back repeatedly (about a dozen duplicates from one implementor), so implementors are told to send exactly one final report and leave no watchers, and a finished agent is stopped; `make docs-check` should be run before committing docs because the link checker reads raw text (a bracketed index immediately followed by a parenthesis, as in some diagnostic target strings, parses as a link); the Principal's own consistency sweep missed a stale "readiness: pending" line that the re-review caught, so the sweep checklist must name the Status and Readiness lines explicitly.
 
-## Open items for the owner (not decided autonomously)
+## Triage of the original open items against current `main` (2026-10-05)
 
-1. Coverage gate nondeterminism and the pre-push/CI duplication (policy change to a protected gate).
-2. Whether R1 acceptance and the model-review signals recorded in this run count toward milestone acceptance.
-3. Remaining known gaps from WP-M3C-4: KG-2 (opaque-usage uncertainty), KG-3 (WriteScope enforcement), KG-4 (lease invalidation wiring); the nil-map residual of KG-1; the same nil-policy defect at `portfolio_validator_constraints.go:141` (`RequireVerifiedAcceleration`).
-4. Reported by the 1B re-reviewer, not yet verified by the Principal: the validator does not appear to check that a context profile referenced by a role binding belongs to that binding's endpoint/channel, so a mismatched profile id can pass and its `MinContractLimitTokens` is not enforced. Candidate follow-up WP (validator consistency).
-5. WP-M3D-1C scope decisions: "minimum planning capability" definition and endpoint selection, driver adapter, compiler-backed invocation digest, historical-evidence input, activation-record link to the recommendation.
-6. A deterministic mutation helper (a `make` target that applies a declared mutant list and reports survivors) would remove the dependence on reviewer sandbox permissions and make the mutation lens reproducible.
-7. Review records: all roles posted under one GitHub account; recording role, lens and head SHA in each post (what `ActorProvenance` models) was done by convention here and should be mechanical in the product.
+The list below is not current policy; it records what became of the run's unresolved questions.
+
+1. **Coverage-gate nondeterminism / duplicate local+CI cost — still worth investigation, not reproduced in this salvage review.** Current `scripts/health/coverage-guard.sh` still caches base coverage by commit SHA + Go version while measuring the candidate freshly, and pre-push still runs the full `make ci` gate before GitHub CI repeats the remote gate. The historical two-statement discrepancy is therefore being tracked as an investigation rather than asserted as a current defect: issue #68.
+2. **R1 acceptance signal — historical/superseded as an owner question.** Later M3C/M3D milestone work and current implementation-plan status moved beyond the run-1 acceptance question; no action is taken from this retrospective.
+3. **M3C substrate known gaps — partly resolved, partly still open.** The old `RequireVerifiedAcceleration` nil/effective-policy defect is resolved by WP-M3C-H4: current validation reads `ctx.policy.RequireVerifiedAcceleration`. The remaining documented KG-1 nil-map residual plus KG-2 (opaque usage uncertainty), KG-3 (WriteScope enforcement) and KG-4 (lease invalidation production wiring) remain current known gaps and are tracked in issue #66.
+4. **Context-profile/binding consistency — resolved.** WP-M3C-H3 added fail-closed endpoint/channel consistency checking and `CONTEXT_PROFILE_MISMATCH`; current validation checks `ContextProfile.EndpointID`/`ChannelID` before using the profile's context facts. No follow-up issue is needed.
+5. **WP-M3D-1C scope decisions — resolved by subsequent M3D work.** Driver-backed planner invocation, endpoint selection and the rest of M3D portfolio/workflow synthesis are implemented; M3D is documented complete. No action is taken from the historical item.
+6. **Deterministic mutation helper — still absent and useful.** Current policy supports targeted native mutation tooling or an adversarial catalog, but there is no repository-native helper that deterministically applies a declared mutant set and reports survivors. Tracked in issue #67.
+7. **Mechanical review provenance — partially resolved, with orchestration intentionally later.** `ActorProvenance`, `ReviewFinding`, `FindingResolution`, `ResolutionVerification` and `CheckVerification` now exist and can mechanically reject logical self-verification. Full multi-review orchestration remains M7 rather than a new issue from this historical document.
