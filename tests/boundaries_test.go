@@ -343,3 +343,37 @@ func TestPrincipalHostsStayOutsideTheSemanticLayers(t *testing.T) {
 		}
 	}
 }
+
+// TestEmpiricalAdmissionIsPureAndOffline keeps the WP-M5-5 admission contract a
+// pure data transformation: its own (non-test) imports exclude network, process,
+// filesystem, providers, credentials and persistence, so it cannot spend or call
+// endpoints. Transitive effects of the existing gate packages are unchanged.
+func TestEmpiricalAdmissionIsPureAndOffline(t *testing.T) {
+	const mod = "github.com/olostan/DevCadence/"
+	cmd := exec.Command("go", "list", "-f", "{{join .Imports \"\\n\"}}", mod+"internal/benchmark/empirical")
+	cmd.Dir = ".."
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("go list failed: %v", err)
+	}
+	imports := strings.Fields(string(out))
+	if len(imports) == 0 {
+		t.Fatal("no imports resolved; test would pass vacuously")
+	}
+	banned := []string{"net", "os", "os/exec", "syscall", mod + "internal/cognition", mod + "internal/credentials",
+		mod + "internal/controlplane", mod + "internal/storage", mod + "internal/mcpadapter", mod + "internal/principal"}
+	for _, imp := range imports {
+		for _, b := range banned {
+			if imp == b || strings.HasPrefix(imp, b+"/") {
+				t.Errorf("internal/benchmark/empirical imports %s", imp)
+			}
+		}
+	}
+	for _, pkg := range append([]string{mod + "internal/principal", mod + "internal/mcpadapter", mod + "internal/controlplane"}, coreDomainPackages...) {
+		for _, dep := range dependenciesOf(t, pkg) {
+			if dep == mod+"internal/benchmark/empirical" {
+				t.Errorf("%s depends on internal/benchmark/empirical", pkg)
+			}
+		}
+	}
+}
