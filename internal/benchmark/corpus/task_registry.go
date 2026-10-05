@@ -57,6 +57,9 @@ func ValidateDefect(defect benchmark.SeededDefect) error {
 	if strings.TrimSpace(defect.FileTarget) == "" && defect.PatchContent != "" {
 		return errs.Wrap(errs.CategoryInvalidArgument, ErrCorpusValidation, "%s: file_target cannot be empty when patch_content is present for defect %q", kind, defect.DefectID)
 	}
+	if strings.TrimSpace(defect.FileTarget) != "" && strings.TrimSpace(defect.PatchContent) == "" {
+		return errs.Wrap(errs.CategoryInvalidArgument, ErrCorpusValidation, "%s: patch_content cannot be empty when file_target is specified for defect %q", kind, defect.DefectID)
+	}
 	return nil
 }
 
@@ -309,13 +312,21 @@ func (r *CorpusRegistry) Digest() string {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	tasks := r.ListTasks()
+	tasks := make([]benchmark.BenchmarkTask, 0, len(r.tasks))
+	for _, task := range r.tasks {
+		tasks = append(tasks, task)
+	}
+	sort.Slice(tasks, func(i, j int) bool {
+		return tasks[i].TaskID < tasks[j].TaskID
+	})
+
 	hasher := sha256.New()
 	for _, t := range tasks {
 		hasher.Write([]byte(t.Digest() + "\n"))
-		defects := r.GetDefectsForTask(t.TaskID)
+		defects := r.defects[t.TaskID]
 		for _, d := range defects {
-			hasher.Write([]byte(d.DefectID + ":" + string(d.Category) + ":" + d.FileTarget + ":" + d.ViolatedInvariant + "\n"))
+			patchHash := sha256.Sum256([]byte(d.PatchContent))
+			hasher.Write([]byte(d.DefectID + ":" + string(d.Category) + ":" + d.FileTarget + ":" + d.ViolatedInvariant + ":" + hex.EncodeToString(patchHash[:]) + "\n"))
 		}
 	}
 	return "sha256:" + hex.EncodeToString(hasher.Sum(nil))

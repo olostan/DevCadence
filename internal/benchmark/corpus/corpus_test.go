@@ -1,6 +1,8 @@
 package corpus_test
 
 import (
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -124,6 +126,9 @@ func TestACC04_RegisterTask_Validation(t *testing.T) {
 	if err == nil || errs.CategoryOf(err) != errs.CategoryInvalidArgument {
 		t.Errorf("expected CategoryInvalidArgument for empty TaskID, got %v", err)
 	}
+	if !errors.Is(err, corpus.ErrCorpusValidation) {
+		t.Errorf("expected ErrCorpusValidation for empty TaskID, got %v", err)
+	}
 
 	// Empty Contract
 	err = reg.RegisterTask(benchmark.BenchmarkTask{
@@ -134,6 +139,9 @@ func TestACC04_RegisterTask_Validation(t *testing.T) {
 	if err == nil || errs.CategoryOf(err) != errs.CategoryInvalidArgument {
 		t.Errorf("expected CategoryInvalidArgument for empty Contract, got %v", err)
 	}
+	if !errors.Is(err, corpus.ErrCorpusValidation) {
+		t.Errorf("expected ErrCorpusValidation for empty Contract, got %v", err)
+	}
 
 	// Invalid WorkloadKind
 	err = reg.RegisterTask(benchmark.BenchmarkTask{
@@ -143,6 +151,9 @@ func TestACC04_RegisterTask_Validation(t *testing.T) {
 	})
 	if err == nil || errs.CategoryOf(err) != errs.CategoryInvalidArgument {
 		t.Errorf("expected CategoryInvalidArgument for invalid WorkloadKind, got %v", err)
+	}
+	if !errors.Is(err, corpus.ErrCorpusValidation) {
+		t.Errorf("expected ErrCorpusValidation for invalid WorkloadKind, got %v", err)
 	}
 }
 
@@ -262,6 +273,84 @@ func TestINV01_DigestStability(t *testing.T) {
 	d3 := reg2.Digest()
 	if d1 != d3 {
 		t.Fatalf("digest differs across separate LoadDefaultCorpus calls: %q != %q", d1, d3)
+	}
+
+	// Repeatability of LoadCorpusManifest
+	m1, err := corpus.LoadCorpusManifest()
+	if err != nil {
+		t.Fatalf("LoadCorpusManifest first instance failed: %v", err)
+	}
+	m2, err := corpus.LoadCorpusManifest()
+	if err != nil {
+		t.Fatalf("LoadCorpusManifest second instance failed: %v", err)
+	}
+	if m1.Digest != m2.Digest {
+		t.Fatalf("LoadCorpusManifest digest unstable across calls: %q != %q", m1.Digest, m2.Digest)
+	}
+	if m1.Digest != d1 {
+		t.Fatalf("CorpusManifest digest does not match registry digest: %q != %q", m1.Digest, d1)
+	}
+}
+
+// Mutant M-04: Altering a seeded defect's PatchContent MUST change CorpusRegistry.Digest() and CorpusManifest.Digest.
+func TestCorpusRegistry_Digest_PatchContentSensitivity(t *testing.T) {
+	task := benchmark.BenchmarkTask{
+		TaskID:       "task-patch-sensitivity",
+		Name:         "Patch Sensitivity Test",
+		Contract:     "Deterministic Digest Requirement",
+		WorkloadKind: protocol.WorkloadImplementation,
+	}
+
+	defect1 := benchmark.SeededDefect{
+		DefectID:          "DEF-PATCH-01",
+		Category:          benchmark.DefectInvariantViolation,
+		FileTarget:        "internal/sample/file.go",
+		PatchContent:      "original patch content",
+		ViolatedInvariant: "INV-01",
+	}
+
+	defect2 := defect1
+	defect2.PatchContent = "modified patch content that alters defect semantics"
+
+	reg1 := corpus.NewCorpusRegistry()
+	if err := reg1.RegisterTask(task); err != nil {
+		t.Fatalf("RegisterTask failed: %v", err)
+	}
+	if err := reg1.AssociateDefect(task.TaskID, defect1); err != nil {
+		t.Fatalf("AssociateDefect failed: %v", err)
+	}
+
+	reg2 := corpus.NewCorpusRegistry()
+	if err := reg2.RegisterTask(task); err != nil {
+		t.Fatalf("RegisterTask failed: %v", err)
+	}
+	if err := reg2.AssociateDefect(task.TaskID, defect2); err != nil {
+		t.Fatalf("AssociateDefect failed: %v", err)
+	}
+
+	d1 := reg1.Digest()
+	d2 := reg2.Digest()
+	if d1 == d2 {
+		t.Fatalf("CorpusRegistry.Digest() did not change when PatchContent changed: %q == %q", d1, d2)
+	}
+
+	// Verify CorpusManifest.Digest also reflects PatchContent difference
+	manifest1 := &corpus.CorpusManifest{
+		Digest:      reg1.Digest(),
+		TaskCount:   reg1.Count(),
+		DefectCount: reg1.DefectCount(),
+		Tasks:       reg1.ListTasks(),
+		Defects:     reg1.ListDefects(),
+	}
+	manifest2 := &corpus.CorpusManifest{
+		Digest:      reg2.Digest(),
+		TaskCount:   reg2.Count(),
+		DefectCount: reg2.DefectCount(),
+		Tasks:       reg2.ListTasks(),
+		Defects:     reg2.ListDefects(),
+	}
+	if manifest1.Digest == manifest2.Digest {
+		t.Fatalf("CorpusManifest.Digest did not change when PatchContent changed: %q == %q", manifest1.Digest, manifest2.Digest)
 	}
 }
 
@@ -430,6 +519,9 @@ func TestValidateDefect_Rejections(t *testing.T) {
 	if err == nil || errs.CategoryOf(err) != errs.CategoryInvalidArgument {
 		t.Errorf("expected CategoryInvalidArgument for empty DefectID, got %v", err)
 	}
+	if !errors.Is(err, corpus.ErrCorpusValidation) {
+		t.Errorf("expected ErrCorpusValidation for empty DefectID, got %v", err)
+	}
 
 	// Invalid Category
 	err = corpus.ValidateDefect(benchmark.SeededDefect{
@@ -438,6 +530,9 @@ func TestValidateDefect_Rejections(t *testing.T) {
 	})
 	if err == nil || errs.CategoryOf(err) != errs.CategoryInvalidArgument {
 		t.Errorf("expected CategoryInvalidArgument for invalid Category, got %v", err)
+	}
+	if !errors.Is(err, corpus.ErrCorpusValidation) {
+		t.Errorf("expected ErrCorpusValidation for invalid Category, got %v", err)
 	}
 
 	// Patch content without file target
@@ -449,6 +544,23 @@ func TestValidateDefect_Rejections(t *testing.T) {
 	})
 	if err == nil || errs.CategoryOf(err) != errs.CategoryInvalidArgument {
 		t.Errorf("expected CategoryInvalidArgument for patch with empty file target, got %v", err)
+	}
+	if !errors.Is(err, corpus.ErrCorpusValidation) {
+		t.Errorf("expected ErrCorpusValidation for patch with empty file target, got %v", err)
+	}
+
+	// Missing patch content when file target is specified
+	err = corpus.ValidateDefect(benchmark.SeededDefect{
+		DefectID:     "DEF-01",
+		Category:     benchmark.DefectInvariantViolation,
+		FileTarget:   "internal/foo/bar.go",
+		PatchContent: "   ",
+	})
+	if err == nil || errs.CategoryOf(err) != errs.CategoryInvalidArgument {
+		t.Errorf("expected CategoryInvalidArgument for empty patch content with file target, got %v", err)
+	}
+	if !errors.Is(err, corpus.ErrCorpusValidation) {
+		t.Errorf("expected ErrCorpusValidation for empty patch content with file target, got %v", err)
 	}
 }
 
@@ -484,7 +596,50 @@ func TestINV02_PatchContainment(t *testing.T) {
 	}
 }
 
-// Concurrency test: registry is safe under parallel reads and queries.
+// AssociateDefect standalone happy path test.
+func TestCorpusRegistry_AssociateDefect_HappyPath(t *testing.T) {
+	reg := corpus.NewCorpusRegistry()
+	task := benchmark.BenchmarkTask{
+		TaskID:       "task-assoc-happy",
+		Name:         "Happy Path Task",
+		Contract:     "Must accept associated defects",
+		WorkloadKind: protocol.WorkloadNavigation,
+	}
+	if err := reg.RegisterTask(task); err != nil {
+		t.Fatalf("RegisterTask failed: %v", err)
+	}
+
+	defect := benchmark.SeededDefect{
+		DefectID:          "DEF-HAPPY-01",
+		Category:          benchmark.DefectInvariantViolation,
+		Description:       "Happy path defect test",
+		FileTarget:        "internal/happy/path.go",
+		PatchContent:      "package happy\n",
+		ViolatedInvariant: "INV-HAPPY-01",
+	}
+
+	if err := reg.AssociateDefect(task.TaskID, defect); err != nil {
+		t.Fatalf("AssociateDefect failed on happy path: %v", err)
+	}
+
+	defects := reg.GetDefectsForTask(task.TaskID)
+	if len(defects) != 1 {
+		t.Fatalf("expected 1 defect for task %q, got %d", task.TaskID, len(defects))
+	}
+	if defects[0].DefectID != defect.DefectID {
+		t.Errorf("defect ID mismatch: got %q, expected %q", defects[0].DefectID, defect.DefectID)
+	}
+
+	retrieved, err := reg.DefectByID(defect.DefectID)
+	if err != nil {
+		t.Fatalf("DefectByID failed: %v", err)
+	}
+	if retrieved.DefectID != defect.DefectID || retrieved.PatchContent != defect.PatchContent {
+		t.Errorf("retrieved defect mismatch: got %+v, expected %+v", retrieved, defect)
+	}
+}
+
+// Concurrency test: registry is safe under parallel reads and writes under -race.
 func TestCorpusRegistry_ConcurrentAccess(t *testing.T) {
 	reg, err := corpus.LoadDefaultCorpus()
 	if err != nil {
@@ -492,10 +647,12 @@ func TestCorpusRegistry_ConcurrentAccess(t *testing.T) {
 	}
 
 	var wg sync.WaitGroup
-	workers := 20
+	readWorkers := 20
+	writeWorkers := 5
 	iterations := 50
 
-	for i := 0; i < workers; i++ {
+	// Concurrent readers
+	for i := 0; i < readWorkers; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -511,5 +668,35 @@ func TestCorpusRegistry_ConcurrentAccess(t *testing.T) {
 			}
 		}()
 	}
+
+	// Concurrent writers (RegisterTask and AssociateDefect)
+	for i := 0; i < writeWorkers; i++ {
+		wg.Add(1)
+		workerID := i
+		go func() {
+			defer wg.Done()
+			for j := 0; j < iterations; j++ {
+				taskID := fmt.Sprintf("task-concurrent-%d-%d", workerID, j)
+				newTask := benchmark.BenchmarkTask{
+					TaskID:       taskID,
+					Name:         fmt.Sprintf("Concurrent Task %d-%d", workerID, j),
+					Contract:     "Concurrency Contract",
+					WorkloadKind: protocol.WorkloadImplementation,
+				}
+				_ = reg.RegisterTask(newTask)
+
+				newDefect := benchmark.SeededDefect{
+					DefectID:          fmt.Sprintf("DEF-CONC-%d-%d", workerID, j),
+					Category:          benchmark.DefectAPIMutation,
+					FileTarget:        "internal/concurrent/file.go",
+					PatchContent:      "package concurrent\n",
+					ViolatedInvariant: "INV-CONC-01",
+				}
+				// AssociateDefect may target the newly added task or existing tasks
+				_ = reg.AssociateDefect(taskID, newDefect)
+			}
+		}()
+	}
+
 	wg.Wait()
 }
