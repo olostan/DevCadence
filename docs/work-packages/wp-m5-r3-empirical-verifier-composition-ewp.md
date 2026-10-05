@@ -2,12 +2,12 @@
 
 ## Identity
 
-- Revision: 1; task: task-m5-r3-empirical-verifier-composition; window: [2026-10-G](window-2026-10-g-overview.md).
+- Revision: 2 (window review round 1 repaired; verdicts pending re-verification); task: task-m5-r3-empirical-verifier-composition; window: [2026-10-G](window-2026-10-g-overview.md).
 - Base: `71bdaec6d6d81c1b6e52d8b30f0f8485f928925a` (`main` `cebb4f0` plus the PR #83 reconcile merge, 2026-10-05).
 - Contract digest: reviewed immutable Git blob. No fictitious runtime state revision; record the actual accepted dependency commits at execution.
 - Endpoint: competent Go implementer with Git, deterministic-test and HTTP-client skill; complete admission is mandatory. Each Part is sized for one endpoint session.
 - Status: **DRAFT / NOT_READY / NOT FROZEN. No implementation authority; no endpoint call, credential, spend or live campaign is authorized.** This EWP **amends** the draft [WP-M5-5](wp-m5-5-empirical-campaign-ewp.md) contract at the points listed under "Explicit amendments"; the amendments need window-level review before Part B freezes.
-- Dependencies: [M5-R1](wp-m5-r1-native-task-executor-ewp.md) Part A types (`ResolvedEndpoint`, `DriverFactory`) for Part A, and Part B worktree primitives for Part B; [M5-R2](wp-m5-r2-independent-review-acceptance-ewp.md) Part A (`DeriveActorID`, `InvocationProvenance`); [M5-R4](wp-m5-r4-protected-operator-ingress-ewp.md) Part A (`receipts.Verifier`) for the production authority; merged WP-M5-5 admission package.
+- Dependencies: [M5-R1](wp-m5-r1-native-task-executor-ewp.md) Part A types (`ResolvedEndpoint`, `OpenedEndpoint`, `DriverFactory`, `Bind`) for Part A, and Part B worktree primitives for Part B; [M5-R2](wp-m5-r2-independent-review-acceptance-ewp.md) Part A (`DeriveActorID`, `InvocationProvenance`); [M5-R4](wp-m5-r4-protected-operator-ingress-ewp.md) Part A (`receipts.Verifier` with subject lookup, `Verified.IsValid`) for the production authority; merged WP-M5-5 admission package.
 - Parts (separately freezable): **A** provider composition (`DriverFactory` implementations, first slice loopback local only). **B** independent verifier, authority adapter, admission wiring and CLI replay.
 
 ## Objective
@@ -16,7 +16,7 @@ Supply what WP-M5-5 explicitly left to a follow-on: the production `IndependentV
 
 ## Context Manifest
 
-Role: Go implementer; independent Contract/Authority and Test Adequacy/Mutation reviewers; the verifier author is not the campaign author. Read envelope: `internal/benchmark/empirical/*` (types, plan, admission, replay), `internal/benchmark/{runner,defects,telemetry,gate,experiments}`, `internal/benchmark/corpus` (signatures), `cmd/devcadence/benchmark.go`, `internal/cognition/drivers/{direct_api,types,metering}.go`, `internal/cognition/ollama` (transport conventions), R1 `execpolicy` types, R2 `actors`, R4 `receipts`, `internal/worktrees`, `internal/process`. Write scope: new `internal/benchmark/empirical/verifier/`, `internal/cognition/sessionclients/` (Part A), additive fields in `internal/benchmark/empirical` (amendments), `cmd/devcadence` subcommand `benchmark replay-empirical` and the legacy refusal, schemas/fixtures under `schemas/`, owning docs. No criteria, gate mathematics or invariant change.
+Role: Go implementer; independent Contract/Authority and Test Adequacy/Mutation reviewers; the verifier author is not the campaign author. Read envelope: `internal/benchmark/empirical/*` (types, plan, admission, replay), `internal/benchmark/{runner,defects,telemetry,gate,experiments}`, `internal/benchmark/corpus` (signatures), `cmd/devcadence/benchmark.go`, `internal/cognition/drivers/{direct_api,types,metering}.go`, `internal/cognition/ollama` (transport conventions), R1 `execpolicy` types, R2 `actors`, R4 `receipts`, `internal/worktrees`, `internal/process`. Write scope: new `internal/benchmark/empirical/verifier/` (verifier, profile, `CampaignAuthority` adapter, `BuildInfoSource`), `internal/cognition/sessionclients/` (Part A), additive types/fields and the `Admitter` in `internal/benchmark/empirical` (amendments), `cmd/devcadence` subcommand `benchmark replay-empirical` and the legacy refusal, schemas/fixtures under `schemas/`, owning docs. No criteria, gate mathematics or invariant change.
 
 Exact clauses: AGENTS §§2–9, 12–15, 17; ADR-0024 §§3–5, 10; WP-M5-5 §§Exact representation, Admission and gate decision semantics, Authority matrix; SECURITY §§3, 5–9, 14–17; DCI-005, 011–014, 032–033, 040–044, 080–084, 090, 100, 120–124, 126, 129, 159–161. Risks: contaminated verifier, forged receipt, flaky deterministic checks, non-hermetic commands, unknown-as-zero, unbounded spend through a client. Re-resolution triggers: gate criteria or corpus change, a new driver kind or credential path, a verifier needing network, empirical type drift, or an owner decision outside OWNER INPUT-2.
 
@@ -31,14 +31,14 @@ LOCAL_DISCRETION: private helpers, test layout, report typography, HTTP client i
 | ID | MUST requirement | Invariant |
 | --- | --- | --- |
 | R1 | The verifier re-executes the pinned deterministic checks on the immutable candidate in a fresh isolated worktree and derives `VerifiedOutcome` from its own execution; the caller receipt is a claim compared field by field | I1: receipt authenticity and independent outcome are distinct checks |
-| R2 | The plan pins `VerifierSourceCommit` and `VerificationProfileDigest`; the verifier determines its own source commit from build info (`vcs.revision`, unmodified) and refuses on any mismatch or unknown | I2: the judge is fixed before observations |
-| R3 | `VerifiedOutcome.Worker` and `.Verifier` are canonical `ActorProvenance` (R2-A); the verifier identity is non-model and independent under `ActorsIndependent`, with a separate invocation and no lineage overlap | I3: no self-verification |
-| R4 | Seeded-defect counts follow the profile's deterministic probe rule: implementation tasks count a defect caught only when all its probe checks pass on the candidate; review tasks only when a strictly parsed finding anchors the defect location | I4: quality is computed, not asserted |
+| R2 | The plan pins `VerifierSourceCommit` and `VerificationProfileDigest`; the verifier determines its own source commit from an injected `BuildInfoSource` (production: `debug.ReadBuildInfo` `vcs.revision` with `vcs.modified=false`) and refuses on any mismatch or unknown. This is a **label check**, not process independence: a binary that carries the right revision label proves nothing about who built or runs it; independence rests on the pinned profile, the separate worktree and actor rules, and is disclosed as such | I2: the judge is fixed before observations |
+| R3 | `VerifiedOutcome.Worker` and `.Verifier` are canonical `ActorProvenance` (R2-A); both actor ids are derived through `actors.DeriveActorID` (the verifier from `ActorBasis{EndpointID:"devcadence-verifier", ModelID: source commit, ModelRevision: profile digest}` under `endpoint_model`, no ad-hoc string); the verifier identity is non-model and independent under `ActorsIndependent`, with a separate invocation and no lineage overlap | I3: no self-verification |
+| R4 | Seeded-defect counts follow the profile's deterministic probe rule: implementation tasks count a defect caught only when all its probe checks pass on the candidate; review tasks only when a strictly parsed finding anchors the defect location. Defect counts are measurements; they never decide `QualityVerdict` (see step 7) | I4: quality is computed, not asserted |
 | R5 | A session-evidence artifact (strict schema, digest-bound in `RunEvidence`) records live endpoint/model/config, prompt digest, timestamps, driver outcome and usage with unknown ≠ zero; admission checks authorization expiry against its start time | I5: no run is empirical without direct session provenance |
 | R6 | The production operator authority accepts a campaign authorization only through an R4 `empirical.campaign_authorize` grant receipt bound to the authorization digest, project and plan digest | I6: authority is protected, not labeled |
-| R7 | Verifier infrastructure failure yields `blocked`, a genuine quality failure yields completed-not-accepted, and original-versus-rerun disagreement yields `blocked` (`INCONSISTENT_VERIFICATION`); none counts as accepted | I7: failures keep their identity |
+| R7 | Verifier infrastructure failure yields `blocked`, a genuine quality failure yields completed-not-accepted, and original-versus-rerun disagreement yields `blocked` (`INCONSISTENT_VERIFICATION`); none counts as accepted. The infrastructure/quality split is a *decidable process-level rule* (step 6), not a guess about network need | I7: failures keep their identity |
 | R8 | Provider composition opens only a granted, eligible endpoint; the first slice implements loopback local runtimes only; every other kind is `MODEL_UNAVAILABLE` (`driver-not-implemented`) | I8: no ambient provider, no hidden fallback (DCI-122) |
-| R9 | `devcadence benchmark replay-empirical` runs Admitter then `ReplayGate`; legacy `evaluate-gate --evidence-kind empirical_campaign` is refused | I9: the caller's label can never establish empirical evidence |
+| R9 | `devcadence benchmark replay-empirical` runs Admitter then `ReplayGate`; legacy `evaluate-gate --evidence-kind empirical_campaign` is refused with its own exit code (4), distinct from every replay conclusion | I9: the caller's label can never establish empirical evidence |
 | R10 | Verifier commands are fixed argv arrays from the pinned profile, with a minimal environment, no network and no shell | I10: verification is controlled execution (DCI-033) |
 
 ## Verified facts and representability gaps
@@ -46,26 +46,38 @@ LOCAL_DISCRETION: private helpers, test layout, report typography, HTTP client i
 | Fact / gap | Evidence at pinned base | Implication |
 | --- | --- | --- |
 | Admission is complete but production `ValidateAdmission` cannot return `Admitted` (`denyAuthority`, nil verifier path) | `empirical/admission.go`, `types.go` | export a constructor taking an authority and verifier |
-| `operatorAuthority` is unexported | `empirical/types.go` | **G-1:** an exported `OperatorAuthority` interface and `Admitter` are needed |
+| `operatorAuthority` is unexported and `VerifyAuthorization` returns only `error` | `empirical/types.go` | **G-1:** an exported `OperatorAuthority` and an `Admitter` are needed, and the authority must return the receipt window so admission can check session start (G-4) without `empirical` importing `receipts` |
+| `CampaignAuthorization` has `AuthorizedBy` (a label), `Expiry`, `PlanDigest` and no receipt field; it carries `MaxAPISpendUSD float64`; `EndpointBinding` is exported from `empirical` | `empirical/types.go` | no receipt id can live in the signed bytes (circular: the id is issuer-generated and the signature covers the digest of those bytes); the receipt is discovered by subject (R4 Lookup); `AuthorizedBy` is display-only; the float is replaced by integer micro-USD (amendment 6) |
 | `RunEvidence` has `SessionEvidenceRef` and no digest; session artifact is never resolved; `VerifiedOutcome.SessionDigest` is format-checked only | WP-M5-5 implementation record, blocked item 3 | **G-2:** add `SessionEvidenceDigest` and define the artifact |
 | `CampaignPlan` pins no verifier source or profile; `VerifiedOutcome` carries both | `empirical/types.go` | **G-3:** add two required plan fields |
 | Authorization `expiry` only checked as RFC3339 | record, blocked item 2 | **G-4:** compare to session start (G-2) and to the receipt window |
 | Corpus defects are synthetic file patches with `FileTarget`/`PatchContent`; `DefaultVerificationSuite` simulates outcomes by defect id; no per-defect detector command exists | `benchmark/defects.go`, `runner.go` | **G-5:** a `VerificationProfile` is required; authoring its content for the ten corpus tasks is card R3-D |
 | Fixture targets such as `internal/auth/checker.go` may not exist in any pinned source tree | `benchmark/defects.go` | unknown U1: which repository the campaign targets (owner/Principal decision with R3-D) |
 | `evaluate-gate` trusts `--evidence-kind empirical_campaign` and has no falsification input | WP-M5-5 §Bounded campaign, record item 4 | R9 replaces the path; no change to gate math |
-| Only `DirectAPIDriver` and `CLIWrapperDriver` exist; no real client; `ollama` package is probe-only with an `HTTPTransport` | `cognition/drivers`, `cognition/ollama` | Part A adds one loopback `DirectAPIClient` |
+| Only `DirectAPIDriver` and `CLIWrapperDriver` exist; no real client; `ollama` package is probe-only (`GET /api/version`, `/api/tags`, `/api/ps`, `POST /api/generate`) with an `HTTPTransport`; its `/api/tags` entry decoder reads no `digest` | `cognition/drivers`, `cognition/ollama/ollama.go` | Part A adds one loopback `DirectAPIClient` speaking the Ollama native protocol (decision below); step 0 verifies `/api/tags` returns a `digest` per model |
+| `go test` binaries carry no `vcs.revision`/`vcs.modified` build settings | Go toolchain behaviour (step 0 verifies with the owner's Go version) | the verifier takes build identity through an injected `BuildInfoSource`; the production adapter fails closed when unknown |
 | `telemetry.RunTelemetrySnapshot` has `AccountingUncertain` and no endpoint/model fields | `benchmark/telemetry/metrics.go` | continue to use the sidecar; unknown tokens are zero placeholders with the flag, never comparable |
 | `protocol.ActorProvenance` and `ActorsIndependent` exist; empirical already uses them | `protocol/review_ledger.go`, `empirical` | reuse |
 
 Step 0 re-verifies each row; a false row escalates.
 
-## Explicit amendments to the WP-M5-5 draft (all additive; no plan or authorization has ever been issued)
+## Explicit amendments to the WP-M5-5 draft (no plan or authorization has ever been issued; amendments 3 and 6 change an unexported seam signature and a never-issued field, the rest are additive)
 
 1. `CampaignPlan` gains required `VerifierSourceCommit` and `VerificationProfileDigest` (G-3). `PlanDigest` fixtures are regenerated; no historical plan exists.
 2. `RunEvidence` gains required `SessionEvidenceDigest` for completed/failed runs that started a session (G-2).
-3. An exported `OperatorAuthority` interface (same method as today) and `Admitter` replace the unexported seam as the only way to obtain `Admitted=true`; the old `ValidateAdmission` keeps its fail-closed behavior and doc comment (G-1).
+3. An exported `OperatorAuthority` interface **whose method now returns the receipt window** and an `Admitter` (both in package `empirical`, which imports neither `receipts`, `actors` nor `verifier`) replace the unexported seam as the only way to obtain `Admitted=true`; the old `ValidateAdmission` keeps its fail-closed behavior and doc comment (G-1, G-4):
+~~~go
+// package empirical (core; additive)
+type AuthorityWindow struct{ IssuedAt, NotAfter time.Time } // UTC; NotAfter already min(authorization.Expiry, receipt NotAfter)
+type OperatorAuthority interface {
+    VerifyAuthorization(ctx context.Context, planDigest, authorizationDigest string, authorization []byte) (AuthorityWindow, error)
+}
+~~~
+   `denyAuthority` adopts the new signature and still always errors. `Admitter` decodes each run's session evidence through the `ArtifactResolver` (type `empirical.SessionEvidence`, amendment 7), checks its digest equals `RunEvidence.SessionEvidenceDigest` and that `StartedAt` lies in `[window.IssuedAt, window.NotAfter]`.
 4. Replay entry point is a new subcommand (R9); the legacy `evaluate-gate` argv in WP-M5-5 is superseded for empirical use.
 5. The `m5-m4-empirical-report.md/json` artifact set and the three-way `Report{Admission, RawGate, Conclusion}` are unchanged.
+6. `CampaignPlan`/`CampaignAuthorization` replace `MaxAPISpendUSD float64` by `MaxAPISpendMicroUSD int64` (digests must not depend on float formatting, so spend is integer micro-USD everywhere in this window); step 0 verifies how the plan and authorization digests are computed (and how `protocol.Digest` canonicalizes numbers) and records it.
+7. `SessionEvidence` (below) is a type of package `empirical` because it embeds `empirical.EndpointBinding`; the `verifier` package imports `empirical`, never the reverse. `CampaignAuthorization.AuthorizedBy` stays a display label with no authority meaning; the receipt is found by subject (R4 Lookup), never named inside the signed bytes.
 
 ## Part A — Provider composition (first slice: loopback local only)
 
@@ -77,17 +89,36 @@ type Options struct {
     Clock clock.Clock
 }
 func New(Options) (*Composition, error)
-func (c *Composition) Open(ctx context.Context, ep execpolicy.ResolvedEndpoint) (drivers.SessionDriver, error) // implements execpolicy.DriverFactory
-func BindingFor(ep execpolicy.ResolvedEndpoint, contextProfileDigest string) empirical.EndpointBinding
+func (c *Composition) Open(ctx context.Context, ep execpolicy.ResolvedEndpoint) (execpolicy.OpenedEndpoint, error) // implements execpolicy.DriverFactory
+func BindingFor(ep execpolicy.ResolvedEndpoint, contextProfileDigest string) empirical.EndpointBinding        // ep MUST be bound (BindingDigest != "")
 ~~~
 
-`Open` dispatches on `ep.Kind`: `local_runtime` builds a `DirectAPIDriver` over a loopback chat client; `authenticated_cli` and `remote_api` return `MODEL_UNAVAILABLE` `driver-not-implemented` (their mappers and clients are added only after OWNER INPUT-2 names an endpoint, as amendments of this EWP). The loopback client implements `drivers.DirectAPIClient.Complete` against the local runtime's non-streaming chat endpoint (`Stream` returns a typed unsupported error). Rules: URL host must be a literal loopback IP (or `localhost` resolved by the client to loopback only, re-checked on the dialed address); no redirects; no proxy; no credentials or auth headers; TLS not required for loopback; request/response size caps (1 MiB / 4 MiB); per-request timeout from the resolved limits; tool definitions map to the runtime's tool schema, tool calls are returned to the mediator and never executed by the client; usage fields are mapped only when the runtime reports them, otherwise `TokenUsage` marks unknown (never zero); the model identity is captured from the runtime's own report (model digest/revision) into `ResolvedEndpoint.ModelRevision`'s source of truth; a runtime that does not report a revision gives revision `unknown` and the empirical binding refuses it (`ModelRevision` is required there). `BindingFor` maps `local_runtime→local_small`, `authenticated_cli→subscription_cli`, `remote_api→frontier_api`, copies ids, sets `SubscriptionQuotaUnit` to literal `unknown` unless the endpoint pins a unit, and takes the context-profile and policy digests from the resolved endpoint.
+`Open` dispatches on `ep.Kind`: `local_runtime` builds a `DirectAPIDriver` over a loopback chat client; `authenticated_cli` and `remote_api` return `MODEL_UNAVAILABLE` `driver-not-implemented` (their mappers and clients are added only after OWNER INPUT-2 names an endpoint, as amendments of this EWP).
+
+**Client protocol decision (closed for the first slice).** The loopback client speaks the **Ollama native API**, the only local runtime this repository already probes (`internal/cognition/ollama`): `POST /api/chat` with `{"model": ep.ModelID, "messages": [...], "tools": [{"type":"function","function":{"name","description","parameters"}}], "stream": false, "options": {"num_predict": <token cap>}}`; the response `message.content` and `message.tool_calls[].function{name, arguments (JSON object)}` map to `DirectAPIResponse` content and `ToolCall`s (a tool call whose `arguments` is not an object, or whose name is not in the request's tool list, is a typed protocol error, never executed); usage maps only from `prompt_eval_count`/`eval_count` when both are present, otherwise `TokenUsage` marks unknown. The OpenAI-compatible `/v1/chat/completions` shape is **not** implemented in this slice; wanting it is an OWNER INPUT-2 amendment (default deny). `Stream` returns a typed unsupported error.
+
+**Metadata-only `Open` and revision (closes the BindingDigest/ModelRevision circularity).** `Open` sends only `GET /api/tags` (no prompt, no source, no spend), finds the entry whose `name`/`model` equals `ep.ModelID` exactly, and returns `ObservedModelRevision = "sha256:" + <entry.digest>` when the digest is present and non-empty; otherwise `ObservedModelRevision == ""`, which makes `execpolicy.Bind` deny (`model-revision-unknown`). The empirical `EndpointBinding.ModelRevision` is therefore always the runtime-reported digest. Rules for every request: URL host must be a literal loopback IP (or `localhost` resolved by the client to loopback only, re-checked on the dialed address); no redirects; no proxy; no credentials or auth headers; TLS not required for loopback; request/response size caps (1 MiB / 4 MiB); per-request timeout from the resolved limits; tool calls are returned to the mediator and never executed by the client. `BindingFor` maps `local_runtime→local_small`, `authenticated_cli→subscription_cli`, `remote_api→frontier_api`, copies ids and the revision from the bound endpoint, sets `SubscriptionQuotaUnit` to literal `unknown` unless the endpoint pins a unit, and takes the context-profile and policy digests from the resolved endpoint.
 
 ## Part B — Verifier, authority, admission wiring, CLI
 
 ### Types (new unless noted)
 
 ~~~go
+// package empirical (core): SessionEvidence moves here (amendment 7); Admitter and OperatorAuthority per amendment 3
+type SessionEvidence struct {          // artifact schema "empirical-session" 1.0, strict
+    Version, RunID, CampaignID, AttemptID, TaskDigest string
+    Endpoint EndpointBinding
+    PromptDigest, ContextManifestDigest, InvocationProvenanceDigest, ExecutionPolicyDigest, AuthorizationDigest string
+    StartedAt, EndedAt string          // RFC3339 UTC
+    DriverOutcome string               // "completed" | "error" | "cancelled" | "limit_reached"
+    Turns int
+    Usage map[string]Measurement       // the ten-key vocabulary of WP-M5-5; unknown stays Known=false
+}
+type AdmitterOptions struct { Authority OperatorAuthority; Verifier IndependentVerifier; Resolver ArtifactResolver; Clock clock.Clock }
+func NewAdmitter(AdmitterOptions) (*Admitter, error) // nil Authority/Verifier/Resolver/Clock refused; there is no exported test authority
+func (a *Admitter) Admit(ctx context.Context, m CampaignManifest) (AdmissionResult, error)
+
+// package verifier (imports empirical, actors, receipts, process, worktrees)
 type CheckSpec struct {
     CheckID string
     Argv []string          // fixed; Argv[0] is an executable name from the profile allow-list, never a shell
@@ -95,7 +126,7 @@ type CheckSpec struct {
     TimeoutSeconds int     // 1..600
     ExpectExitCode int
 }
-type ReviewAnchor struct { Path string; StartLine, EndLine int }
+type ReviewAnchor struct { Path string; StartLine, EndLine int }   // 1 <= StartLine <= EndLine
 type DefectProbe struct {
     DefectID string
     CatchCheckIDs []string      // implementation tasks: caught iff all pass on the candidate
@@ -104,8 +135,9 @@ type DefectProbe struct {
 type TaskVerification struct {
     TaskID, TaskDigest, Class string // "implementation" | "review"
     BaseCommit string
+    WriteScope []string         // implementation only: repo-relative file paths or directory prefixes ending "/"; part of the profile digest; the only source of the write scope
     Checks []CheckSpec
-    AcceptanceCheckIDs []string
+    AcceptanceCheckIDs []string // implementation: required; review: must be empty
     Defects []DefectProbe
 }
 type VerificationProfile struct {
@@ -113,44 +145,38 @@ type VerificationProfile struct {
     Executables []string             // allow-list; "sh","bash","zsh","cmd","powershell" refused at load
     Tasks []TaskVerification         // sorted, unique TaskID
 }
-type SessionEvidence struct {          // artifact schema "empirical-session" 1.0, strict
-    Version, RunID, CampaignID, AttemptID, TaskDigest string
-    Endpoint empirical.EndpointBinding
-    PromptDigest, ContextManifestDigest, InvocationProvenanceDigest, ExecutionPolicyDigest, AuthorizationDigest string
-    StartedAt, EndedAt string          // RFC3339 UTC
-    DriverOutcome string               // "completed" | "error" | "cancelled" | "limit_reached"
-    Turns int
-    Usage map[string]empirical.Measurement // the ten-key vocabulary of WP-M5-5; unknown stays Known=false
-}
-type OperatorAuthority interface { // exported replacement of the unexported seam
-    VerifyAuthorization(ctx context.Context, planDigest, authorizationDigest string, authorization []byte) error
-}
-type Options struct { Authority OperatorAuthority; Verifier IndependentVerifier; Resolver ArtifactResolver; Clock clock.Clock }
-func NewAdmitter(Options) (*Admitter, error) // nil Authority/Verifier/Resolver refused
-func (a *Admitter) Admit(ctx context.Context, m CampaignManifest) (AdmissionResult, error)
+type BuildInfoSource interface { VCSRevision() (revision string, modified bool, ok bool) }
+// Production default (Options.BuildInfo == nil): debug.ReadBuildInfo settings vcs.revision / vcs.modified; ok=false when absent
+// (always so in `go test` binaries). Tests inject a source from _test.go only; no exported permissive source exists.
+type Options struct { Resolver empirical.ArtifactResolver; Worktrees *worktrees.Manager; Repositories taskexec.RepositoryProvider; Runner *process.Runner; BuildInfo BuildInfoSource; Clock clock.Clock; IDs ids.Source; ScratchDir string }
+func New(Options) (*Verifier, error)        // implements empirical.IndependentVerifier
 ~~~
 
-Profile load validates: strict decode, unique ids, each `CheckSpec` argv non-empty with `Argv[0]` in `Executables`, no shell, no URL-looking argument, no `..` directory; `AcceptanceCheckIDs` and `CatchCheckIDs` reference existing checks; review-class tasks have anchors, implementation tasks have probes. The profile digest is the canonical digest of the whole document and must equal `CampaignPlan.VerificationProfileDigest`. The campaign renderer (R4) prints that digest and the distinct executables across all checks.
+Profile load validates: strict decode, unique ids, each `CheckSpec` argv non-empty with `Argv[0]` in `Executables`, no shell, no URL-looking argument, no `..` directory; `AcceptanceCheckIDs` and `CatchCheckIDs` reference existing checks; implementation tasks have a non-empty `WriteScope`, at least one acceptance check and probes; review tasks have anchors and no acceptance checks or write scope. The profile digest is the canonical digest of the whole document and must equal `CampaignPlan.VerificationProfileDigest`. The campaign renderer (R4) prints that digest and the distinct executables across all checks.
 
 ### Algorithm: `Verify` (implements `empirical.IndependentVerifier`)
 
 1. Preconditions: run status `completed`; plan, run, evidence internally consistent (admission has already matched ids). Unknown/unavailable inputs return an infrastructure error (`blocked`), never an accept.
 2. Resolve and digest-check the receipt, session evidence and candidate artifact via `ArtifactResolver` (no network). Strict-decode the receipt (fields per WP-M5-5 `VerifierReceipt`) and session evidence. Cross-check ids, task digest, seed, strategy, endpoint binding digest, prompt digest, candidate commit and artifact digest, snapshot digest against plan/run.
-3. Determine own identity: `vcs.revision` and `vcs.modified=false` from build info must equal `plan.VerifierSourceCommit`; the profile digest must equal `plan.VerificationProfileDigest`. Unknown build info, a modified tree or a mismatch fails closed.
-4. Build the verifier `ActorProvenance` (role verifier, `ActorID = "verifier:" + sourceCommit[:12] + ":" + profileDigest[:12]`, fresh `InvocationID`, empty lineage) and the worker `ActorProvenance` from the session evidence's `InvocationProvenance` (R2-A) with actor id re-derived from its stored basis; require `protocol.ActorsIndependent`.
-5. Create an isolated worktree at the **candidate commit** (R1 manager, id `<run>-verify`), clean and read-only for the candidate: verify commit exists, its sole parent equals the task profile's `BaseCommit` (implementation) and the changed paths are inside the closed EWP write scope. Review-class tasks verify the candidate artifact JSON strictly instead.
-6. Execute every `CheckSpec` of the task through `process.Runner`: argv only, `Dir` resolved inside the worktree, env limited to a fixed set (`PATH` of resolved executables, `HOME`/`TMPDIR` in a verifier scratch directory, `GOFLAGS=-mod=readonly`, `GOPROXY=off`, `GOTOOLCHAIN=local`, no proxy or credential variables), timeout per check, bounded output capture stored as verifier artifacts. A check needing the network fails with a nonzero exit and the run is `blocked` with `VERIFIER_INFRASTRUCTURE`, not scored as a defect result.
-7. Compute results: `passed_acceptance_ids` = acceptance checks whose exit code equals `ExpectExitCode`; per defect, caught per the probe rule (implementation: all `CatchCheckIDs` pass; review: some finding's `evidence_refs` entry matches `path:line` within the anchor); `SeededDefectTotal = len(task.Defects)`, `SeededDefectsCaught` = count; `QualityVerdict = accepted` iff all acceptance checks passed and the task's defect rule is satisfied under the closed rules above, else `rejected`.
+3. Determine own identity: `BuildInfo.VCSRevision()` must return `ok` and `modified == false` and a revision equal to `plan.VerifierSourceCommit`; the profile digest must equal `plan.VerificationProfileDigest`. Unknown build info, a modified tree or a mismatch fails closed (R2 label-check caveat applies).
+4. Build the verifier `ActorProvenance` (role verifier; `ActorID = actors.DeriveActorID("endpoint_model", ActorBasis{EndpointID:"devcadence-verifier", ModelID: sourceCommit, ModelRevision: profileDigest})`; fresh `InvocationID`; empty lineage) and the worker `ActorProvenance` from the session evidence's `InvocationProvenance` (R2-A) with actor id re-derived from its stored basis; require `protocol.ActorsIndependent`.
+5. Implementation tasks: create an isolated worktree at the **candidate commit** (R1 manager, id `<run>-verify`), clean and read-only for the candidate: verify the commit exists, its sole parent equals the task's `BaseCommit`, and every changed path (`git diff --name-status base..commit`, renames and deletions included, no symlink/submodule/`.git` change) lies inside `TaskVerification.WriteScope`; a violation is a **quality** failure (`rejected`, verdict reason `scope`), not infrastructure. Review tasks skip the worktree and verify the candidate artifact JSON strictly instead: it must strict-decode into `protocol.ReviewResult` (unknown fields refuse) and pass `Validate()`; failure is a quality failure.
+6. Execute every `CheckSpec` of the task through `process.Runner`: argv only, `Dir` resolved inside the worktree, env limited to a fixed set (`PATH` of resolved executables, `HOME`/`TMPDIR` in a verifier scratch directory, `GOFLAGS=-mod=readonly`, `GOPROXY=off`, `GOTOOLCHAIN=local`, no proxy or credential variables), timeout per check, bounded output capture stored as verifier artifacts. **Infrastructure vs quality is decided by the process outcome alone:** if the process could not be started, the executable was not found, the runner killed it for exceeding the timeout or output cap, it died to a signal, or the worktree could not be created → `blocked` with `VERIFIER_INFRASTRUCTURE`. If the process exited with any exit code, the check is a normal result (pass iff the code equals `ExpectExitCode`), including a failure caused by a missing dependency or a refused network call. Network need is *not* detected (it is undecidable); it is excluded structurally (offline environment) and covered by an R3-D obligation: every task's profile must be shown, before freeze, to pass all acceptance checks with its reference solution under this exact environment, so a check that cannot pass offline is found at profile review rather than scored as a model defect.
+7. Compute results: `passed_acceptance_ids` = acceptance checks whose exit code equals `ExpectExitCode`; per defect, caught per the probe rule (implementation: all `CatchCheckIDs` pass; review: some finding's `evidence_refs` entry matches `^([^:\s]+):([1-9][0-9]*)$`, its path (slash-separated, `path.Clean`, no `..`, no leading `/`) equals `Anchor.Path` and its line lies in `[StartLine, EndLine]`); `SeededDefectTotal = len(task.Defects)`, `SeededDefectsCaught` = count. **`QualityVerdict = accepted` iff** the write-scope/artifact checks of step 5 passed **and** every `AcceptanceCheckID` passed (review tasks, having none, are accepted iff the artifact validated); defect counts are measurements recorded beside the verdict and never decide it (a model that passes acceptance but misses seeded defects is `accepted` with a low catch rate, which is exactly what the gate's quality metric must see). Otherwise `rejected`.
 8. Deterministic re-run: compare the decision fields (acceptance ids, per-check exit codes, caught set, verdict) with the claimed original receipt; any disagreement returns `INCONSISTENT_VERIFICATION` (run `blocked`). Output bytes and digests are not compared (timestamps vary); the original receipt digest is returned as `ReceiptDigest` and must equal `RunEvidence.VerifierReceiptDigest` (admission checks).
 9. Return `VerifiedOutcome` with `VerifiedCommandArtifactRefs` for the verifier's own output artifacts. The verifier never modifies the candidate, the profile or the judge source; the worktree is cleaned if clean.
 
 ### Algorithm: authority adapter
 
-`receipts.CampaignAuthority{Verifier}` implements `OperatorAuthority`: strictly parse the authorization bytes, take its `authorized_by`/receipt reference, call `receipts.Verifier.Verify(Request{ReceiptID, ProjectID, Purpose: empirical.campaign_authorize, Subject: {Kind:"CampaignAuthorization", ID: campaign_id, Version: 1}, SubjectDigest: authorizationDigest})`, and require the authorization's `plan_digest` to equal `planDigest` and its `expiry` not after the receipt `NotAfter`. `Admitter` additionally requires each run's `SessionEvidence.StartedAt` to lie within `[receipt IssuedAt, min(authorization.expiry, receipt NotAfter)]` (G-4). The adapter lives with R4 or R3 adapters, never in `empirical` core (no dependency from `empirical` to `receipts`).
+`verifier.CampaignAuthority{Verifier receipts.Verifier, Clock}` (package `verifier`, which may import `receipts`; package `empirical` imports neither) implements `empirical.OperatorAuthority`:
+
+1. Strictly decode `authorization` into `empirical.CampaignAuthorization`; require `PlanDigest == planDigest`, a parseable `Expiry`, `Expiry` in the future.
+2. `v, err := Verifier.Verify(Request{ReceiptID: "", ProjectID, Purpose: empirical.campaign_authorize, Subject: {Kind:"CampaignAuthorization", ID: planDigest, Version: 1}, SubjectDigest: authorizationDigest})` (R4 lookup by subject; the receipt is a detached file under `receipts/`, never referenced from the authorization bytes, so there is no circular receipt-id binding; `AuthorizedBy` is ignored for authority). Require `v.IsValid()`.
+3. Require `Expiry <= receipt NotAfter`; return `AuthorityWindow{IssuedAt: receipt IssuedAt, NotAfter: min(Expiry, receipt NotAfter)}`. Any failure returns an error (the grant is also re-verified for every run admission, per R4 R5).
 
 ### Algorithm: CLI replay
 
-`devcadence benchmark replay-empirical --manifest <file> --plan <file> --authorization <file> --artifacts <dir> --criteria <file> --output <report.md> [--json <report.json>]`: build resolver over the digest-addressed `--artifacts` directory (no network), compose the production authority and verifier, `Admit`; on refusal print the closed reason codes and exit `3`; otherwise `ReplayGate(admission, criteria)` with the pinned criteria and write the report (`Admission`, `RawGate`, `Conclusion` kept separate). Exit `0/1/2` is the raw Go/Revise/Inconclusive conclusion of the combined report. `evaluate-gate --evidence-kind empirical_campaign` exits `2` with a message naming `replay-empirical`; other evidence kinds are unchanged. No flag accepts a precomputed aggregate, a summary or a boolean "verified".
+`devcadence benchmark replay-empirical --manifest <file> --plan <file> --authorization <file> --artifacts <dir> --criteria <file> --output <report.md> [--json <report.json>]`: build resolver over the digest-addressed `--artifacts` directory (no network), compose the production authority (`CampaignAuthority`), verifier and `empirical.NewAdmitter`, `Admit`; on refusal print the closed reason codes and exit `3`; otherwise `ReplayGate(admission, criteria)` with the pinned criteria and write the report (`Admission`, `RawGate`, `Conclusion` kept separate). Exit `0/1/2` is the raw Go/Revise/Inconclusive conclusion of the combined report. `evaluate-gate --evidence-kind empirical_campaign` exits **`4`** with a message naming `replay-empirical` (so the legacy refusal is distinguishable from Inconclusive `2` and refused admission `3`); other evidence kinds are unchanged. No flag accepts a precomputed aggregate, a summary or a boolean "verified".
 
 ## Cards not authored in this window (explicit, no implementation authority)
 
@@ -175,7 +201,7 @@ Until both exist, M5 cannot close and A9 cannot run.
 | Receipt / authorization / grant | not admitted, zero verifier effects | unverifiable: not admitted | expired/revoked: not admitted | refusal with closed reason |
 | Verifier build info / profile | not admitted | unknown revision: refuse | mismatch: refuse | refuse |
 | Session evidence / usage | run not completed | unknown usage: `Known=false`, no efficiency proof | n/a | integrity refusal |
-| Check execution | `blocked` | timeout: failed check, not infra if exit recorded | n/a | `blocked` |
+| Check execution | `blocked` | timeout/signal/start failure: infrastructure `blocked`; any recorded exit code is a normal result | n/a | `blocked` |
 | Endpoint kind | `driver-not-implemented` | n/a | n/a | n/a |
 
 | Failure boundary | Required postcondition | Recovery |
@@ -190,7 +216,7 @@ Until both exist, M5 cannot close and A9 cannot run.
 
 | ID | Setup → action → expected | Requirement → invariant → representation |
 | --- | --- | --- |
-| A1 | receipt claims pass but re-execution fails → verify → rejected/blocked per rule | R1 → I1 |
+| A1 | receipt claims pass but re-execution fails an acceptance check → verify → completed-`rejected` (quality), caught-set recomputed from probes | R1 → I1 |
 | A2 | forged receipt bytes/digest mismatch → refused before verifier effects | R1 → I1 |
 | A3 | plan verifier commit or profile digest differs from the running verifier → refuse | R2 → I2 |
 | A4 | worker and verifier actors overlap/lineage/same invocation → refuse | R3 → I3 |
@@ -198,11 +224,14 @@ Until both exist, M5 cannot close and A9 cannot run.
 | A6 | review task: finding anchors inside range → caught; vague/out-of-range → not caught | R4 → I4 |
 | A7 | session evidence missing, wrong digest, or authorization expired at session start → refuse | R5 → I5 |
 | A8 | unknown token usage → `Known=false`; gate numeric input skipped; Inconclusive | R5 → I5 |
-| A9a | campaign grant receipt valid/forged/revoked/wrong plan → authority accepts only the valid one | R6 → I6 |
-| A10 | infra failure vs quality failure vs inconsistency → blocked / completed-rejected / blocked | R7 → I7 |
-| A11 | `Open` for remote or CLI endpoint → `driver-not-implemented`, zero network | R8 → I8 |
-| A12 | loopback client refuses non-loopback host, redirect, proxy, oversize response, credential header | R8 → I8 |
-| A13 | `replay-empirical` with refused admission exits 3, no gate call; legacy label exits 2 | R9 → I9 |
+| A9a | campaign grant receipt valid/forged/revoked/wrong plan/expired → authority accepts only the valid one and returns the window; a detached receipt is found by subject with `AuthorizedBy` set to any string; zero-value `Verified` refused | R6 → I6 |
+| A9b | a run whose `SessionEvidence.StartedAt` is before the receipt `IssuedAt` or after `min(expiry, NotAfter)` → refused by the Admitter in package `empirical`; `empirical` has no import of `receipts`/`verifier`/`actors` (package-boundary test) | R5/R6 → I5/I6 |
+| A10 | process cannot start / timeout / signal → `VERIFIER_INFRASTRUCTURE` blocked; exit code ≠ expected (including a dependency/network-refused failure) → completed-rejected; original vs rerun differ → `INCONSISTENT_VERIFICATION` blocked | R7 → I7 |
+| A10b | candidate touches a path outside the profile `WriteScope` (rename, delete, symlink) → rejected (scope); passes all acceptance checks but misses seeded defects → `accepted` with low caught count (defects never decide the verdict) | R4/R7 → I4/I7 |
+| A10c | build info unknown (`ok=false`, as in `go test`) → refuse; injected source with matching revision and `modified=false` → proceeds; the verifier actor id equals `DeriveActorID` of its basis | R2/R3 → I2/I3 |
+| A11 | `Open` for remote or CLI endpoint → `driver-not-implemented`, zero network; loopback `Open` sends only `GET /api/tags`; a missing/empty digest → `ObservedModelRevision == ""` and `Bind` denies | R8 → I8 |
+| A12 | loopback client refuses non-loopback host, redirect, proxy, oversize response, credential header, a tool call with a non-object `arguments` or an unlisted name; maps `/api/chat` tool calls and usage per the decision, unknown usage stays unknown | R8 → I8 |
+| A13 | `replay-empirical` with refused admission exits 3, no gate call; Inconclusive conclusion exits 2; legacy `--evidence-kind empirical_campaign` exits 4 | R9 → I9 |
 | A14 | profile with `sh -c`, network-looking arg, `..` dir → load refused; verifier env contains no proxy/credential variables | R10 → I10 |
 | A15 | nil authority/verifier/resolver → `NewAdmitter` refused; production `ValidateAdmission` still denies | R6/R1 → I6/I1 |
 
@@ -211,6 +240,8 @@ The live A9 scenario of WP-M5-5 is **not** claimed by anything in this EWP; fixt
 ## Validation and Mutation Catalog
 
 `go test -count=1 -race ./internal/benchmark/empirical/... ./internal/cognition/sessionclients/... ./cmd/devcadence/... ./tests/...`; `make schemas`; `make docs-check`; `make verify`. Record versions, fixture digests, check argv arrays, exit statuses and the replay-gate argv/exit.
+
+Test seams (explicit): the loopback client is tested against an in-process `httptest` server bound to `127.0.0.1` (non-loopback and redirect cases use a second server/handler, never a real network); the verifier uses an injected `BuildInfoSource` and temporary Git repositories; infrastructure faults are injected by a `process.Runner` wrapper from `_test.go` that returns start errors/timeouts; the package-boundary tests use `go list -deps -json` to assert `empirical` imports none of `receipts`, `actors`, `verifier`, `sessionclients` and that no non-test package constructs `Options.BuildInfo` with a non-production source.
 
 | Mutant | Expected failure |
 | --- | --- |
@@ -222,10 +253,13 @@ The live A9 scenario of WP-M5-5 is **not** claimed by anything in this EWP; fixt
 | Skip session-evidence digest/expiry check | A7 |
 | Unknown usage becomes zero | A8 |
 | Authority accepts any receipt/grant, ignores revocation or plan digest | A9a |
+| Admitter ignores the window, or `empirical` imports a receipt package | A9b |
 | Infra failure counted accepted/rejected-quality; disagreement ignored | A10 |
+| Defect catch rate gates the verdict; write-scope read from the worker | A10b |
+| Production default for `BuildInfo` is permissive | A10c |
 | Remote/CLI kind opens a client | A11 |
 | Client follows redirect, honors proxy, or dials non-loopback | A12 |
-| Replay calls the gate despite refusal; legacy label still works | A13 |
+| Replay calls the gate despite refusal; legacy label still works or shares an exit code with Inconclusive | A13 |
 | Shell or ambient env allowed in checks | A14 |
 | Exported test authority reachable from production | A15 |
 
@@ -240,18 +274,16 @@ Escalate on: gate criteria, corpus or snapshot schema changes; a verifier needin
 Implementation Readiness Report:
 
 ~~~text
-requirements represented: 10/10
-state transitions specified: 5/5 (verify, authority check, admit, replay, open)
-failure cases specified: 8/8
-authority decisions specified: 4/4
-missing/unknown input semantics: 5/5
-acceptance scenarios mapped: 15/15
-unresolved architecture choices: 2 (G-5 profile content; U1 target repository), both owned by card R3-D
-readiness: Part A NOT_READY pending R1-A freeze and OWNER INPUT-2 for anything beyond loopback; Part B NOT_READY pending amendments' review, R2-A and R4-A freezes
+author tally after repair round 1 (a self-count, not evidence; independent re-verification PENDING):
+requirements represented: 10 (R1-R10; R2/R3/R7/R9 tightened in r2)
+acceptance scenarios mapped: 19 (A1-A15 plus A9b, A10b, A10c and the expanded A11/A12)
+unresolved architecture choices: 2 (G-5 profile content; U1 target repository), both owned by card R3-D; the loopback protocol is closed (Ollama native) with other protocols an INPUT-2 amendment
+readiness: Part A NOT_READY pending R1-A freeze, step-0 check that `/api/tags` reports a digest, and OWNER INPUT-2 for anything beyond loopback; Part B NOT_READY pending the amendments' review, R2-A and R4-A freezes
 ~~~
 
-Weaker-implementer check: Part A yes (loopback only); Part B yes for the verifier algorithm, with profile content explicitly out of scope.
+Weaker-implementer check: author expectation only, to be re-tested by the independent Implementability reviewer (Part B verifier algorithm; profile content explicitly out of scope).
 
 ## Changelog
 
 - r1: initial draft for window 2026-10-G.
+- r2: repair round 1: receipt discovered by subject (no receipt id in signed bytes); `OperatorAuthority` returns `AuthorityWindow`, `Admitter` and `SessionEvidence` live in `empirical` (layering fixed); loopback protocol closed (Ollama `/api/chat`, tool and usage mapping) and metadata-only `Open`/`Bind` resolves the revision circularity; verdict rule, `WriteScope` in the profile, review artifact schema and anchor matching, decidable infra/quality rule, `BuildInfoSource` seam, verifier actor via `DeriveActorID`; `vcs.revision` documented as a label check; integer micro-USD; CLI exit 4 for the legacy refusal; test seams; honest readiness tally.

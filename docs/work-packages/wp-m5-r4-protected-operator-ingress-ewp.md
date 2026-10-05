@@ -2,7 +2,7 @@
 
 ## Identity
 
-- Revision: 1; task: task-m5-r4-operator-ingress; window: [2026-10-G](window-2026-10-g-overview.md).
+- Revision: 2 (window review round 1 repaired; verdicts pending re-verification); task: task-m5-r4-operator-ingress; window: [2026-10-G](window-2026-10-g-overview.md).
 - Base: `71bdaec6d6d81c1b6e52d8b30f0f8485f928925a` (`main` `cebb4f0` plus the PR #83 reconcile merge, 2026-10-05).
 - Contract digest: reviewed immutable Git blob. No fictitious runtime state revision; record the actual accepted dependency commits at execution.
 - Endpoint: competent Go implementer with POSIX filesystem/ownership and `crypto/ed25519` skill; complete admission of this contract is mandatory.
@@ -33,11 +33,11 @@ LOCAL_DISCRETION: file and helper layout, test fixtures, error wording that is s
 | ID | MUST requirement | Invariant |
 | --- | --- | --- |
 | R1 | A receipt verifies only if its Ed25519 signature checks against an enrolled, unexpired, unrevoked anchor whose public key is allowed for that purpose | I1: a request field, flag or file that merely says "human" is never authority |
-| R2 | The trust-anchor and revocation files are loaded only from a path whose every component is owned by an identity different from the verifier's effective UID, not group/world-writable and not a symlink; the verifier refuses to run as UID 0 | I2: an identity that can reach the model's tools cannot edit the thing that decides who is trusted |
+| R2 | The trust-anchor and revocation files are loaded only from a path whose every component is owned by a uid in the explicit `TrustedOwnerUIDs` allow-list (non-empty, supplied by composition from the operator account chosen in OWNER INPUT-1) that is also different from the verifier's effective UID, not group/world-writable and not a symlink; the verifier refuses to run as UID 0 | I2: an identity that can reach the model's tools cannot edit the thing that decides who is trusted; "owner is not me" alone is insufficient (any third account could own the directory) |
 | R3 | A receipt binds `project_id`, `purpose`, subject `{kind,id,version}`, `subject_digest`, optional `input_digest`, the rendered statement digest and a bounded validity window; any mismatch with the consumer's recomputed values fails | I3: a receipt cannot be reused for another project, purpose, artifact or revision |
 | R4 | A `once` receipt is consumed in the same transaction as the effect it authorizes; replay fails; a rolled-back effect leaves it unconsumed | I4: one human act authorizes at most one effect, and no effect commits without its consumption |
-| R5 | A `grant` receipt is accepted only until expiry or revocation and is re-verified at every use | I5: standing authority is bounded and revocable |
-| R6 | Verification returns a trusted in-process `Verified` value; wire/request data never constructs it | I6: no accepting JSON or test double can reach production authority |
+| R5 | A `grant` receipt is accepted only until expiry or revocation and is re-verified at every use. "Use" is defined once for the window: every `Delegate`, every `Review` start, every `Evaluate`, every campaign run admission; the policy file bytes are pinned for the process, the receipt/anchor/revocation state is not | I5: standing authority is bounded and revocable |
+| R6 | Verification returns a trusted in-process `Verified` value; wire/request data never constructs it; the zero value is invalid and every consumer and `ConsumeOnce` refuse it via `Verified.IsValid()` | I6: no accepting JSON or test double can reach production authority, and a zero-value struct cannot pass as one |
 | R7 | The issuer renders the human-visible text from the exact artifact bytes by a typed renderer, never from request-supplied text | I7: the human signs what will be applied |
 | R8 | Missing, unreadable, malformed, expired, unknown-anchor, unprotected-anchor or ambiguous inputs deny with `NEEDS_HUMAN` and zero effects | I8: absence of authority is never defaulted |
 | R9 | Receipt creation, enrolment and revocation have no model-reachable surface | I9: the principal cannot mint, enrol or revoke |
@@ -53,6 +53,8 @@ LOCAL_DISCRETION: file and helper layout, test fixtures, error wording that is s
 | Records are stored via `Command.Records` and read via `BatchReadView.Record` | `internal/controlplane/{service,batch}.go` | consumption is a record id `receipt_id`, version 1 |
 | Storage idempotence of a duplicate `(kind,id,version)` insert is not established by this EWP | not verified | the explicit `BatchGuard` existence check below is mandatory and does not rely on a storage error; step 0 verifies behaviour and records it |
 | No Ed25519/receipt code, no anchor store, no `devcadence-operator` binary | repository search | all new |
+| `WP-M5-3` `ReceiptSubject{Kind,ID,Version}`, `HumanReceiptVerifier.Verify(ctx, caller, receiptRef, purpose, inputDigest, subject)` and `principalhosts.ApprovalVerifier.VerifyApproval(ctx, ref, planDigest, paths)` are the consumer contracts | `wp-m5-3-discovery-ewp.md` §Dependency surface; `internal/principalhosts/integration.go` | R4 supplies thin adapters to both (Part A, below); `receiptRef`/`ref` is a `ReceiptID` |
+| `empirical.CampaignAuthorization` has `AuthorizedBy` (a label) and no receipt field | `internal/benchmark/empirical/types.go` | the receipt is found by subject, never named inside the signed bytes (see Lookup) |
 
 Step 0 re-verifies each row; a false row escalates.
 
@@ -92,22 +94,53 @@ type Statement struct {
 }
 type Receipt struct { Statement Statement; Signature string } // base64 Ed25519 over "devcadence-receipt/1\n" + canonical Statement
 type Request struct {
-    ReceiptID, ProjectID string
+    ReceiptID string          // OPTIONAL. "" = discover by subject (see Lookup); non-empty = exactly that file
+    ProjectID string
     Purpose Purpose
     Subject Subject
     SubjectDigest, InputDigest string // recomputed by the consumer, never copied from the receipt
 }
-type Verified struct { /* unexported fields */ } // constructed only by Verifier implementations in this package
+type Verified struct { /* unexported fields incl. a package-private validity token */ } // constructed only by Verifier implementations in this package
 func (Verified) Statement() Statement
+func (Verified) IsValid() bool                 // false for the zero value or any value not produced by a Verifier
 type Verifier interface { Verify(context.Context, Request) (Verified, error) }
 type Consumption struct { // protocol record kind "ReceiptConsumption", schema 1.0, version 1, id = ReceiptID
     SchemaVersion, ReceiptID, ProjectID, Purpose, SubjectDigest, InputDigest, AnchorID string
     EffectKind, EffectID string // e.g. "ProductDecision"/id, "HostPlan"/digest; set by the consumer
     ConsumedAt string
 }
-func ConsumeOnce(Verified, effectKind, effectID string) (controlplane.BatchGuard, controlplane.RecordToStore, error)
-func NewFileVerifier(opts FileOptions) (Verifier, error) // refuses when R2 protection fails
+// ConsumeOnce refuses (error, no guard) when !v.IsValid() or when v's purpose Use is "grant".
+func ConsumeOnce(v Verified, effectKind, effectID string) (controlplane.BatchGuard, controlplane.RecordToStore, error)
+// AuditGrantUse is the grant counterpart: no replay guard; returns the record "<receipt_id>:<effect_id>" for audit. Refuses !IsValid or Use "once".
+func AuditGrantUse(v Verified, effectKind, effectID string) (controlplane.RecordToStore, error)
+type FileOptions struct {
+    OperatorDir string        // default per platform; DEVCADENCE_OPERATOR_DIR override is protection-checked too
+    ReceiptsDir string        // default DEVCADENCE_HOME/receipts; need NOT be protected (receipts are signed)
+    TrustedOwnerUIDs []uint32 // required non-empty; root (0) is allowed as an owner, never as the verifier euid
+    Clock clock.Clock         // required
+}
+func NewFileVerifier(opts FileOptions) (Verifier, error) // refuses when R2 protection fails or TrustedOwnerUIDs is empty
 ~~~
+
+**Receipt location and lookup (single rule, replaces any per-consumer receipt path).** Every receipt is a file `DEVCADENCE_HOME/receipts/<ReceiptID>.json` (64 KiB cap). Consumers never read receipt files themselves, and policy loaders do **not** read `config/*.receipt.json`. With `Request.ReceiptID` set, exactly that file is verified. With it empty, `Verify` enumerates `receipts/*.json` (sorted by name, at most 256 files, files over the cap or failing strict decode are skipped), keeps those whose `Purpose`, `ProjectID`, `Subject` and `SubjectDigest` equal the request, fully verifies each, and returns the verifying one with the latest `IssuedAt` (ties: lexicographically greatest `ReceiptID`); none verifying returns `receipt-missing` (or the most specific failure of the best candidate). A `once` consumer is given the `ReceiptID` by the human/host (the `receiptRef`/`ref` argument of the consumer ports); `grant` consumers (policies, campaigns) discover by subject, so no receipt reference is ever embedded in the signed artifact (a receipt id is issuer-generated and signed over the digest of those same bytes, so it cannot live inside them).
+
+**Subject table (R3 binding, exact).** Digests are `sha256:` over protocol canonical JSON of the stated value; policies carry no floating point (spend is integer micro-USD) so digests do not depend on float formatting; step 0 verifies `protocol.Digest` number canonicalization.
+
+| Purpose | `Subject.Kind` | `Subject.ID` | `Subject.Version` | `SubjectDigest` over | `InputDigest` |
+| --- | --- | --- | --- | --- | --- |
+| `discovery.product_decision` | `ProductDecision` | decision id | decision record version | canonical `DecisionRecord` | discovery `InputDigest` the decision answers (WP-M5-3) |
+| `discovery.requirement_confirm` | `Requirement` | requirement id | record version | canonical requirement record | as above |
+| `discovery.ledger_resolution` | `AmbiguityResolution` | ambiguity id | ledger version | canonical resolution | none |
+| `discovery.reflection` | `ProblemModelReflection` | problem-model id | problem-model revision | canonical `ReflectionInput` minus `HumanReceiptRef` | `ReflectionInput.InputDigest` |
+| `discovery.accepted_risk` | `AcceptedRisk` | risk id | record version | canonical risk record | discovery `InputDigest` |
+| `host.plan_apply` | `HostPlan` | plan digest | 1 | canonical `HostPlanScope{plan_digest, paths}` (adapter below) | none |
+| `acceptance.policy_activate` | `AcceptancePolicy` | `PolicyID` | `Revision` | canonical policy document | none |
+| `execution.policy_activate` | `ExecutionPolicy` | `PolicyID` | `Revision` | canonical policy document | none |
+| `empirical.campaign_authorize` | `CampaignAuthorization` | plan digest | 1 | the `authorizationDigest` argument of `VerifyAuthorization` | none |
+
+WP-M5-3's write side MUST adopt the discovery rows verbatim (it owns the record versions); a mismatch is a re-resolution trigger, not a local choice.
+
+**Consumer adapters (Part A, in `internal/operator/receipts`).** `HostPlanApprovals{Verifier}` implements `principalhosts.ApprovalVerifier`: `VerifyApproval(ctx, ref, planDigest, paths)` canonicalizes `paths` (each must be absolute, NUL-free, equal to its `filepath.Clean` form and free of `..`; sorted ascending by bytes; a duplicate or non-canonical entry refuses), builds `HostPlanScope{PlanDigest, Paths}`, and calls `Verify` with `Purpose: host.plan_apply`, `ReceiptID: ref`, `Subject{HostPlan, planDigest, 1}`; success requires `Verified.IsValid()`; the receipt is then consumed by the apply path through `ConsumeOnce` in the effect's transaction (today manual apply never consumes, so the adapter alone grants nothing). `HumanReceipts{Verifier}` implements WP-M5-3 `HumanReceiptVerifier`: maps `(receiptRef, purpose, inputDigest, subject)` to a `Request` with `ReceiptID: receiptRef` and returns `HumanReceipt{HumanActorID: Statement.HumanActorID, SourceRef: receiptRef, Purpose, InputDigest, Subject}`.
 
 Fixed purpose table (use, maximum validity, `input_digest` required): `discovery.*` once, 1 h, required for decision/requirement/reflection/risk and not for ledger; `host.plan_apply` once, 1 h, no; `acceptance.policy_activate` and `execution.policy_activate` grant, 30 days, no; `empirical.campaign_authorize` grant, 7 days, no. A receipt whose `NotAfter - IssuedAt` exceeds the maximum, whose `Use` differs from the table, or whose `IssuedAt` is more than 5 minutes in the future refuses.
 
@@ -117,12 +150,12 @@ Trust-anchor files (read-only to the verifier). Directory `OperatorDir` contains
 
 1. `euid := os.Geteuid()`; if `euid == 0` refuse (a root verifier has no separation to rely on).
 2. Resolve the absolute path without following symlinks; walk every component from `/` to each file with `Lstat`.
-3. For each component: not a symlink; owner uid `!= euid`; `mode & 0022 == 0` (no group/world write; a sticky directory does not excuse this); regular file or directory as expected; file mode has no write bit for anyone but the owner.
+3. For each component: not a symlink; owner uid is in `TrustedOwnerUIDs` **and** `!= euid`; `mode & 0022 == 0` (no group/world write; a sticky directory does not excuse this); regular file or directory as expected; file mode has no write bit for anyone but the owner. macOS note: system directories are often `root:wheel 0755` (acceptable) but user-created directories default to group-writable for the `admin`/`staff` groups on some setups, so the `0022` rule must be checked, not assumed; `/etc`, `/var` and `/tmp` are symlinks on macOS, so a path through them refuses and the operator must name the real path (the default `/Library/Application Support/DevCadence/operator` has no symlink component).
 4. Any unknown ownership/ACL capability, `Lstat` failure or mode ambiguity refuses. Re-run the check at every `Verify`, not only at construction, and compare file digests with the values loaded at construction; a changed file refuses until the process is relaunched.
 
 ### Algorithm: Verify
 
-1. Load nothing from the request except `ReceiptID`; resolve `DEVCADENCE_HOME/receipts/<ReceiptID>.json` only after the id matches `^rcpt_[a-z2-7]{26}$`. Size cap 64 KiB. Strict decode.
+1. Load nothing from the request except `ReceiptID` and the binding fields. With a non-empty `ReceiptID` resolve `DEVCADENCE_HOME/receipts/<ReceiptID>.json` only after the id matches `^rcpt_[a-z2-7]{26}$`; with an empty one apply the Lookup rule above. Size cap 64 KiB. Strict decode.
 2. Re-run R2 protection; read anchors and revocations from the verified files.
 3. Reject if the receipt id or its anchor is revoked; the anchor must exist, be inside `not_before..not_after`, and list `Purpose`.
 4. Check the fixed table (use, validity, input requirement) and that `ProjectID`, `Purpose`, `Subject`, `SubjectDigest`, `InputDigest` equal the **consumer's** values and `TextDigest == sha256(Text)`.
@@ -131,11 +164,11 @@ Trust-anchor files (read-only to the verifier). Directory `OperatorDir` contains
 
 ### Algorithm: consumption and replay
 
-`ConsumeOnce` returns (a) a **Precondition** `BatchGuard` that fails with `receipt-replayed` when `view.Record(ctx,"ReceiptConsumption",id,1)` exists (existence is checked explicitly, never inferred from a storage error) and (b) the `RecordToStore` to attach to the member that carries the effect. The consumer re-runs `Verify` immediately before building the batch and the batch's expected prefix is the usual WP-M5-1 compare, so two concurrent uses serialize and exactly one wins. Grants are not consumed; each use re-verifies and, for audit, the consumer may attach a `ReceiptConsumption` with id `<receipt_id>:<effect_id>`.
+`ConsumeOnce` returns (a) a **Precondition** `BatchGuard` that fails with `receipt-replayed` when `view.Record(ctx,"ReceiptConsumption",id,1)` exists (existence is checked explicitly, never inferred from a storage error) and (b) the `RecordToStore` to attach to the member that carries the effect. The consumer re-runs `Verify` immediately before building the batch and the batch's expected prefix is the usual WP-M5-1 compare, so two concurrent uses serialize and exactly one wins. Grants are not consumed; each use re-verifies and, for audit, the consumer may attach the record returned by `AuditGrantUse` (id `<receipt_id>:<effect_id>`).
 
 ### Algorithm: issuer ceremony (Part B)
 
-`devcadence-operator issue --request <file>` runs as the operator identity from OWNER INPUT-1. It reads an immutable `ApprovalRequest` (project, purpose, subject, exact canonical artifact bytes) produced by the server side on `NEEDS_HUMAN`; recomputes `SubjectDigest`; renders `Text` with the purpose's typed renderer (below); displays text, digest, project and validity to the controlling TTY; requires the human to type `approve <first 8 hex of subject digest>` read from `/dev/tty` (anti-accident only, not the isolation mechanism); signs through `Signer`; writes the receipt to a path the human names or to stdout. Renderers print every authority-bearing field: decision/requirement/ledger text and ids; host plan file paths with content digests and the manual/automatic mode; the entire `AcceptancePolicy` or `ExecutionPolicy` (endpoints, source exposure, domains, caps); for campaigns the plan digest, tiers, run count, every cap, allowed endpoints, source classes, network domains, credential reference names (never secrets), metered and unknown-quota grants, the verification-profile digest and the distinct executables its checks run. Unknown artifact kind or a field the renderer cannot display refuses.
+`devcadence-operator issue --request <file>` runs as the operator identity from OWNER INPUT-1. It reads an immutable `ApprovalRequest` (project, purpose, subject, exact canonical artifact bytes) produced by the server side on `NEEDS_HUMAN`. The `ApprovalRequest` JSON format is **specified at Part B freeze** (it is blocked on OWNER INPUT-1 and nothing in Part A depends on it; Part A's fixtures use hand-built `Statement`s); it is noted here so it is not mistaken for closed; recomputes `SubjectDigest`; renders `Text` with the purpose's typed renderer (below); displays text, digest, project and validity to the controlling TTY; requires the human to type `approve <first 8 hex of subject digest>` read from `/dev/tty` (anti-accident only, not the isolation mechanism); signs through `Signer`; writes the receipt to a path the human names or to stdout. Renderers print every authority-bearing field: decision/requirement/ledger text and ids; host plan file paths with content digests and the manual/automatic mode; the entire `AcceptancePolicy` or `ExecutionPolicy` (endpoints, source exposure, domains, caps); for campaigns the plan digest, tiers, run count, every cap, allowed endpoints, source classes, network domains, credential reference names (never secrets), metered and unknown-quota grants, the verification-profile digest and the distinct executables its checks run. Unknown artifact kind or a field the renderer cannot display refuses.
 
 ## OWNER INPUT-1 — protected-ingress mechanism on a single-user machine
 
@@ -192,13 +225,18 @@ Decision owner: repository owner. **Safe default: deny.** Until answered, no anc
 | A11 | issuer given a request whose text differs from the artifact → refuses; text rendered only from bytes | R7 → I7 → renderer (Part B) |
 | A12 | every missing/unknown input above → `NEEDS_HUMAN`, zero effects, no secret in message | R8 → I8 |
 | A13 | MCP tool list and facade grants contain no receipt/anchor tool | R9 → I9 → existing allowlist test extended |
-| A14 | host-plan adapter: valid receipt bound to plan digest and exact path list → `ApprovalVerifier` true; changed path list → false | R1/R3 → I1/I3 |
+| A14 | host-plan adapter: valid receipt bound to plan digest and exact path list → `ApprovalVerifier` true; changed, reordered-then-uncanonical, duplicate or relative path list → false | R1/R3 → I1/I3 |
+| A15 | zero-value `Verified{}` or one decoded from JSON → `ConsumeOnce`, `AuditGrantUse` and every adapter refuse; `ConsumeOnce` of a `grant` Verified refuses | R6 → I6 → `IsValid` |
+| A16 | empty `ReceiptID`: two valid receipts for one subject → latest `IssuedAt` wins; one revoked → the other is used; none → `receipt-missing`; a receipt whose subject digest differs is never selected | R3/R5 → I3/I5 → Lookup |
+| A17 | anchor directory owned by a uid not in `TrustedOwnerUIDs` (even if not the euid) → refuse; empty allow-list → construct refuses | R2 → I2 |
 
 A live A2 against a real separate account is a manual operator acceptance step after OWNER INPUT-1; unit tests use the `fs` abstraction and never claim it.
 
 ## Validation and Mutation Catalog
 
 `go test -count=1 -race ./internal/operator/... ./internal/controlplane/... ./tests/...`; `make schemas`; `make docs-check`; `make verify`. Record versions, receipt fixtures, ownership-abstraction cases and exit statuses.
+
+Test seams (explicit): ownership/mode/`Lstat` come from an `fs` interface in `FileOptions`-internal construction (unexported field set only by `_test.go` helpers in package `receipts`; production `NewFileVerifier` always uses the OS implementation); the clock is the required `Clock`; concurrent-use (A8) runs two goroutines through `ApplyBatch` on one SQLite file. The "no exported fake" claims (A10/A15) are enforced by a package-boundary test under `tests/` that parses `go list -json` for `internal/operator/receipts` and asserts no exported identifier other than the declared API can produce a `Verified` and that no non-test importer constructs `FileOptions` with an `fs` override.
 
 | Mutant | Expected failure |
 | --- | --- |
@@ -215,6 +253,9 @@ A live A2 against a real separate account is a manual operator acceptance step a
 | Echo receipt text or paths in an error | A12 |
 | Register a receipt-minting tool | A13 |
 | Plan path list not in the signed subject | A14 |
+| `IsValid` ignored, or `ConsumeOnce` accepts a grant | A15 |
+| Lookup picks the first/any file without full verification or ignores subject digest | A16 |
+| Ownership check only compares to euid | A17 |
 
 Independent lenses: Contract/Authority; Test Adequacy/Mutation. The issuer author does not verify the verifier.
 
@@ -227,18 +268,16 @@ Escalate on: owner chooses B or a mechanism without a location the process ident
 Implementation Readiness Report:
 
 ~~~text
-requirements represented: 9/9
-state transitions specified: 4/4 (verify, consume, grant-reuse, revoke)
-failure cases specified: 10/10
-authority decisions specified: 3/3
-missing/unknown input semantics: 3/3
-acceptance scenarios mapped: 14/14
-unresolved architecture choices: 1 (OWNER INPUT-1, Part B only)
-readiness: Part A NOT_READY pending window review and current-base gate; Part B BLOCKED
+author tally after repair round 1 (a self-count, not evidence; independent re-verification PENDING):
+requirements represented: 9 (R1-R9) with R2/R5/R6 tightened in r2
+acceptance scenarios mapped: 17 (A1-A17); mutation rows 17
+unresolved architecture choices: 1 (OWNER INPUT-1, Part B only); 1 deferred format (`ApprovalRequest`, Part B)
+readiness: Part A NOT_READY pending independent re-verification, current-base gate and step-0 fact checks; Part B BLOCKED
 ~~~
 
-Weaker-implementer check for Part A: yes, provided step-0 facts hold. Part B: no, until OWNER INPUT-1.
+Weaker-implementer check for Part A: author expectation only, to be tested by the independent Implementability reviewer; Part B: no, until OWNER INPUT-1.
 
 ## Changelog
 
 - r1: initial draft for window 2026-10-G.
+- r2: repair round 1: trusted-owner allow-list and macOS notes; optional-`ReceiptID` subject lookup and one receipt location; exact subject table per purpose; host-plan path canonicalization and consumer adapters; `Verified.IsValid`, `AuditGrantUse`, grant `ConsumeOnce` refusal; per-use re-verification definition; explicit test seams; `ApprovalRequest` format noted as Part B; honest readiness tally.
