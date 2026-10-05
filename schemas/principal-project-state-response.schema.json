@@ -59,6 +59,9 @@
         },
         "repository": {
           "$ref": "#/$defs/repository"
+        },
+        "discovery_analysis": {
+          "$ref": "#/$defs/discoveryAnalysis"
         }
       }
     }
@@ -170,6 +173,159 @@
           }
         },
         "refresh_required": {
+          "type": "boolean"
+        }
+      }
+    },
+    "discoveryAnalysis": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Read-only reconstruction of discovery from durable records (WP-M5-3 read side). positive_readiness is derived, never trusted from a recorded verdict, and is false while any blocker remains.",
+      "required": [
+        "open_questions",
+        "decision_statuses",
+        "violations",
+        "blockers",
+        "positive_readiness"
+      ],
+      "properties": {
+        "problem_model_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "problem_model_revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "ambiguity_ledger_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "ambiguity_ledger_revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "open_questions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "resolution_authority",
+              "architectural_impact"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "resolution_authority": {
+                "enum": [
+                  "human",
+                  "repository_tool",
+                  "external_research",
+                  "experiment",
+                  "consultant",
+                  "principal"
+                ]
+              },
+              "architectural_impact": {
+                "enum": [
+                  "low",
+                  "medium",
+                  "high",
+                  "critical"
+                ]
+              }
+            }
+          }
+        },
+        "decision_statuses": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "decision_id",
+              "status"
+            ],
+            "properties": {
+              "decision_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "status": {
+                "enum": [
+                  "confirmed",
+                  "superseded",
+                  "withdrawn"
+                ]
+              }
+            }
+          }
+        },
+        "recorded_readiness": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "ref",
+            "current"
+          ],
+          "properties": {
+            "ref": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "verdict": {
+              "enum": [
+                "not_ready",
+                "ready_for_architecture",
+                "ready_with_explicit_risks"
+              ]
+            },
+            "current": {
+              "type": "boolean"
+            }
+          }
+        },
+        "violations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "code",
+              "subject"
+            ],
+            "properties": {
+              "code": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "subject": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              }
+            }
+          }
+        },
+        "blockers": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "positive_readiness": {
           "type": "boolean"
         }
       }
