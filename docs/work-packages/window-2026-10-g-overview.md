@@ -128,14 +128,39 @@ This change adds planning links only. Owning syncs per EWP at implementation: PR
 
 Review input is an immutable snapshot of this overview and the four EWPs with file hashes and the base SHA. Two clean reviewers in parallel: Architecture/Contract and Implementability/Failure Semantics. Consolidate material findings into **one repair round**, then focused independent verification of changed obligations. Authors never establish their own PASS. If blockers remain, keep draft and record unresolved items.
 
-Round 1 happened on the r1 snapshot. Outcome as reported to the author: Architecture/Contract returned APPROVE_DRAFT with five findings to fix before any Part freezes (receipt binding for the campaign authorization, empirical layering, actor-basis representability, policy revocation consistency, `ChangeAccepted` field sources) plus non-blocking items; Implementability/Failure Semantics returned REJECT as implementation-ready, chiefly for missing types, enums and wiring (collaborator interfaces, failure-summary enum and post-failure task state, accept wiring, the loopback protocol and verifier rules, the receipt subject table). r2 closes those findings by repository-grounded specification or by explicit owner inputs; the per-finding closure record is the changelog of each EWP and the report accompanying the repair. **The verdict rows below stay PENDING: no reviewer has seen r2.**
+Round 1 happened on the r1 snapshot. Outcome as reported to the author: Architecture/Contract returned APPROVE_DRAFT with five findings to fix before any Part freezes (receipt binding for the campaign authorization, empirical layering, actor-basis representability, policy revocation consistency, `ChangeAccepted` field sources) plus non-blocking items; Implementability/Failure Semantics returned REJECT as implementation-ready, chiefly for missing types, enums and wiring (collaborator interfaces, failure-summary enum and post-failure task state, accept wiring, the loopback protocol and verifier rules, the receipt subject table). r2 closes those findings by repository-grounded specification or by explicit owner inputs; the per-finding closure record is the changelog of each EWP and the report accompanying the repair. The verdict table below records the r1 and r2 outcomes; r2 verification is described in the subsection after the table.
 
 | Lens | Candidate | Verdict | Repair / verification |
 | --- | --- | --- | --- |
-| Architecture/Contract | r1 reviewed (APPROVE_DRAFT with fixes, see above); r2 is the repaired candidate | PENDING re-verification of r2 | Repair round 1 applied in r2; focused re-verification not yet run |
-| Implementability/Failure Semantics | r1 reviewed (REJECT as implementation-ready, see above); r2 is the repaired candidate | PENDING re-verification of r2 | Repair round 1 applied in r2; focused re-verification not yet run |
+| Architecture/Contract | r1 (c2ce5e3): APPROVE_DRAFT with fixes. r2 (e91f365): not re-reviewed by this lens | APPROVE_DRAFT (on r1, c2ce5e3) | Repair round 1 applied in r2; this lens did not re-review r2 |
+| Implementability/Failure Semantics | r1 (c2ce5e3): REJECT. r2 (e91f365): focused re-check | REJECT on r1 (c2ce5e3); REJECT (narrow) on r2 (e91f365) with 5 open blocking items | Repair round 1 spent; five blockers remain UNRESOLVED (below) |
 
 Nothing in this window is approved. All four EWPs remain NOT_READY; Part-level gates require resolved dependencies, the owner inputs they list, a current-base check and executable validation commands. Missing live hardware, host or credential evidence is disclosed, never replaced by mocked PASS.
+
+### Open items after verification (r2, head e91f365)
+
+The focused Implementability re-check of r2 returned **REJECT (narrow)**. The five blocking findings below are **UNRESOLVED**. No Part may freeze until they are closed by a further authorized repair. All four EWPs remain **DRAFT / NOT_READY / NOT FROZEN** and carry **no implementation authority**. The one repair round allowed by this process is spent; the owner's review decides whether to authorize another repair round.
+
+Blocking (a worker would still have to invent semantics):
+
+1. **R1-A resolution step 5 vs `EndpointRequest.ExcludeActorIDs []string`.** Under `endpoint_model` the resolver must drop candidates matching an excluded actor's basis but receives only actor-id hashes (it cannot recover a basis; the revision is unknown at that point). Fix direction: pass `ExcludeBases []actors.ActorBasis` (the worker's stored basis) alongside or instead of ids and state the comparison. Affects R1-A, R2-B step 3, scenarios A20 and B8.
+2. **No exported way to emit coded errors with refs.** R1/R2/R3 specify `coded(CODE, retryable)` with fixed refs (`execution-policy-unavailable`, `attempt-outcome-unrecorded`, `no-independent-reviewer`, `review-partial`, acceptance denial refs), but `facade.codedError`/`coded()` are unexported and `semanticFor` maps non-coded errors by `errs` category only. R1 forbids facade changes and R2's disclosed amendment covers only `AcceptanceGate`. Fix direction: disclose a facade amendment adding an exported typed-error constructor (or a principal-level one) and list it under Shared schema policy; the `review-partial` `completed=<n> requested=<m>` detail needs a carrier (evidence ref).
+3. **R1-B cancellation/`OPERATION_LOST` mapping and scenario A9 are unsatisfiable against `OperationRegistry`.** `finish()` sets status `cancelled` whenever the operation context was cancelled; otherwise any error becomes `failed` via `semanticFor`; status `lost` is never produced by a function return. A9 expects `lost`/`OPERATION_LOST` on cancel plus failed append. Fix direction: restate expectations as the registry's actual outputs or authorize a registry amendment.
+4. **R3-A `BindingFor` field sources.** `empirical.EndpointBinding` has `ChannelID`, `CapabilityClass`, `RuntimeVersion`, `ContextProfileDigest`, `PolicyDigest`; no source is given for `ChannelID`/`RuntimeVersion`; `Open` is limited to `GET /api/tags` so it cannot read `/api/version`; the signature takes `contextProfileDigest string` while prose says it comes from the resolved endpoint, which has no such field. Fix direction: specify each source; add a runtime-version observation to `OpenedEndpoint` or fix it to a literal.
+5. **R3-B step 4 / R1 step 5 worker provenance.** Step 4 builds worker `ActorProvenance` from `InvocationProvenance`, but `SessionEvidence` carries only the digest and step 2 does not resolve that record via `ArtifactResolver`; implementer `IndependenceBasis` and `ActorID` are not specified at `AttemptStarted` time (no acceptance policy may exist yet); R2 `Decide` step 4 re-derives only reviewer actors, but the worker actor must also be re-derived from stored `Basis` fields under the policy basis before `ActorsIndependent` (R2 states this in prose; the algorithm omits it).
+
+Non-blocking notes:
+
+1. The overview and R4 R5 say "every `Evaluate`" but R2 uses `Decide`; `Evaluator.Evaluate` has no receipt check. Align terms to `Decide`.
+2. The overview diagram makes R2-C wait on R1-C, but the table and parallelism paragraph omit it.
+3. R1 step 6: sources of `AttemptStarted` `WorkPackageVersion`, `ProjectStateRevision` (WP-approved revision vs meta prefix) and `BaseCommit` are unstated; "first delegation" should mean task state `ready`.
+4. R2-B review worktree id `<attemptID>-r<k>` reuses `k` on re-review after partial failure; cleanup of failed review worktrees is unspecified, so a re-request can collide (`worktrees.Create` rejects existing paths).
+5. R3 exit codes 3 and 4 for `replay-empirical` collide with global `ExitCodeNotFound`/`ExitCodeDrift` in `cmd/devcadence/main.go`; state they are subcommand-local.
+6. `taskexec.ProjectLock` and `RepositoryProvider` are imported by `reviewexec` and `verifier`; consider a leaf package. State in R2-A whether `ActorBasis` lives in `internal/actors` or `protocol`.
+7. `receipts` imports `controlplane` (`ConsumeOnce` returns `BatchGuard`); this is not stated in the overview's dependency-direction paragraph.
+
+Verified closed against the repository: reducer facts, summary grammar, `ProjectLock`, freeze order, actor-basis fields, binding order, `ChangeAccepted` field sources, R2 dimension rule / `ReviewID` / partials, R3 circularity, R4 subject table / receipt location / `TrustedOwnerUIDs` / `IsValid`, and the single policy re-verification rule.
+
 
 ## M5 closure checklist (delta over window F)
 
@@ -147,5 +172,6 @@ Nothing in this window is approved. All four EWPs remain NOT_READY; Part-level g
 
 ## Changelog
 
-- r2 (2026-10-05): repair round 1 after the two independent reviews: dependency/freeze order corrected (R1-A needs R2-A and R4-A); R1 split into A/B/C; policy rule unified (bytes pinned, authority re-verified per use); receipts discovered by subject with one location; disclosed cross-package amendments listed under Shared schema policy; R4 subject table; R2 acceptance wiring (`AcceptanceGate`, `ReadView`); R3 layering, loopback protocol and verifier rules; readiness tallies made honest. Verdict rows remain PENDING.
+- r2 verification (head e91f365): focused Implementability re-check REJECT (narrow), five blocking items open; Architecture/Contract not re-run on r2; all EWPs remain DRAFT/NOT_READY/NOT FROZEN. Documentation-only update to this overview.
+- r2 (2026-10-05): repair round 1 after the two independent reviews: dependency/freeze order corrected (R1-A needs R2-A and R4-A); R1 split into A/B/C; policy rule unified (bytes pinned, authority re-verified per use); receipts discovered by subject with one location; disclosed cross-package amendments listed under Shared schema policy; R4 subject table; R2 acceptance wiring (`AcceptanceGate`, `ReadView`); R3 layering, loopback protocol and verifier rules; readiness tallies made honest. Verdict rows were PENDING at r2 authoring; see the r2 verification outcome below.
 - r1 (2026-10-05): initial window; four EWPs split into separately freezable Parts; WP-M5-5 amendments and one `BatchReadView` amendment disclosed; four owner inputs with safe-default deny.
