@@ -692,7 +692,7 @@ go/revise gate, not a ceremonial demo. Working-set context must preserve predecl
 
 ## M5 — Semantic principal integration and host portability
 
-See the [2026-10-F preparation window](work-packages/window-2026-10-f-overview.md) for the current planning status, runtime prerequisites and required M4 real-endpoint reevaluation.
+See the [2026-10-F preparation window](work-packages/window-2026-10-f-overview.md) for the current planning status, runtime prerequisites and required M4 real-endpoint reevaluation. The runtime-completion follow-on (native task executor, independent review and acceptance gate, empirical verifier/provider composition, protected operator ingress) is planned, as a draft and not frozen, in the [2026-10-G window](work-packages/window-2026-10-g-overview.md).
 
 ### Goal
 Productize the semantic principal boundary after the adaptive cognition
