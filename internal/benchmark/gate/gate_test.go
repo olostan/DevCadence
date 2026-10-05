@@ -608,6 +608,12 @@ func TestGenerateCanonicalEvidenceFiles(t *testing.T) {
 		t.Fatalf("canonical dataset failed gate evaluation: got %s, expected %s", gateResult.Decision, DecisionGo)
 	}
 
+	prov, err := NewEvidenceProvenance(EvidenceKindSyntheticHarness, "canonicalTestDriver", "", "see docs/evidence/m4-evidence-report.md")
+	if err != nil {
+		t.Fatalf("provenance: %v", err)
+	}
+	gateResult.Provenance = prov
+
 	mdReport, err := SynthesizeEvidenceReport(gateResult)
 	if err != nil {
 		t.Fatalf("synthesize report failed: %v", err)

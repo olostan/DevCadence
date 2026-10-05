@@ -299,7 +299,7 @@
             "architectural_findings_count": 1,
             "principal_reentry_required": true,
             "tokens_consumed": 3780,
-            "duration": 7292
+            "duration": 9882
           }
         ]
       },
@@ -323,7 +323,7 @@
             "architectural_findings_count": 0,
             "principal_reentry_required": false,
             "tokens_consumed": 1260,
-            "duration": 2014
+            "duration": 1415
           }
         ]
       },
@@ -355,7 +355,7 @@
             "architectural_findings_count": 1,
             "principal_reentry_required": true,
             "tokens_consumed": 3780,
-            "duration": 14490
+            "duration": 4336
           }
         ]
       },
@@ -379,7 +379,7 @@
             "architectural_findings_count": 0,
             "principal_reentry_required": false,
             "tokens_consumed": 1260,
-            "duration": 4454
+            "duration": 1217
           }
         ]
       },
@@ -411,7 +411,7 @@
             "architectural_findings_count": 1,
             "principal_reentry_required": true,
             "tokens_consumed": 3780,
-            "duration": 7984
+            "duration": 4530
           }
         ]
       },
@@ -435,7 +435,7 @@
             "architectural_findings_count": 0,
             "principal_reentry_required": false,
             "tokens_consumed": 1260,
-            "duration": 2073
+            "duration": 1227
           }
         ]
       },
@@ -467,7 +467,7 @@
             "architectural_findings_count": 1,
             "principal_reentry_required": true,
             "tokens_consumed": 3780,
-            "duration": 5471
+            "duration": 4760
           }
         ]
       },
@@ -491,7 +491,7 @@
             "architectural_findings_count": 0,
             "principal_reentry_required": false,
             "tokens_consumed": 1260,
-            "duration": 1580
+            "duration": 1378
           }
         ]
       },
@@ -523,7 +523,7 @@
             "architectural_findings_count": 1,
             "principal_reentry_required": true,
             "tokens_consumed": 3780,
-            "duration": 5213
+            "duration": 4138
           }
         ]
       },
@@ -547,7 +547,7 @@
             "architectural_findings_count": 0,
             "principal_reentry_required": false,
             "tokens_consumed": 1260,
-            "duration": 5767
+            "duration": 1231
           }
         ]
       },
@@ -579,7 +579,7 @@
             "architectural_findings_count": 1,
             "principal_reentry_required": true,
             "tokens_consumed": 3780,
-            "duration": 10394
+            "duration": 4649
           }
         ]
       },
@@ -603,7 +603,7 @@
             "architectural_findings_count": 0,
             "principal_reentry_required": false,
             "tokens_consumed": 1260,
-            "duration": 1571
+            "duration": 1281
           }
         ]
       },
@@ -635,7 +635,7 @@
             "architectural_findings_count": 1,
             "principal_reentry_required": true,
             "tokens_consumed": 3780,
-            "duration": 4525
+            "duration": 6150
           }
         ]
       },
@@ -659,7 +659,7 @@
             "architectural_findings_count": 0,
             "principal_reentry_required": false,
             "tokens_consumed": 1260,
-            "duration": 1149
+            "duration": 1640
           }
         ]
       },
@@ -691,7 +691,7 @@
             "architectural_findings_count": 1,
             "principal_reentry_required": true,
             "tokens_consumed": 3780,
-            "duration": 3637
+            "duration": 5065
           }
         ]
       },
@@ -715,7 +715,7 @@
             "architectural_findings_count": 0,
             "principal_reentry_required": false,
             "tokens_consumed": 1260,
-            "duration": 1091
+            "duration": 1087
           }
         ]
       },
@@ -747,7 +747,7 @@
             "architectural_findings_count": 1,
             "principal_reentry_required": true,
             "tokens_consumed": 3780,
-            "duration": 4200
+            "duration": 5648
           }
         ]
       },
@@ -771,7 +771,7 @@
             "architectural_findings_count": 0,
             "principal_reentry_required": false,
             "tokens_consumed": 1260,
-            "duration": 955
+            "duration": 1442
           }
         ]
       },
@@ -803,7 +803,7 @@
             "architectural_findings_count": 1,
             "principal_reentry_required": true,
             "tokens_consumed": 3780,
-            "duration": 4508
+            "duration": 24411
           }
         ]
       },
@@ -827,7 +827,7 @@
             "architectural_findings_count": 0,
             "principal_reentry_required": false,
             "tokens_consumed": 1260,
-            "duration": 1240
+            "duration": 1104
           }
         ]
       },
@@ -859,7 +859,7 @@
             "architectural_findings_count": 1,
             "principal_reentry_required": true,
             "tokens_consumed": 3780,
-            "duration": 4496
+            "duration": 5525
           }
         ]
       },
@@ -883,7 +883,7 @@
             "architectural_findings_count": 0,
             "principal_reentry_required": false,
             "tokens_consumed": 1260,
-            "duration": 14349
+            "duration": 1580
           }
         ]
       },
@@ -915,7 +915,7 @@
             "architectural_findings_count": 1,
             "principal_reentry_required": true,
             "tokens_consumed": 3780,
-            "duration": 8816
+            "duration": 5156
           }
         ]
       },
@@ -939,7 +939,7 @@
             "architectural_findings_count": 0,
             "principal_reentry_required": false,
             "tokens_consumed": 1260,
-            "duration": 2926
+            "duration": 1459
           }
         ]
       },
@@ -971,7 +971,7 @@
             "architectural_findings_count": 1,
             "principal_reentry_required": true,
             "tokens_consumed": 3780,
-            "duration": 5865
+            "duration": 4203
           }
         ]
       },
@@ -995,7 +995,7 @@
             "architectural_findings_count": 0,
             "principal_reentry_required": false,
             "tokens_consumed": 1260,
-            "duration": 1497
+            "duration": 1332
           }
         ]
       },
@@ -1027,7 +1027,7 @@
             "architectural_findings_count": 1,
             "principal_reentry_required": true,
             "tokens_consumed": 3780,
-            "duration": 6916
+            "duration": 5394
           }
         ]
       },
@@ -1051,7 +1051,7 @@
             "architectural_findings_count": 0,
             "principal_reentry_required": false,
             "tokens_consumed": 1260,
-            "duration": 1149
+            "duration": 1368
           }
         ]
       },
@@ -1083,7 +1083,7 @@
             "architectural_findings_count": 1,
             "principal_reentry_required": true,
             "tokens_consumed": 3780,
-            "duration": 4472
+            "duration": 8969
           }
         ]
       },
@@ -1107,7 +1107,7 @@
             "architectural_findings_count": 0,
             "principal_reentry_required": false,
             "tokens_consumed": 1260,
-            "duration": 1371
+            "duration": 2702
           }
         ]
       },
@@ -1139,7 +1139,7 @@
             "architectural_findings_count": 1,
             "principal_reentry_required": true,
             "tokens_consumed": 3780,
-            "duration": 4379
+            "duration": 4571
           }
         ]
       },
@@ -1163,7 +1163,7 @@
             "architectural_findings_count": 0,
             "principal_reentry_required": false,
             "tokens_consumed": 1260,
-            "duration": 1204
+            "duration": 1130
           }
         ]
       },
@@ -1195,7 +1195,7 @@
             "architectural_findings_count": 1,
             "principal_reentry_required": true,
             "tokens_consumed": 3780,
-            "duration": 6768
+            "duration": 5674
           }
         ]
       },
@@ -1219,7 +1219,7 @@
             "architectural_findings_count": 0,
             "principal_reentry_required": false,
             "tokens_consumed": 1260,
-            "duration": 3065
+            "duration": 1441
           }
         ]
       },
@@ -1251,7 +1251,7 @@
             "architectural_findings_count": 1,
             "principal_reentry_required": true,
             "tokens_consumed": 3780,
-            "duration": 7028
+            "duration": 204074
           }
         ]
       },
@@ -1275,7 +1275,7 @@
             "architectural_findings_count": 0,
             "principal_reentry_required": false,
             "tokens_consumed": 1260,
-            "duration": 1848
+            "duration": 13829
           }
         ]
       },
@@ -1307,7 +1307,7 @@
             "architectural_findings_count": 1,
             "principal_reentry_required": true,
             "tokens_consumed": 3780,
-            "duration": 6230
+            "duration": 4060
           }
         ]
       },
@@ -1331,7 +1331,7 @@
             "architectural_findings_count": 0,
             "principal_reentry_required": false,
             "tokens_consumed": 1260,
-            "duration": 1653
+            "duration": 1046
           }
         ]
       },
@@ -1363,7 +1363,7 @@
             "architectural_findings_count": 1,
             "principal_reentry_required": true,
             "tokens_consumed": 3780,
-            "duration": 8251
+            "duration": 5551
           }
         ]
       },
@@ -1387,7 +1387,7 @@
             "architectural_findings_count": 0,
             "principal_reentry_required": false,
             "tokens_consumed": 1260,
-            "duration": 2058
+            "duration": 1330
           }
         ]
       },
@@ -1419,7 +1419,7 @@
             "architectural_findings_count": 1,
             "principal_reentry_required": true,
             "tokens_consumed": 3780,
-            "duration": 4166
+            "duration": 6645
           }
         ]
       },
@@ -1443,7 +1443,7 @@
             "architectural_findings_count": 0,
             "principal_reentry_required": false,
             "tokens_consumed": 1260,
-            "duration": 1210
+            "duration": 1734
           }
         ]
       },
@@ -1475,7 +1475,7 @@
             "architectural_findings_count": 1,
             "principal_reentry_required": true,
             "tokens_consumed": 3780,
-            "duration": 11795
+            "duration": 4725
           }
         ]
       },
@@ -1499,7 +1499,7 @@
             "architectural_findings_count": 0,
             "principal_reentry_required": false,
             "tokens_consumed": 1260,
-            "duration": 1520
+            "duration": 1289
           }
         ]
       },
@@ -1531,7 +1531,7 @@
             "architectural_findings_count": 1,
             "principal_reentry_required": true,
             "tokens_consumed": 3780,
-            "duration": 8948
+            "duration": 4006
           }
         ]
       },
@@ -1555,7 +1555,7 @@
             "architectural_findings_count": 0,
             "principal_reentry_required": false,
             "tokens_consumed": 1260,
-            "duration": 2260
+            "duration": 1006
           }
         ]
       },
@@ -1587,7 +1587,7 @@
             "architectural_findings_count": 1,
             "principal_reentry_required": true,
             "tokens_consumed": 3780,
-            "duration": 4691
+            "duration": 4150
           }
         ]
       },
@@ -1611,7 +1611,7 @@
             "architectural_findings_count": 0,
             "principal_reentry_required": false,
             "tokens_consumed": 1260,
-            "duration": 1097
+            "duration": 1133
           }
         ]
       },
@@ -1643,7 +1643,7 @@
             "architectural_findings_count": 1,
             "principal_reentry_required": true,
             "tokens_consumed": 3780,
-            "duration": 6540
+            "duration": 5020
           }
         ]
       },
@@ -1667,7 +1667,7 @@
             "architectural_findings_count": 0,
             "principal_reentry_required": false,
             "tokens_consumed": 1260,
-            "duration": 1598
+            "duration": 1253
           }
         ]
       },
@@ -1699,7 +1699,7 @@
             "architectural_findings_count": 1,
             "principal_reentry_required": true,
             "tokens_consumed": 3780,
-            "duration": 4167
+            "duration": 5437
           }
         ]
       },
@@ -1723,7 +1723,7 @@
             "architectural_findings_count": 0,
             "principal_reentry_required": false,
             "tokens_consumed": 1260,
-            "duration": 1230
+            "duration": 1497
           }
         ]
       },
@@ -1755,7 +1755,7 @@
             "architectural_findings_count": 1,
             "principal_reentry_required": true,
             "tokens_consumed": 3780,
-            "duration": 3653
+            "duration": 4287
           }
         ]
       },
@@ -1779,7 +1779,7 @@
             "architectural_findings_count": 0,
             "principal_reentry_required": false,
             "tokens_consumed": 1260,
-            "duration": 996
+            "duration": 1144
           }
         ]
       },
@@ -1811,7 +1811,7 @@
             "architectural_findings_count": 1,
             "principal_reentry_required": true,
             "tokens_consumed": 3780,
-            "duration": 4447
+            "duration": 5030
           }
         ]
       },
@@ -1835,7 +1835,7 @@
             "architectural_findings_count": 0,
             "principal_reentry_required": false,
             "tokens_consumed": 1260,
-            "duration": 1129
+            "duration": 1245
           }
         ]
       },
@@ -1867,7 +1867,7 @@
             "architectural_findings_count": 1,
             "principal_reentry_required": true,
             "tokens_consumed": 3780,
-            "duration": 4192
+            "duration": 5531
           }
         ]
       },
@@ -1891,7 +1891,7 @@
             "architectural_findings_count": 0,
             "principal_reentry_required": false,
             "tokens_consumed": 1260,
-            "duration": 1126
+            "duration": 1704
           }
         ]
       },
@@ -1923,7 +1923,7 @@
             "architectural_findings_count": 1,
             "principal_reentry_required": true,
             "tokens_consumed": 3780,
-            "duration": 4417
+            "duration": 5032
           }
         ]
       },
@@ -1947,7 +1947,7 @@
             "architectural_findings_count": 0,
             "principal_reentry_required": false,
             "tokens_consumed": 1260,
-            "duration": 1147
+            "duration": 1160
           }
         ]
       },
@@ -1957,9 +1957,9 @@
       "is_applicable": true
     }
   },
-  "summary": "All Milestone M4 gate criteria passed. Empirical evidence supports progressing to Milestone M5.",
+  "summary": "All Milestone M4 gate criteria passed.",
   "aggregated_report": {
-    "generated_at": "2026-10-05T08:18:17.676915409Z",
+    "generated_at": "2026-10-05T08:32:49.989690576Z",
     "total_snapshots": 264,
     "groups": [
       {
@@ -1974,7 +1974,7 @@
         "avg_initial_tokens": 409.09090909090907,
         "avg_peak_resident_tokens": 409.09090909090907,
         "avg_cumulative_input_tokens": 409.09090909090907,
-        "avg_duration": 1280111,
+        "avg_duration": 784019,
         "resource_per_accepted_result": {
           "value": 900,
           "is_undefined": false
@@ -1993,7 +1993,7 @@
         "avg_initial_tokens": 409.09090909090907,
         "avg_peak_resident_tokens": 409.09090909090907,
         "avg_cumulative_input_tokens": 409.09090909090907,
-        "avg_duration": 916915,
+        "avg_duration": 753009,
         "resource_per_accepted_result": {
           "value": 900,
           "is_undefined": false
@@ -2012,7 +2012,7 @@
         "avg_initial_tokens": 409.09090909090907,
         "avg_peak_resident_tokens": 409.09090909090907,
         "avg_cumulative_input_tokens": 409.09090909090907,
-        "avg_duration": 894306,
+        "avg_duration": 1003458,
         "resource_per_accepted_result": {
           "value": 900,
           "is_undefined": false
@@ -2031,7 +2031,7 @@
         "avg_initial_tokens": 1090.909090909091,
         "avg_peak_resident_tokens": 1090.909090909091,
         "avg_cumulative_input_tokens": 1090.909090909091,
-        "avg_duration": 815525,
+        "avg_duration": 673370,
         "resource_per_accepted_result": {
           "value": 2400,
           "is_undefined": false
@@ -2050,7 +2050,7 @@
         "avg_initial_tokens": 1090.909090909091,
         "avg_peak_resident_tokens": 1090.909090909091,
         "avg_cumulative_input_tokens": 1090.909090909091,
-        "avg_duration": 1392214,
+        "avg_duration": 490212,
         "resource_per_accepted_result": {
           "value": 2400,
           "is_undefined": false
@@ -2069,7 +2069,7 @@
         "avg_initial_tokens": 1090.909090909091,
         "avg_peak_resident_tokens": 1090.909090909091,
         "avg_cumulative_input_tokens": 1090.909090909091,
-        "avg_duration": 1510169,
+        "avg_duration": 569584,
         "resource_per_accepted_result": {
           "value": 2400,
           "is_undefined": false
@@ -2088,7 +2088,7 @@
         "avg_initial_tokens": 327.27272727272725,
         "avg_peak_resident_tokens": 327.27272727272725,
         "avg_cumulative_input_tokens": 327.27272727272725,
-        "avg_duration": 5065111,
+        "avg_duration": 5159784,
         "resource_per_accepted_result": {
           "value": 360,
           "is_undefined": false
@@ -2107,7 +2107,7 @@
         "avg_initial_tokens": 327.27272727272725,
         "avg_peak_resident_tokens": 327.27272727272725,
         "avg_cumulative_input_tokens": 327.27272727272725,
-        "avg_duration": 5026844,
+        "avg_duration": 4854448,
         "resource_per_accepted_result": {
           "value": 360,
           "is_undefined": false
@@ -2126,7 +2126,7 @@
         "avg_initial_tokens": 327.27272727272725,
         "avg_peak_resident_tokens": 327.27272727272725,
         "avg_cumulative_input_tokens": 327.27272727272725,
-        "avg_duration": 6702562,
+        "avg_duration": 4355064,
         "resource_per_accepted_result": {
           "value": 360,
           "is_undefined": false
@@ -2145,7 +2145,7 @@
         "avg_initial_tokens": 409.09090909090907,
         "avg_peak_resident_tokens": 409.09090909090907,
         "avg_cumulative_input_tokens": 409.09090909090907,
-        "avg_duration": 1936868,
+        "avg_duration": 784003,
         "resource_per_accepted_result": {
           "value": 900,
           "is_undefined": false
@@ -2164,7 +2164,7 @@
         "avg_initial_tokens": 409.09090909090907,
         "avg_peak_resident_tokens": 409.09090909090907,
         "avg_cumulative_input_tokens": 409.09090909090907,
-        "avg_duration": 1050073,
+        "avg_duration": 879058,
         "resource_per_accepted_result": {
           "value": 900,
           "is_undefined": false
@@ -2183,7 +2183,7 @@
         "avg_initial_tokens": 409.09090909090907,
         "avg_peak_resident_tokens": 409.09090909090907,
         "avg_cumulative_input_tokens": 409.09090909090907,
-        "avg_duration": 1865161,
+        "avg_duration": 1232617,
         "resource_per_accepted_result": {
           "value": 900,
           "is_undefined": false
@@ -2192,6 +2192,13 @@
       }
     ]
   },
-  "report_digest": "sha256:f816651558ef9f9183e78cbe8f1a66183ad9a9ff35d83fb07877493b9c2a5097",
-  "evaluated_at": "2026-10-05T08:18:23.828975628Z"
+  "report_digest": "sha256:1a50591b9c4fd95925b2cb9875c9055cfe3888e1d10410ca3a732479c135cef1",
+  "provenance": {
+    "evidence_kind": "synthetic_harness_validation",
+    "driver": "canonicalTestDriver",
+    "source_commit": "76b516d",
+    "regeneration_command": "DEVCADENCE_EVIDENCE_OUT=\u003cdir\u003e go test ./internal/benchmark/gate -run TestGenerateCanonicalEvidenceFiles; devcadence benchmark evaluate-gate --snapshots \u003cdir\u003e/campaign_summary.json --evidence-kind synthetic_harness_validation --driver canonicalTestDriver [--json] --output docs/evidence/m4-evidence-report.{md,json}",
+    "statement": "Synthetic harness validation: produced by a scripted driver with fixed token counts and deterministic outcomes. It validates the gate machinery and is NOT empirical proof of the M4 product hypothesis."
+  },
+  "evaluated_at": "2026-10-05T08:32:50.897885965Z"
 }

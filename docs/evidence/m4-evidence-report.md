@@ -1,16 +1,26 @@
-# Milestone M4 Empirical Evidence Report & Gate Evaluation
+# Milestone M4 Gate Evaluation (Non-Empirical Evidence)
+
+## Evidence Provenance
+
+- **Evidence Kind:** `synthetic_harness_validation`
+- **Driver:** `canonicalTestDriver`
+- **Source Commit:** `76b516d`
+- **Regeneration Command:** `DEVCADENCE_EVIDENCE_OUT=<dir> go test ./internal/benchmark/gate -run TestGenerateCanonicalEvidenceFiles; devcadence benchmark evaluate-gate --snapshots <dir>/campaign_summary.json --evidence-kind synthetic_harness_validation --driver canonicalTestDriver [--json] --output docs/evidence/m4-evidence-report.{md,json}`
+
+> [!WARNING]
+> Synthetic harness validation: produced by a scripted driver with fixed token counts and deterministic outcomes. It validates the gate machinery and is NOT empirical proof of the M4 product hypothesis.
 
 ## Executive Summary
 
-- **Evaluated At:** 2026-10-05T08:18:23Z
-- **Telemetry Report Digest:** `sha256:f816651558ef9f9183e78cbe8f1a66183ad9a9ff35d83fb07877493b9c2a5097`
+- **Evaluated At:** 2026-10-05T08:32:50Z
+- **Telemetry Report Digest:** `sha256:1a50591b9c4fd95925b2cb9875c9055cfe3888e1d10410ca3a732479c135cef1`
 - **Gate Decision:** **GO**
-- **Summary:** All Milestone M4 gate criteria passed. Empirical evidence supports progressing to Milestone M5.
+- **Summary:** All Milestone M4 gate criteria passed.
 
 > [!IMPORTANT]
 > **GATE DECISION: GO**
-> All empirical criteria for Milestone M4 (Defect Catch Rate, Resource Efficiency, Delegation Floor) have passed.
-> The Cognitive Invocation Compiler and 4-layer context architecture demonstrate empirical superiority over monolithic history.
+> All gate criteria passed on NON-EMPIRICAL evidence. This validates the gate machinery only; it is NOT proof of the M4 product hypothesis.
+> The M4 product claim requires evidence_kind `empirical_campaign` from real endpoints.
 
 ### Epistemic Accounting Disclosure
 
@@ -66,7 +76,7 @@
 
 # Empirical Benchmark Telemetry Report
 
-- Generated: 2026-10-05T08:18:17Z
+- Generated: 2026-10-05T08:32:49Z
 - Total Snapshots: 264
 
 ## Aggregated Performance by Strategy & Capability

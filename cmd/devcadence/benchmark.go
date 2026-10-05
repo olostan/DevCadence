@@ -90,9 +90,22 @@ func runBenchmarkEvaluateGate(ctx context.Context, e *env, args []string) error 
 	outputPath := fs.String("output", "", "path to write output markdown/json report (optional, defaults to stdout)")
 	criteriaPath := fs.String("criteria", "", "optional path to custom GateCriteria JSON file")
 	asJSON := fs.Bool("json", false, "emit evaluation result as JSON instead of Markdown")
+	evidenceKind := fs.String("evidence-kind", "", "evidence provenance kind: synthetic_harness_validation or empirical_campaign (unset = unspecified, never rendered as empirical)")
+	driverName := fs.String("driver", "", "driver name that produced the evidence (required with --evidence-kind)")
+	sourceCommit := fs.String("source-commit", "", "source commit the evidence was generated from")
+	regenCmd := fs.String("regen-command", "", "command that regenerates the evidence")
 
 	if err := parseFlags(fs, e, args); err != nil {
 		return err
+	}
+
+	var provenance *gate.EvidenceProvenance
+	if *evidenceKind != "" {
+		p, err := gate.NewEvidenceProvenance(*evidenceKind, *driverName, *sourceCommit, *regenCmd)
+		if err != nil {
+			return err
+		}
+		provenance = p
 	}
 
 	inputPath := *snapshotsPath
@@ -123,6 +136,7 @@ func runBenchmarkEvaluateGate(ctx context.Context, e *env, args []string) error 
 	if err != nil {
 		return err
 	}
+	evalRes.Provenance = provenance
 
 	var outputContent string
 	if *asJSON {
@@ -145,6 +159,10 @@ func runBenchmarkEvaluateGate(ctx context.Context, e *env, args []string) error 
 		}
 		if err := os.WriteFile(*outputPath, []byte(outputContent), 0o644); err != nil {
 			return errs.Wrap(errs.CategoryInternal, err, "failed to write output file %q", *outputPath)
+		}
+		fmt.Fprintf(e.stdout, "evidence_kind=%s\n", provenanceKind(provenance))
+		if provenance != nil {
+			fmt.Fprintf(e.stdout, "driver=%s\n%s\n", provenance.Driver, provenance.Statement)
 		}
 	} else {
 		fmt.Fprintln(e.stdout, outputContent)
@@ -221,4 +239,11 @@ func runBenchmarkReport(ctx context.Context, e *env, args []string) error {
 func runBenchmarkGate(ctx context.Context, e *env, args []string) error {
 	// Re-uses evaluate-gate logic
 	return runBenchmarkEvaluateGate(ctx, e, args)
+}
+
+func provenanceKind(p *gate.EvidenceProvenance) string {
+	if p == nil {
+		return "unspecified"
+	}
+	return p.Kind
 }

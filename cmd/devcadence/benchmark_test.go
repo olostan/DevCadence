@@ -230,3 +230,22 @@ func TestCLIBenchmark_SnapshotArrayAndCampaignSummary(t *testing.T) {
 		t.Errorf("expected error when missing required flag")
 	}
 }
+
+func TestCLIBenchmarkEvaluateGate_PrintsProvenance(t *testing.T) {
+	c := newCLI(t)
+	tmpDir := t.TempDir()
+	reportPath := filepath.Join(tmpDir, "report.json")
+	writeTestReportFile(t, reportPath, 0.95, 400.0, 1000.0, 20, false)
+	outPath := filepath.Join(tmpDir, "out.md")
+	stdout, _, err := c.run("benchmark", "evaluate-gate", "--snapshots", reportPath, "--output", outPath,
+		"--evidence-kind", "synthetic_harness_validation", "--driver", "scripted", "--source-commit", "abc")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(stdout, "evidence_kind=synthetic_harness_validation") || !strings.Contains(stdout, "NOT empirical proof") {
+		t.Errorf("provenance not printed: %q", stdout)
+	}
+	if _, _, err := c.run("benchmark", "evaluate-gate", "--snapshots", reportPath, "--evidence-kind", "bogus", "--driver", "x"); err == nil {
+		t.Error("unknown evidence kind must fail")
+	}
+}

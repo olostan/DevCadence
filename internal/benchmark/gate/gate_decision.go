@@ -1,10 +1,12 @@
 package gate
 
 import (
+	"math"
 	"time"
 
 	"github.com/olostan/DevCadence/internal/benchmark/experiments"
 	"github.com/olostan/DevCadence/internal/benchmark/telemetry"
+	"github.com/olostan/DevCadence/internal/errs"
 )
 
 // GateDecision represents the formal Milestone M4 evidence gate outcome (REQ-01).
@@ -77,5 +79,30 @@ type GateEvaluationResult struct {
 	Recommendations      []string                                    `json:"recommendations,omitempty"`
 	AggregatedReport     *telemetry.AggregatedReport                 `json:"aggregated_report,omitempty"`
 	ReportDigest         string                                      `json:"report_digest,omitempty"`
-	EvaluatedAt          time.Time                                   `json:"evaluated_at"`
+	// Provenance states what kind of evidence was evaluated; nil means unspecified and is
+	// never rendered as empirical proof.
+	Provenance  *EvidenceProvenance `json:"provenance,omitempty"`
+	EvaluatedAt time.Time           `json:"evaluated_at"`
+}
+
+func badFloat(v float64) bool { return math.IsNaN(v) || math.IsInf(v, 0) }
+
+// Validate fails closed on criteria that would silently disable a check (REQ-08).
+func (c GateCriteria) Validate() error {
+	if c.MinCompletedRuns < 1 {
+		return errs.New(errs.CategoryInvalidArgument, "min_completed_runs must be >= 1, got %d", c.MinCompletedRuns)
+	}
+	if badFloat(c.MinDefectCatchRate) || c.MinDefectCatchRate < 0 || c.MinDefectCatchRate > 1 {
+		return errs.New(errs.CategoryInvalidArgument, "min_defect_catch_rate must be between 0.0 and 1.0, got %v", c.MinDefectCatchRate)
+	}
+	if badFloat(c.MaxResourceRatioVersusBaseline) || c.MaxResourceRatioVersusBaseline <= 0 {
+		return errs.New(errs.CategoryInvalidArgument, "max_resource_ratio_versus_baseline must be finite and > 0.0, got %v", c.MaxResourceRatioVersusBaseline)
+	}
+	if badFloat(c.MaxFalsificationRate) || c.MaxFalsificationRate < 0 || c.MaxFalsificationRate > 1 {
+		return errs.New(errs.CategoryInvalidArgument, "max_falsification_rate must be between 0.0 and 1.0, got %v", c.MaxFalsificationRate)
+	}
+	if badFloat(c.MaxResidentContextRatioBaseline) || c.MaxResidentContextRatioBaseline < 0 {
+		return errs.New(errs.CategoryInvalidArgument, "max_resident_context_ratio_versus_baseline must be finite and >= 0.0, got %v", c.MaxResidentContextRatioBaseline)
+	}
+	return nil
 }

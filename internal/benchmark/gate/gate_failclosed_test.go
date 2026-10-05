@@ -387,3 +387,152 @@ func TestResultPreservesFalsificationsForReevaluation(t *testing.T) {
 		t.Fatalf("re-evaluation diverged: %s/%d vs %s/%d", res2.Decision, len(res2.CriteriaEvaluations), res.Decision, len(res.CriteriaEvaluations))
 	}
 }
+
+func okReport() *telemetry.AggregatedReport {
+	return mkReport(s4(tierLocal, 50), s1(tierLocal, 100))
+}
+
+func falsifiedApplicable() map[string]*experiments.FalsificationResult {
+	return map[string]*experiments.FalsificationResult{
+		"task-1": {IsApplicable: true, HypothesisFalsified: true, Reason: "floor broken"},
+	}
+}
+
+func TestCriteriaValidation_RejectsMalformed(t *testing.T) {
+	mut := map[string]func(*GateCriteria){
+		"fals_neg":     func(c *GateCriteria) { c.MaxFalsificationRate = -1 },
+		"fals_nan":     func(c *GateCriteria) { c.MaxFalsificationRate = math.NaN() },
+		"fals_inf":     func(c *GateCriteria) { c.MaxFalsificationRate = math.Inf(1) },
+		"fals_gt1":     func(c *GateCriteria) { c.MaxFalsificationRate = 1.5 },
+		"resident_neg": func(c *GateCriteria) { c.MaxResidentContextRatioBaseline = -0.1 },
+		"resident_nan": func(c *GateCriteria) { c.MaxResidentContextRatioBaseline = math.NaN() },
+		"resident_inf": func(c *GateCriteria) { c.MaxResidentContextRatioBaseline = math.Inf(1) },
+		"res_zero":     func(c *GateCriteria) { c.MaxResourceRatioVersusBaseline = 0 },
+		"res_nan":      func(c *GateCriteria) { c.MaxResourceRatioVersusBaseline = math.NaN() },
+		"res_inf":      func(c *GateCriteria) { c.MaxResourceRatioVersusBaseline = math.Inf(1) },
+		"catch_nan":    func(c *GateCriteria) { c.MinDefectCatchRate = math.NaN() },
+		"catch_gt1":    func(c *GateCriteria) { c.MinDefectCatchRate = 1.1 },
+		"runs_zero":    func(c *GateCriteria) { c.MinCompletedRuns = 0 },
+	}
+	for name, m := range mut {
+		c := DefaultM4GateCriteria()
+		m(&c)
+		res, err := EvaluateM4Gate(okReport(), nil, c)
+		if err == nil || res != nil {
+			t.Errorf("%s: expected invalid-argument error, got res=%v err=%v", name, res, err)
+		}
+	}
+}
+
+func TestFalsificationProbe_NegativeRateNeverGo(t *testing.T) {
+	c := DefaultM4GateCriteria()
+	c.RequireZeroFalsifications = false
+	c.MaxFalsificationRate = -1
+	res, err := EvaluateM4Gate(okReport(), falsifiedApplicable(), c)
+	if err == nil {
+		t.Fatalf("expected error, got decision %v", res.Decision)
+	}
+}
+
+func TestFalsification_InformationalStillDecidedByAggregate(t *testing.T) {
+	c := DefaultM4GateCriteria()
+	c.RequireZeroFalsifications = false
+	c.MaxFalsificationRate = 0
+	res := evalOK(t, okReport(), falsifiedApplicable(), c)
+	if res.Decision != DecisionRevise {
+		t.Fatalf("falsified entry with zero tolerated rate must Revise, got %s", res.Decision)
+	}
+	if findCrit(t, res, "aggregate_falsification_rate").Passed {
+		t.Fatal("aggregate criterion must fail")
+	}
+}
+
+func TestNonApplicableFalsifiedDoesNotFail(t *testing.T) {
+	f := map[string]*experiments.FalsificationResult{
+		"na": {IsApplicable: false, HypothesisFalsified: true, Reason: "n/a"},
+	}
+	for _, require := range []bool{true, false} {
+		c := DefaultM4GateCriteria()
+		c.RequireZeroFalsifications = require
+		res := evalOK(t, okReport(), f, c)
+		if res.Decision != DecisionGo {
+			t.Fatalf("require=%v: non-applicable falsified entry must not fail gate, got %s", require, res.Decision)
+		}
+	}
+}
+
+func TestMinCompletedRunsBoundary(t *testing.T) {
+	r := okReport()
+	r.TotalSnapshots = 10
+	if res := evalOK(t, r, nil, DefaultM4GateCriteria()); res.Decision == DecisionInconclusive {
+		t.Fatal("TotalSnapshots == MinCompletedRuns must not be inconclusive")
+	}
+	r.TotalSnapshots = 9
+	if res := evalOK(t, r, nil, DefaultM4GateCriteria()); res.Decision != DecisionInconclusive {
+		t.Fatalf("below minimum must be inconclusive, got %s", res.Decision)
+	}
+}
+
+func TestEnoughSnapshotsZeroGroupsInconclusive(t *testing.T) {
+	r := &telemetry.AggregatedReport{GeneratedAt: time.Now().UTC(), TotalSnapshots: 100}
+	if res := evalOK(t, r, nil, DefaultM4GateCriteria()); res.Decision != DecisionInconclusive {
+		t.Fatalf("zero groups must be inconclusive, got %s", res.Decision)
+	}
+}
+
+func TestZeroBaselinePeakTokens_FailsClosedAndMarshals(t *testing.T) {
+	b := s1(tierLocal, 100)
+	b.peakTokens = 0
+	res := evalOK(t, mkReport(s4(tierLocal, 50), b), nil, DefaultM4GateCriteria())
+	c := findCrit(t, res, "peak_resident_context_local_small")
+	if c.Passed || !c.ObservedUndefined || math.IsInf(c.Observed, 0) || math.IsNaN(c.Observed) {
+		t.Fatalf("unexpected criterion %+v", c)
+	}
+	if res.Decision != DecisionRevise {
+		t.Fatalf("got %s", res.Decision)
+	}
+	if _, err := json.Marshal(res); err != nil {
+		t.Fatalf("result must marshal: %v", err)
+	}
+}
+
+func TestProvenance_SyntheticNeverRendersAsProof(t *testing.T) {
+	res := evalOK(t, okReport(), nil, DefaultM4GateCriteria())
+	if res.Decision != DecisionGo {
+		t.Fatalf("setup: %s", res.Decision)
+	}
+	for _, kind := range []string{"", EvidenceKindSyntheticHarness} {
+		if kind != "" {
+			p, err := NewEvidenceProvenance(kind, "scripted", "abc", "cmd")
+			if err != nil {
+				t.Fatal(err)
+			}
+			res.Provenance = p
+		}
+		md, err := SynthesizeEvidenceReport(res)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(strings.ToLower(md), "empirical superiority") || strings.Contains(md, "Empirical Evidence Report") {
+			t.Fatalf("kind %q rendered as empirical:\n%s", kind, md)
+		}
+		if !strings.Contains(md, "NOT") {
+			t.Fatalf("kind %q missing non-proof statement", kind)
+		}
+	}
+	p, _ := NewEvidenceProvenance(EvidenceKindEmpiricalCampaign, "real", "abc", "cmd")
+	res.Provenance = p
+	md, _ := SynthesizeEvidenceReport(res)
+	if !strings.Contains(md, "empirical_campaign") || strings.Contains(md, "NON-EMPIRICAL") {
+		t.Fatalf("empirical report mislabelled:\n%s", md)
+	}
+}
+
+func TestProvenance_Validation(t *testing.T) {
+	if _, err := NewEvidenceProvenance("bogus", "d", "", ""); err == nil {
+		t.Fatal("unknown kind must fail")
+	}
+	if _, err := NewEvidenceProvenance(EvidenceKindSyntheticHarness, " ", "", ""); err == nil {
+		t.Fatal("missing driver must fail")
+	}
+}

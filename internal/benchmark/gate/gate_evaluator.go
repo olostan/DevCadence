@@ -29,14 +29,8 @@ func EvaluateM4Gate(
 	if report == nil {
 		return nil, errs.New(errs.CategoryInvalidArgument, "%s: aggregated report cannot be nil", kind)
 	}
-	if criteria.MinCompletedRuns < 1 {
-		return nil, errs.New(errs.CategoryInvalidArgument, "%s: min_completed_runs must be >= 1, got %d", kind, criteria.MinCompletedRuns)
-	}
-	if criteria.MinDefectCatchRate < 0.0 || criteria.MinDefectCatchRate > 1.0 {
-		return nil, errs.New(errs.CategoryInvalidArgument, "%s: min_defect_catch_rate must be between 0.0 and 1.0, got %f", kind, criteria.MinDefectCatchRate)
-	}
-	if criteria.MaxResourceRatioVersusBaseline <= 0.0 {
-		return nil, errs.New(errs.CategoryInvalidArgument, "%s: max_resource_ratio_versus_baseline must be > 0.0, got %f", kind, criteria.MaxResourceRatioVersusBaseline)
+	if err := criteria.Validate(); err != nil {
+		return nil, errs.Wrap(errs.CategoryInvalidArgument, err, "%s: invalid gate criteria", kind)
 	}
 
 	evaluatedAt := time.Now().UTC()
@@ -239,7 +233,10 @@ func EvaluateM4Gate(
 		}
 
 		// If MaxFalsificationRate check is evaluated as aggregate
-		if criteria.MaxFalsificationRate >= 0.0 && totalApplicable > 0 && !criteria.RequireZeroFalsifications {
+		// Criteria validation guarantees MaxFalsificationRate is a finite fraction, so whenever
+		// per-task falsified entries are recorded as informational (Require=false) this
+		// aggregate check always runs and decides.
+		if totalApplicable > 0 && !criteria.RequireZeroFalsifications {
 			falsRate := float64(falsifiedCount) / float64(totalApplicable)
 			pass := falsRate <= criteria.MaxFalsificationRate
 			details := fmt.Sprintf("Aggregate falsification rate: %.1f%% (threshold <= %.1f%%)",
@@ -269,7 +266,7 @@ func EvaluateM4Gate(
 	}
 
 	decision := DecisionGo
-	summaryText := "All Milestone M4 gate criteria passed. Empirical evidence supports progressing to Milestone M5."
+	summaryText := "All Milestone M4 gate criteria passed."
 
 	if !allPassed {
 		decision = DecisionRevise
@@ -296,7 +293,13 @@ func SynthesizeEvidenceReport(eval *GateEvaluationResult) (string, error) {
 
 	var sb strings.Builder
 
-	sb.WriteString("# Milestone M4 Empirical Evidence Report & Gate Evaluation\n\n")
+	empirical := eval.Provenance != nil && eval.Provenance.Kind == EvidenceKindEmpiricalCampaign
+	if empirical {
+		sb.WriteString("# Milestone M4 Evidence Report & Gate Evaluation\n\n")
+	} else {
+		sb.WriteString("# Milestone M4 Gate Evaluation (Non-Empirical Evidence)\n\n")
+	}
+	writeProvenance(&sb, eval.Provenance)
 
 	sb.WriteString("## Executive Summary\n\n")
 	sb.WriteString(fmt.Sprintf("- **Evaluated At:** %s\n", eval.EvaluatedAt.Format(time.RFC3339)))
@@ -311,12 +314,17 @@ func SynthesizeEvidenceReport(eval *GateEvaluationResult) (string, error) {
 	case DecisionGo:
 		sb.WriteString("> [!IMPORTANT]\n")
 		sb.WriteString("> **GATE DECISION: GO**\n")
-		sb.WriteString("> All empirical criteria for Milestone M4 (Defect Catch Rate, Resource Efficiency, Delegation Floor) have passed.\n")
-		sb.WriteString("> The Cognitive Invocation Compiler and 4-layer context architecture demonstrate empirical superiority over monolithic history.\n\n")
+		if empirical {
+			sb.WriteString("> All criteria for Milestone M4 (Defect Catch Rate, Resource Efficiency, Delegation Floor) have passed on empirical campaign evidence.\n")
+			sb.WriteString("> The measured 4-layer context architecture met the pre-declared thresholds against monolithic history.\n\n")
+		} else {
+			sb.WriteString("> All gate criteria passed on NON-EMPIRICAL evidence. This validates the gate machinery only; it is NOT proof of the M4 product hypothesis.\n")
+			sb.WriteString("> The M4 product claim requires evidence_kind `empirical_campaign` from real endpoints.\n\n")
+		}
 	case DecisionRevise:
 		sb.WriteString("> [!WARNING]\n")
 		sb.WriteString("> **GATE DECISION: REVISE**\n")
-		sb.WriteString("> One or more empirical criteria failed. Architectural adjustments or contract refinements are required prior to Milestone M5.\n\n")
+		sb.WriteString("> One or more criteria failed. Architectural adjustments or contract refinements are required prior to Milestone M5.\n\n")
 	case DecisionInconclusive:
 		sb.WriteString("> [!NOTE]\n")
 		sb.WriteString("> **GATE DECISION: INCONCLUSIVE**\n")
@@ -411,4 +419,72 @@ func validFraction(v float64) bool {
 // validResource reports whether v is a finite, non-negative measurement.
 func validResource(v float64) bool {
 	return !math.IsNaN(v) && !math.IsInf(v, 0) && v >= 0
+}
+
+// Evidence kinds distinguish gate-machinery validation from empirical proof of the M4 hypothesis.
+const (
+	// EvidenceKindSyntheticHarness marks evidence produced by scripted drivers (fixed token
+	// counts, deterministic outcomes). It validates gate machinery and is NOT empirical proof.
+	EvidenceKindSyntheticHarness = "synthetic_harness_validation"
+	// EvidenceKindEmpiricalCampaign marks evidence from a campaign on real endpoints.
+	EvidenceKindEmpiricalCampaign = "empirical_campaign"
+)
+
+// EvidenceProvenance records where the evaluated evidence came from.
+type EvidenceProvenance struct {
+	Kind              string `json:"evidence_kind"`
+	Driver            string `json:"driver"`
+	SourceCommit      string `json:"source_commit"`
+	RegenerateCommand string `json:"regeneration_command"`
+	Statement         string `json:"statement"`
+}
+
+// Validate rejects unknown kinds and missing mandatory fields.
+func (p EvidenceProvenance) Validate() error {
+	switch p.Kind {
+	case EvidenceKindSyntheticHarness, EvidenceKindEmpiricalCampaign:
+	default:
+		return errs.New(errs.CategoryInvalidArgument, "unknown evidence_kind %q (want %q or %q)", p.Kind, EvidenceKindSyntheticHarness, EvidenceKindEmpiricalCampaign)
+	}
+	if strings.TrimSpace(p.Driver) == "" {
+		return errs.New(errs.CategoryInvalidArgument, "evidence provenance requires a driver name")
+	}
+	return nil
+}
+
+// NewEvidenceProvenance builds provenance with the canonical statement for the kind.
+func NewEvidenceProvenance(kind, driver, sourceCommit, regenCmd string) (*EvidenceProvenance, error) {
+	p := EvidenceProvenance{Kind: kind, Driver: driver, SourceCommit: sourceCommit, RegenerateCommand: regenCmd}
+	if err := p.Validate(); err != nil {
+		return nil, err
+	}
+	if kind == EvidenceKindSyntheticHarness {
+		p.Statement = "Synthetic harness validation: produced by a scripted driver with fixed token counts and deterministic outcomes. " +
+			"It validates the gate machinery and is NOT empirical proof of the M4 product hypothesis."
+	} else {
+		p.Statement = "Empirical campaign evidence collected from real endpoints."
+	}
+	return &p, nil
+}
+
+func writeProvenance(sb *strings.Builder, p *EvidenceProvenance) {
+	sb.WriteString("## Evidence Provenance\n\n")
+	if p == nil {
+		sb.WriteString("- **Evidence Kind:** `unspecified` (treated as NON-EMPIRICAL; no provenance supplied)\n\n")
+		return
+	}
+	sb.WriteString(fmt.Sprintf("- **Evidence Kind:** `%s`\n", p.Kind))
+	sb.WriteString(fmt.Sprintf("- **Driver:** `%s`\n", p.Driver))
+	if p.SourceCommit != "" {
+		sb.WriteString(fmt.Sprintf("- **Source Commit:** `%s`\n", p.SourceCommit))
+	}
+	if p.RegenerateCommand != "" {
+		sb.WriteString(fmt.Sprintf("- **Regeneration Command:** `%s`\n", p.RegenerateCommand))
+	}
+	if p.Kind != EvidenceKindEmpiricalCampaign {
+		sb.WriteString("\n> [!WARNING]\n> " + p.Statement + "\n")
+	} else if p.Statement != "" {
+		sb.WriteString(fmt.Sprintf("- **Statement:** %s\n", p.Statement))
+	}
+	sb.WriteString("\n")
 }
