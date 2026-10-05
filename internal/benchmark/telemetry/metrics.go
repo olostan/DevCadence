@@ -2,6 +2,7 @@ package telemetry
 
 import (
 	"encoding/json"
+	"github.com/olostan/DevCadence/internal/errs"
 	"time"
 )
 
@@ -12,6 +13,15 @@ type LayerBreakdownMetrics struct {
 	EvidenceWorkingSetTokens int64 `json:"evidence_working_set_tokens"`
 	EphemeralTailTokens      int64 `json:"ephemeral_tail_tokens"`
 	TotalTokens              int64 `json:"total_tokens"`
+}
+
+// Validate verifies that TotalTokens matches the sum of constituent layer tokens (REQ-01).
+func (l LayerBreakdownMetrics) Validate() error {
+	sum := l.ProtectedCoreTokens + l.StateCapsuleTokens + l.EvidenceWorkingSetTokens + l.EphemeralTailTokens
+	if l.TotalTokens != sum {
+		return errs.New(errs.CategoryInvalidArgument, "layer breakdown total tokens (%d) != sum of layers (%d)", l.TotalTokens, sum)
+	}
+	return nil
 }
 
 // RunTelemetrySnapshot captures full empirical metrics for a single benchmark run (REQ-02).

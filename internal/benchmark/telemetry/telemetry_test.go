@@ -3,17 +3,45 @@ package telemetry
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/olostan/DevCadence/internal/errs"
 )
 
 // ACC-01: Snapshots recorded across strategies, verifying aggregation, higher cache efficiency, lower residency.
 func TestAggregate_ACC01_MultiStrategy(t *testing.T) {
 	snapshots := []RunTelemetrySnapshot{
 		{
-			RunID:                 "run-1",
+			RunID:                 "run-compacted",
+			TaskID:                "task-1",
+			Strategy:              "compacted",
+			Capability:            "code_edit",
+			InitialTokens:         4000,
+			PeakResidentTokens:    8000,
+			CachedTokens:          3000,
+			OutputTokens:          300,
+			CumulativeInputTokens: 12000,
+			Duration:              6 * time.Second,
+			Turns:                 2,
+			DefectSeeded:          true,
+			DefectStatus:          "detected",
+			Accepted:              true,
+			ReviewFindingsCount:   1,
+			AccountingUncertain:   false,
+			LayerBreakdown: &LayerBreakdownMetrics{
+				ProtectedCoreTokens:      1000,
+				StateCapsuleTokens:       1000,
+				EvidenceWorkingSetTokens: 1500,
+				EphemeralTailTokens:      500,
+				TotalTokens:              4000,
+			},
+		},
+		{
+			RunID:                 "run-full",
 			TaskID:                "task-1",
 			Strategy:              "full_history",
 			Capability:            "code_edit",
@@ -38,7 +66,7 @@ func TestAggregate_ACC01_MultiStrategy(t *testing.T) {
 			},
 		},
 		{
-			RunID:                 "run-2",
+			RunID:                 "run-hybrid",
 			TaskID:                "task-1",
 			Strategy:              "hybrid_4layer",
 			Capability:            "code_edit",
@@ -62,6 +90,31 @@ func TestAggregate_ACC01_MultiStrategy(t *testing.T) {
 				TotalTokens:              3000,
 			},
 		},
+		{
+			RunID:                 "run-snippet",
+			TaskID:                "task-1",
+			Strategy:              "snippet_pool",
+			Capability:            "code_edit",
+			InitialTokens:         3500,
+			PeakResidentTokens:    6000,
+			CachedTokens:          6000,
+			OutputTokens:          350,
+			CumulativeInputTokens: 16000,
+			Duration:              7 * time.Second,
+			Turns:                 2,
+			DefectSeeded:          true,
+			DefectStatus:          "detected",
+			Accepted:              true,
+			ReviewFindingsCount:   1,
+			AccountingUncertain:   false,
+			LayerBreakdown: &LayerBreakdownMetrics{
+				ProtectedCoreTokens:      1200,
+				StateCapsuleTokens:       800,
+				EvidenceWorkingSetTokens: 1000,
+				EphemeralTailTokens:      500,
+				TotalTokens:              3500,
+			},
+		},
 	}
 
 	report, err := Aggregate(snapshots)
@@ -69,25 +122,86 @@ func TestAggregate_ACC01_MultiStrategy(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if report.TotalSnapshots != 2 {
-		t.Errorf("expected 2 snapshots, got %d", report.TotalSnapshots)
+	if report.TotalSnapshots != 4 {
+		t.Errorf("expected 4 snapshots, got %d", report.TotalSnapshots)
 	}
-	if len(report.Groups) != 2 {
-		t.Fatalf("expected 2 groups, got %d", len(report.Groups))
-	}
-
-	// Order should be full_history, then hybrid_4layer
-	gFull := report.Groups[0]
-	gHybrid := report.Groups[1]
-
-	if gFull.Strategy != "full_history" {
-		t.Errorf("expected group 0 strategy full_history, got %s", gFull.Strategy)
-	}
-	if gHybrid.Strategy != "hybrid_4layer" {
-		t.Errorf("expected group 1 strategy hybrid_4layer, got %s", gHybrid.Strategy)
+	if len(report.Groups) != 4 {
+		t.Fatalf("expected 4 groups, got %d", len(report.Groups))
 	}
 
-	// Hybrid strategy should show higher cache hit ratio and lower peak resident tokens
+	// Groups are sorted deterministically: compacted, full_history, hybrid_4layer, snippet_pool
+	expected := []struct {
+		strategy                  string
+		cacheHitRatio             float64
+		avgCumulativeInputTokens  float64
+		avgPeakResidentTokens     float64
+		avgInitialTokens          float64
+		resourcePerAcceptedResult float64
+	}{
+		{
+			strategy:                  "compacted",
+			cacheHitRatio:             3000.0 / 12000.0, // 0.25
+			avgCumulativeInputTokens:  12000.0,
+			avgPeakResidentTokens:     8000.0,
+			avgInitialTokens:          4000.0,
+			resourcePerAcceptedResult: 12000.0,
+		},
+		{
+			strategy:                  "full_history",
+			cacheHitRatio:             1000.0 / 20000.0, // 0.05
+			avgCumulativeInputTokens:  20000.0,
+			avgPeakResidentTokens:     12000.0,
+			avgInitialTokens:          5000.0,
+			resourcePerAcceptedResult: 20000.0,
+		},
+		{
+			strategy:                  "hybrid_4layer",
+			cacheHitRatio:             12000.0 / 15000.0, // 0.8
+			avgCumulativeInputTokens:  15000.0,
+			avgPeakResidentTokens:     4500.0,
+			avgInitialTokens:          3000.0,
+			resourcePerAcceptedResult: 15000.0,
+		},
+		{
+			strategy:                  "snippet_pool",
+			cacheHitRatio:             6000.0 / 16000.0, // 0.375
+			avgCumulativeInputTokens:  16000.0,
+			avgPeakResidentTokens:     6000.0,
+			avgInitialTokens:          3500.0,
+			resourcePerAcceptedResult: 16000.0,
+		},
+	}
+
+	const epsilon = 1e-6
+	for i, exp := range expected {
+		g := report.Groups[i]
+		if g.Strategy != exp.strategy {
+			t.Errorf("group %d: expected strategy %s, got %s", i, exp.strategy, g.Strategy)
+		}
+		if math.Abs(g.CacheHitRatio-exp.cacheHitRatio) > epsilon {
+			t.Errorf("%s: CacheHitRatio got %f, want %f", exp.strategy, g.CacheHitRatio, exp.cacheHitRatio)
+		}
+		if g.AvgCumulativeInputTokens != exp.avgCumulativeInputTokens {
+			t.Errorf("%s: AvgCumulativeInputTokens got %f, want %f", exp.strategy, g.AvgCumulativeInputTokens, exp.avgCumulativeInputTokens)
+		}
+		if g.AvgPeakResidentTokens != exp.avgPeakResidentTokens {
+			t.Errorf("%s: AvgPeakResidentTokens got %f, want %f", exp.strategy, g.AvgPeakResidentTokens, exp.avgPeakResidentTokens)
+		}
+		if g.AvgInitialTokens != exp.avgInitialTokens {
+			t.Errorf("%s: AvgInitialTokens got %f, want %f", exp.strategy, g.AvgInitialTokens, exp.avgInitialTokens)
+		}
+		if g.ResourcePerAcceptedResult.IsUndefined {
+			t.Errorf("%s: ResourcePerAcceptedResult unexpectedly undefined", exp.strategy)
+		}
+		if math.Abs(g.ResourcePerAcceptedResult.Value-exp.resourcePerAcceptedResult) > epsilon {
+			t.Errorf("%s: ResourcePerAcceptedResult.Value got %f, want %f", exp.strategy, g.ResourcePerAcceptedResult.Value, exp.resourcePerAcceptedResult)
+		}
+	}
+
+	// Hybrid strategy should show higher cache hit ratio and lower peak resident tokens than full_history
+	gFull := report.Groups[1]
+	gHybrid := report.Groups[2]
+
 	if gHybrid.CacheHitRatio <= gFull.CacheHitRatio {
 		t.Errorf("expected hybrid cache hit ratio (%f) > full_history (%f)", gHybrid.CacheHitRatio, gFull.CacheHitRatio)
 	}
@@ -310,7 +424,7 @@ func TestAggregate_Mutant_ZeroDefectsSeeded(t *testing.T) {
 
 // Mutation test: Layer breakdown sum validation (TotalTokens == sum of parts).
 func TestLayerBreakdown_Integrity(t *testing.T) {
-	lb := LayerBreakdownMetrics{
+	validLB := LayerBreakdownMetrics{
 		ProtectedCoreTokens:      1000,
 		StateCapsuleTokens:       500,
 		EvidenceWorkingSetTokens: 1200,
@@ -318,9 +432,56 @@ func TestLayerBreakdown_Integrity(t *testing.T) {
 		TotalTokens:              3000,
 	}
 
-	sum := lb.ProtectedCoreTokens + lb.StateCapsuleTokens + lb.EvidenceWorkingSetTokens + lb.EphemeralTailTokens
-	if lb.TotalTokens != sum {
-		t.Fatalf("layer breakdown integrity violation: total %d != sum of parts %d", lb.TotalTokens, sum)
+	if err := validLB.Validate(); err != nil {
+		t.Fatalf("expected valid layer breakdown to pass Validate(), got: %v", err)
+	}
+
+	invalidLB := LayerBreakdownMetrics{
+		ProtectedCoreTokens:      1000,
+		StateCapsuleTokens:       500,
+		EvidenceWorkingSetTokens: 1200,
+		EphemeralTailTokens:      300,
+		TotalTokens:              3500, // sum is 3000 != 3500
+	}
+
+	err := invalidLB.Validate()
+	if err == nil {
+		t.Fatalf("expected invalid layer breakdown to fail Validate(), got nil")
+	}
+	if gotCat := errs.CategoryOf(err); gotCat != errs.CategoryInvalidArgument {
+		t.Fatalf("expected error category %v, got %v", errs.CategoryInvalidArgument, gotCat)
+	}
+
+	// Verify via TelemetryCollector.RecordLayerBreakdown
+	collector := NewTelemetryCollector()
+	collector.RecordSnapshot(RunTelemetrySnapshot{
+		RunID:      "run-lb-check",
+		TaskID:     "task-1",
+		Strategy:   "hybrid_4layer",
+		Capability: "code_edit",
+	})
+
+	// Invalid breakdown rejected by collector
+	err = collector.RecordLayerBreakdown("run-lb-check", invalidLB)
+	if err == nil {
+		t.Fatalf("expected collector.RecordLayerBreakdown to reject invalid breakdown, got nil")
+	}
+	if gotCat := errs.CategoryOf(err); gotCat != errs.CategoryInvalidArgument {
+		t.Fatalf("expected collector error category %v, got %v", errs.CategoryInvalidArgument, gotCat)
+	}
+
+	// Valid breakdown accepted by collector
+	err = collector.RecordLayerBreakdown("run-lb-check", validLB)
+	if err != nil {
+		t.Fatalf("expected collector.RecordLayerBreakdown to accept valid breakdown, got: %v", err)
+	}
+
+	snaps := collector.GetSnapshots()
+	if len(snaps) != 1 || snaps[0].LayerBreakdown == nil {
+		t.Fatalf("expected 1 snapshot with layer breakdown recorded")
+	}
+	if *snaps[0].LayerBreakdown != validLB {
+		t.Fatalf("recorded layer breakdown %+v != expected %+v", *snaps[0].LayerBreakdown, validLB)
 	}
 }
 

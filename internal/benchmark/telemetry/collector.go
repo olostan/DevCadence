@@ -38,6 +38,10 @@ func (c *TelemetryCollector) RecordSnapshot(s RunTelemetrySnapshot) {
 // RecordLayerBreakdown updates the layer breakdown metrics for an existing snapshot (REQ-03).
 // If the runID is unknown, an error is returned.
 func (c *TelemetryCollector) RecordLayerBreakdown(runID string, b LayerBreakdownMetrics) error {
+	if err := b.Validate(); err != nil {
+		return err
+	}
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
