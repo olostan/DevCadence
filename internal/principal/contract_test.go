@@ -318,3 +318,22 @@ func TestSchemasAreTheTwinOfTheGoTypes(t *testing.T) {
 		}
 	}
 }
+
+func TestCallerAllowsIsExactMatchOnly(t *testing.T) {
+	read := principal.CallerContext{AllowedActions: []string{"read"}}
+	more := principal.CallerContext{AllowedActions: []string{"read_more"}}
+	if !read.Allows("read") || !more.Allows("read_more") {
+		t.Fatal("an exact grant must allow its own action")
+	}
+	if read.Allows("read_more") {
+		t.Error("read must not grant read_more")
+	}
+	if more.Allows("read") {
+		t.Error("read_more must not grant its prefix read")
+	}
+	for _, action := range []string{"", "Read", " read", "rea"} {
+		if read.Allows(action) {
+			t.Errorf("read granted %q", action)
+		}
+	}
+}

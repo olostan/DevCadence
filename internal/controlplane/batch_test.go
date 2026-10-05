@@ -939,3 +939,15 @@ func TestA12_ContentionIsBoundedAndReadsStayFree(t *testing.T) {
 		t.Fatalf("after the lock was released: %v", err)
 	}
 }
+
+func TestEmptyRevisionAgainstAnInitialisedProjectIsStale(t *testing.T) {
+	h := testsupport.NewHarness(t)
+	initProject(t, h)
+	_, err := h.Service.ApplyBatch(context.Background(), controlplane.BatchCommand{
+		ProjectID: "example", Actor: batchActor, ExpectedStateRevision: "ps_000000000",
+		Commands: []controlplane.Command{risk("R-1")},
+	})
+	if !errors.Is(err, controlplane.ErrStaleProjectState) {
+		t.Fatalf("err = %v, want ErrStaleProjectState", err)
+	}
+}

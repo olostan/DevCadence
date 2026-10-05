@@ -225,3 +225,47 @@ func TestWriteSerializedWaitsOutBriefContention(t *testing.T) {
 		t.Fatalf("body ran %d times; it must run only once the lock is held", calls)
 	}
 }
+
+func TestCommitErrorIsNeverClassifiedBusy(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "busy.db")
+	holder := openFileStore(t, path)
+	other := openFileStore(t, path)
+	release := holdLock(t, holder)
+	busy := other.ProvokeBusyForTest(ctx)
+	release()
+	if !storage.IsBusyForTest(busy) {
+		t.Fatalf("precondition: %v must classify as busy", busy)
+	}
+	if storage.IsBusyForTest(storage.NewCommitErrorForTest(busy)) {
+		t.Fatal("a busy-shaped commit failure must not classify as busy")
+	}
+}
+
+func TestWriteSerializedNeverRetriesAFailedCommit(t *testing.T) {
+	ctx := context.Background()
+	store := openStore(t)
+	attempts := 0
+	err := store.WriteSerialized(ctx, func(tx *storage.Tx) error {
+		attempts++
+		// Defer the foreign-key check to commit, then violate it.
+		if err := tx.ExecForTest(ctx, "PRAGMA defer_foreign_keys = ON"); err != nil {
+			return err
+		}
+		return tx.ExecForTest(ctx, `INSERT INTO projection_attempts
+			(attempt_id, project_id, task_id, ordinal, status, document, created_seq, updated_seq)
+			VALUES ('a1', 'p', 'missing_task', 1, 's', '{}', 1, 1)`)
+	})
+	if err == nil {
+		t.Fatal("commit with a deferred foreign-key violation must fail")
+	}
+	if attempts != 1 {
+		t.Fatalf("attempts = %d, want exactly 1: a commit failure is never retried", attempts)
+	}
+	if errors.Is(err, storage.ErrBusy) {
+		t.Fatalf("err = %v must not be ErrBusy", err)
+	}
+	if errs.CategoryOf(err) != errs.CategoryInternal && errs.CategoryOf(err) != errs.CategoryIntegrity {
+		t.Fatalf("err = %v, want an internal/integrity failure", err)
+	}
+}

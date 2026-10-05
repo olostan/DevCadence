@@ -43,6 +43,11 @@ var ErrBusy error = busySentinel{}
 // isBusy reports a SQLITE_BUSY or SQLITE_LOCKED error, by typed driver code
 // and never by message text.
 func isBusy(err error) bool {
+	// A commit failure is uncertain and never busy, whatever its sqlite cause.
+	var ce *commitError
+	if errors.As(err, &ce) {
+		return false
+	}
 	var sqliteErr *sqlite.Error
 	if !errors.As(err, &sqliteErr) {
 		return false
