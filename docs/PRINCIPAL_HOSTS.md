@@ -14,7 +14,7 @@ Additional hosts are future integration candidates, not bootstrap commitments.
 
 ## M5 preparation status
 
-The [draft M5 host EWP](work-packages/wp-m5-4-host-integration-ewp.md) proposes Antigravity reference and Cursor portability recipes, with VS Code guidance. Installed-version/OS smoke and negative access tests remain required evidence; source-free workspace layout alone does not prove the information firewall. No empirical host readiness is claimed in this planning change.
+See the [M5 preparation window](work-packages/window-2026-10-f-overview.md) for shared planning status and [WP-M5-4](work-packages/wp-m5-4-host-integration-ewp.md) for proposed recipes, adapter ownership, installed-host evidence and source-boundary tests.
 
 ## 1. Host versus cognition endpoint
 

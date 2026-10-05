@@ -600,9 +600,7 @@ new-resource addition, topology collapse and future-driver extensibility. Verifi
 
 ## M5 — Semantic principal preparation (draft window)
 
-The [2026-10-F planning window](work-packages/window-2026-10-f-overview.md) proposes five review units: guarded semantic identities/batch persistence, application facade and stdio MCP, Discovery persistence, host integration, and the bounded real-evidence re-evaluation contract. The window is **DRAFT / NOT FROZEN**, not implementation authority or evidence of milestone completion.
-
-Current main contains lifecycle/benchmark primitives but no production task/review executor or real candidate verifier. The overview records a required follow-on runtime window; nil executors fail closed. The M4 real-endpoint re-evaluation remains mandatory M5 exit work. Freeze individual EWPs only after dependency/current-base resolution and independent Implementation Readiness review.
+The [2026-10-F planning window](work-packages/window-2026-10-f-overview.md) indexes the five proposed M5 preparation EWPs and owns their shared planning status, runtime prerequisites and required M4 reevaluation. Each EWP retains its own implementation readiness gates.
 
 ## Future milestones
 

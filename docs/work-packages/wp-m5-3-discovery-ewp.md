@@ -3,13 +3,13 @@
 ## Identity
 
 - Work Package ID: WP-M5-3
-- Revision: 2 (consolidated ARC04/IF03–IF06 repair; planning candidate)
+- Revision: 2 (consolidated discovery policy, readiness, decision-overlay and deferral repair; planning candidate)
 - Task ID: task-m5-3-discovery
 - Base: `bd6c424e292815460033b2570dce4d682ef5cb73` (`origin/main` when inspected)
 - Project state revision: not supplied; the implementation task must record its actual canonical revision before delegation. This is not a fabricated `ps_` value.
 - Contract digest: not calculated; bind the reviewed immutable contract in the delegation manifest.
 - Target endpoint/profile: bounded Go implementer with protocol/schema and SQLite integration competence; complete contract admission is mandatory.
-- Status: **DRAFT — BLOCKED ON DEPENDENCY CONTRACTS AND INDEPENDENT REVIEW; NOT READY FOR IMPLEMENTATION**.
+- Status: **DRAFT — APPROVE_DRAFT (both lenses); NOT_READY pending dependency contracts and independent Implementation Readiness review**.
 - Dependencies: WP-M5-1 atomic revision-guarded batch and principal envelope/schema; WP-M5-2 immutable, locally bound CallerContext and deterministic action policy. Dependencies below are proposals, not existing exports at this base.
 
 ## Objective
@@ -448,4 +448,13 @@ Escalate to the Principal for any dependency mismatch, unverifiable human/review
 
 ## Revision 2 closure record
 
-ARC04/IF03: nine exact public tool/action/method mappings, required PolicyResolver, plural requirement atomic bound and operator-only nonwire actions. IF04: separate readiness basis and unresolved same-input review blocking. IF05: chronological decision overlay and reconfirmation scenario. IF06: required exact nonblank deferral reason plus boundary. These are contract amendments; independent re-review remains pending. Protected human/operator issuer, live review port and authorized blocker closure remain disabled prerequisites, not implemented features.
+The consolidated repair defines nine exact public tool/action/method mappings, required PolicyResolver, plural requirement atomic bounds and operator-only nonwire actions; a separate readiness basis and unresolved same-input review blocking; chronological decision overlay and reconfirmation; and an exact nonblank deferral reason plus boundary. Both independent review lenses approved the revised preparation draft; see the [window review record](window-2026-10-f-overview.md#review-and-freezing). Implementation Readiness review remains outstanding after the disabled prerequisites are resolved. Protected human/operator issuer, live review port and authorized blocker closure remain disabled prerequisites, not implemented features.
+
+
+## Owning-contract alignment
+
+| Owning contract | This draft's refinement | Conflict / implementation synchronization |
+| --- | --- | --- |
+| [MCP_API §2A](../MCP_API.md#2a-discovery-tool-set) | Retains all nine public discovery tool names; the exact mappings above add bounded DTOs, immutable record revisions and authority checks. | No tool rename or competing transport schema. WP-M5-2 owns MCP registration/serialization; implementation must update the high-level owner with these exact semantics and schema links before acceptance. |
+| MCP_API discovery experiment/readiness descriptions | Refines broad persistence wording into immutable supplied experiment outcomes and a computed, exact-basis readiness verdict. | Proposed detail, not an already implemented API. A live experiment executor and protected approval ingress are separate prerequisites. |
+| [WP-M5-4](wp-m5-4-host-integration-ewp.md) | Host recipes consume the same facade and registered tool set. | Host adapters do not add discovery tools, DTOs or persistence handlers. Dependency drift requires re-resolution before execution. |

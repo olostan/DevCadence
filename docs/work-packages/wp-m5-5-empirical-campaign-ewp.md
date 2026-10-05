@@ -314,4 +314,4 @@ Readiness: **NOT_READY** pending exact current enums/CLI binding, accepted indep
 - r1: empirical sidecar/admission design, real verifier and hard authority gates, bounded paired campaign and honest unknown/failed-run accounting.
 
 
-- r2: consolidated ARC-06/07 and IF10/11 repair; exact acyclic pre-run CampaignPlan, EWP/unit/tier-cause bindings and capability-bound independent verifier result API.
+- r2: consolidated campaign-plan and trusted-verifier repair; exact acyclic pre-run CampaignPlan, EWP/unit/tier-cause bindings and capability-bound independent verifier result API.

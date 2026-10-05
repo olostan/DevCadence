@@ -32,7 +32,6 @@ Integrating real-world execution and testing (such as Firebase emulators, Vite d
   - Services enforce an absolute `MaxLifetime` (default 15m).
   - Teardown executes unconditionally on success, failure, cancellation, and partial startup: graceful `SIGTERM` followed by forced `SIGKILL` and process reaping.
   - Controller restart reconciliation: PID files alone never authorize termination. Process ownership is verified via start time matching (anti-PID recycling). Full executable path resolution across platform variants is deferred to the background task daemon integration. If ownership cannot be verified, DevCadence reports `StatusCleanupFailed` / `unresolved_reconciliation` without signaling the PID.
-  - Startup records the OS-reported process start time using the same bounded `ps` query as reconciliation, rather than the controller's wall clock. On Linux, both paths first require the PID reported by `/proc/self/stat` to match the execution PID; missing, malformed or mismatched procfs identity is rejected without querying a target PID. If identity cannot be captured (including unavailable `ps`), startup fails with an internal error, terminates and reaps the child through its owned process handle, and removes its temporary resources.
 
 ### 3. Bounded Tools & Universal Artifact Pagination
 
@@ -166,3 +165,4 @@ exists.
   cite this amendment and specify the snippet size cap, the citation/reason
   requirement, and the routing between the two tiers before it is considered
   complete.
+

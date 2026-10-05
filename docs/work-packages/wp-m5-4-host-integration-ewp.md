@@ -3,13 +3,13 @@
 ## Identity
 
 - Work Package ID: WP-M5-4 (M5 host integration slice)
-- Revision: 2 (consolidated ARC05/IF07–IF09 repairs: runtime binding, exclusive mutation, bounded rollback)
+- Revision: 2 (consolidated runtime binding, exclusive mutation and bounded rollback repairs)
 - Task ID: task-m5-4-host-integration
 - Base commit: `bd6c424e292815460033b2570dce4d682ef5cb73`
 - Project state revision: not supplied; capture canonical revision before execution.
 - Contract digest: not frozen; Markdown is the authoritative draft contract.
 - Target implementation endpoint/profile: bounded Go implementer with host-adapter and security-test competence.
-- Status: DRAFT — pending independent contract and mutation review.
+- Status: DRAFT — both independent lenses approved the preparation contract; NOT_READY for implementation.
 - Dependencies: WP-M5-1 protocol/authority/CAS; WP-M5-2 reduced Principal facade/MCP adapter; follow-on accepted runtime window; WP-M5-3 discovery semantics.
 - Window decisions remain proposed and unfrozen until independent review and Principal adjudication.
 
@@ -471,7 +471,7 @@ compatibility must be tested against WP-M5-2's declared protocol set.
 
 ```text
 requirements represented: 12/12 in proposed bounded contract
-mandatory clauses resolved: 8/8 named DCI clauses; independent confirmation pending
+mandatory clauses resolved: 8/8 named DCI clauses; preparation draft independently reviewed; execution-time admission still required
 state transitions specified: 4/4 (observed, planned/applied, verified, drift invalidation)
 failure cases specified: 13/13
 authority decisions specified: 7/7
@@ -480,19 +480,29 @@ acceptance scenarios mapped: 20/20
 unresolved architecture choices: 0 within this proposed contract
 integration prerequisites: dependency contracts and M3 binding require step-0 verification
 native human smoke: unavailable; no host empirical readiness claimed
-independent readiness review: pending
-readiness: NOT_READY — DRAFT pending independent review
+independent preparation review: APPROVE_DRAFT (both lenses; window review record)
+independent implementation readiness review: outstanding after dependency binding and required live evidence
+readiness: NOT_READY — DRAFT; dependency binding and implementation readiness evidence outstanding
 ```
 
 ### Consistency sweep after every material revision
 
-- [ ] Search/remove superseded contract names, mode semantics and path claims.
-- [ ] Recompute requirement/state/failure/acceptance counts and map all mutants.
-- [ ] Confirm facade/transport ownership matches WP-M5-1 through WP-M5-3.
-- [ ] Verify Status and readiness remain consistent with actual independent review.
-- [ ] Re-resolve changed paths/risks/clauses and verify repaired blockers independently.
+- [x] Search/remove superseded contract names, mode semantics and path claims.
+- [x] Recompute requirement/state/failure/acceptance counts and map all mutants.
+- [x] Confirm facade/transport ownership matches WP-M5-1 through WP-M5-3.
+- [x] Verify Status and readiness remain consistent with actual independent review.
+- [x] Re-resolve changed draft paths/risks/clauses and verify repaired draft blockers independently; execution-time dependency binding remains a separate prerequisite.
 
 ### Weaker-implementer check
 
 - [ ] Yes — independently verified executable contract.
-- [x] No — proposed bounded design awaits independent contract review and dependency binding verification; do not delegate implementation yet.
+- [x] No — the preparation contract has independent draft approval, but dependency binding, required live evidence and implementation readiness verification remain outstanding; do not delegate implementation yet.
+
+
+## Owning-contract alignment
+
+| Owning contract | This host draft's role | Conflict / implementation synchronization |
+| --- | --- | --- |
+| [MCP_API bootstrap executable contract](../MCP_API.md#bootstrap-executable-contract) and [WP-M5-2](wp-m5-2-semantic-mcp-ewp.md) | Render the same no-argument stdio executable and its project/action binding. | No additional MCP tools or wire schema. WP-M5-2 owns registration, DTO serialization and transport limits; host-specific configuration is confined to the adapter. |
+| [MCP_API §2A](../MCP_API.md#2a-discovery-tool-set) and [WP-M5-3](wp-m5-3-discovery-ewp.md) | Expose the same nine discovery tools through the facade. | No competing discovery persistence contract. Host observation/setup types are Go adapter types, not principal request DTOs. |
+| [PRINCIPAL_HOSTS](../PRINCIPAL_HOSTS.md) | Adds proposed concrete launch recipes, source-boundary verification and safe mutation behavior. | Exact host instructions and owning contract must synchronize during implementation; installed-host evidence remains outstanding. |

@@ -120,10 +120,10 @@ Review input is an immutable document snapshot with file hashes, base SHA and co
 
 | Lens | Candidate | Verdict | Repair / verification |
 | --- | --- | --- | --- |
-| Architecture/Contract | r2 immutable manifest SHA-256 e4722b5103d4d23778021f7310027e8d4accefb1babdcc87db49727704a9290e | APPROVE_DRAFT | ARC-01 through ARC-07 independently verified after the single repair round |
-| Implementability/Failure Semantics | same r2 manifest | APPROVE_DRAFT | IF01 through IF11 independently verified after the single repair round |
+| Architecture/Contract | r2 immutable manifest SHA-256 e4722b5103d4d23778021f7310027e8d4accefb1babdcc87db49727704a9290e | APPROVE_DRAFT | Transaction read guards and SQLite contention; complete evidence/discovery contracts; host launch binding; trusted verifier and pre-run bindings independently verified |
+| Implementability/Failure Semantics | same r2 manifest | APPROVE_DRAFT | Transaction/evidence/action boundaries; readiness and decision overlay; deferral semantics; host mutation/rollback; verifier and plan integrity independently verified |
 
-Both reviewers approve the **reduced preparation draft only**. Neither approves implementation readiness, architecture freeze, enabled acceptance, human/operator authority, live execution or M5 closure. All five contracts remain NOT_READY until their applicable dependency/current-base/admission gates close. No remaining material draft-contract blocker was reported in focused repair verification. Uncovered evidence remains explicit: protected operator ingress, native host/OS smoke and isolation, actual task/scout/review/verifier execution, live usage/spend and empirical outcome verification. The final overview changes after the r2 snapshot are verdict/handoff bookkeeping only, not a semantic contract amendment.
+Both reviewers approve the **reduced preparation draft only**. Neither approves implementation readiness, architecture freeze, enabled acceptance, human/operator authority, live execution or M5 closure. All five contracts remain NOT_READY until their applicable dependency/current-base/admission gates close. No remaining material draft-contract blocker was reported in focused repair verification. Uncovered evidence remains explicit: protected operator ingress, native host/OS smoke and isolation, actual task/scout/review/verifier execution, live usage/spend and empirical outcome verification. Subsequent documentation cleanup aligns review status and owning-contract references without changing proposed execution semantics. Session validation and publication exceptions are tracked in the PR discussion.
 
 Per-WP current-base gates must still resolve actual accepted dependency SHAs, exact signatures/paths, full contract admission and executable validation commands. Every EWP's authoring base is pinned now; subsequent changes require explicit re-resolution. Missing live hardware/host/credential evidence is disclosed, never represented by mocked smoke PASS.
 
@@ -142,31 +142,3 @@ Per-WP current-base gates must still resolve actual accepted dependency SHAs, ex
 - r1 (2026-10-05): initial five-unit preparation window; disclosed missing production runtime and empirical verifier rather than hiding them in the MCP EWP.
 
 - r2: one consolidated dual-review repair round; shared read guards/concurrency, complete evidence DTOs/actions, disabled acceptance, discovery readiness/overlay corrections, complete host launch and safe manual fallback, acyclic empirical plan/verifier.
-
-## Validation and resumable handoff
-
-Prepared on local branch `docs/m5-planning-window` from the exact base above. The original preparation changes are documentation only; the owner subsequently authorized the bounded verification repair recorded below. Git hooks installed and verified with `core.hooksPath=.githooks`. The original preparation stopped before committing; the owner subsequently requested draft publication while taking over green-CI work, as recorded below.
-
-| Check | Toolchain / candidate | Result |
-| --- | --- | --- |
-| make verify, unchanged base (twice) | Go 1.25.0 linux/amd64, bd6c424 | exit 2: internal/validation TestServiceVerifiedTeardown, supervisor_test.go:285, Expected VerifyProcessOwnership to return true for active process |
-| targeted ownership test, default timezone and UTC | unchanged base | exit 1 both times |
-| make verify, r1 and repaired r2 staged documents | same toolchain/source | exit 2: same baseline assertion |
-| make schemas docs-check | r2 staged documents | exit 0 |
-| make hooks-check | versioned hooks | exit 0 |
-| git diff --cached --check | staged document patch | exit 0 |
-
-Bounded diagnostic evidence: at wall time 09:14:56 UTC, a newly spawned process reported ps start 08:42:44 UTC and age 1931 seconds; ownership requires start-time agreement within two seconds. Namespace correction is unavailable (unshare operation not permitted, effective/bounding capabilities zero). This is a reproduced environment limitation on unchanged source, not a waived test. No implementation/test/health policy was changed during the original preparation run.
-
-AGENTS §12 requires hooks and forbids bypassing them; ENGINEERING_HEALTH_POLICY requires a healthy checkpoint. Those requirements blocked the original preparation checkpoint. The owner later explicitly requested draft publication while taking over green-CI work; the PR records this owner-authorized unfinished-CI exception. Resume in a healthy checkout at the pinned base, install/check hooks, and run make verify and the normal hooks before acceptance. Reconcile advanced main before execution; never force-push. Do not label the window frozen or any EWP implementation-ready based on these draft approvals.
-
-The next planning action is expanding the four explicit M5-R scope cards into another bounded window, with exact secure authority, producer-policy, live executor and empirical verification contracts. The owner inputs needed only before live operations are endpoint selection, source exposure, spend/quota/compute/time caps and available host/OS installations. No such permission was assumed or requested during this design-only work.
-
-
-### Owner-authorized verification repair follow-up
-
-On 2026-10-05 the owner requested PR preparation and CI repair. The bounded follow-up changes only validation-service process identity capture, its regression tests, and the owning ADR-0016 lifecycle paragraph. Startup captures process-start metadata through the same OS query used by reconciliation, rather than comparing an OS timestamp with controller wall time. Failure to obtain identity terminates and reaps the owned child and fails startup; stale-PID rejection remains unchanged. This is separate from implementing the five NOT_READY M5 EWPs.
-
-The restored Go 1.25.0 toolchain passes module hygiene, vet, the new focused regressions, schemas, documentation integrity, and hook configuration. Full `make verify` remains blocked in process-service integration: the runner executes inside an inner PID namespace while its `/proc` exposes outer PIDs, and real `ps` cannot reliably identify launched processes. Mounting a matching process view is denied. The candidate fails startup safely in that environment. These results do not establish green CI. The owner subsequently instructed: “Ok, just update PR and I'll work on green CI.” Draft publication proceeds as an owner-authorized unfinished-CI handoff; hook bypass for that publication is disclosed in the commit and PR rather than changing health policy or skipping checked-in tests. Full verification and normal hook validation remain outstanding in a runner with matching PID and process views.
-
-Independent clean repair review returned **PASS source correctness** after the namespace-collision finding was repaired, against immutable r2 manifest SHA-256 `a20575da481b4fd013b7fe14f0915c7cd84bfa387a68cf090e92e6cda2958e30`. Five focused regressions independently passed with the race detector; real lifecycle integration remains uncovered locally. The normal precommit attempt exited 2 because exact-base coverage reproduced the original ownership assertion failure.

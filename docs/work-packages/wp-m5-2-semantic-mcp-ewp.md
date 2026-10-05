@@ -313,4 +313,4 @@ Official sources verified 2026-10-05: https://github.com/modelcontextprotocol/go
 - r1: preparation facade/stdio boundary, explicit absent-runtime denial, proposal/approval distinction and accepted mediated-content rule.
 
 
-- r2: consolidated ARC-01/03/04 and IF01–03 repair; complete evidence dispatch, exact discovery grants, transaction read-guard seam, and explicitly disabled acceptance until canonical producer/policy contract exists.
+- r2: consolidated transaction, evidence-dispatch and action-boundary repair; complete evidence dispatch, exact discovery grants, transaction read-guard seam, and explicitly disabled acceptance until canonical producer/policy contract exists.

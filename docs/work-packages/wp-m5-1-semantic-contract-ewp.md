@@ -248,4 +248,4 @@ Readiness: **NOT_READY (independent review/current-base gate pending)**. Require
 
 - r1: initial contract and batch/freshness design; preserved historical WP planning revision and separated start guard from candidate operations.
 
-- r2: consolidated ARC-01/02 and IF01 repair: bounded read-only transaction guards, early SQLite write-intent serialization and cancellation-aware contention semantics.
+- r2: consolidated transaction-guard and SQLite contention repair: bounded read-only transaction guards, early SQLite write-intent serialization and cancellation-aware contention semantics.
