@@ -591,12 +591,12 @@ versioning and rollback. No silent learned/policy mutation. Contract: [wp-m3d-3-
 Integrate recommend/explain/apply into the setup experience. Plain/JSON remains
 canonical; optional rich terminal rendering (Huh/Bubble Tea/Lip Gloss if still
 justified) presents the same underlying typed recommendation/validation path,
-never a second decision engine.
+never a second decision engine. Contract: [wp-m3d-4-adaptive-setup-ux.md](work-packages/wp-m3d-4-adaptive-setup-ux.md); implemented.
 
 ### WP-M3D-5 — Cross-portfolio verification
 Cover Apple/MLX, NVIDIA/local, one subscription, multiple subscriptions,
 paid-API allowed/forbidden, mixed portfolios, endpoint loss, quota pressure,
-new-resource addition, topology collapse and future-driver extensibility.
+new-resource addition, topology collapse and future-driver extensibility. Verified across recommendation synthesis matrix, model-assisted and deterministic workflow planning, adaptation diffing, atomic lineage activation, revalidation-gated rollback, and schema conformance in `tests/m3d_cross_portfolio_test.go`; implemented. Milestone M3D exit criteria satisfied.
 
 ## Future milestones
 

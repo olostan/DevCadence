@@ -553,6 +553,8 @@ family or billing channel is structurally privileged.
 
 ### M3D — Adaptive portfolio and workflow synthesis
 
+**Status: complete.** M3D owns AI-assisted portfolio planning, workflow topology planning, adaptation diffing/rollback, plain/JSON CLI UX, and cross-portfolio verification. Verified across Apple Silicon/MLX, NVIDIA CUDA local-only, single-subscription, multi-subscription, paid-API allowed/forbidden, mixed portfolios, budget exhaustion, resource additions, and future driver extensibility in `tests/m3d_cross_portfolio_test.go`. Milestone M3D exit criteria are satisfied.
+
 #### Goal
 Use eligible cognition to recommend how the discovered resources should be
 organized, while keeping activation authority deterministic and adapting the
