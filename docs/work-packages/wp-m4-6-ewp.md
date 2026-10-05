@@ -3,13 +3,13 @@
 ## Identity
 
 - Work Package ID: WP-M4-6 (window 2026-10-E; slice 6 of Milestone M4)
-- Revision: 2 (window review: CriterionResult struct definition, authorized CLI write domain in cmd/devcadence, pairwise tier matching semantics, IsUndefined fail-closed handling, clean Inconclusive nil-error semantics, expanded mutation catalog)
+- Revision: 3 (r3 amendment after PR #75 review; see Changelog). r2 (window review: CriterionResult struct definition, authorized CLI write domain in cmd/devcadence, pairwise tier matching semantics, IsUndefined fail-closed handling, clean Inconclusive nil-error semantics, expanded mutation catalog)
 - Task ID: task-m4-6-evidence-report-gate
 - Base commit: `0c3bce20d89010d90bfec93540541effc4591b7c`
 - Project state revision: 1
 - Contract digest: n/a (Markdown contract authoritative)
 - Target implementation endpoint/profile: competent Go implementer
-- Status: READY_FOR_IMPLEMENTATION (r2)
+- Status: AMENDED_R3 (implemented; under review, PR #75)
 
 ## Objective
 
@@ -40,6 +40,8 @@ Deliver the evidence synthesizer and formal gate evaluator for Milestone M4 in `
 - `cmd/devcadence/benchmark.go` (new CLI command handler for `devcadence benchmark evaluate-gate`)
 - `cmd/devcadence/benchmark_test.go` (new)
 - `docs/evidence/m4-evidence-report.md` (generated report)
+- `docs/evidence/m4-evidence-report.json` (generated report, JSON)
+- `internal/benchmark/gate/gate_failclosed_test.go` (fail-closed and mutation tests)
 - `docs/work-packages/wp-m4-6-ewp.md`
 
 ### Explicitly forbidden semantic changes
@@ -201,3 +203,31 @@ Could a competent implementation model with good language/repository skill but m
 
 - [x] Yes
 - [ ] No — return to Principal design
+
+## Amendment r3 (PR #75 review)
+
+### Changelog
+
+- r3: Authorized write domain extended to `docs/evidence/*.json`, `internal/benchmark/gate/gate_failclosed_test.go`. Added fields and semantics below (previously implemented but undeclared). Added evidence provenance and the synthetic-vs-empirical distinction. Added criteria validation (B3).
+
+### Added representation
+
+- `CriterionResult.ObservedUndefined bool` (`observed_undefined`): set when the observed value is undefined, missing or malformed; `Observed` is then 0, never +Inf/NaN (JSON-serializable).
+- `GateEvaluationResult` gains `FalsificationResults` (`falsification_results`, preserves delegation-floor inputs for re-evaluation), `ReportDigest` (`sha256:` of the aggregated report JSON), `Recommendations`, `Provenance`, and `AggregatedReport` is a pointer (`*telemetry.AggregatedReport`), superseding REQ-03's value type.
+- `GateCriteria` gains `MaxFalsificationRate` (default 0.0) and `MaxResidentContextRatioBaseline` (default 1.0; 0 disables the peak-resident check). `DecisionPivot` is an alias of `DecisionRevise`.
+
+### Criteria validation (fail closed, `errs.CategoryInvalidArgument`, `nil` result)
+
+MinCompletedRuns >= 1; MinDefectCatchRate finite in [0,1]; MaxResourceRatioVersusBaseline finite and > 0; MaxFalsificationRate finite in [0,1]; MaxResidentContextRatioBaseline finite and >= 0. A malformed bound must never silently disable a check (probe: Require=false, MaxFalsificationRate=-1, one falsified applicable entry => error, never Go).
+
+### Fail-closed missing-input semantics
+
+- Per tier present: missing Strategy 4 group, non-applicable or malformed Strategy 4 defect catch rate, missing Strategy 1 group, undefined/malformed resource values => FAILED criterion with `ObservedUndefined`, so `DecisionRevise`. Exception (unchanged): Strategy 1 undefined while Strategy 4 has accepted runs passes.
+- Peak resident context: baseline `AvgPeakResidentTokens <= 0` or malformed => FAILED undefined criterion (never +Inf).
+- No capability tiers, or tiers containing only Strategy 2/3 groups => `DecisionRevise` (Strategy 4 vs Strategy 1 comparison impossible).
+- `len(Groups)==0 || TotalSnapshots < MinCompletedRuns` => `DecisionInconclusive`; `TotalSnapshots == MinCompletedRuns` is sufficient.
+- Falsification semantics: only applicable entries count. With `RequireZeroFalsifications=true` each falsified applicable entry is a failed `delegation_floor_<key>` criterion. With false, per-task entries are informational (recorded as passed) and the aggregate `aggregate_falsification_rate` criterion (falsified/applicable <= MaxFalsificationRate) decides; criteria validation guarantees this aggregate check runs whenever totalApplicable > 0.
+
+### Evidence provenance: synthetic versus empirical
+
+`GateEvaluationResult.Provenance` (`evidence_kind`, `driver`, `source_commit`, `regeneration_command`, `statement`). Kinds: `synthetic_harness_validation` (scripted drivers; validates gate machinery only) and `empirical_campaign` (real endpoints). Unspecified provenance is treated as non-empirical. Only `empirical_campaign` may render empirical-evidence language; synthetic or unspecified evidence MUST render a non-proof statement and MUST NOT be presented as proof of the M4 product hypothesis. The CLI accepts `--evidence-kind/--driver/--source-commit/--regen-command` and prints the provenance. The committed `docs/evidence/m4-evidence-report.{md,json}` is `synthetic_harness_validation` (driver `canonicalTestDriver`): a GO on it validates the gate machinery. Completing the M4 product claim requires an `empirical_campaign` run on real endpoints through the same gate.

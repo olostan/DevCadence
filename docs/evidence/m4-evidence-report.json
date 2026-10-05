@@ -1,0 +1,2204 @@
+{
+  "decision": "go",
+  "criteria_evaluations": [
+    {
+      "name": "defect_catch_rate_frontier_api",
+      "passed": true,
+      "threshold": 0.8,
+      "observed": 0.8333333333333334,
+      "details": "Strategy 4 catch rate in tier frontier_api: 83.3% (threshold \u003e= 80.0%)"
+    },
+    {
+      "name": "resource_efficiency_frontier_api",
+      "passed": true,
+      "threshold": 1,
+      "observed": 0.15,
+      "details": "Resource ratio in tier frontier_api: 0.15x versus baseline Strategy 1 (threshold \u003c= 1.00x)"
+    },
+    {
+      "name": "peak_resident_context_frontier_api",
+      "passed": true,
+      "threshold": 1,
+      "observed": 0.29999999999999993,
+      "details": "Peak resident context ratio in tier frontier_api: 0.30x (threshold \u003c= 1.00x)"
+    },
+    {
+      "name": "defect_catch_rate_local_small",
+      "passed": true,
+      "threshold": 0.8,
+      "observed": 0.8333333333333334,
+      "details": "Strategy 4 catch rate in tier local_small: 83.3% (threshold \u003e= 80.0%)"
+    },
+    {
+      "name": "resource_efficiency_local_small",
+      "passed": true,
+      "threshold": 1,
+      "observed": 0.15,
+      "details": "Resource ratio in tier local_small: 0.15x versus baseline Strategy 1 (threshold \u003c= 1.00x)"
+    },
+    {
+      "name": "peak_resident_context_local_small",
+      "passed": true,
+      "threshold": 1,
+      "observed": 0.29999999999999993,
+      "details": "Peak resident context ratio in tier local_small: 0.30x (threshold \u003c= 1.00x)"
+    },
+    {
+      "name": "defect_catch_rate_subscription_cli",
+      "passed": true,
+      "threshold": 0.8,
+      "observed": 0.8333333333333334,
+      "details": "Strategy 4 catch rate in tier subscription_cli: 83.3% (threshold \u003e= 80.0%)"
+    },
+    {
+      "name": "resource_efficiency_subscription_cli",
+      "passed": true,
+      "threshold": 1,
+      "observed": 0.15,
+      "details": "Resource ratio in tier subscription_cli: 0.15x versus baseline Strategy 1 (threshold \u003c= 1.00x)"
+    },
+    {
+      "name": "peak_resident_context_subscription_cli",
+      "passed": true,
+      "threshold": 1,
+      "observed": 0.29999999999999993,
+      "details": "Peak resident context ratio in tier subscription_cli: 0.30x (threshold \u003c= 1.00x)"
+    },
+    {
+      "name": "delegation_floor_task-arch-01:frontier_api",
+      "passed": true,
+      "threshold": 0,
+      "observed": 0,
+      "details": "Delegation floor hypothesis satisfied for task-arch-01:frontier_api"
+    },
+    {
+      "name": "delegation_floor_task-arch-01:local_small",
+      "passed": true,
+      "threshold": 0,
+      "observed": 0,
+      "details": "Delegation floor hypothesis satisfied for task-arch-01:local_small"
+    },
+    {
+      "name": "delegation_floor_task-arch-01:subscription_cli",
+      "passed": true,
+      "threshold": 0,
+      "observed": 0,
+      "details": "Delegation floor hypothesis satisfied for task-arch-01:subscription_cli"
+    },
+    {
+      "name": "delegation_floor_task-arch-02:frontier_api",
+      "passed": true,
+      "threshold": 0,
+      "observed": 0,
+      "details": "Delegation floor hypothesis satisfied for task-arch-02:frontier_api"
+    },
+    {
+      "name": "delegation_floor_task-arch-02:local_small",
+      "passed": true,
+      "threshold": 0,
+      "observed": 0,
+      "details": "Delegation floor hypothesis satisfied for task-arch-02:local_small"
+    },
+    {
+      "name": "delegation_floor_task-arch-02:subscription_cli",
+      "passed": true,
+      "threshold": 0,
+      "observed": 0,
+      "details": "Delegation floor hypothesis satisfied for task-arch-02:subscription_cli"
+    },
+    {
+      "name": "delegation_floor_task-impl-01:frontier_api",
+      "passed": true,
+      "threshold": 0,
+      "observed": 0,
+      "details": "Delegation floor hypothesis satisfied for task-impl-01:frontier_api"
+    },
+    {
+      "name": "delegation_floor_task-impl-01:local_small",
+      "passed": true,
+      "threshold": 0,
+      "observed": 0,
+      "details": "Delegation floor hypothesis satisfied for task-impl-01:local_small"
+    },
+    {
+      "name": "delegation_floor_task-impl-01:subscription_cli",
+      "passed": true,
+      "threshold": 0,
+      "observed": 0,
+      "details": "Delegation floor hypothesis satisfied for task-impl-01:subscription_cli"
+    },
+    {
+      "name": "delegation_floor_task-impl-02:frontier_api",
+      "passed": true,
+      "threshold": 0,
+      "observed": 0,
+      "details": "Delegation floor hypothesis satisfied for task-impl-02:frontier_api"
+    },
+    {
+      "name": "delegation_floor_task-impl-02:local_small",
+      "passed": true,
+      "threshold": 0,
+      "observed": 0,
+      "details": "Delegation floor hypothesis satisfied for task-impl-02:local_small"
+    },
+    {
+      "name": "delegation_floor_task-impl-02:subscription_cli",
+      "passed": true,
+      "threshold": 0,
+      "observed": 0,
+      "details": "Delegation floor hypothesis satisfied for task-impl-02:subscription_cli"
+    },
+    {
+      "name": "delegation_floor_task-impl-03:frontier_api",
+      "passed": true,
+      "threshold": 0,
+      "observed": 0,
+      "details": "Delegation floor hypothesis satisfied for task-impl-03:frontier_api"
+    },
+    {
+      "name": "delegation_floor_task-impl-03:local_small",
+      "passed": true,
+      "threshold": 0,
+      "observed": 0,
+      "details": "Delegation floor hypothesis satisfied for task-impl-03:local_small"
+    },
+    {
+      "name": "delegation_floor_task-impl-03:subscription_cli",
+      "passed": true,
+      "threshold": 0,
+      "observed": 0,
+      "details": "Delegation floor hypothesis satisfied for task-impl-03:subscription_cli"
+    },
+    {
+      "name": "delegation_floor_task-impl-04:frontier_api",
+      "passed": true,
+      "threshold": 0,
+      "observed": 0,
+      "details": "Delegation floor hypothesis satisfied for task-impl-04:frontier_api"
+    },
+    {
+      "name": "delegation_floor_task-impl-04:local_small",
+      "passed": true,
+      "threshold": 0,
+      "observed": 0,
+      "details": "Delegation floor hypothesis satisfied for task-impl-04:local_small"
+    },
+    {
+      "name": "delegation_floor_task-impl-04:subscription_cli",
+      "passed": true,
+      "threshold": 0,
+      "observed": 0,
+      "details": "Delegation floor hypothesis satisfied for task-impl-04:subscription_cli"
+    },
+    {
+      "name": "delegation_floor_task-nav-01:frontier_api",
+      "passed": true,
+      "threshold": 0,
+      "observed": 0,
+      "details": "Delegation floor hypothesis satisfied for task-nav-01:frontier_api"
+    },
+    {
+      "name": "delegation_floor_task-nav-01:local_small",
+      "passed": true,
+      "threshold": 0,
+      "observed": 0,
+      "details": "Delegation floor hypothesis satisfied for task-nav-01:local_small"
+    },
+    {
+      "name": "delegation_floor_task-nav-01:subscription_cli",
+      "passed": true,
+      "threshold": 0,
+      "observed": 0,
+      "details": "Delegation floor hypothesis satisfied for task-nav-01:subscription_cli"
+    },
+    {
+      "name": "delegation_floor_task-nav-02:frontier_api",
+      "passed": true,
+      "threshold": 0,
+      "observed": 0,
+      "details": "Delegation floor hypothesis satisfied for task-nav-02:frontier_api"
+    },
+    {
+      "name": "delegation_floor_task-nav-02:local_small",
+      "passed": true,
+      "threshold": 0,
+      "observed": 0,
+      "details": "Delegation floor hypothesis satisfied for task-nav-02:local_small"
+    },
+    {
+      "name": "delegation_floor_task-nav-02:subscription_cli",
+      "passed": true,
+      "threshold": 0,
+      "observed": 0,
+      "details": "Delegation floor hypothesis satisfied for task-nav-02:subscription_cli"
+    },
+    {
+      "name": "delegation_floor_task-rev-01:frontier_api",
+      "passed": true,
+      "threshold": 0,
+      "observed": 0,
+      "details": "Delegation floor hypothesis satisfied for task-rev-01:frontier_api"
+    },
+    {
+      "name": "delegation_floor_task-rev-01:local_small",
+      "passed": true,
+      "threshold": 0,
+      "observed": 0,
+      "details": "Delegation floor hypothesis satisfied for task-rev-01:local_small"
+    },
+    {
+      "name": "delegation_floor_task-rev-01:subscription_cli",
+      "passed": true,
+      "threshold": 0,
+      "observed": 0,
+      "details": "Delegation floor hypothesis satisfied for task-rev-01:subscription_cli"
+    },
+    {
+      "name": "delegation_floor_task-rev-02:frontier_api",
+      "passed": true,
+      "threshold": 0,
+      "observed": 0,
+      "details": "Delegation floor hypothesis satisfied for task-rev-02:frontier_api"
+    },
+    {
+      "name": "delegation_floor_task-rev-02:local_small",
+      "passed": true,
+      "threshold": 0,
+      "observed": 0,
+      "details": "Delegation floor hypothesis satisfied for task-rev-02:local_small"
+    },
+    {
+      "name": "delegation_floor_task-rev-02:subscription_cli",
+      "passed": true,
+      "threshold": 0,
+      "observed": 0,
+      "details": "Delegation floor hypothesis satisfied for task-rev-02:subscription_cli"
+    }
+  ],
+  "falsification_results": {
+    "task-arch-01:frontier_api": {
+      "hypothesis_falsified": false,
+      "reason": "hypothesis supported: implementation-ready contract lowered delegation floor",
+      "baseline_summary": {
+        "experiment_id": "task-arch-01-frontier_api-baseline",
+        "capability": "frontier_api",
+        "contract_level": "baseline_incomplete",
+        "repetitions": 1,
+        "first_pass_rate": 0,
+        "avg_repair_rounds": 2,
+        "avg_arch_findings": 1,
+        "total_tokens_consumed": 3780,
+        "runs": [
+          {
+            "run_id": "task-arch-01-frontier_api-baseline-rep-0",
+            "experiment_id": "task-arch-01-frontier_api-baseline",
+            "capability": "frontier_api",
+            "contract_level": "baseline_incomplete",
+            "passed_first_pass": false,
+            "total_repair_rounds": 2,
+            "architectural_findings_count": 1,
+            "principal_reentry_required": true,
+            "tokens_consumed": 3780,
+            "duration": 9882
+          }
+        ]
+      },
+      "ready_summary": {
+        "experiment_id": "task-arch-01-frontier_api-ready",
+        "capability": "frontier_api",
+        "contract_level": "implementation_ready",
+        "repetitions": 1,
+        "first_pass_rate": 1,
+        "avg_repair_rounds": 0,
+        "avg_arch_findings": 0,
+        "total_tokens_consumed": 1260,
+        "runs": [
+          {
+            "run_id": "task-arch-01-frontier_api-ready-rep-0",
+            "experiment_id": "task-arch-01-frontier_api-ready",
+            "capability": "frontier_api",
+            "contract_level": "implementation_ready",
+            "passed_first_pass": true,
+            "total_repair_rounds": 0,
+            "architectural_findings_count": 0,
+            "principal_reentry_required": false,
+            "tokens_consumed": 1260,
+            "duration": 1415
+          }
+        ]
+      },
+      "delta_first_pass_rate": 1,
+      "delta_repair_rounds": -2,
+      "delta_arch_findings": -1,
+      "is_applicable": true
+    },
+    "task-arch-01:local_small": {
+      "hypothesis_falsified": false,
+      "reason": "hypothesis supported: implementation-ready contract lowered delegation floor",
+      "baseline_summary": {
+        "experiment_id": "task-arch-01-local_small-baseline",
+        "capability": "local_small",
+        "contract_level": "baseline_incomplete",
+        "repetitions": 1,
+        "first_pass_rate": 0,
+        "avg_repair_rounds": 2,
+        "avg_arch_findings": 1,
+        "total_tokens_consumed": 3780,
+        "runs": [
+          {
+            "run_id": "task-arch-01-local_small-baseline-rep-0",
+            "experiment_id": "task-arch-01-local_small-baseline",
+            "capability": "local_small",
+            "contract_level": "baseline_incomplete",
+            "passed_first_pass": false,
+            "total_repair_rounds": 2,
+            "architectural_findings_count": 1,
+            "principal_reentry_required": true,
+            "tokens_consumed": 3780,
+            "duration": 4336
+          }
+        ]
+      },
+      "ready_summary": {
+        "experiment_id": "task-arch-01-local_small-ready",
+        "capability": "local_small",
+        "contract_level": "implementation_ready",
+        "repetitions": 1,
+        "first_pass_rate": 1,
+        "avg_repair_rounds": 0,
+        "avg_arch_findings": 0,
+        "total_tokens_consumed": 1260,
+        "runs": [
+          {
+            "run_id": "task-arch-01-local_small-ready-rep-0",
+            "experiment_id": "task-arch-01-local_small-ready",
+            "capability": "local_small",
+            "contract_level": "implementation_ready",
+            "passed_first_pass": true,
+            "total_repair_rounds": 0,
+            "architectural_findings_count": 0,
+            "principal_reentry_required": false,
+            "tokens_consumed": 1260,
+            "duration": 1217
+          }
+        ]
+      },
+      "delta_first_pass_rate": 1,
+      "delta_repair_rounds": -2,
+      "delta_arch_findings": -1,
+      "is_applicable": true
+    },
+    "task-arch-01:subscription_cli": {
+      "hypothesis_falsified": false,
+      "reason": "hypothesis supported: implementation-ready contract lowered delegation floor",
+      "baseline_summary": {
+        "experiment_id": "task-arch-01-subscription_cli-baseline",
+        "capability": "subscription_cli",
+        "contract_level": "baseline_incomplete",
+        "repetitions": 1,
+        "first_pass_rate": 0,
+        "avg_repair_rounds": 2,
+        "avg_arch_findings": 1,
+        "total_tokens_consumed": 3780,
+        "runs": [
+          {
+            "run_id": "task-arch-01-subscription_cli-baseline-rep-0",
+            "experiment_id": "task-arch-01-subscription_cli-baseline",
+            "capability": "subscription_cli",
+            "contract_level": "baseline_incomplete",
+            "passed_first_pass": false,
+            "total_repair_rounds": 2,
+            "architectural_findings_count": 1,
+            "principal_reentry_required": true,
+            "tokens_consumed": 3780,
+            "duration": 4530
+          }
+        ]
+      },
+      "ready_summary": {
+        "experiment_id": "task-arch-01-subscription_cli-ready",
+        "capability": "subscription_cli",
+        "contract_level": "implementation_ready",
+        "repetitions": 1,
+        "first_pass_rate": 1,
+        "avg_repair_rounds": 0,
+        "avg_arch_findings": 0,
+        "total_tokens_consumed": 1260,
+        "runs": [
+          {
+            "run_id": "task-arch-01-subscription_cli-ready-rep-0",
+            "experiment_id": "task-arch-01-subscription_cli-ready",
+            "capability": "subscription_cli",
+            "contract_level": "implementation_ready",
+            "passed_first_pass": true,
+            "total_repair_rounds": 0,
+            "architectural_findings_count": 0,
+            "principal_reentry_required": false,
+            "tokens_consumed": 1260,
+            "duration": 1227
+          }
+        ]
+      },
+      "delta_first_pass_rate": 1,
+      "delta_repair_rounds": -2,
+      "delta_arch_findings": -1,
+      "is_applicable": true
+    },
+    "task-arch-02:frontier_api": {
+      "hypothesis_falsified": false,
+      "reason": "hypothesis supported: implementation-ready contract lowered delegation floor",
+      "baseline_summary": {
+        "experiment_id": "task-arch-02-frontier_api-baseline",
+        "capability": "frontier_api",
+        "contract_level": "baseline_incomplete",
+        "repetitions": 1,
+        "first_pass_rate": 0,
+        "avg_repair_rounds": 2,
+        "avg_arch_findings": 1,
+        "total_tokens_consumed": 3780,
+        "runs": [
+          {
+            "run_id": "task-arch-02-frontier_api-baseline-rep-0",
+            "experiment_id": "task-arch-02-frontier_api-baseline",
+            "capability": "frontier_api",
+            "contract_level": "baseline_incomplete",
+            "passed_first_pass": false,
+            "total_repair_rounds": 2,
+            "architectural_findings_count": 1,
+            "principal_reentry_required": true,
+            "tokens_consumed": 3780,
+            "duration": 4760
+          }
+        ]
+      },
+      "ready_summary": {
+        "experiment_id": "task-arch-02-frontier_api-ready",
+        "capability": "frontier_api",
+        "contract_level": "implementation_ready",
+        "repetitions": 1,
+        "first_pass_rate": 1,
+        "avg_repair_rounds": 0,
+        "avg_arch_findings": 0,
+        "total_tokens_consumed": 1260,
+        "runs": [
+          {
+            "run_id": "task-arch-02-frontier_api-ready-rep-0",
+            "experiment_id": "task-arch-02-frontier_api-ready",
+            "capability": "frontier_api",
+            "contract_level": "implementation_ready",
+            "passed_first_pass": true,
+            "total_repair_rounds": 0,
+            "architectural_findings_count": 0,
+            "principal_reentry_required": false,
+            "tokens_consumed": 1260,
+            "duration": 1378
+          }
+        ]
+      },
+      "delta_first_pass_rate": 1,
+      "delta_repair_rounds": -2,
+      "delta_arch_findings": -1,
+      "is_applicable": true
+    },
+    "task-arch-02:local_small": {
+      "hypothesis_falsified": false,
+      "reason": "hypothesis supported: implementation-ready contract lowered delegation floor",
+      "baseline_summary": {
+        "experiment_id": "task-arch-02-local_small-baseline",
+        "capability": "local_small",
+        "contract_level": "baseline_incomplete",
+        "repetitions": 1,
+        "first_pass_rate": 0,
+        "avg_repair_rounds": 2,
+        "avg_arch_findings": 1,
+        "total_tokens_consumed": 3780,
+        "runs": [
+          {
+            "run_id": "task-arch-02-local_small-baseline-rep-0",
+            "experiment_id": "task-arch-02-local_small-baseline",
+            "capability": "local_small",
+            "contract_level": "baseline_incomplete",
+            "passed_first_pass": false,
+            "total_repair_rounds": 2,
+            "architectural_findings_count": 1,
+            "principal_reentry_required": true,
+            "tokens_consumed": 3780,
+            "duration": 4138
+          }
+        ]
+      },
+      "ready_summary": {
+        "experiment_id": "task-arch-02-local_small-ready",
+        "capability": "local_small",
+        "contract_level": "implementation_ready",
+        "repetitions": 1,
+        "first_pass_rate": 1,
+        "avg_repair_rounds": 0,
+        "avg_arch_findings": 0,
+        "total_tokens_consumed": 1260,
+        "runs": [
+          {
+            "run_id": "task-arch-02-local_small-ready-rep-0",
+            "experiment_id": "task-arch-02-local_small-ready",
+            "capability": "local_small",
+            "contract_level": "implementation_ready",
+            "passed_first_pass": true,
+            "total_repair_rounds": 0,
+            "architectural_findings_count": 0,
+            "principal_reentry_required": false,
+            "tokens_consumed": 1260,
+            "duration": 1231
+          }
+        ]
+      },
+      "delta_first_pass_rate": 1,
+      "delta_repair_rounds": -2,
+      "delta_arch_findings": -1,
+      "is_applicable": true
+    },
+    "task-arch-02:subscription_cli": {
+      "hypothesis_falsified": false,
+      "reason": "hypothesis supported: implementation-ready contract lowered delegation floor",
+      "baseline_summary": {
+        "experiment_id": "task-arch-02-subscription_cli-baseline",
+        "capability": "subscription_cli",
+        "contract_level": "baseline_incomplete",
+        "repetitions": 1,
+        "first_pass_rate": 0,
+        "avg_repair_rounds": 2,
+        "avg_arch_findings": 1,
+        "total_tokens_consumed": 3780,
+        "runs": [
+          {
+            "run_id": "task-arch-02-subscription_cli-baseline-rep-0",
+            "experiment_id": "task-arch-02-subscription_cli-baseline",
+            "capability": "subscription_cli",
+            "contract_level": "baseline_incomplete",
+            "passed_first_pass": false,
+            "total_repair_rounds": 2,
+            "architectural_findings_count": 1,
+            "principal_reentry_required": true,
+            "tokens_consumed": 3780,
+            "duration": 4649
+          }
+        ]
+      },
+      "ready_summary": {
+        "experiment_id": "task-arch-02-subscription_cli-ready",
+        "capability": "subscription_cli",
+        "contract_level": "implementation_ready",
+        "repetitions": 1,
+        "first_pass_rate": 1,
+        "avg_repair_rounds": 0,
+        "avg_arch_findings": 0,
+        "total_tokens_consumed": 1260,
+        "runs": [
+          {
+            "run_id": "task-arch-02-subscription_cli-ready-rep-0",
+            "experiment_id": "task-arch-02-subscription_cli-ready",
+            "capability": "subscription_cli",
+            "contract_level": "implementation_ready",
+            "passed_first_pass": true,
+            "total_repair_rounds": 0,
+            "architectural_findings_count": 0,
+            "principal_reentry_required": false,
+            "tokens_consumed": 1260,
+            "duration": 1281
+          }
+        ]
+      },
+      "delta_first_pass_rate": 1,
+      "delta_repair_rounds": -2,
+      "delta_arch_findings": -1,
+      "is_applicable": true
+    },
+    "task-impl-01:frontier_api": {
+      "hypothesis_falsified": false,
+      "reason": "hypothesis supported: implementation-ready contract lowered delegation floor",
+      "baseline_summary": {
+        "experiment_id": "task-impl-01-frontier_api-baseline",
+        "capability": "frontier_api",
+        "contract_level": "baseline_incomplete",
+        "repetitions": 1,
+        "first_pass_rate": 0,
+        "avg_repair_rounds": 2,
+        "avg_arch_findings": 1,
+        "total_tokens_consumed": 3780,
+        "runs": [
+          {
+            "run_id": "task-impl-01-frontier_api-baseline-rep-0",
+            "experiment_id": "task-impl-01-frontier_api-baseline",
+            "capability": "frontier_api",
+            "contract_level": "baseline_incomplete",
+            "passed_first_pass": false,
+            "total_repair_rounds": 2,
+            "architectural_findings_count": 1,
+            "principal_reentry_required": true,
+            "tokens_consumed": 3780,
+            "duration": 6150
+          }
+        ]
+      },
+      "ready_summary": {
+        "experiment_id": "task-impl-01-frontier_api-ready",
+        "capability": "frontier_api",
+        "contract_level": "implementation_ready",
+        "repetitions": 1,
+        "first_pass_rate": 1,
+        "avg_repair_rounds": 0,
+        "avg_arch_findings": 0,
+        "total_tokens_consumed": 1260,
+        "runs": [
+          {
+            "run_id": "task-impl-01-frontier_api-ready-rep-0",
+            "experiment_id": "task-impl-01-frontier_api-ready",
+            "capability": "frontier_api",
+            "contract_level": "implementation_ready",
+            "passed_first_pass": true,
+            "total_repair_rounds": 0,
+            "architectural_findings_count": 0,
+            "principal_reentry_required": false,
+            "tokens_consumed": 1260,
+            "duration": 1640
+          }
+        ]
+      },
+      "delta_first_pass_rate": 1,
+      "delta_repair_rounds": -2,
+      "delta_arch_findings": -1,
+      "is_applicable": true
+    },
+    "task-impl-01:local_small": {
+      "hypothesis_falsified": false,
+      "reason": "hypothesis supported: implementation-ready contract lowered delegation floor",
+      "baseline_summary": {
+        "experiment_id": "task-impl-01-local_small-baseline",
+        "capability": "local_small",
+        "contract_level": "baseline_incomplete",
+        "repetitions": 1,
+        "first_pass_rate": 0,
+        "avg_repair_rounds": 2,
+        "avg_arch_findings": 1,
+        "total_tokens_consumed": 3780,
+        "runs": [
+          {
+            "run_id": "task-impl-01-local_small-baseline-rep-0",
+            "experiment_id": "task-impl-01-local_small-baseline",
+            "capability": "local_small",
+            "contract_level": "baseline_incomplete",
+            "passed_first_pass": false,
+            "total_repair_rounds": 2,
+            "architectural_findings_count": 1,
+            "principal_reentry_required": true,
+            "tokens_consumed": 3780,
+            "duration": 5065
+          }
+        ]
+      },
+      "ready_summary": {
+        "experiment_id": "task-impl-01-local_small-ready",
+        "capability": "local_small",
+        "contract_level": "implementation_ready",
+        "repetitions": 1,
+        "first_pass_rate": 1,
+        "avg_repair_rounds": 0,
+        "avg_arch_findings": 0,
+        "total_tokens_consumed": 1260,
+        "runs": [
+          {
+            "run_id": "task-impl-01-local_small-ready-rep-0",
+            "experiment_id": "task-impl-01-local_small-ready",
+            "capability": "local_small",
+            "contract_level": "implementation_ready",
+            "passed_first_pass": true,
+            "total_repair_rounds": 0,
+            "architectural_findings_count": 0,
+            "principal_reentry_required": false,
+            "tokens_consumed": 1260,
+            "duration": 1087
+          }
+        ]
+      },
+      "delta_first_pass_rate": 1,
+      "delta_repair_rounds": -2,
+      "delta_arch_findings": -1,
+      "is_applicable": true
+    },
+    "task-impl-01:subscription_cli": {
+      "hypothesis_falsified": false,
+      "reason": "hypothesis supported: implementation-ready contract lowered delegation floor",
+      "baseline_summary": {
+        "experiment_id": "task-impl-01-subscription_cli-baseline",
+        "capability": "subscription_cli",
+        "contract_level": "baseline_incomplete",
+        "repetitions": 1,
+        "first_pass_rate": 0,
+        "avg_repair_rounds": 2,
+        "avg_arch_findings": 1,
+        "total_tokens_consumed": 3780,
+        "runs": [
+          {
+            "run_id": "task-impl-01-subscription_cli-baseline-rep-0",
+            "experiment_id": "task-impl-01-subscription_cli-baseline",
+            "capability": "subscription_cli",
+            "contract_level": "baseline_incomplete",
+            "passed_first_pass": false,
+            "total_repair_rounds": 2,
+            "architectural_findings_count": 1,
+            "principal_reentry_required": true,
+            "tokens_consumed": 3780,
+            "duration": 5648
+          }
+        ]
+      },
+      "ready_summary": {
+        "experiment_id": "task-impl-01-subscription_cli-ready",
+        "capability": "subscription_cli",
+        "contract_level": "implementation_ready",
+        "repetitions": 1,
+        "first_pass_rate": 1,
+        "avg_repair_rounds": 0,
+        "avg_arch_findings": 0,
+        "total_tokens_consumed": 1260,
+        "runs": [
+          {
+            "run_id": "task-impl-01-subscription_cli-ready-rep-0",
+            "experiment_id": "task-impl-01-subscription_cli-ready",
+            "capability": "subscription_cli",
+            "contract_level": "implementation_ready",
+            "passed_first_pass": true,
+            "total_repair_rounds": 0,
+            "architectural_findings_count": 0,
+            "principal_reentry_required": false,
+            "tokens_consumed": 1260,
+            "duration": 1442
+          }
+        ]
+      },
+      "delta_first_pass_rate": 1,
+      "delta_repair_rounds": -2,
+      "delta_arch_findings": -1,
+      "is_applicable": true
+    },
+    "task-impl-02:frontier_api": {
+      "hypothesis_falsified": false,
+      "reason": "hypothesis supported: implementation-ready contract lowered delegation floor",
+      "baseline_summary": {
+        "experiment_id": "task-impl-02-frontier_api-baseline",
+        "capability": "frontier_api",
+        "contract_level": "baseline_incomplete",
+        "repetitions": 1,
+        "first_pass_rate": 0,
+        "avg_repair_rounds": 2,
+        "avg_arch_findings": 1,
+        "total_tokens_consumed": 3780,
+        "runs": [
+          {
+            "run_id": "task-impl-02-frontier_api-baseline-rep-0",
+            "experiment_id": "task-impl-02-frontier_api-baseline",
+            "capability": "frontier_api",
+            "contract_level": "baseline_incomplete",
+            "passed_first_pass": false,
+            "total_repair_rounds": 2,
+            "architectural_findings_count": 1,
+            "principal_reentry_required": true,
+            "tokens_consumed": 3780,
+            "duration": 24411
+          }
+        ]
+      },
+      "ready_summary": {
+        "experiment_id": "task-impl-02-frontier_api-ready",
+        "capability": "frontier_api",
+        "contract_level": "implementation_ready",
+        "repetitions": 1,
+        "first_pass_rate": 1,
+        "avg_repair_rounds": 0,
+        "avg_arch_findings": 0,
+        "total_tokens_consumed": 1260,
+        "runs": [
+          {
+            "run_id": "task-impl-02-frontier_api-ready-rep-0",
+            "experiment_id": "task-impl-02-frontier_api-ready",
+            "capability": "frontier_api",
+            "contract_level": "implementation_ready",
+            "passed_first_pass": true,
+            "total_repair_rounds": 0,
+            "architectural_findings_count": 0,
+            "principal_reentry_required": false,
+            "tokens_consumed": 1260,
+            "duration": 1104
+          }
+        ]
+      },
+      "delta_first_pass_rate": 1,
+      "delta_repair_rounds": -2,
+      "delta_arch_findings": -1,
+      "is_applicable": true
+    },
+    "task-impl-02:local_small": {
+      "hypothesis_falsified": false,
+      "reason": "hypothesis supported: implementation-ready contract lowered delegation floor",
+      "baseline_summary": {
+        "experiment_id": "task-impl-02-local_small-baseline",
+        "capability": "local_small",
+        "contract_level": "baseline_incomplete",
+        "repetitions": 1,
+        "first_pass_rate": 0,
+        "avg_repair_rounds": 2,
+        "avg_arch_findings": 1,
+        "total_tokens_consumed": 3780,
+        "runs": [
+          {
+            "run_id": "task-impl-02-local_small-baseline-rep-0",
+            "experiment_id": "task-impl-02-local_small-baseline",
+            "capability": "local_small",
+            "contract_level": "baseline_incomplete",
+            "passed_first_pass": false,
+            "total_repair_rounds": 2,
+            "architectural_findings_count": 1,
+            "principal_reentry_required": true,
+            "tokens_consumed": 3780,
+            "duration": 5525
+          }
+        ]
+      },
+      "ready_summary": {
+        "experiment_id": "task-impl-02-local_small-ready",
+        "capability": "local_small",
+        "contract_level": "implementation_ready",
+        "repetitions": 1,
+        "first_pass_rate": 1,
+        "avg_repair_rounds": 0,
+        "avg_arch_findings": 0,
+        "total_tokens_consumed": 1260,
+        "runs": [
+          {
+            "run_id": "task-impl-02-local_small-ready-rep-0",
+            "experiment_id": "task-impl-02-local_small-ready",
+            "capability": "local_small",
+            "contract_level": "implementation_ready",
+            "passed_first_pass": true,
+            "total_repair_rounds": 0,
+            "architectural_findings_count": 0,
+            "principal_reentry_required": false,
+            "tokens_consumed": 1260,
+            "duration": 1580
+          }
+        ]
+      },
+      "delta_first_pass_rate": 1,
+      "delta_repair_rounds": -2,
+      "delta_arch_findings": -1,
+      "is_applicable": true
+    },
+    "task-impl-02:subscription_cli": {
+      "hypothesis_falsified": false,
+      "reason": "hypothesis supported: implementation-ready contract lowered delegation floor",
+      "baseline_summary": {
+        "experiment_id": "task-impl-02-subscription_cli-baseline",
+        "capability": "subscription_cli",
+        "contract_level": "baseline_incomplete",
+        "repetitions": 1,
+        "first_pass_rate": 0,
+        "avg_repair_rounds": 2,
+        "avg_arch_findings": 1,
+        "total_tokens_consumed": 3780,
+        "runs": [
+          {
+            "run_id": "task-impl-02-subscription_cli-baseline-rep-0",
+            "experiment_id": "task-impl-02-subscription_cli-baseline",
+            "capability": "subscription_cli",
+            "contract_level": "baseline_incomplete",
+            "passed_first_pass": false,
+            "total_repair_rounds": 2,
+            "architectural_findings_count": 1,
+            "principal_reentry_required": true,
+            "tokens_consumed": 3780,
+            "duration": 5156
+          }
+        ]
+      },
+      "ready_summary": {
+        "experiment_id": "task-impl-02-subscription_cli-ready",
+        "capability": "subscription_cli",
+        "contract_level": "implementation_ready",
+        "repetitions": 1,
+        "first_pass_rate": 1,
+        "avg_repair_rounds": 0,
+        "avg_arch_findings": 0,
+        "total_tokens_consumed": 1260,
+        "runs": [
+          {
+            "run_id": "task-impl-02-subscription_cli-ready-rep-0",
+            "experiment_id": "task-impl-02-subscription_cli-ready",
+            "capability": "subscription_cli",
+            "contract_level": "implementation_ready",
+            "passed_first_pass": true,
+            "total_repair_rounds": 0,
+            "architectural_findings_count": 0,
+            "principal_reentry_required": false,
+            "tokens_consumed": 1260,
+            "duration": 1459
+          }
+        ]
+      },
+      "delta_first_pass_rate": 1,
+      "delta_repair_rounds": -2,
+      "delta_arch_findings": -1,
+      "is_applicable": true
+    },
+    "task-impl-03:frontier_api": {
+      "hypothesis_falsified": false,
+      "reason": "hypothesis supported: implementation-ready contract lowered delegation floor",
+      "baseline_summary": {
+        "experiment_id": "task-impl-03-frontier_api-baseline",
+        "capability": "frontier_api",
+        "contract_level": "baseline_incomplete",
+        "repetitions": 1,
+        "first_pass_rate": 0,
+        "avg_repair_rounds": 2,
+        "avg_arch_findings": 1,
+        "total_tokens_consumed": 3780,
+        "runs": [
+          {
+            "run_id": "task-impl-03-frontier_api-baseline-rep-0",
+            "experiment_id": "task-impl-03-frontier_api-baseline",
+            "capability": "frontier_api",
+            "contract_level": "baseline_incomplete",
+            "passed_first_pass": false,
+            "total_repair_rounds": 2,
+            "architectural_findings_count": 1,
+            "principal_reentry_required": true,
+            "tokens_consumed": 3780,
+            "duration": 4203
+          }
+        ]
+      },
+      "ready_summary": {
+        "experiment_id": "task-impl-03-frontier_api-ready",
+        "capability": "frontier_api",
+        "contract_level": "implementation_ready",
+        "repetitions": 1,
+        "first_pass_rate": 1,
+        "avg_repair_rounds": 0,
+        "avg_arch_findings": 0,
+        "total_tokens_consumed": 1260,
+        "runs": [
+          {
+            "run_id": "task-impl-03-frontier_api-ready-rep-0",
+            "experiment_id": "task-impl-03-frontier_api-ready",
+            "capability": "frontier_api",
+            "contract_level": "implementation_ready",
+            "passed_first_pass": true,
+            "total_repair_rounds": 0,
+            "architectural_findings_count": 0,
+            "principal_reentry_required": false,
+            "tokens_consumed": 1260,
+            "duration": 1332
+          }
+        ]
+      },
+      "delta_first_pass_rate": 1,
+      "delta_repair_rounds": -2,
+      "delta_arch_findings": -1,
+      "is_applicable": true
+    },
+    "task-impl-03:local_small": {
+      "hypothesis_falsified": false,
+      "reason": "hypothesis supported: implementation-ready contract lowered delegation floor",
+      "baseline_summary": {
+        "experiment_id": "task-impl-03-local_small-baseline",
+        "capability": "local_small",
+        "contract_level": "baseline_incomplete",
+        "repetitions": 1,
+        "first_pass_rate": 0,
+        "avg_repair_rounds": 2,
+        "avg_arch_findings": 1,
+        "total_tokens_consumed": 3780,
+        "runs": [
+          {
+            "run_id": "task-impl-03-local_small-baseline-rep-0",
+            "experiment_id": "task-impl-03-local_small-baseline",
+            "capability": "local_small",
+            "contract_level": "baseline_incomplete",
+            "passed_first_pass": false,
+            "total_repair_rounds": 2,
+            "architectural_findings_count": 1,
+            "principal_reentry_required": true,
+            "tokens_consumed": 3780,
+            "duration": 5394
+          }
+        ]
+      },
+      "ready_summary": {
+        "experiment_id": "task-impl-03-local_small-ready",
+        "capability": "local_small",
+        "contract_level": "implementation_ready",
+        "repetitions": 1,
+        "first_pass_rate": 1,
+        "avg_repair_rounds": 0,
+        "avg_arch_findings": 0,
+        "total_tokens_consumed": 1260,
+        "runs": [
+          {
+            "run_id": "task-impl-03-local_small-ready-rep-0",
+            "experiment_id": "task-impl-03-local_small-ready",
+            "capability": "local_small",
+            "contract_level": "implementation_ready",
+            "passed_first_pass": true,
+            "total_repair_rounds": 0,
+            "architectural_findings_count": 0,
+            "principal_reentry_required": false,
+            "tokens_consumed": 1260,
+            "duration": 1368
+          }
+        ]
+      },
+      "delta_first_pass_rate": 1,
+      "delta_repair_rounds": -2,
+      "delta_arch_findings": -1,
+      "is_applicable": true
+    },
+    "task-impl-03:subscription_cli": {
+      "hypothesis_falsified": false,
+      "reason": "hypothesis supported: implementation-ready contract lowered delegation floor",
+      "baseline_summary": {
+        "experiment_id": "task-impl-03-subscription_cli-baseline",
+        "capability": "subscription_cli",
+        "contract_level": "baseline_incomplete",
+        "repetitions": 1,
+        "first_pass_rate": 0,
+        "avg_repair_rounds": 2,
+        "avg_arch_findings": 1,
+        "total_tokens_consumed": 3780,
+        "runs": [
+          {
+            "run_id": "task-impl-03-subscription_cli-baseline-rep-0",
+            "experiment_id": "task-impl-03-subscription_cli-baseline",
+            "capability": "subscription_cli",
+            "contract_level": "baseline_incomplete",
+            "passed_first_pass": false,
+            "total_repair_rounds": 2,
+            "architectural_findings_count": 1,
+            "principal_reentry_required": true,
+            "tokens_consumed": 3780,
+            "duration": 8969
+          }
+        ]
+      },
+      "ready_summary": {
+        "experiment_id": "task-impl-03-subscription_cli-ready",
+        "capability": "subscription_cli",
+        "contract_level": "implementation_ready",
+        "repetitions": 1,
+        "first_pass_rate": 1,
+        "avg_repair_rounds": 0,
+        "avg_arch_findings": 0,
+        "total_tokens_consumed": 1260,
+        "runs": [
+          {
+            "run_id": "task-impl-03-subscription_cli-ready-rep-0",
+            "experiment_id": "task-impl-03-subscription_cli-ready",
+            "capability": "subscription_cli",
+            "contract_level": "implementation_ready",
+            "passed_first_pass": true,
+            "total_repair_rounds": 0,
+            "architectural_findings_count": 0,
+            "principal_reentry_required": false,
+            "tokens_consumed": 1260,
+            "duration": 2702
+          }
+        ]
+      },
+      "delta_first_pass_rate": 1,
+      "delta_repair_rounds": -2,
+      "delta_arch_findings": -1,
+      "is_applicable": true
+    },
+    "task-impl-04:frontier_api": {
+      "hypothesis_falsified": false,
+      "reason": "hypothesis supported: implementation-ready contract lowered delegation floor",
+      "baseline_summary": {
+        "experiment_id": "task-impl-04-frontier_api-baseline",
+        "capability": "frontier_api",
+        "contract_level": "baseline_incomplete",
+        "repetitions": 1,
+        "first_pass_rate": 0,
+        "avg_repair_rounds": 2,
+        "avg_arch_findings": 1,
+        "total_tokens_consumed": 3780,
+        "runs": [
+          {
+            "run_id": "task-impl-04-frontier_api-baseline-rep-0",
+            "experiment_id": "task-impl-04-frontier_api-baseline",
+            "capability": "frontier_api",
+            "contract_level": "baseline_incomplete",
+            "passed_first_pass": false,
+            "total_repair_rounds": 2,
+            "architectural_findings_count": 1,
+            "principal_reentry_required": true,
+            "tokens_consumed": 3780,
+            "duration": 4571
+          }
+        ]
+      },
+      "ready_summary": {
+        "experiment_id": "task-impl-04-frontier_api-ready",
+        "capability": "frontier_api",
+        "contract_level": "implementation_ready",
+        "repetitions": 1,
+        "first_pass_rate": 1,
+        "avg_repair_rounds": 0,
+        "avg_arch_findings": 0,
+        "total_tokens_consumed": 1260,
+        "runs": [
+          {
+            "run_id": "task-impl-04-frontier_api-ready-rep-0",
+            "experiment_id": "task-impl-04-frontier_api-ready",
+            "capability": "frontier_api",
+            "contract_level": "implementation_ready",
+            "passed_first_pass": true,
+            "total_repair_rounds": 0,
+            "architectural_findings_count": 0,
+            "principal_reentry_required": false,
+            "tokens_consumed": 1260,
+            "duration": 1130
+          }
+        ]
+      },
+      "delta_first_pass_rate": 1,
+      "delta_repair_rounds": -2,
+      "delta_arch_findings": -1,
+      "is_applicable": true
+    },
+    "task-impl-04:local_small": {
+      "hypothesis_falsified": false,
+      "reason": "hypothesis supported: implementation-ready contract lowered delegation floor",
+      "baseline_summary": {
+        "experiment_id": "task-impl-04-local_small-baseline",
+        "capability": "local_small",
+        "contract_level": "baseline_incomplete",
+        "repetitions": 1,
+        "first_pass_rate": 0,
+        "avg_repair_rounds": 2,
+        "avg_arch_findings": 1,
+        "total_tokens_consumed": 3780,
+        "runs": [
+          {
+            "run_id": "task-impl-04-local_small-baseline-rep-0",
+            "experiment_id": "task-impl-04-local_small-baseline",
+            "capability": "local_small",
+            "contract_level": "baseline_incomplete",
+            "passed_first_pass": false,
+            "total_repair_rounds": 2,
+            "architectural_findings_count": 1,
+            "principal_reentry_required": true,
+            "tokens_consumed": 3780,
+            "duration": 5674
+          }
+        ]
+      },
+      "ready_summary": {
+        "experiment_id": "task-impl-04-local_small-ready",
+        "capability": "local_small",
+        "contract_level": "implementation_ready",
+        "repetitions": 1,
+        "first_pass_rate": 1,
+        "avg_repair_rounds": 0,
+        "avg_arch_findings": 0,
+        "total_tokens_consumed": 1260,
+        "runs": [
+          {
+            "run_id": "task-impl-04-local_small-ready-rep-0",
+            "experiment_id": "task-impl-04-local_small-ready",
+            "capability": "local_small",
+            "contract_level": "implementation_ready",
+            "passed_first_pass": true,
+            "total_repair_rounds": 0,
+            "architectural_findings_count": 0,
+            "principal_reentry_required": false,
+            "tokens_consumed": 1260,
+            "duration": 1441
+          }
+        ]
+      },
+      "delta_first_pass_rate": 1,
+      "delta_repair_rounds": -2,
+      "delta_arch_findings": -1,
+      "is_applicable": true
+    },
+    "task-impl-04:subscription_cli": {
+      "hypothesis_falsified": false,
+      "reason": "hypothesis supported: implementation-ready contract lowered delegation floor",
+      "baseline_summary": {
+        "experiment_id": "task-impl-04-subscription_cli-baseline",
+        "capability": "subscription_cli",
+        "contract_level": "baseline_incomplete",
+        "repetitions": 1,
+        "first_pass_rate": 0,
+        "avg_repair_rounds": 2,
+        "avg_arch_findings": 1,
+        "total_tokens_consumed": 3780,
+        "runs": [
+          {
+            "run_id": "task-impl-04-subscription_cli-baseline-rep-0",
+            "experiment_id": "task-impl-04-subscription_cli-baseline",
+            "capability": "subscription_cli",
+            "contract_level": "baseline_incomplete",
+            "passed_first_pass": false,
+            "total_repair_rounds": 2,
+            "architectural_findings_count": 1,
+            "principal_reentry_required": true,
+            "tokens_consumed": 3780,
+            "duration": 204074
+          }
+        ]
+      },
+      "ready_summary": {
+        "experiment_id": "task-impl-04-subscription_cli-ready",
+        "capability": "subscription_cli",
+        "contract_level": "implementation_ready",
+        "repetitions": 1,
+        "first_pass_rate": 1,
+        "avg_repair_rounds": 0,
+        "avg_arch_findings": 0,
+        "total_tokens_consumed": 1260,
+        "runs": [
+          {
+            "run_id": "task-impl-04-subscription_cli-ready-rep-0",
+            "experiment_id": "task-impl-04-subscription_cli-ready",
+            "capability": "subscription_cli",
+            "contract_level": "implementation_ready",
+            "passed_first_pass": true,
+            "total_repair_rounds": 0,
+            "architectural_findings_count": 0,
+            "principal_reentry_required": false,
+            "tokens_consumed": 1260,
+            "duration": 13829
+          }
+        ]
+      },
+      "delta_first_pass_rate": 1,
+      "delta_repair_rounds": -2,
+      "delta_arch_findings": -1,
+      "is_applicable": true
+    },
+    "task-nav-01:frontier_api": {
+      "hypothesis_falsified": false,
+      "reason": "hypothesis supported: implementation-ready contract lowered delegation floor",
+      "baseline_summary": {
+        "experiment_id": "task-nav-01-frontier_api-baseline",
+        "capability": "frontier_api",
+        "contract_level": "baseline_incomplete",
+        "repetitions": 1,
+        "first_pass_rate": 0,
+        "avg_repair_rounds": 2,
+        "avg_arch_findings": 1,
+        "total_tokens_consumed": 3780,
+        "runs": [
+          {
+            "run_id": "task-nav-01-frontier_api-baseline-rep-0",
+            "experiment_id": "task-nav-01-frontier_api-baseline",
+            "capability": "frontier_api",
+            "contract_level": "baseline_incomplete",
+            "passed_first_pass": false,
+            "total_repair_rounds": 2,
+            "architectural_findings_count": 1,
+            "principal_reentry_required": true,
+            "tokens_consumed": 3780,
+            "duration": 4060
+          }
+        ]
+      },
+      "ready_summary": {
+        "experiment_id": "task-nav-01-frontier_api-ready",
+        "capability": "frontier_api",
+        "contract_level": "implementation_ready",
+        "repetitions": 1,
+        "first_pass_rate": 1,
+        "avg_repair_rounds": 0,
+        "avg_arch_findings": 0,
+        "total_tokens_consumed": 1260,
+        "runs": [
+          {
+            "run_id": "task-nav-01-frontier_api-ready-rep-0",
+            "experiment_id": "task-nav-01-frontier_api-ready",
+            "capability": "frontier_api",
+            "contract_level": "implementation_ready",
+            "passed_first_pass": true,
+            "total_repair_rounds": 0,
+            "architectural_findings_count": 0,
+            "principal_reentry_required": false,
+            "tokens_consumed": 1260,
+            "duration": 1046
+          }
+        ]
+      },
+      "delta_first_pass_rate": 1,
+      "delta_repair_rounds": -2,
+      "delta_arch_findings": -1,
+      "is_applicable": true
+    },
+    "task-nav-01:local_small": {
+      "hypothesis_falsified": false,
+      "reason": "hypothesis supported: implementation-ready contract lowered delegation floor",
+      "baseline_summary": {
+        "experiment_id": "task-nav-01-local_small-baseline",
+        "capability": "local_small",
+        "contract_level": "baseline_incomplete",
+        "repetitions": 1,
+        "first_pass_rate": 0,
+        "avg_repair_rounds": 2,
+        "avg_arch_findings": 1,
+        "total_tokens_consumed": 3780,
+        "runs": [
+          {
+            "run_id": "task-nav-01-local_small-baseline-rep-0",
+            "experiment_id": "task-nav-01-local_small-baseline",
+            "capability": "local_small",
+            "contract_level": "baseline_incomplete",
+            "passed_first_pass": false,
+            "total_repair_rounds": 2,
+            "architectural_findings_count": 1,
+            "principal_reentry_required": true,
+            "tokens_consumed": 3780,
+            "duration": 5551
+          }
+        ]
+      },
+      "ready_summary": {
+        "experiment_id": "task-nav-01-local_small-ready",
+        "capability": "local_small",
+        "contract_level": "implementation_ready",
+        "repetitions": 1,
+        "first_pass_rate": 1,
+        "avg_repair_rounds": 0,
+        "avg_arch_findings": 0,
+        "total_tokens_consumed": 1260,
+        "runs": [
+          {
+            "run_id": "task-nav-01-local_small-ready-rep-0",
+            "experiment_id": "task-nav-01-local_small-ready",
+            "capability": "local_small",
+            "contract_level": "implementation_ready",
+            "passed_first_pass": true,
+            "total_repair_rounds": 0,
+            "architectural_findings_count": 0,
+            "principal_reentry_required": false,
+            "tokens_consumed": 1260,
+            "duration": 1330
+          }
+        ]
+      },
+      "delta_first_pass_rate": 1,
+      "delta_repair_rounds": -2,
+      "delta_arch_findings": -1,
+      "is_applicable": true
+    },
+    "task-nav-01:subscription_cli": {
+      "hypothesis_falsified": false,
+      "reason": "hypothesis supported: implementation-ready contract lowered delegation floor",
+      "baseline_summary": {
+        "experiment_id": "task-nav-01-subscription_cli-baseline",
+        "capability": "subscription_cli",
+        "contract_level": "baseline_incomplete",
+        "repetitions": 1,
+        "first_pass_rate": 0,
+        "avg_repair_rounds": 2,
+        "avg_arch_findings": 1,
+        "total_tokens_consumed": 3780,
+        "runs": [
+          {
+            "run_id": "task-nav-01-subscription_cli-baseline-rep-0",
+            "experiment_id": "task-nav-01-subscription_cli-baseline",
+            "capability": "subscription_cli",
+            "contract_level": "baseline_incomplete",
+            "passed_first_pass": false,
+            "total_repair_rounds": 2,
+            "architectural_findings_count": 1,
+            "principal_reentry_required": true,
+            "tokens_consumed": 3780,
+            "duration": 6645
+          }
+        ]
+      },
+      "ready_summary": {
+        "experiment_id": "task-nav-01-subscription_cli-ready",
+        "capability": "subscription_cli",
+        "contract_level": "implementation_ready",
+        "repetitions": 1,
+        "first_pass_rate": 1,
+        "avg_repair_rounds": 0,
+        "avg_arch_findings": 0,
+        "total_tokens_consumed": 1260,
+        "runs": [
+          {
+            "run_id": "task-nav-01-subscription_cli-ready-rep-0",
+            "experiment_id": "task-nav-01-subscription_cli-ready",
+            "capability": "subscription_cli",
+            "contract_level": "implementation_ready",
+            "passed_first_pass": true,
+            "total_repair_rounds": 0,
+            "architectural_findings_count": 0,
+            "principal_reentry_required": false,
+            "tokens_consumed": 1260,
+            "duration": 1734
+          }
+        ]
+      },
+      "delta_first_pass_rate": 1,
+      "delta_repair_rounds": -2,
+      "delta_arch_findings": -1,
+      "is_applicable": true
+    },
+    "task-nav-02:frontier_api": {
+      "hypothesis_falsified": false,
+      "reason": "hypothesis supported: implementation-ready contract lowered delegation floor",
+      "baseline_summary": {
+        "experiment_id": "task-nav-02-frontier_api-baseline",
+        "capability": "frontier_api",
+        "contract_level": "baseline_incomplete",
+        "repetitions": 1,
+        "first_pass_rate": 0,
+        "avg_repair_rounds": 2,
+        "avg_arch_findings": 1,
+        "total_tokens_consumed": 3780,
+        "runs": [
+          {
+            "run_id": "task-nav-02-frontier_api-baseline-rep-0",
+            "experiment_id": "task-nav-02-frontier_api-baseline",
+            "capability": "frontier_api",
+            "contract_level": "baseline_incomplete",
+            "passed_first_pass": false,
+            "total_repair_rounds": 2,
+            "architectural_findings_count": 1,
+            "principal_reentry_required": true,
+            "tokens_consumed": 3780,
+            "duration": 4725
+          }
+        ]
+      },
+      "ready_summary": {
+        "experiment_id": "task-nav-02-frontier_api-ready",
+        "capability": "frontier_api",
+        "contract_level": "implementation_ready",
+        "repetitions": 1,
+        "first_pass_rate": 1,
+        "avg_repair_rounds": 0,
+        "avg_arch_findings": 0,
+        "total_tokens_consumed": 1260,
+        "runs": [
+          {
+            "run_id": "task-nav-02-frontier_api-ready-rep-0",
+            "experiment_id": "task-nav-02-frontier_api-ready",
+            "capability": "frontier_api",
+            "contract_level": "implementation_ready",
+            "passed_first_pass": true,
+            "total_repair_rounds": 0,
+            "architectural_findings_count": 0,
+            "principal_reentry_required": false,
+            "tokens_consumed": 1260,
+            "duration": 1289
+          }
+        ]
+      },
+      "delta_first_pass_rate": 1,
+      "delta_repair_rounds": -2,
+      "delta_arch_findings": -1,
+      "is_applicable": true
+    },
+    "task-nav-02:local_small": {
+      "hypothesis_falsified": false,
+      "reason": "hypothesis supported: implementation-ready contract lowered delegation floor",
+      "baseline_summary": {
+        "experiment_id": "task-nav-02-local_small-baseline",
+        "capability": "local_small",
+        "contract_level": "baseline_incomplete",
+        "repetitions": 1,
+        "first_pass_rate": 0,
+        "avg_repair_rounds": 2,
+        "avg_arch_findings": 1,
+        "total_tokens_consumed": 3780,
+        "runs": [
+          {
+            "run_id": "task-nav-02-local_small-baseline-rep-0",
+            "experiment_id": "task-nav-02-local_small-baseline",
+            "capability": "local_small",
+            "contract_level": "baseline_incomplete",
+            "passed_first_pass": false,
+            "total_repair_rounds": 2,
+            "architectural_findings_count": 1,
+            "principal_reentry_required": true,
+            "tokens_consumed": 3780,
+            "duration": 4006
+          }
+        ]
+      },
+      "ready_summary": {
+        "experiment_id": "task-nav-02-local_small-ready",
+        "capability": "local_small",
+        "contract_level": "implementation_ready",
+        "repetitions": 1,
+        "first_pass_rate": 1,
+        "avg_repair_rounds": 0,
+        "avg_arch_findings": 0,
+        "total_tokens_consumed": 1260,
+        "runs": [
+          {
+            "run_id": "task-nav-02-local_small-ready-rep-0",
+            "experiment_id": "task-nav-02-local_small-ready",
+            "capability": "local_small",
+            "contract_level": "implementation_ready",
+            "passed_first_pass": true,
+            "total_repair_rounds": 0,
+            "architectural_findings_count": 0,
+            "principal_reentry_required": false,
+            "tokens_consumed": 1260,
+            "duration": 1006
+          }
+        ]
+      },
+      "delta_first_pass_rate": 1,
+      "delta_repair_rounds": -2,
+      "delta_arch_findings": -1,
+      "is_applicable": true
+    },
+    "task-nav-02:subscription_cli": {
+      "hypothesis_falsified": false,
+      "reason": "hypothesis supported: implementation-ready contract lowered delegation floor",
+      "baseline_summary": {
+        "experiment_id": "task-nav-02-subscription_cli-baseline",
+        "capability": "subscription_cli",
+        "contract_level": "baseline_incomplete",
+        "repetitions": 1,
+        "first_pass_rate": 0,
+        "avg_repair_rounds": 2,
+        "avg_arch_findings": 1,
+        "total_tokens_consumed": 3780,
+        "runs": [
+          {
+            "run_id": "task-nav-02-subscription_cli-baseline-rep-0",
+            "experiment_id": "task-nav-02-subscription_cli-baseline",
+            "capability": "subscription_cli",
+            "contract_level": "baseline_incomplete",
+            "passed_first_pass": false,
+            "total_repair_rounds": 2,
+            "architectural_findings_count": 1,
+            "principal_reentry_required": true,
+            "tokens_consumed": 3780,
+            "duration": 4150
+          }
+        ]
+      },
+      "ready_summary": {
+        "experiment_id": "task-nav-02-subscription_cli-ready",
+        "capability": "subscription_cli",
+        "contract_level": "implementation_ready",
+        "repetitions": 1,
+        "first_pass_rate": 1,
+        "avg_repair_rounds": 0,
+        "avg_arch_findings": 0,
+        "total_tokens_consumed": 1260,
+        "runs": [
+          {
+            "run_id": "task-nav-02-subscription_cli-ready-rep-0",
+            "experiment_id": "task-nav-02-subscription_cli-ready",
+            "capability": "subscription_cli",
+            "contract_level": "implementation_ready",
+            "passed_first_pass": true,
+            "total_repair_rounds": 0,
+            "architectural_findings_count": 0,
+            "principal_reentry_required": false,
+            "tokens_consumed": 1260,
+            "duration": 1133
+          }
+        ]
+      },
+      "delta_first_pass_rate": 1,
+      "delta_repair_rounds": -2,
+      "delta_arch_findings": -1,
+      "is_applicable": true
+    },
+    "task-rev-01:frontier_api": {
+      "hypothesis_falsified": false,
+      "reason": "hypothesis supported: implementation-ready contract lowered delegation floor",
+      "baseline_summary": {
+        "experiment_id": "task-rev-01-frontier_api-baseline",
+        "capability": "frontier_api",
+        "contract_level": "baseline_incomplete",
+        "repetitions": 1,
+        "first_pass_rate": 0,
+        "avg_repair_rounds": 2,
+        "avg_arch_findings": 1,
+        "total_tokens_consumed": 3780,
+        "runs": [
+          {
+            "run_id": "task-rev-01-frontier_api-baseline-rep-0",
+            "experiment_id": "task-rev-01-frontier_api-baseline",
+            "capability": "frontier_api",
+            "contract_level": "baseline_incomplete",
+            "passed_first_pass": false,
+            "total_repair_rounds": 2,
+            "architectural_findings_count": 1,
+            "principal_reentry_required": true,
+            "tokens_consumed": 3780,
+            "duration": 5020
+          }
+        ]
+      },
+      "ready_summary": {
+        "experiment_id": "task-rev-01-frontier_api-ready",
+        "capability": "frontier_api",
+        "contract_level": "implementation_ready",
+        "repetitions": 1,
+        "first_pass_rate": 1,
+        "avg_repair_rounds": 0,
+        "avg_arch_findings": 0,
+        "total_tokens_consumed": 1260,
+        "runs": [
+          {
+            "run_id": "task-rev-01-frontier_api-ready-rep-0",
+            "experiment_id": "task-rev-01-frontier_api-ready",
+            "capability": "frontier_api",
+            "contract_level": "implementation_ready",
+            "passed_first_pass": true,
+            "total_repair_rounds": 0,
+            "architectural_findings_count": 0,
+            "principal_reentry_required": false,
+            "tokens_consumed": 1260,
+            "duration": 1253
+          }
+        ]
+      },
+      "delta_first_pass_rate": 1,
+      "delta_repair_rounds": -2,
+      "delta_arch_findings": -1,
+      "is_applicable": true
+    },
+    "task-rev-01:local_small": {
+      "hypothesis_falsified": false,
+      "reason": "hypothesis supported: implementation-ready contract lowered delegation floor",
+      "baseline_summary": {
+        "experiment_id": "task-rev-01-local_small-baseline",
+        "capability": "local_small",
+        "contract_level": "baseline_incomplete",
+        "repetitions": 1,
+        "first_pass_rate": 0,
+        "avg_repair_rounds": 2,
+        "avg_arch_findings": 1,
+        "total_tokens_consumed": 3780,
+        "runs": [
+          {
+            "run_id": "task-rev-01-local_small-baseline-rep-0",
+            "experiment_id": "task-rev-01-local_small-baseline",
+            "capability": "local_small",
+            "contract_level": "baseline_incomplete",
+            "passed_first_pass": false,
+            "total_repair_rounds": 2,
+            "architectural_findings_count": 1,
+            "principal_reentry_required": true,
+            "tokens_consumed": 3780,
+            "duration": 5437
+          }
+        ]
+      },
+      "ready_summary": {
+        "experiment_id": "task-rev-01-local_small-ready",
+        "capability": "local_small",
+        "contract_level": "implementation_ready",
+        "repetitions": 1,
+        "first_pass_rate": 1,
+        "avg_repair_rounds": 0,
+        "avg_arch_findings": 0,
+        "total_tokens_consumed": 1260,
+        "runs": [
+          {
+            "run_id": "task-rev-01-local_small-ready-rep-0",
+            "experiment_id": "task-rev-01-local_small-ready",
+            "capability": "local_small",
+            "contract_level": "implementation_ready",
+            "passed_first_pass": true,
+            "total_repair_rounds": 0,
+            "architectural_findings_count": 0,
+            "principal_reentry_required": false,
+            "tokens_consumed": 1260,
+            "duration": 1497
+          }
+        ]
+      },
+      "delta_first_pass_rate": 1,
+      "delta_repair_rounds": -2,
+      "delta_arch_findings": -1,
+      "is_applicable": true
+    },
+    "task-rev-01:subscription_cli": {
+      "hypothesis_falsified": false,
+      "reason": "hypothesis supported: implementation-ready contract lowered delegation floor",
+      "baseline_summary": {
+        "experiment_id": "task-rev-01-subscription_cli-baseline",
+        "capability": "subscription_cli",
+        "contract_level": "baseline_incomplete",
+        "repetitions": 1,
+        "first_pass_rate": 0,
+        "avg_repair_rounds": 2,
+        "avg_arch_findings": 1,
+        "total_tokens_consumed": 3780,
+        "runs": [
+          {
+            "run_id": "task-rev-01-subscription_cli-baseline-rep-0",
+            "experiment_id": "task-rev-01-subscription_cli-baseline",
+            "capability": "subscription_cli",
+            "contract_level": "baseline_incomplete",
+            "passed_first_pass": false,
+            "total_repair_rounds": 2,
+            "architectural_findings_count": 1,
+            "principal_reentry_required": true,
+            "tokens_consumed": 3780,
+            "duration": 4287
+          }
+        ]
+      },
+      "ready_summary": {
+        "experiment_id": "task-rev-01-subscription_cli-ready",
+        "capability": "subscription_cli",
+        "contract_level": "implementation_ready",
+        "repetitions": 1,
+        "first_pass_rate": 1,
+        "avg_repair_rounds": 0,
+        "avg_arch_findings": 0,
+        "total_tokens_consumed": 1260,
+        "runs": [
+          {
+            "run_id": "task-rev-01-subscription_cli-ready-rep-0",
+            "experiment_id": "task-rev-01-subscription_cli-ready",
+            "capability": "subscription_cli",
+            "contract_level": "implementation_ready",
+            "passed_first_pass": true,
+            "total_repair_rounds": 0,
+            "architectural_findings_count": 0,
+            "principal_reentry_required": false,
+            "tokens_consumed": 1260,
+            "duration": 1144
+          }
+        ]
+      },
+      "delta_first_pass_rate": 1,
+      "delta_repair_rounds": -2,
+      "delta_arch_findings": -1,
+      "is_applicable": true
+    },
+    "task-rev-02:frontier_api": {
+      "hypothesis_falsified": false,
+      "reason": "hypothesis supported: implementation-ready contract lowered delegation floor",
+      "baseline_summary": {
+        "experiment_id": "task-rev-02-frontier_api-baseline",
+        "capability": "frontier_api",
+        "contract_level": "baseline_incomplete",
+        "repetitions": 1,
+        "first_pass_rate": 0,
+        "avg_repair_rounds": 2,
+        "avg_arch_findings": 1,
+        "total_tokens_consumed": 3780,
+        "runs": [
+          {
+            "run_id": "task-rev-02-frontier_api-baseline-rep-0",
+            "experiment_id": "task-rev-02-frontier_api-baseline",
+            "capability": "frontier_api",
+            "contract_level": "baseline_incomplete",
+            "passed_first_pass": false,
+            "total_repair_rounds": 2,
+            "architectural_findings_count": 1,
+            "principal_reentry_required": true,
+            "tokens_consumed": 3780,
+            "duration": 5030
+          }
+        ]
+      },
+      "ready_summary": {
+        "experiment_id": "task-rev-02-frontier_api-ready",
+        "capability": "frontier_api",
+        "contract_level": "implementation_ready",
+        "repetitions": 1,
+        "first_pass_rate": 1,
+        "avg_repair_rounds": 0,
+        "avg_arch_findings": 0,
+        "total_tokens_consumed": 1260,
+        "runs": [
+          {
+            "run_id": "task-rev-02-frontier_api-ready-rep-0",
+            "experiment_id": "task-rev-02-frontier_api-ready",
+            "capability": "frontier_api",
+            "contract_level": "implementation_ready",
+            "passed_first_pass": true,
+            "total_repair_rounds": 0,
+            "architectural_findings_count": 0,
+            "principal_reentry_required": false,
+            "tokens_consumed": 1260,
+            "duration": 1245
+          }
+        ]
+      },
+      "delta_first_pass_rate": 1,
+      "delta_repair_rounds": -2,
+      "delta_arch_findings": -1,
+      "is_applicable": true
+    },
+    "task-rev-02:local_small": {
+      "hypothesis_falsified": false,
+      "reason": "hypothesis supported: implementation-ready contract lowered delegation floor",
+      "baseline_summary": {
+        "experiment_id": "task-rev-02-local_small-baseline",
+        "capability": "local_small",
+        "contract_level": "baseline_incomplete",
+        "repetitions": 1,
+        "first_pass_rate": 0,
+        "avg_repair_rounds": 2,
+        "avg_arch_findings": 1,
+        "total_tokens_consumed": 3780,
+        "runs": [
+          {
+            "run_id": "task-rev-02-local_small-baseline-rep-0",
+            "experiment_id": "task-rev-02-local_small-baseline",
+            "capability": "local_small",
+            "contract_level": "baseline_incomplete",
+            "passed_first_pass": false,
+            "total_repair_rounds": 2,
+            "architectural_findings_count": 1,
+            "principal_reentry_required": true,
+            "tokens_consumed": 3780,
+            "duration": 5531
+          }
+        ]
+      },
+      "ready_summary": {
+        "experiment_id": "task-rev-02-local_small-ready",
+        "capability": "local_small",
+        "contract_level": "implementation_ready",
+        "repetitions": 1,
+        "first_pass_rate": 1,
+        "avg_repair_rounds": 0,
+        "avg_arch_findings": 0,
+        "total_tokens_consumed": 1260,
+        "runs": [
+          {
+            "run_id": "task-rev-02-local_small-ready-rep-0",
+            "experiment_id": "task-rev-02-local_small-ready",
+            "capability": "local_small",
+            "contract_level": "implementation_ready",
+            "passed_first_pass": true,
+            "total_repair_rounds": 0,
+            "architectural_findings_count": 0,
+            "principal_reentry_required": false,
+            "tokens_consumed": 1260,
+            "duration": 1704
+          }
+        ]
+      },
+      "delta_first_pass_rate": 1,
+      "delta_repair_rounds": -2,
+      "delta_arch_findings": -1,
+      "is_applicable": true
+    },
+    "task-rev-02:subscription_cli": {
+      "hypothesis_falsified": false,
+      "reason": "hypothesis supported: implementation-ready contract lowered delegation floor",
+      "baseline_summary": {
+        "experiment_id": "task-rev-02-subscription_cli-baseline",
+        "capability": "subscription_cli",
+        "contract_level": "baseline_incomplete",
+        "repetitions": 1,
+        "first_pass_rate": 0,
+        "avg_repair_rounds": 2,
+        "avg_arch_findings": 1,
+        "total_tokens_consumed": 3780,
+        "runs": [
+          {
+            "run_id": "task-rev-02-subscription_cli-baseline-rep-0",
+            "experiment_id": "task-rev-02-subscription_cli-baseline",
+            "capability": "subscription_cli",
+            "contract_level": "baseline_incomplete",
+            "passed_first_pass": false,
+            "total_repair_rounds": 2,
+            "architectural_findings_count": 1,
+            "principal_reentry_required": true,
+            "tokens_consumed": 3780,
+            "duration": 5032
+          }
+        ]
+      },
+      "ready_summary": {
+        "experiment_id": "task-rev-02-subscription_cli-ready",
+        "capability": "subscription_cli",
+        "contract_level": "implementation_ready",
+        "repetitions": 1,
+        "first_pass_rate": 1,
+        "avg_repair_rounds": 0,
+        "avg_arch_findings": 0,
+        "total_tokens_consumed": 1260,
+        "runs": [
+          {
+            "run_id": "task-rev-02-subscription_cli-ready-rep-0",
+            "experiment_id": "task-rev-02-subscription_cli-ready",
+            "capability": "subscription_cli",
+            "contract_level": "implementation_ready",
+            "passed_first_pass": true,
+            "total_repair_rounds": 0,
+            "architectural_findings_count": 0,
+            "principal_reentry_required": false,
+            "tokens_consumed": 1260,
+            "duration": 1160
+          }
+        ]
+      },
+      "delta_first_pass_rate": 1,
+      "delta_repair_rounds": -2,
+      "delta_arch_findings": -1,
+      "is_applicable": true
+    }
+  },
+  "summary": "All Milestone M4 gate criteria passed.",
+  "aggregated_report": {
+    "generated_at": "2026-10-05T08:32:49.989690576Z",
+    "total_snapshots": 264,
+    "groups": [
+      {
+        "strategy": "compacted",
+        "capability": "frontier_api",
+        "run_count": 22,
+        "accepted_count": 10,
+        "first_pass_acceptance_rate": 0.45454545454545453,
+        "defect_catch_rate": 0.8333333333333334,
+        "defect_catch_rate_applicable": true,
+        "cache_hit_ratio": 0.7777777777777778,
+        "avg_initial_tokens": 409.09090909090907,
+        "avg_peak_resident_tokens": 409.09090909090907,
+        "avg_cumulative_input_tokens": 409.09090909090907,
+        "avg_duration": 784019,
+        "resource_per_accepted_result": {
+          "value": 900,
+          "is_undefined": false
+        },
+        "contains_uncertain_accounting": false
+      },
+      {
+        "strategy": "compacted",
+        "capability": "local_small",
+        "run_count": 22,
+        "accepted_count": 10,
+        "first_pass_acceptance_rate": 0.45454545454545453,
+        "defect_catch_rate": 0.8333333333333334,
+        "defect_catch_rate_applicable": true,
+        "cache_hit_ratio": 0.7777777777777778,
+        "avg_initial_tokens": 409.09090909090907,
+        "avg_peak_resident_tokens": 409.09090909090907,
+        "avg_cumulative_input_tokens": 409.09090909090907,
+        "avg_duration": 753009,
+        "resource_per_accepted_result": {
+          "value": 900,
+          "is_undefined": false
+        },
+        "contains_uncertain_accounting": false
+      },
+      {
+        "strategy": "compacted",
+        "capability": "subscription_cli",
+        "run_count": 22,
+        "accepted_count": 10,
+        "first_pass_acceptance_rate": 0.45454545454545453,
+        "defect_catch_rate": 0.8333333333333334,
+        "defect_catch_rate_applicable": true,
+        "cache_hit_ratio": 0.7777777777777778,
+        "avg_initial_tokens": 409.09090909090907,
+        "avg_peak_resident_tokens": 409.09090909090907,
+        "avg_cumulative_input_tokens": 409.09090909090907,
+        "avg_duration": 1003458,
+        "resource_per_accepted_result": {
+          "value": 900,
+          "is_undefined": false
+        },
+        "contains_uncertain_accounting": false
+      },
+      {
+        "strategy": "full_history",
+        "capability": "frontier_api",
+        "run_count": 22,
+        "accepted_count": 10,
+        "first_pass_acceptance_rate": 0.45454545454545453,
+        "defect_catch_rate": 0.8333333333333334,
+        "defect_catch_rate_applicable": true,
+        "cache_hit_ratio": 0.08333333333333333,
+        "avg_initial_tokens": 1090.909090909091,
+        "avg_peak_resident_tokens": 1090.909090909091,
+        "avg_cumulative_input_tokens": 1090.909090909091,
+        "avg_duration": 673370,
+        "resource_per_accepted_result": {
+          "value": 2400,
+          "is_undefined": false
+        },
+        "contains_uncertain_accounting": false
+      },
+      {
+        "strategy": "full_history",
+        "capability": "local_small",
+        "run_count": 22,
+        "accepted_count": 10,
+        "first_pass_acceptance_rate": 0.45454545454545453,
+        "defect_catch_rate": 0.8333333333333334,
+        "defect_catch_rate_applicable": true,
+        "cache_hit_ratio": 0.08333333333333333,
+        "avg_initial_tokens": 1090.909090909091,
+        "avg_peak_resident_tokens": 1090.909090909091,
+        "avg_cumulative_input_tokens": 1090.909090909091,
+        "avg_duration": 490212,
+        "resource_per_accepted_result": {
+          "value": 2400,
+          "is_undefined": false
+        },
+        "contains_uncertain_accounting": false
+      },
+      {
+        "strategy": "full_history",
+        "capability": "subscription_cli",
+        "run_count": 22,
+        "accepted_count": 10,
+        "first_pass_acceptance_rate": 0.45454545454545453,
+        "defect_catch_rate": 0.8333333333333334,
+        "defect_catch_rate_applicable": true,
+        "cache_hit_ratio": 0.08333333333333333,
+        "avg_initial_tokens": 1090.909090909091,
+        "avg_peak_resident_tokens": 1090.909090909091,
+        "avg_cumulative_input_tokens": 1090.909090909091,
+        "avg_duration": 569584,
+        "resource_per_accepted_result": {
+          "value": 2400,
+          "is_undefined": false
+        },
+        "contains_uncertain_accounting": false
+      },
+      {
+        "strategy": "hybrid_4layer",
+        "capability": "frontier_api",
+        "run_count": 22,
+        "accepted_count": 20,
+        "first_pass_acceptance_rate": 0.9090909090909091,
+        "defect_catch_rate": 0.8333333333333334,
+        "defect_catch_rate_applicable": true,
+        "cache_hit_ratio": 0.7777777777777778,
+        "avg_initial_tokens": 327.27272727272725,
+        "avg_peak_resident_tokens": 327.27272727272725,
+        "avg_cumulative_input_tokens": 327.27272727272725,
+        "avg_duration": 5159784,
+        "resource_per_accepted_result": {
+          "value": 360,
+          "is_undefined": false
+        },
+        "contains_uncertain_accounting": true
+      },
+      {
+        "strategy": "hybrid_4layer",
+        "capability": "local_small",
+        "run_count": 22,
+        "accepted_count": 20,
+        "first_pass_acceptance_rate": 0.9090909090909091,
+        "defect_catch_rate": 0.8333333333333334,
+        "defect_catch_rate_applicable": true,
+        "cache_hit_ratio": 0.7777777777777778,
+        "avg_initial_tokens": 327.27272727272725,
+        "avg_peak_resident_tokens": 327.27272727272725,
+        "avg_cumulative_input_tokens": 327.27272727272725,
+        "avg_duration": 4854448,
+        "resource_per_accepted_result": {
+          "value": 360,
+          "is_undefined": false
+        },
+        "contains_uncertain_accounting": true
+      },
+      {
+        "strategy": "hybrid_4layer",
+        "capability": "subscription_cli",
+        "run_count": 22,
+        "accepted_count": 20,
+        "first_pass_acceptance_rate": 0.9090909090909091,
+        "defect_catch_rate": 0.8333333333333334,
+        "defect_catch_rate_applicable": true,
+        "cache_hit_ratio": 0.7777777777777778,
+        "avg_initial_tokens": 327.27272727272725,
+        "avg_peak_resident_tokens": 327.27272727272725,
+        "avg_cumulative_input_tokens": 327.27272727272725,
+        "avg_duration": 4355064,
+        "resource_per_accepted_result": {
+          "value": 360,
+          "is_undefined": false
+        },
+        "contains_uncertain_accounting": true
+      },
+      {
+        "strategy": "snippet_pool",
+        "capability": "frontier_api",
+        "run_count": 22,
+        "accepted_count": 10,
+        "first_pass_acceptance_rate": 0.45454545454545453,
+        "defect_catch_rate": 0.8333333333333334,
+        "defect_catch_rate_applicable": true,
+        "cache_hit_ratio": 0.7777777777777778,
+        "avg_initial_tokens": 409.09090909090907,
+        "avg_peak_resident_tokens": 409.09090909090907,
+        "avg_cumulative_input_tokens": 409.09090909090907,
+        "avg_duration": 784003,
+        "resource_per_accepted_result": {
+          "value": 900,
+          "is_undefined": false
+        },
+        "contains_uncertain_accounting": false
+      },
+      {
+        "strategy": "snippet_pool",
+        "capability": "local_small",
+        "run_count": 22,
+        "accepted_count": 10,
+        "first_pass_acceptance_rate": 0.45454545454545453,
+        "defect_catch_rate": 0.8333333333333334,
+        "defect_catch_rate_applicable": true,
+        "cache_hit_ratio": 0.7777777777777778,
+        "avg_initial_tokens": 409.09090909090907,
+        "avg_peak_resident_tokens": 409.09090909090907,
+        "avg_cumulative_input_tokens": 409.09090909090907,
+        "avg_duration": 879058,
+        "resource_per_accepted_result": {
+          "value": 900,
+          "is_undefined": false
+        },
+        "contains_uncertain_accounting": false
+      },
+      {
+        "strategy": "snippet_pool",
+        "capability": "subscription_cli",
+        "run_count": 22,
+        "accepted_count": 10,
+        "first_pass_acceptance_rate": 0.45454545454545453,
+        "defect_catch_rate": 0.8333333333333334,
+        "defect_catch_rate_applicable": true,
+        "cache_hit_ratio": 0.7777777777777778,
+        "avg_initial_tokens": 409.09090909090907,
+        "avg_peak_resident_tokens": 409.09090909090907,
+        "avg_cumulative_input_tokens": 409.09090909090907,
+        "avg_duration": 1232617,
+        "resource_per_accepted_result": {
+          "value": 900,
+          "is_undefined": false
+        },
+        "contains_uncertain_accounting": false
+      }
+    ]
+  },
+  "report_digest": "sha256:1a50591b9c4fd95925b2cb9875c9055cfe3888e1d10410ca3a732479c135cef1",
+  "provenance": {
+    "evidence_kind": "synthetic_harness_validation",
+    "driver": "canonicalTestDriver",
+    "source_commit": "76b516d",
+    "regeneration_command": "DEVCADENCE_EVIDENCE_OUT=\u003cdir\u003e go test ./internal/benchmark/gate -run TestGenerateCanonicalEvidenceFiles; devcadence benchmark evaluate-gate --snapshots \u003cdir\u003e/campaign_summary.json --evidence-kind synthetic_harness_validation --driver canonicalTestDriver [--json] --output docs/evidence/m4-evidence-report.{md,json}",
+    "statement": "Synthetic harness validation: produced by a scripted driver with fixed token counts and deterministic outcomes. It validates the gate machinery and is NOT empirical proof of the M4 product hypothesis."
+  },
+  "evaluated_at": "2026-10-05T08:32:50.897885965Z"
+}
