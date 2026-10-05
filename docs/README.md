@@ -117,7 +117,7 @@ hierarchy below.
 | [0022](adr/0022-greenfield-technology-selection-and-scaffolding.md) | Requirement-driven greenfield technology selection and bounded scaffolding |
 | [0023](adr/0023-declarative-project-capability-packs.md) | Declarative capability packs and Skills-first ecosystem extensibility |
 | [0024](adr/0024-implementation-ready-work-packages-and-contract-completeness.md) | Implementation-ready EWPs and contract completeness |
-| [0025](adr/0025-workflow-execution-runtime-boundary.md) | Workflow execution runtime boundary, runtime-private activation, and hierarchical knowledge separation |
+| [0025](adr/0025-workflow-execution-runtime-boundary.md) | Workflow execution boundary, logical plan semantics, and executor-private implementation separation |
 
 ## Normative hierarchy
 
