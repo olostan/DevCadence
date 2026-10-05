@@ -719,6 +719,7 @@ dependency.
   readiness.
 
 - **M4 real-evidence re-evaluation** (carried over from M4 closure): run a bounded real-endpoint campaign through the M4 gate with provenance `empirical_campaign` and revise policy per the M4 status section if it does not hold.
+  - *Status:* only the pure offline admission contract (`internal/benchmark/empirical`, [WP-M5-5 implementation record](work-packages/wp-m5-5-empirical-campaign-ewp.md#implementation-record)) exists; it cannot admit evidence in production until protected operator receipts and an independent verifier exist. No real campaign has run, and **M5 is not complete** until the follow-on runtime window (M5-R1..R4) is accepted and the live re-evaluation is run.
 
 ### Verification
 - principal initializes from compact ProjectState;

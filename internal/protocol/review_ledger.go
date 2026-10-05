@@ -491,6 +491,10 @@ func independent(a, b ActorProvenance) bool {
 	return true
 }
 
+// ActorsIndependent exposes the review-ledger independence rule (see independent)
+// so other packages apply the same semantics instead of re-deriving them.
+func ActorsIndependent(a, b ActorProvenance) bool { return independent(a, b) }
+
 // CheckVerification checks link equalities, candidate rules, kind×outcome matrix,
 // and actor independence between a finding, resolution, and verification (EWP §5, REQ-05).
 // All errors return CategoryValidationFailed.
