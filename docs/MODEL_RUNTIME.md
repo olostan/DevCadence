@@ -421,9 +421,7 @@ See [ENVIRONMENT_INTELLIGENCE_AND_ONBOARDING.md](ENVIRONMENT_INTELLIGENCE_AND_ON
 
 ## 21. Future distributed workers and execution placement
 
-The cognition abstraction may later support remote local-model workers. Separately, a future workflow execution runtime may distribute its own private runtime tasks across nodes.
-
-For example, a COS-backed executor may eventually use COS Nexus nodes to store/synchronize tasks among COS Runtime instances. That is a workflow-executor concern, not a reason to turn today's DevCadence scheduler into a distributed system.
+The cognition abstraction may later support remote local-model workers. Separately, a future workflow executor may use a different placement strategy for its private work.
 
 M3/M4 MUST NOT introduce distributed scheduling merely for future compatibility. The native executor remains single-node/process-local unless a current requirement independently demands otherwise.
 
@@ -445,23 +443,23 @@ The durable constraint is only that logical WorkflowPlan semantics do not derive
 
 A cognition `SessionDriver` executes interaction with one model/runtime/access path. It is intentionally not the abstraction for a whole DevCadence workflow.
 
-Above session drivers, a workflow execution runtime may coordinate logical WorkflowPlan stages. The native DevCadence executor can directly use SessionDrivers, tools and validators. A future external runtime such as COS may instead create its own private task graph, hierarchical knowledge scopes and event-driven wait/wake machinery while consuming the same authorized cognition resources underneath.
+Above session drivers, workflow execution coordinates logical `WorkflowPlan` stages. The native DevCadence executor can directly use SessionDrivers, tools and validators. A future alternate executor may use a different private scheduling/decomposition strategy while preserving the same logical obligations.
 
 The separation is:
 
 ```text
 WorkflowPlan + DevCadence authority
               |
-       workflow executor
+       workflow execution
           /       \
-       native    external
-         |          |
-   SessionDriver   private orchestration
-         \          /
-       cognition endpoints
+       native    alternate
+         |
+   SessionDriver
+         |
+   cognition endpoint
 ```
 
-Runtime-private task graphs, blackboards, receptors/ligands, scheduler state or equivalent mechanisms are not cognition endpoint/session properties and must not be forced into `AccessChannel` or `SessionDriver` merely to support an external orchestrator.
+Private executor topology/state is not a cognition endpoint/session property and must not be forced into `AccessChannel` or `SessionDriver` merely to support an alternate executor.
 
 See [ADR-0025](adr/0025-workflow-execution-runtime-boundary.md).
 
