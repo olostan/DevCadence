@@ -1,8 +1,8 @@
 {
-  "authority_projection": "sha256:e65e9f04e0d132856bfb499cf2da11ff93cf54fffca837c11791fd3ac4a9acbd",
-  "catalog": "sha256:5e92de5695dcb673c4c29a43e845c9001901c8edd85c3f05bc1f49230484e871",
-  "invocation_json": "sha256:c1fc7dd9570211bca8f1c9a604e594bf3cb197e9ec7a767b1eddb46daa253a5e",
-  "invocation_markdown": "sha256:2716eb89c0bcc862af5e695ac5ebd35e5ffe811515d80c09d665aa8992d83c3c",
-  "normative_source": "sha256:908bd526b9714ca6ecb3cfc53e29ba85b3c0eded64a132a280022b240b8f4810",
+  "authority_projection": "sha256:193424240851f8116a84d626361be25dc90d0da5a4620fb4cf4338b3b4c61199",
+  "catalog": "sha256:eae29a06cf51b3c4675eb15e25672bc91371d33b9886d2575bebaf35296a12d7",
+  "invocation_json": "sha256:efd06528880edb7574ccfe090553c40d31f5e777c3dfd95d14d2b88a69ffb94e",
+  "invocation_markdown": "sha256:2c844b716e910b7d3c07fd1bd8cbe00eef2ab96b21cb275681aee7c8e366b6cf",
+  "normative_source": "sha256:22fefe25df23b9fe52a511f2e1512410e9019a2feb2a0a60de757c6e21851718",
   "pack": "sha256:beb6cb6d93b1b900fd7e12ab4c005fe36886ee7ed9041f7216e64c63fc3b7d9c"
 }
