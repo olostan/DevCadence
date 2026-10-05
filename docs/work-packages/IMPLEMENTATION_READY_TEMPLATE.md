@@ -68,6 +68,14 @@ Use stable IDs.
 
 For stateful work, include pre-state, committed state and failed/interrupted state semantics.
 
+## Verified facts about the current code
+
+Record only implementation-relevant claims that the EWP depends on. Each row must say how the claim was verified against the EWP base revision. The implementer re-verifies these facts as step 0; a false or stale row is an escalation trigger, not permission to invent replacement semantics.
+
+| ID | Claim | Evidence (file:line / command / artifact) | Verified by |
+| --- | --- | --- | --- |
+| F-01 | ... | ... | Principal / reviewer |
+
 ## Interface / algorithm contract
 
 Provide exact interfaces, state transitions, pseudocode or algorithm semantics needed to prevent architectural invention by the implementer.
@@ -166,6 +174,17 @@ unresolved architecture choices: 0
 declared local-discretion choices: __
 readiness: READY_FOR_IMPLEMENTATION | NOT_READY
 ```
+
+### Consistency sweep after every material revision
+
+A revision can fix one finding while leaving stale wording, counts, names, or acceptance mappings elsewhere. Before declaring the revised EWP ready:
+
+- [ ] search for superseded wording of every changed decision and remove/qualify stale copies;
+- [ ] recompute requirement, invariant, failure-case and acceptance-scenario counts in the Readiness Report;
+- [ ] verify interface/type/schema names match the Requirements, Authority Matrix and Acceptance Scenarios;
+- [ ] verify Status and Readiness lines reflect the revised document;
+- [ ] re-resolve any new/changed domains, risks, paths or normative clauses;
+- [ ] if a prior readiness review found a blocker/major or returned NOT_READY, obtain the required independent re-review/probe before delegation.
 
 ### Weaker-implementer check
 
