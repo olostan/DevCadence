@@ -1,5 +1,7 @@
 # Rolling Planning Window 2026-10-E: Milestone M4 Empirical Evidence Campaign
 
+**Status: COMPLETE (2026-10-05), with a documented caveat.** Delivered via PR #72 (specs), #73 (WP-M4-4), #74 (WP-M4-5) and #75 (WP-M4-6). The campaign evidence is synthetic harness validation (scripted driver), not real-endpoint measurement; the M4 product hypothesis is re-evaluated after M5. See `docs/IMPLEMENTATION_PLAN.md` § M4.
+
 ## Window Objective & Overview
 
 Window 2026-10-E conducts the **Empirical Evidence Campaign** for **Milestone M4: Adaptive Cognition Vertical Slice and Evidence Gate** per `docs/IMPLEMENTATION_PLAN.md` § M4.

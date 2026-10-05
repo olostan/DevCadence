@@ -592,6 +592,26 @@ silently expanding spending, privacy exposure or execution authority.
 
 ## M4 — Adaptive cognition vertical slice and evidence gate
 
+### Status: CLOSED WITH DOCUMENTED CAVEATS (2026-10-05)
+The M4 harness, corpus, campaign matrix and fail-closed gate are implemented
+(WP-M4-4 PR #73, WP-M4-5 PR #74, WP-M4-6 PR #75). The gate evaluates to
+`DecisionGo` on **synthetic harness evidence only**: the committed
+report is [`docs/evidence/m4-evidence-report.md`](evidence/m4-evidence-report.md),
+produced by a scripted deterministic driver (kind
+`synthetic_harness_validation`). It validates the measurement and decision
+machinery. It is **not** empirical proof of the M4 product hypothesis, and no
+real local, subscription-CLI or frontier-API endpoint was measured.
+
+**Mandatory re-evaluation after M5.** Once M5 allows real API/CLI/local-LLM
+operation, run a bounded real-endpoint campaign (Strategy 1 vs Strategy 4
+within each capability tier, unobservable resources recorded as unknown)
+through the same gate with provenance kind `empirical_campaign`. If that run
+returns Revise or Inconclusive, or contradicts the synthetic result, revise
+admission/profile/routing/topology policy or gate criteria through the normal
+EWP change process. The synthetic `DecisionGo` MUST NOT be cited to justify
+current policy against real evidence. This re-evaluation is M5 exit work and
+may not be silently dropped.
+
 ### Goal
 Test the central product hypothesis **before** broad host/product/adoption
 investment: can adaptive allocation of heterogeneous cognition resources,
@@ -695,6 +715,8 @@ dependency.
 - Discovery Principal semantic operations;
 - Day-0 persistence operations for product decisions, requirements and
   readiness.
+
+- **M4 real-evidence re-evaluation** (carried over from M4 closure): run a bounded real-endpoint campaign through the M4 gate with provenance `empirical_campaign` and revise policy per the M4 status section if it does not hold.
 
 ### Verification
 - principal initializes from compact ProjectState;
