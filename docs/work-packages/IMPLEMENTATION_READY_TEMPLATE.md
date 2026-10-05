@@ -184,7 +184,7 @@ A revision can fix one finding while leaving stale wording, counts, names, or ac
 - [ ] verify interface/type/schema names match the Requirements, Authority Matrix and Acceptance Scenarios;
 - [ ] verify Status and Readiness lines reflect the revised document;
 - [ ] re-resolve any new/changed domains, risks, paths or normative clauses;
-- [ ] if a prior readiness review found a blocker/major or returned NOT_READY, obtain the required independent re-review/probe before delegation.
+- [ ] if a prior readiness review found material/blocking defects and this revision changes the EWP to resolve them, obtain focused independent verification of those repairs before delegation, consistent with `REVIEW_AND_CONVERGENCE.md` §§6–7.
 
 ### Weaker-implementer check
 
