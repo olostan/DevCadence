@@ -28,12 +28,11 @@ func coded(code string, retryable bool, refs []string, detail string) error {
 // staleRepository reports that the repository changed outside DevCadence
 // since the evidence, Work Package or state was captured. The caller must
 // refresh (project_state) and re-request.
-func staleRepository(head string, changed int, detail string) error {
+func staleRepository(head, detail string) error {
 	refs := []string{}
 	if head != "" && len(head) <= principal.MaxIDBytes-4 {
 		refs = append(refs, "git:"+head)
 	}
-	_ = changed
 	return coded(principal.CodeStaleProjectState, true, refs, detail)
 }
 

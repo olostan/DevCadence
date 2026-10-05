@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -301,5 +303,49 @@ func TestA12_BinaryOverStdio(t *testing.T) {
 	// Closing stdin (EOF) shuts the server down cleanly.
 	if err := cs.Close(); err != nil {
 		t.Logf("close: %v", err)
+	}
+}
+
+// An unreadable registration must refuse repository-dependent calls; only a
+// readable project with no repository (Day-0) has no observer.
+func TestRepositoryObserverSelection(t *testing.T) {
+	ctx := context.Background()
+	open := func(repo *testsupport.GitRepo) (*controlplane.Service, *storage.Store) {
+		home := t.TempDir()
+		store, err := storage.Open(ctx, storage.Config{Path: filepath.Join(home, "cp.db"), Clock: clock.System()})
+		if err != nil {
+			t.Fatal(err)
+		}
+		svc, err := controlplane.New(controlplane.Options{Store: store})
+		if err != nil {
+			t.Fatal(err)
+		}
+		init := controlplane.InitProjectInput{ProjectID: "example", MilestoneID: "M1", MilestoneTitle: "Domain core"}
+		if repo != nil {
+			init.RepositoryPath, init.AcceptedCommit = repo.Path, repo.Head()
+		}
+		if _, err := svc.InitProject(ctx, init); err != nil {
+			t.Fatal(err)
+		}
+		return svc, store
+	}
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	day0, store := open(nil)
+	defer store.Close()
+	if obs := mcpadapter.RepositoryObserverForTest(ctx, day0, "example", logger); obs != nil {
+		t.Fatalf("a Day-0 project got an observer: %T", obs)
+	}
+
+	broken, closed := open(nil)
+	if err := closed.Close(); err != nil {
+		t.Fatal(err)
+	}
+	obs := mcpadapter.RepositoryObserverForTest(ctx, broken, "example", logger)
+	if obs == nil {
+		t.Fatal("an unreadable registration disabled drift detection")
+	}
+	if _, err := obs.Drift(ctx, "abc1234", nil); err == nil {
+		t.Fatal("the fallback observer did not refuse")
 	}
 }

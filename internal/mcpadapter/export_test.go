@@ -17,3 +17,6 @@ func ToolResultForTest(response any, isError bool) *mcp.CallToolResult {
 func DispatchForTest(call func(context.Context, principal.CallerContext, []byte) (any, *principal.SemanticError)) *mcp.CallToolResult {
 	return dispatch(context.Background(), principal.CallerContext{}, "test", call, nil)
 }
+
+// RepositoryObserverForTest exposes the launch-time observer selection.
+var RepositoryObserverForTest = repositoryObserver

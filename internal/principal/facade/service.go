@@ -299,7 +299,7 @@ func (s *Service) checkDrift(ctx context.Context, base string, prefixes []string
 		return err
 	}
 	if len(d.ChangedPaths) > 0 {
-		return staleRepository(d.HeadCommit, len(d.ChangedPaths), "repository changed outside DevCadence since the base")
+		return staleRepository(d.HeadCommit, "repository changed outside DevCadence since the base")
 	}
 	return nil
 }

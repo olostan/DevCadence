@@ -127,7 +127,12 @@ func repositoryObserver(ctx context.Context, cp *controlplane.Service, project s
 	list, err := cp.Events(ctx, storage.EventQuery{
 		ProjectID: project, Types: []events.Type{events.TypeProjectInitialized}, Limit: 1,
 	})
-	if err != nil || len(list) == 0 {
+	if err != nil {
+		// Unknown whether a repository is registered: never skip drift detection.
+		logger.Warn("project repository registration cannot be read; repository-dependent calls will be refused")
+		return refusingObserver{err: err}
+	}
+	if len(list) == 0 {
 		return nil
 	}
 	init, ok := list[0].Payload.(*events.ProjectInitialized)
