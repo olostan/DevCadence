@@ -1,0 +1,17 @@
+{
+  "task_id": "task-arch-02",
+  "name": "Adaptive Review State Machine Decomposition",
+  "work_package_id": "WP-M4-TASK-ARCH-02",
+  "workload_kind": "architectural_reasoning",
+  "complexity": "complex_evolution",
+  "contract": "Design decoupled state machine for multi-lens review convergence ensuring progress without cyclic debates.",
+  "read_files": [
+    "docs/REVIEW_AND_CONVERGENCE.md"
+  ],
+  "target_files": [
+    "internal/review/convergence.go"
+  ],
+  "expected_mutations": [
+    "func NextConvergenceState(current State, finding Finding) State"
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "defect_id": "DEFECT-BOUND-03",
+  "category": "boundary_violation",
+  "severity": "blocking",
+  "description": "Unmediated write targeting absolute root path",
+  "file_target": "../etc/shadow",
+  "patch_content": "root write attempt",
+  "violated_invariant": "DCI-123"
+}

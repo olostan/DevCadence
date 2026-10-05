@@ -1,0 +1,17 @@
+{
+  "task_id": "task-arch-01",
+  "name": "Cognitive Invocation Compiler Architecture Trade-Offs",
+  "work_package_id": "WP-M4-TASK-ARCH-01",
+  "workload_kind": "architectural_reasoning",
+  "complexity": "complex_evolution",
+  "contract": "Evaluate architectural trade-offs between static prompt projection and dynamic evidence leasing under memory bounds.",
+  "read_files": [
+    "docs/adr/0020-cognitive-invocation-compiler-and-review-ledger.md"
+  ],
+  "target_files": [
+    "internal/cognition/architecture.go"
+  ],
+  "expected_mutations": [
+    "func SynthesizeCompilerArchitecture() (*ArchSpec, error)"
+  ]
+}

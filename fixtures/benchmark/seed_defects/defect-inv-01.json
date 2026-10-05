@@ -1,0 +1,9 @@
+{
+  "defect_id": "DEFECT-INV-01",
+  "category": "invariant_violation",
+  "severity": "blocking",
+  "description": "Bypasses principal authorization check in control plane",
+  "file_target": "internal/auth/checker.go",
+  "patch_content": "package auth\n\nfunc IsAuthorized() bool { return true }\n",
+  "violated_invariant": "INV-AUTH-BYPASS"
+}

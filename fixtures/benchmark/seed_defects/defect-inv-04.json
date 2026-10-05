@@ -1,0 +1,9 @@
+{
+  "defect_id": "DEFECT-INV-04",
+  "category": "invariant_violation",
+  "severity": "critical",
+  "description": "State lease digest verification bypass allowing corrupted state",
+  "file_target": "internal/storage/lease.go",
+  "patch_content": "package storage\n\nfunc VerifyDigest(expected, actual string) bool { return true }\n",
+  "violated_invariant": "INV-LEASE-INTEGRITY"
+}

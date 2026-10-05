@@ -1,0 +1,9 @@
+{
+  "defect_id": "DEFECT-BOUND-01",
+  "category": "boundary_violation",
+  "severity": "blocking",
+  "description": "Path traversal writing files outside declared worktree",
+  "file_target": "../outside.txt",
+  "patch_content": "corrupted outside content",
+  "violated_invariant": "DCI-123"
+}

@@ -1,0 +1,18 @@
+{
+  "task_id": "task-rev-01",
+  "name": "Contract Completeness Dual-Lens Review",
+  "work_package_id": "WP-M4-TASK-REV-01",
+  "workload_kind": "review",
+  "complexity": "complex_evolution",
+  "contract": "Conduct dual-lens review of candidate EWP validating that all state transitions, failure cases, and stop rules are closed.",
+  "read_files": [
+    "docs/work-packages/wp-m4-4-ewp.md",
+    "docs/adr/0024-implementation-ready-work-packages-and-contract-completeness.md"
+  ],
+  "target_files": [
+    "internal/review/contract_lens.go"
+  ],
+  "expected_mutations": [
+    "func ReviewContractCompleteness(ewp *EWP) (*ReviewResult, error)"
+  ]
+}

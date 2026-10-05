@@ -26,6 +26,7 @@ func TestEnums_Validity(t *testing.T) {
 	// Defect categories
 	categories := []DefectCategory{
 		DefectInvariantViolation, DefectAPIMutation, DefectBoundaryViolation,
+		DefectArchitecturalBoundary, DefectAPIContractMutation, DefectStateCorruption,
 	}
 	for _, c := range categories {
 		if !c.Valid() {
@@ -34,6 +35,19 @@ func TestEnums_Validity(t *testing.T) {
 	}
 	if DefectCategory("unknown").Valid() {
 		t.Error("expected unknown defect category to be invalid")
+	}
+
+	if DefectArchitecturalBoundary.Canonical() != DefectBoundaryViolation {
+		t.Errorf("expected DefectArchitecturalBoundary.Canonical() == DefectBoundaryViolation")
+	}
+	if DefectAPIContractMutation.Canonical() != DefectAPIMutation {
+		t.Errorf("expected DefectAPIContractMutation.Canonical() == DefectAPIMutation")
+	}
+	if DefectStateCorruption.Canonical() != DefectInvariantViolation {
+		t.Errorf("expected DefectStateCorruption.Canonical() == DefectInvariantViolation")
+	}
+	if DefectAPIMutation.Canonical() != DefectAPIMutation {
+		t.Errorf("expected DefectAPIMutation.Canonical() == DefectAPIMutation")
 	}
 
 	// Run statuses
@@ -101,6 +115,20 @@ func TestBenchmarkTask_DigestDeterminism(t *testing.T) {
 	d3 := task3.Digest()
 	if d1 == d3 {
 		t.Fatal("expected different contract to change digest")
+	}
+
+	task4 := task1
+	task4.WorkloadKind = "navigation"
+	d4 := task4.Digest()
+	if d1 == d4 {
+		t.Fatal("expected different workload kind to change digest")
+	}
+
+	task5 := task1
+	task5.Complexity = "complex_evolution"
+	d5 := task5.Digest()
+	if d1 == d5 {
+		t.Fatal("expected different complexity to change digest")
 	}
 }
 

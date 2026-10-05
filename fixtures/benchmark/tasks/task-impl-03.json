@@ -1,0 +1,17 @@
+{
+  "task_id": "task-impl-03",
+  "name": "Setup Ledger Event Deserializer",
+  "work_package_id": "WP-M4-TASK-IMPL-03",
+  "workload_kind": "implementation",
+  "complexity": "greenfield_component",
+  "contract": "Implement schema-versioned deserialization for setup ledger events failing closed on unknown versions.",
+  "read_files": [
+    "fixtures/protocol/setup-ledger-event.valid.json"
+  ],
+  "target_files": [
+    "internal/setup/ledger_parser.go"
+  ],
+  "expected_mutations": [
+    "func ParseLedgerEvent(data []byte) (*LedgerEvent, error)"
+  ]
+}

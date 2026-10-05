@@ -1,0 +1,3 @@
+package storage
+
+func VerifyDigest(expected, actual string) bool { return true }

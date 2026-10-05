@@ -32,24 +32,28 @@ func (k ContextStrategyKind) Valid() bool {
 
 // BenchmarkTask defines an engineering task executed by the benchmark harness (REQ-02, INV-01).
 type BenchmarkTask struct {
-	TaskID            string   `json:"task_id"`
-	Name              string   `json:"name"`
-	WorkPackageID     string   `json:"work_package_id"`
-	Contract          string   `json:"contract"`
-	ReadFiles         []string `json:"read_files"`
-	TargetFiles       []string `json:"target_files"`
-	ExpectedMutations []string `json:"expected_mutations"`
+	TaskID            string                `json:"task_id"`
+	Name              string                `json:"name"`
+	WorkPackageID     string                `json:"work_package_id"`
+	WorkloadKind      protocol.WorkloadKind `json:"workload_kind"`
+	Complexity        string                `json:"complexity,omitempty"`
+	Contract          string                `json:"contract"`
+	ReadFiles         []string              `json:"read_files"`
+	TargetFiles       []string              `json:"target_files"`
+	ExpectedMutations []string              `json:"expected_mutations"`
 }
 
 // benchmarkTaskDigestView provides deterministic canonical JSON representation for Digest.
 type benchmarkTaskDigestView struct {
-	Contract          string   `json:"contract"`
-	ExpectedMutations []string `json:"expected_mutations"`
-	Name              string   `json:"name"`
-	ReadFiles         []string `json:"read_files"`
-	TargetFiles       []string `json:"target_files"`
-	TaskID            string   `json:"task_id"`
-	WorkPackageID     string   `json:"work_package_id"`
+	Complexity        string                `json:"complexity,omitempty"`
+	Contract          string                `json:"contract"`
+	ExpectedMutations []string              `json:"expected_mutations"`
+	Name              string                `json:"name"`
+	ReadFiles         []string              `json:"read_files"`
+	TargetFiles       []string              `json:"target_files"`
+	TaskID            string                `json:"task_id"`
+	WorkPackageID     string                `json:"work_package_id"`
+	WorkloadKind      protocol.WorkloadKind `json:"workload_kind"`
 }
 
 // Digest computes a deterministic sha256 hex digest of all task fields (REQ-02, INV-01).
@@ -58,6 +62,8 @@ func (t BenchmarkTask) Digest() string {
 		TaskID:            t.TaskID,
 		Name:              t.Name,
 		WorkPackageID:     t.WorkPackageID,
+		WorkloadKind:      t.WorkloadKind,
+		Complexity:        t.Complexity,
 		Contract:          t.Contract,
 		ReadFiles:         t.ReadFiles,
 		TargetFiles:       t.TargetFiles,
@@ -76,7 +82,7 @@ func (t BenchmarkTask) Digest() string {
 	canonical, err := protocol.CanonicalJSON(&view)
 	if err != nil {
 		hasher := sha256.New()
-		hasher.Write([]byte(t.TaskID + ":" + t.Name + ":" + t.WorkPackageID + ":" + t.Contract))
+		hasher.Write([]byte(t.TaskID + ":" + t.Name + ":" + t.WorkPackageID + ":" + string(t.WorkloadKind) + ":" + t.Complexity + ":" + t.Contract))
 		return "sha256:" + hex.EncodeToString(hasher.Sum(nil))
 	}
 	return protocol.DigestBytes(canonical)
@@ -89,15 +95,35 @@ const (
 	DefectInvariantViolation DefectCategory = "invariant_violation"
 	DefectAPIMutation        DefectCategory = "api_mutation"
 	DefectBoundaryViolation  DefectCategory = "boundary_violation"
+
+	// Extended and descriptive category names
+	DefectArchitecturalBoundary DefectCategory = "architectural_boundary"
+	DefectAPIContractMutation   DefectCategory = "api_contract_mutation"
+	DefectStateCorruption       DefectCategory = "state_corruption"
 )
 
 // Valid reports whether the defect category is known (REQ-03).
 func (c DefectCategory) Valid() bool {
 	switch c {
-	case DefectInvariantViolation, DefectAPIMutation, DefectBoundaryViolation:
+	case DefectInvariantViolation, DefectAPIMutation, DefectBoundaryViolation,
+		DefectArchitecturalBoundary, DefectAPIContractMutation, DefectStateCorruption:
 		return true
 	default:
 		return false
+	}
+}
+
+// Canonical maps any alias category to the canonical 3-category taxonomy.
+func (c DefectCategory) Canonical() DefectCategory {
+	switch c {
+	case DefectArchitecturalBoundary:
+		return DefectBoundaryViolation
+	case DefectAPIContractMutation:
+		return DefectAPIMutation
+	case DefectStateCorruption:
+		return DefectInvariantViolation
+	default:
+		return c
 	}
 }
 
@@ -105,6 +131,7 @@ func (c DefectCategory) Valid() bool {
 type SeededDefect struct {
 	DefectID          string         `json:"defect_id"`
 	Category          DefectCategory `json:"category"`
+	Severity          string         `json:"severity,omitempty"`
 	Description       string         `json:"description"`
 	FileTarget        string         `json:"file_target"`
 	PatchContent      string         `json:"patch_content"`
