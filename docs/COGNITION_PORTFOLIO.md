@@ -142,7 +142,7 @@ flowchart TD
 
 The endpoint used to plan the portfolio need not be the endpoint ultimately preferred for Principal, implementation or review.
 
-**Implementation status (WP-M3D-1B).** The `Planner` step above exists as a pure service, `internal/cognition/planner`: given caller-supplied facts and an injected one-method `Invoker`, it builds a deterministic prompt, calls the invoker once (no retry), strictly decodes the output, assigns every identity, timestamp and provenance field in Go, and gates each alternative through the deterministic validator. Alternatives that fail are returned as structured rejections. It never activates or persists anything. The driver-backed `Invoker` adapter is implemented as a candidate pending review (WP-M3D-1C1, package `internal/cognition/plannerdriver`): one tool-less, worktree-less session turn per call, caller-bound endpoint and model, and no driver-provided text in errors unless opted in. Not yet implemented (WP-M3D-1C and later): planning-endpoint selection, compiler admission of the planner role, historical-evidence input and the link from a recommendation to activation.
+**Implementation status (Milestone M3D Complete).** The `Planner` step above exists as a pure service, `internal/cognition/planner` (WP-M3D-1B): given caller-supplied facts and an injected one-method `Invoker`, it builds a deterministic prompt, calls the invoker once (no retry), strictly decodes the output, assigns every identity, timestamp and provenance field in Go, and gates each alternative through the deterministic validator. The driver-backed `Invoker` adapter and planning-endpoint selection pipeline are implemented in `internal/cognition/plannerdriver` (WP-M3D-1C1, WP-M3D-1C2). Workflow topology planning (`internal/cognition/workflowplanner`, WP-M3D-2A1..2C), portfolio adaptation and revalidation-gated rollback (`internal/cognition`, WP-M3D-3), CLI integration (`cmd/devcadence`, WP-M3D-4), and cross-portfolio verification (`tests/m3d_cross_portfolio_test.go`, WP-M3D-5) are complete. Milestone M3D exit criteria are satisfied.
 
 ## 9. Portfolio recommendation
 
@@ -233,7 +233,7 @@ Learned routing remains governed through LessonCandidate/evaluation/promotion, n
 
 ## 15. UI and configuration
 
-The CLI is the first user experience. A later self-hosted UI/dashboard should visualize and edit the same canonical contracts: resources, endpoint health, budget state, role assignments, workflow history, effectiveness evidence and recommended configuration deltas.
+The CLI is the first user experience. Plain/JSON terminal commands (`devcadence cognition plan`, `diff`, `propose`, `rollback`, WP-M3D-4) implement canonical portfolio inspection, adaptation proposal, and rollback workflows without acting as a second decision engine (ADR-0018 §15). A later self-hosted UI/dashboard should visualize and edit the same canonical contracts: resources, endpoint health, budget state, role assignments, workflow history, effectiveness evidence and recommended configuration deltas.
 
 The dashboard is not a second source of truth and is deliberately not built before the protocols are proven.
 
