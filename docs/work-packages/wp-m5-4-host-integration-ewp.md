@@ -506,3 +506,43 @@ readiness: NOT_READY — DRAFT; dependency binding and implementation readiness 
 | [MCP_API bootstrap executable contract](../MCP_API.md#bootstrap-executable-contract) and [WP-M5-2](wp-m5-2-semantic-mcp-ewp.md) | Render the same no-argument stdio executable and its project/action binding. | No additional MCP tools or wire schema. WP-M5-2 owns registration, DTO serialization and transport limits; host-specific configuration is confined to the adapter. |
 | [MCP_API §2A](../MCP_API.md#2a-discovery-tool-set) and [WP-M5-3](wp-m5-3-discovery-ewp.md) | Expose the same nine discovery tools through the facade. | No competing discovery persistence contract. Host observation/setup types are Go adapter types, not principal request DTOs. |
 | [PRINCIPAL_HOSTS](../PRINCIPAL_HOSTS.md) | Adds proposed concrete launch recipes, source-boundary verification and safe mutation behavior. | Exact host instructions and owning contract must synchronize during implementation; installed-host evidence remains outstanding. |
+
+
+## Implementation record
+
+Implemented from base `100a3cc` (WP-M5-1, -2 and the WP-M5-3 read-side subset merged) in the working tree, **without commit**. **Gate exception:** the repository owner explicitly authorized implementation while the header status stays DRAFT/NOT_READY; no independent Contract/Authority or Test Adequacy review and no separate-reviewer mutant observation has run. This record does not change the contract above.
+
+**Dependency binding (Step 0, from repository facts).** WP-M5-2 is merged: `cmd/devcadence-mcp` is a no-argument stdio server (`DEVCADENCE_PROJECT_ID`, absolute `DEVCADENCE_HOME`, optional `DEVCADENCE_PRINCIPAL_BINDING`) with 11 tools; the MCP SDK is confined to `internal/mcpadapter` and `cmd/devcadence-mcp`, and the facade is `internal/principal/facade`. WP-M5-3 is merged read-side only: no discovery tool is registered, so no discovery smoke or tool expectation is implemented (**blocked on WP-M5-3 writes**). M3 `internal/setup` has operation kinds `create_directory`, `write_managed_config`, `remove_stale_cache`, `run_diagnostic_check` and `ensure_local_model` only: host configuration cannot be represented, and no enforced exclusive operator-owned mutation channel exists. Per the EWP this selects the specified fallback: reviewed exact files plus manual application. M3's `principalhosts.FromEnvironment` is adapted by `Detect`; no field was added to an M3 type.
+
+**Delivered.**
+
+- `internal/principalhosts/integration.go` (types, `Detect`, `Plan`, `ApplyApproved`, `Service`, `PrincipalHost`), `verify.go` (`Verify`, `Reuse`, `Prober`), `smoke.go` (`SmokeProjectState`), `home_*.go`, `assets/` (embedded rule and skill text).
+- Antigravity plan: `.agents/mcp_config.json` (no `type`), `.agents/rules/devcadence-principal.md` (`trigger: always_on`), `.agents/skills/devcadence-principal/SKILL.md` (description frontmatter). Cursor plan: `.cursor/mcp.json` (`type: stdio`, no `cwd`), `.cursor/rules/devcadence-principal.mdc` (`alwaysApply: true`). Unrelated JSON is preserved semantically (values re-serialized with indentation, keys sorted); an unequal existing `devcadence` entry is replaced only with an explicit manual step; non-object or malformed JSON, symlinks and non-regular files are refused.
+- Golden fixtures `fixtures/principalhosts/*`; VS Code guidance and samples in `integrations/vscode/`; boundary test `TestPrincipalHostsStayOutsideTheSemanticLayers`; owning docs synchronized.
+- `SmokeProjectState` speaks the identical wire contract to the real binary over newline-delimited stdio without the SDK, from an empty temporary directory with only the three DevCadence env variables, and reports only pass/fail metadata.
+
+**Requirement and acceptance coverage.**
+
+| Item | Where proved |
+| --- | --- |
+| REQ-01, ACC-01, ACC-02 | `TestDetectReportsEveryStateSeparately`, `TestPlanRequiresAnExplicitDetectedHost` |
+| REQ-02 | `PrincipalHost` interface, compile-time assertion; boundary test |
+| REQ-03, ACC-03 | digest in `Plan`; `TestRenderedNativePlansMatchGoldenFixtures`, `TestNativeRecipeSemantics`, `TestExistingConfigIsMergedNotRewritten` |
+| REQ-04, ACC-04, ACC-05, ACC-16 | `TestApplyNeverWritesAndRefusesUnauthorizedOrStalePlans` (zero writes always; manual) |
+| REQ-05 | same golden/semantic tests |
+| REQ-06, ACC-07 | `TestSmokeAgainstTheRealServerBinary` (project state read; wrong project and missing binding rejected; absent-runtime denial is WP-M5-2's `TestA8_*`) |
+| REQ-07, ACC-08..ACC-10 | `TestStrictReadyOnlyWithCompleteDenialEvidence`, `TestStrictIsBlockedByAnyAccessUnknownOrEscape` |
+| REQ-08, ACC-11 | same, assisted labeled with recorded shortfalls |
+| REQ-09, ACC-12 | no host approval path reaches the server; denial/CAS is covered by WP-M5-1/2 tests (`TestA2_*`, `TestA10_AcceptIsHardDisabled`); not re-tested here |
+| REQ-10, ACC-13 | `TestReuseRequiresUnchangedIdentities`, `TestConnectionInstructionsAndDriftGateReadiness` |
+| REQ-11, ACC-14 | `TestVSCodeGuidance` |
+| REQ-12, ACC-15 | `Unverified` for unavailable/timeout/cancel; no live host smoke claimed |
+| ACC-20 | `TestInvalidRuntimePathsAreBlocked` (capture bound is moot: nothing is captured) |
+
+**Not delivered (explicit).** ACC-06, ACC-17, ACC-18 and ACC-19, and the 1 MiB capture, rooted no-follow per-write handles and in-process rollback: they only apply to automated apply, which is not built because no enforced exclusive channel exists (`AutomaticApplyEligible` is always false). The CLI setup exposure under `cmd/devcadence` was not added: no REQ/ACC needs it. No real `Prober` ships; Antigravity and Cursor native smoke packs are **manual evidence required** (below). Discovery tool smoke is blocked on WP-M5-3 writes.
+
+**Manual evidence required (operator steps, per host).** On an installed Antigravity or Cursor: (1) record the exact host version and OS; (2) review and hand-apply the planned files byte-for-byte; (3) restart/reload the host and open a new session, record the session reference; (4) confirm the `devcadence` server connects and the always-on rule is discovered; (5) place a harmless sentinel outside the principal workspace and, for every enabled route (absolute-path read, search/index, write, terminal read and write, unsandboxed or alternate shell, any other file/shell/MCP tool), attempt access and record only allowed or denied; (6) record the host permission policy identity and which routes the host disables; (7) supply these as a `Prober` and run `Verify`. Until then every report is `unverified` or `blocked`, and strict-ready is not claimed.
+
+**Ambiguities and interpretations.** (1) Source roots needed for the overlap rules are not in `IntegrationRequest`; they are a service option the shared facade should supply, and strict mode refuses to plan without them. (2) Runtime-home protection checks only the home directory (plain, `0700`, owned); ancestors and the binding file are enforced by the server at launch and surface as a failed smoke. (3) `ApprovalVerifier` is an interface because M3 has no host-plan approval authority to bind; with none, apply returns manual-required. (4) `VerificationReport` gained `Identities`, needed to bind and compare drift identities. (5) Route names in `RequiredRoutes` are this slice's labels, not a host vocabulary. (6) The smoke offers protocol `2025-06-18` in `initialize`; the server negotiated successfully, but the 2026-07-28 revision's metadata model was not separately exercised. (7) Instruction and tool discovery cannot be checked without a live session and are prober responsibilities.
+
+**Mutation observation.** Not observed by a separate reviewer; tests are written to fail the listed mutants but that is unverified.

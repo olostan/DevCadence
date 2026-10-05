@@ -1,0 +1,1 @@
+{"mcpServers":{"devcadence":{"type":"stdio","command":"/absolute/path/devcadence-mcp","env":{"DEVCADENCE_PROJECT_ID":"project-id","DEVCADENCE_HOME":"/absolute/private/devcadence-home"}}}}

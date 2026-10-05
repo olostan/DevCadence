@@ -320,3 +320,26 @@ func TestPrincipalContractIsPureAndCoreDoesNotDependOnIt(t *testing.T) {
 		}
 	}
 }
+
+// TestPrincipalHostsStayOutsideTheSemanticLayers keeps the host adapter on its
+// declared dependency edge (WP-M5-4): it must not import the MCP SDK, the MCP
+// adapter or the facade (it speaks the same wire bytes), and no core package
+// may import it, so host-specific types never reach core schemas.
+func TestPrincipalHostsStayOutsideTheSemanticLayers(t *testing.T) {
+	const mod = "github.com/olostan/DevCadence/"
+	deps := dependenciesOf(t, mod+"internal/principalhosts")
+	for _, dep := range deps {
+		for _, banned := range []string{"github.com/modelcontextprotocol", mod + "internal/mcpadapter", mod + "internal/principal", mod + "internal/controlplane", mod + "internal/storage"} {
+			if dep == banned || strings.HasPrefix(dep, banned+"/") {
+				t.Errorf("internal/principalhosts depends on %s", dep)
+			}
+		}
+	}
+	for _, pkg := range append([]string{mod + "internal/principal", mod + "internal/principal/facade", mod + "internal/mcpadapter", mod + "internal/controlplane"}, coreDomainPackages...) {
+		for _, dep := range dependenciesOf(t, pkg) {
+			if dep == mod+"internal/principalhosts" {
+				t.Errorf("%s depends on internal/principalhosts", pkg)
+			}
+		}
+	}
+}

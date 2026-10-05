@@ -507,7 +507,7 @@ Antigravity is an external product and configuration can change.
 
 The integration layer MUST:
 - record the upstream behavior/version it was tested against;
-- keep product-specific files under `integrations/antigravity/`;
+- keep product-specific files under `integrations/antigravity/` (in WP-M5-4 the always-on rule and skill are embedded assets of `internal/principalhosts`, rendered into the workspace by an approved plan, and are not applied automatically);
 - avoid encoding Antigravity paths/formats in core domain types;
 - update this guide and plugin together when upstream syntax changes.
 
