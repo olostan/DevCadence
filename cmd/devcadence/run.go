@@ -83,6 +83,7 @@ func commands() []command {
 		{"cognition", "list, probe and route discovered cognition endpoints", runCognition},
 		{"doctor", "diagnose environment readiness, inspect inventory, and plan remediation", runDoctor},
 		{"setup", "plan and apply bounded remediation recipes", runSetup},
+		{"benchmark", "synthesize benchmark reports and evaluate milestone gates", runBenchmark},
 	}
 }
 
