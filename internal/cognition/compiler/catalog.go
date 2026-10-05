@@ -228,6 +228,11 @@ var CanonicalInvariantMappings = map[string]InvariantMapping{
 	"DCI-156": {AdmissionClass: AdmissionClassMapped, Domains: []string{"health", "validation", "governance"}},
 	"DCI-157": {AdmissionClass: AdmissionClassMapped, Domains: []string{"security", "governance", "execution"}},
 	"DCI-158": {AdmissionClass: AdmissionClassMapped, Domains: []string{"governance", "validation", "health"}},
+
+	// O. Workflow execution runtime invariants (DCI-159..DCI-161)
+	"DCI-159": {AdmissionClass: AdmissionClassMapped, Domains: []string{"workflow", "architecture", "execution"}},
+	"DCI-160": {AdmissionClass: AdmissionClassMapped, Domains: []string{"workflow", "governance", "state", "controlplane"}},
+	"DCI-161": {AdmissionClass: AdmissionClassMapped, Domains: []string{"workflow", "architecture", "execution"}},
 }
 
 // computeRuleDigest calculates sha256:hex(content).

@@ -382,3 +382,14 @@ A pack, Skill, manifest, or generated pack content MUST NOT grant itself filesys
 
 ### DCI-158 — Successor-policy acceptance is capability-separated
 A proposed successor health/pack/toolchain policy MUST be accepted by an authority structurally independent of the candidate producer. The producing worker MUST NOT possess, derive, invoke, or mutate the credential, API, IPC endpoint, UI action, state record, or other capability that records/promotes successor approval. Role labels, prompts, or an approval command reachable from the worker's own execution environment are insufficient separation.
+
+## O. Workflow execution runtime invariants
+
+### DCI-159 — WorkflowPlan is a logical contract, not a runtime trace
+A WorkflowPlan MUST describe engineering obligations, ordering, role/independence requirements, deterministic gates, budgets and other policy-significant constraints rather than mirror one executor's private execution trace. An executor MAY use its own internal scheduling, decomposition, retry or waiting strategy, but MUST preserve every applicable DevCadence obligation and MUST NOT require executor-private topology to become canonical ProjectState solely for execution convenience.
+
+### DCI-160 — Executor-private state cannot create authority
+Executor-private state, memory, hypotheses, scheduling metadata, wait conditions, signals or equivalent mechanisms are non-authoritative. They MAY consume revision-pinned DevCadence facts/evidence by reference and MAY return candidate facts/evidence, but MUST NOT directly mutate accepted project truth, weaken policy, close independent review, expand source/spending/tool authority, replace deterministic validation, or establish acceptance. Policy-significant lifecycle and evidence outcomes cross the execution boundary through DevCadence-governed records.
+
+### DCI-161 — Execution placement is not workflow semantics
+A logical DevCadence task or WorkflowPlan stage MUST NOT derive engineering meaning or authority from the process, host, node, scheduler instance or executor that happens to perform it, unless an explicit locality/security/tool constraint is part of the task contract. The native executor MAY remain single-process and single-host. A future executor MAY use different placement internally without changing DevCadence workflow semantics; ownership, duplicate-execution, synchronization, recovery and consistency mechanisms remain executor concerns until a concrete DevCadence requirement makes them cross-boundary semantics.

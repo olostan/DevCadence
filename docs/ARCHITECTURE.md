@@ -388,7 +388,37 @@ The workflow topology itself is routable. More model calls are not automatically
 
 See [COGNITION_PORTFOLIO.md](COGNITION_PORTFOLIO.md) and [ADR-0018](adr/0018-adaptive-cognition-portfolio-and-workflow-synthesis.md).
 
-### 6.7D Credential references and secret isolation
+### 6.7D Workflow execution runtime boundary
+
+A `WorkflowPlan` is the logical engineering contract for execution, not the complete runtime trace (DCI-159, ADR-0025). DevCadence owns the policy-significant obligations that must survive every implementation: EWP/contract identity, explicit stage bindings and bounds, deterministic gates, review requirements, evidence requirements and acceptance authority.
+
+The mechanism that executes an authorized plan is a separate responsibility above the individual cognition-session driver layer:
+
+```text
+DevCadence WorkflowPlan / policy / evidence / acceptance
+                         │
+                         ▼
+                 workflow execution
+                    boundary
+                  /          \
+                 /            \
+       native executor      alternate executor
+             │
+      SessionDrivers
+      tools/validators
+```
+
+The native implementation should initially be a simple scheduler over existing SessionDrivers, processes, worktrees and validators. An alternate executor may use a different private scheduling/decomposition strategy without requiring those details to become DevCadence protocol.
+
+Executor-private state is non-authoritative. It may consume revision-pinned DevCadence facts/artifacts and return candidate outputs/evidence, but it cannot mutate accepted project truth, weaken authority, satisfy review by assertion, replace deterministic validation or establish acceptance (DCI-160).
+
+The boundary is deliberately narrow and YAGNI-driven: no plugin framework or generalized external-runtime machinery is required until a concrete second executor or current native orchestration need justifies it.
+
+The native executor therefore remains single-node/process-local by default and directly schedules ready logical stages. Execution placement is not workflow semantics (DCI-161); any future distributed integration requires a separate concrete design for ownership, duplicate execution, locality, credentials, recovery and consistency.
+
+See [ADR-0025](adr/0025-workflow-execution-runtime-boundary.md).
+
+### 6.7E Credential references and secret isolation
 
 `internal/credentials` provides provider-neutral, opaque authorization locators (`CredentialRefKind`: `env_var`, `cli_session`, `keychain_ref`). DevCadence holds no custody of raw secrets.
 

@@ -419,22 +419,51 @@ Bootstrap:
 
 See [ENVIRONMENT_INTELLIGENCE_AND_ONBOARDING.md](ENVIRONMENT_INTELLIGENCE_AND_ONBOARDING.md).
 
-## 21. Future distributed workers
+## 21. Future distributed workers and execution placement
 
-The cognition abstraction may later support remote local-model workers.
+The cognition abstraction may later support remote local-model workers. Separately, a future workflow executor may use a different placement strategy for its private work.
 
-That does not mean M3 should introduce distributed scheduling.
+M3/M4 MUST NOT introduce distributed scheduling merely for future compatibility. The native executor remains single-node/process-local unless a current requirement independently demands otherwise.
 
-A true remote worker design requires:
+A true distributed worker or task-placement design requires concrete decisions for:
 
 - mutual authentication;
-- source/artifact synchronization;
+- task ownership / duplicate-execution semantics;
+- source/artifact synchronization and locality;
 - source confidentiality;
+- worktree and validation placement;
 - capability/resource reporting;
-- failure semantics;
+- failure/recovery semantics;
+- consistency/split-brain handling where applicable;
 - a separate threat model.
 
-## 22. Core principle
+The durable constraint is only that logical WorkflowPlan semantics do not derive authority or meaning from one process/node identity (DCI-161).
+
+## 22. Workflow execution runtime versus cognition session
+
+A cognition `SessionDriver` executes interaction with one model/runtime/access path. It is intentionally not the abstraction for a whole DevCadence workflow.
+
+Above session drivers, workflow execution coordinates logical `WorkflowPlan` stages. The native DevCadence executor can directly use SessionDrivers, tools and validators. A future alternate executor may use a different private scheduling/decomposition strategy while preserving the same logical obligations.
+
+The separation is:
+
+```text
+WorkflowPlan + DevCadence authority
+              |
+       workflow execution
+          /       \
+       native    alternate
+         |
+   SessionDriver
+         |
+   cognition endpoint
+```
+
+Private executor topology/state is not a cognition endpoint/session property and must not be forced into `AccessChannel` or `SessionDriver` merely to support an alternate executor.
+
+See [ADR-0025](adr/0025-workflow-execution-runtime-boundary.md).
+
+## 23. Core principle
 
 The architectural distinction is not cloud versus local, and not frontier versus cheap.
 
