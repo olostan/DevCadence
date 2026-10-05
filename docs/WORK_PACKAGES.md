@@ -598,6 +598,10 @@ Cover Apple/MLX, NVIDIA/local, one subscription, multiple subscriptions,
 paid-API allowed/forbidden, mixed portfolios, endpoint loss, quota pressure,
 new-resource addition, topology collapse and future-driver extensibility. Verified across recommendation synthesis matrix, model-assisted and deterministic workflow planning, adaptation diffing, atomic lineage activation, revalidation-gated rollback, and schema conformance in `tests/m3d_cross_portfolio_test.go`; implemented. Milestone M3D exit criteria satisfied.
 
+## M5 — Semantic principal preparation (draft window)
+
+The [2026-10-F planning window](work-packages/window-2026-10-f-overview.md) indexes the five proposed M5 preparation EWPs and owns their shared planning status, runtime prerequisites and required M4 reevaluation. Each EWP retains its own implementation readiness gates.
+
 ## Future milestones
 
 Add a new `## <Milestone>` section here, following the same shape (branch

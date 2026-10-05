@@ -12,6 +12,10 @@ The initial supported host scope is deliberately narrow:
 
 Additional hosts are future integration candidates, not bootstrap commitments.
 
+## M5 preparation status
+
+See the [M5 preparation window](work-packages/window-2026-10-f-overview.md) for shared planning status and [WP-M5-4](work-packages/wp-m5-4-host-integration-ewp.md) for proposed recipes, adapter ownership, installed-host evidence and source-boundary tests.
+
 ## 1. Host versus cognition endpoint
 
 A principal host is the user-facing environment in which the principal operates.
