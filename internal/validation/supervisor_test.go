@@ -3,6 +3,7 @@ package validation
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -260,6 +261,7 @@ func TestServiceVerifiedTeardown(t *testing.T) {
 	if err != nil {
 		t.Fatalf("StartServices: %v", err)
 	}
+	t.Cleanup(func() { _ = active.Teardown(context.Background()) })
 
 	pid := active.services[0].PID
 	tempDir := active.services[0].TempDir
@@ -278,6 +280,13 @@ func TestServiceVerifiedTeardown(t *testing.T) {
 	var record PIDRecord
 	if err := json.Unmarshal(data, &record); err != nil {
 		t.Fatalf("Unmarshal PID record: %v", err)
+	}
+	osStartTime, err := processStartTime(context.Background(), pid)
+	if err != nil {
+		t.Fatalf("Read OS process start time: %v", err)
+	}
+	if diff := record.StartTime.Sub(osStartTime); diff < -processStartTimeTolerance || diff > processStartTimeTolerance {
+		t.Fatalf("PID record start time %v differs from OS identity %v", record.StartTime, osStartTime)
 	}
 
 	// Verify ownership check succeeds on actual running process
@@ -301,6 +310,9 @@ func TestServiceVerifiedTeardown(t *testing.T) {
 	if err == nil || errs.CategoryOf(err) != errs.CategoryPolicyDenied {
 		t.Fatalf("Expected CategoryPolicyDenied for stale PID reconciliation, got: %v", err)
 	}
+	if !isPIDAlive(pid) {
+		t.Fatal("Stale PID reconciliation signaled the live service")
+	}
 
 	// Teardown active service
 	if err := active.Teardown(context.Background()); err != nil {
@@ -313,6 +325,164 @@ func TestServiceVerifiedTeardown(t *testing.T) {
 	// Verify process is killed
 	if isPIDAlive(pid) {
 		t.Errorf("Expected process %d to be dead after Teardown, but it is still running", pid)
+	}
+}
+
+func TestServicePersistsOSStartTime(t *testing.T) {
+	serverBin := getTestServerBinary(t)
+	// An OS timestamp deliberately far from the controller wall clock proves
+	// persistence does not substitute time.Now() for process identity.
+	want := time.Date(2000, time.January, 2, 3, 4, 5, 0, time.UTC)
+	spec := ServiceSpec{ID: "clock-skew", Argv: []string{serverBin}, Env: map[string]string{"PORT": "0"}}
+	svc, err := startSingleServiceWithIdentity(context.Background(), spec, t.TempDir(), nil, "clock-skew", nil,
+		func(context.Context, int) (time.Time, error) { return want, nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+	active := &ActiveServices{services: []*ActiveService{svc}}
+	t.Cleanup(func() { _ = active.Teardown(context.Background()) })
+	data, err := os.ReadFile(filepath.Join(svc.TempDir, "service.pid"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var record PIDRecord
+	if err := json.Unmarshal(data, &record); err != nil {
+		t.Fatal(err)
+	}
+	if record.PID != svc.PID || !record.StartTime.Equal(want) {
+		t.Fatalf("persisted identity = %+v; want PID %d, start %v", record, svc.PID, want)
+	}
+}
+
+func TestServiceIdentityFailureReapsChild(t *testing.T) {
+	serverBin := getTestServerBinary(t)
+	tempRoot := t.TempDir()
+	t.Setenv("TMPDIR", tempRoot)
+	var pid int
+	spec := ServiceSpec{ID: "identity-failure", Argv: []string{serverBin}, Env: map[string]string{"PORT": "0"}}
+	svc, err := startSingleServiceWithIdentity(context.Background(), spec, t.TempDir(), nil, "identity-failure", nil,
+		func(_ context.Context, childPID int) (time.Time, error) {
+			pid = childPID
+			if !isPIDAlive(pid) {
+				t.Error("identity lookup did not receive a live child")
+			}
+			return time.Time{}, os.ErrPermission
+		})
+	if svc != nil || err == nil || errs.CategoryOf(err) != errs.CategoryInternal {
+		t.Fatalf("identity failure: service=%v error=%v", svc, err)
+	}
+	if pid <= 0 || isPIDAlive(pid) {
+		t.Fatalf("child %d was not terminated and reaped", pid)
+	}
+	entries, err := os.ReadDir(tempRoot)
+	if err != nil || len(entries) != 0 {
+		t.Fatalf("startup left temporary resources: entries=%v error=%v", entries, err)
+	}
+}
+
+func TestProcessStartTimeParsing(t *testing.T) {
+	for _, input := range []string{"", "   \n", "not a timestamp", "Mon Jan 99 15:04:05 2006"} {
+		t.Run(input, func(t *testing.T) {
+			if _, err := parseProcessStartTime(123, input); err == nil {
+				t.Fatal("accepted missing or malformed process identity")
+			}
+		})
+	}
+	want := time.Date(2006, time.January, 2, 15, 4, 5, 0, time.Local)
+	got, err := parseProcessStartTime(123, "  Mon Jan  2 15:04:05 2006\n")
+	if err != nil || !got.Equal(want) {
+		t.Fatalf("parsed identity=%v error=%v; want %v", got, err, want)
+	}
+}
+
+func TestProcessStartTimeCancelled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := queryProcessStartTime(ctx, os.Getpid()); err == nil {
+		t.Fatal("cancelled identity query succeeded")
+	}
+}
+
+func TestProcessNamespaceIdentity(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		data      string
+		err       error
+		wantError bool
+	}{
+		{name: "same namespace", data: "42 (service name) S", wantError: false},
+		{name: "different namespace", data: "142 (service) S", wantError: true},
+		{name: "missing", err: os.ErrNotExist, wantError: true},
+		{name: "empty", wantError: true},
+		{name: "malformed PID", data: "invalid (service) S", wantError: true},
+		{name: "missing stat fields", data: "42", wantError: true},
+		{name: "zero PID", data: "0 (service) S", wantError: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := checkLinuxProcessNamespace(42, func() ([]byte, error) { return []byte(tc.data), tc.err })
+			if (err != nil) != tc.wantError {
+				t.Fatalf("namespace check error=%v; want error=%v", err, tc.wantError)
+			}
+			queryCalled := false
+			got, queryErr := processStartTimeWithNamespace(context.Background(), 42,
+				func() error { return err },
+				func(context.Context, int) (time.Time, error) {
+					queryCalled = true
+					// A colliding outer PID can return a valid timestamp. A failed
+					// namespace check must reject it without querying that PID.
+					return parseProcessStartTime(42, "Mon Jan  2 15:04:05 2006")
+				})
+			if tc.wantError {
+				if queryCalled || !got.IsZero() || !errors.Is(queryErr, err) {
+					t.Fatalf("unsafe namespace query: called=%v time=%v error=%v", queryCalled, got, queryErr)
+				}
+			} else if !queryCalled || queryErr != nil || got.IsZero() {
+				t.Fatalf("valid namespace rejected: called=%v time=%v error=%v", queryCalled, got, queryErr)
+			}
+		})
+	}
+}
+
+func TestReconciliationRejectsMismatchedProcessNamespace(t *testing.T) {
+	serverBin := getTestServerBinary(t)
+	want := time.Date(2000, time.January, 2, 3, 4, 5, 0, time.UTC)
+	spec := ServiceSpec{ID: "namespace-refusal", Argv: []string{serverBin}, Env: map[string]string{"PORT": "0"}}
+	svc, err := startSingleServiceWithIdentity(context.Background(), spec, t.TempDir(), nil, "namespace-refusal", nil,
+		func(context.Context, int) (time.Time, error) { return want, nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+	active := &ActiveServices{services: []*ActiveService{svc}}
+	t.Cleanup(func() { _ = active.Teardown(context.Background()) })
+	pidFile := filepath.Join(svc.TempDir, "service.pid")
+	queryCalled := false
+	err = reconcileAndCleanupWithIdentity(pidFile, func(ctx context.Context, pid int) (time.Time, error) {
+		if pid != svc.PID {
+			t.Fatalf("lookup PID = %d; want live service %d", pid, svc.PID)
+		}
+		return processStartTimeWithNamespace(ctx, pid,
+			func() error {
+				return checkLinuxProcessNamespace(42, func() ([]byte, error) {
+					return []byte("142 (controller) S"), nil
+				})
+			},
+			func(context.Context, int) (time.Time, error) {
+				queryCalled = true
+				// The unrelated procfs PID could appear to match the record.
+				return want, nil
+			})
+	})
+	if err == nil || errs.CategoryOf(err) != errs.CategoryPolicyDenied {
+		t.Fatalf("mismatched namespace reconciliation error = %v", err)
+	}
+	if queryCalled {
+		t.Fatal("queried a target PID in an incompatible procfs view")
+	}
+	if !isPIDAlive(svc.PID) {
+		t.Fatal("ownership refusal signaled the live service")
+	}
+	if _, err := os.Stat(pidFile); err != nil {
+		t.Fatalf("ownership refusal removed its unresolved PID record: %v", err)
 	}
 }
 
@@ -391,4 +561,3 @@ func TestServiceReadinessVerification(t *testing.T) {
 		t.Errorf("Expected CategoryProbeTimeout, got: %v", err)
 	}
 }
-

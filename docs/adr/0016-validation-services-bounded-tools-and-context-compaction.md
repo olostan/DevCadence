@@ -166,3 +166,16 @@ exists.
   requirement, and the routing between the two tiers before it is considered
   complete.
 
+
+## Amendment (2026-10-05): Process identity capture and incompatible PID views
+
+- **Status:** Proposed
+- **Trigger:** PR #77 review identified that controller wall-clock timestamps can differ from the OS start time used for restart reconciliation.
+
+### Decision change
+
+Extend §2's ownership decision: startup records the OS-reported process start time using the same bounded, five-second `ps -p <pid> -o lstart=` query as reconciliation. The query sets `LC_ALL=C` so day and month names match the parser. Reconciliation retains its existing two-second start-time tolerance; controlled capture tests still require the exact returned timestamp to be persisted.
+
+On Linux, both identity-capture paths require the PID in `/proc/self/stat` to match the controller's execution PID before querying any target PID. Missing, malformed or mismatched identity means the procfs numeric PID view is unsupported. This is a prerequisite for interpreting target PIDs, not a target ownership check: the target must still be alive and match its recorded start time. An incompatible view could return a valid timestamp for an unrelated outer-namespace process with the same numeric PID while termination addresses the execution namespace. No cross-namespace PID translation is introduced.
+
+If startup cannot capture identity (including unavailable `ps` or an incompatible PID view), it fails with an internal error, terminates and reaps the child through its owned process handle, and removes temporary resources. Reconciliation refuses to signal the PID and retains the unresolved record when identity cannot be verified. Deployments with an incompatible procfs mount cannot run supervised validation services or reconcile them through this path; they must provide a compatible PID view rather than bypass ownership verification.

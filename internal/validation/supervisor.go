@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -20,10 +21,11 @@ import (
 )
 
 const (
-	DefaultStartupTimeout  = 30 * time.Second
-	DefaultShutdownTimeout = 5 * time.Second
-	DefaultMaxLifetime     = 15 * time.Minute
-	DefaultProbeInterval   = 50 * time.Millisecond
+	DefaultStartupTimeout     = 30 * time.Second
+	DefaultShutdownTimeout    = 5 * time.Second
+	DefaultMaxLifetime        = 15 * time.Minute
+	DefaultProbeInterval      = 50 * time.Millisecond
+	processStartTimeTolerance = 2 * time.Second
 )
 
 // PIDRecord represents process metadata persisted for crash reconciliation (ADR-0016).
@@ -208,6 +210,10 @@ func StartServices(ctx context.Context, specs []ServiceSpec, baseDir string, bas
 }
 
 func startSingleService(ctx context.Context, spec ServiceSpec, baseDir string, currentEnv []string, runID string, modules []protocol.ModuleDefinition) (*ActiveService, error) {
+	return startSingleServiceWithIdentity(ctx, spec, baseDir, currentEnv, runID, modules, processStartTime)
+}
+
+func startSingleServiceWithIdentity(ctx context.Context, spec ServiceSpec, baseDir string, currentEnv []string, runID string, modules []protocol.ModuleDefinition, lookupStartTime func(context.Context, int) (time.Time, error)) (*ActiveService, error) {
 	workingDir := baseDir
 	if spec.ModuleID != "" {
 		var foundMod *protocol.ModuleDefinition
@@ -328,9 +334,19 @@ func startSingleService(ctx context.Context, spec ServiceSpec, baseDir string, c
 		_ = listener.Close()
 	}
 
+	// Record the OS identity used by reconciliation, rather than the controller's
+	// wall clock: clock adjustments and container boot-time views can differ.
+	processStartedAt, err := lookupStartTime(ctx, cmd.Process.Pid)
+	if err != nil {
+		killServiceForced(cmd.Process)
+		_ = cmd.Wait()
+		_ = os.RemoveAll(tempDir)
+		return nil, errs.Wrap(errs.CategoryInternal, err, "capture process start time for service %q", spec.ID)
+	}
+
 	pidRecord := PIDRecord{
 		PID:        cmd.Process.Pid,
-		StartTime:  startedAt,
+		StartTime:  processStartedAt,
 		Executable: argv[0],
 		ServiceID:  spec.ID,
 	}
@@ -495,6 +511,10 @@ func probeHTTP(port int, path string, expectedStatus int, expectedBody string) b
 
 // VerifyProcessOwnership checks if a PID is alive and matches the recorded start time (ADR-0016).
 func VerifyProcessOwnership(record PIDRecord) bool {
+	return verifyProcessOwnershipWithIdentity(record, processStartTime)
+}
+
+func verifyProcessOwnershipWithIdentity(record PIDRecord, lookupStartTime func(context.Context, int) (time.Time, error)) bool {
 	if record.PID <= 0 {
 		return false
 	}
@@ -504,19 +524,7 @@ func VerifyProcessOwnership(record PIDRecord) bool {
 		return false
 	}
 
-	// 2. Query process start time via ps
-	out, err := exec.Command("ps", "-p", strconv.Itoa(record.PID), "-o", "lstart=").Output()
-	if err != nil {
-		return false
-	}
-
-	str := strings.TrimSpace(string(out))
-	if str == "" {
-		return false
-	}
-
-	// Format: "Mon Jan _2 15:04:05 2006"
-	parsed, err := time.ParseInLocation("Mon Jan _2 15:04:05 2006", str, time.Local)
+	parsed, err := lookupStartTime(context.Background(), record.PID)
 	if err != nil {
 		return false
 	}
@@ -526,12 +534,84 @@ func VerifyProcessOwnership(record PIDRecord) bool {
 	if diff < 0 {
 		diff = -diff
 	}
-	return diff <= 2*time.Second
+	return diff <= processStartTimeTolerance
+}
+
+func processStartTime(ctx context.Context, pid int) (time.Time, error) {
+	return processStartTimeWithNamespace(ctx, pid, checkProcessNamespace, queryProcessStartTime)
+}
+
+func processStartTimeWithNamespace(ctx context.Context, pid int, checkNamespace func() error, query func(context.Context, int) (time.Time, error)) (time.Time, error) {
+	if err := checkNamespace(); err != nil {
+		return time.Time{}, err
+	}
+	return query(ctx, pid)
+}
+
+func checkProcessNamespace() error {
+	if runtime.GOOS != "linux" {
+		return nil
+	}
+	return checkLinuxProcessNamespace(os.Getpid(), func() ([]byte, error) {
+		return os.ReadFile("/proc/self/stat")
+	})
+}
+
+func checkLinuxProcessNamespace(pid int, readSelf func() ([]byte, error)) error {
+	data, err := readSelf()
+	if err != nil {
+		return fmt.Errorf("read process namespace identity: %w", err)
+	}
+	// The first stat field is the PID as seen by the procfs mount. Never use
+	// target PIDs from another namespace, even if the same number exists there.
+	// This validates the numeric PID view, not ownership of any target process;
+	// callers must still verify that target's recorded start time.
+	first, _, found := strings.Cut(string(data), " ")
+	procPID, err := strconv.Atoi(first)
+	if !found || err != nil || procPID <= 0 {
+		return fmt.Errorf("invalid procfs process identity")
+	}
+	if procPID != pid {
+		return fmt.Errorf("process namespace mismatch: procfs PID %d, execution PID %d", procPID, pid)
+	}
+	return nil
+}
+
+func queryProcessStartTime(ctx context.Context, pid int) (time.Time, error) {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "ps", "-p", strconv.Itoa(pid), "-o", "lstart=")
+	// ps uses locale-dependent day/month names; the parser expects English.
+	cmd.Env = append(os.Environ(), "LC_ALL=C")
+	out, err := cmd.Output()
+	if err != nil {
+		return time.Time{}, err
+	}
+
+	return parseProcessStartTime(pid, string(out))
+}
+
+func parseProcessStartTime(pid int, out string) (time.Time, error) {
+	str := strings.TrimSpace(out)
+	if str == "" {
+		return time.Time{}, fmt.Errorf("process %d has no start time", pid)
+	}
+
+	// Format: "Mon Jan _2 15:04:05 2006"
+	parsed, err := time.ParseInLocation("Mon Jan _2 15:04:05 2006", str, time.Local)
+	if err != nil {
+		return time.Time{}, err
+	}
+	return parsed, nil
 }
 
 // ReconcileAndCleanup checks process ownership before terminating stale services.
 // It refuses to signal recycled PIDs if start time does not match.
 func ReconcileAndCleanup(pidFilePath string) error {
+	return reconcileAndCleanupWithIdentity(pidFilePath, processStartTime)
+}
+
+func reconcileAndCleanupWithIdentity(pidFilePath string, lookupStartTime func(context.Context, int) (time.Time, error)) error {
 	data, err := os.ReadFile(pidFilePath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -545,7 +625,7 @@ func ReconcileAndCleanup(pidFilePath string) error {
 		return errs.Wrap(errs.CategoryInvalidArgument, err, "unmarshal pid record")
 	}
 
-	if !VerifyProcessOwnership(record) {
+	if !verifyProcessOwnershipWithIdentity(record, lookupStartTime) {
 		return errs.New(errs.CategoryPolicyDenied,
 			"unresolved_reconciliation: process %d ownership cannot be verified against start time %v (refusing to signal PID)",
 			record.PID, record.StartTime)
