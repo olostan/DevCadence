@@ -725,6 +725,38 @@ Aggregation is an orchestration phase within `ReviewCampaign`, not a separate du
 - **Asymmetric Veto**: If any reviewer raises a `BLOCKING` finding in `security` or `invariants`, an Aggregator model **cannot** discard or override it. Deterministic falsification evidence may prove a finding *false or inapplicable* (e.g. demonstrating that a cited vulnerability path is unreachable or a claimed invariant conflict is refuted by code), but cannot waive or override a genuine invariant requirement. A real invariant conflict requires an explicit human/principal decision record, never an automatic reviewer dismissal.
 - **Consolidated Repair Synthesis**: If findings exist or reviewers disagree, the Aggregator synthesizes the findings into standard `FindingDisposition` records and compiles at most one consolidated `RepairWorkPackage`. Implementers never negotiate directly with multiple reviewers.
 
+## 11c. Subagent Failure and Quota Recovery Protocol
+
+To preserve orchestrator context efficiency, enforce role boundaries, and maintain resilience against model rate limits and execution crashes, DevCadence defines standard recovery procedures for delegated worker subagents (DCI-018, DCI-019).
+
+### 1. Master Context Preservation and Mandatory Delegation
+Master orchestrators and Principal coordinators MUST NOT directly inspect implementation code, view multi-thousand-line test suites, or parse raw test logs into their primary context. Ingesting implementation details saturates the orchestrator context window, degrades high-level strategic reasoning, and consumes scarce tokens.
+- All code inspection, debugging, iterative test repairs, and patch applications MUST be delegated immediately to bounded, clean-context worker subagents.
+- When deterministic validation fails, the master extracts a concise failure signature (test name and terminal assertion failure) and dispatches a dedicated repair subagent with a tightly scoped Context Pack.
+- Master context is reserved strictly for EWP formulation, invariant compliance, review aggregation, and decision recording.
+
+### 2. Failure and Quota Triggers
+A subagent task failure is recognized by the following deterministic failure modes:
+- **`RESOURCE_EXHAUSTED` (HTTP 429):** Provider token quota, rate limit, or concurrent request limit reached.
+- **Context Saturation / Overflow:** Subagent reaches model context window boundary or token threshold.
+- **Execution Timeout / Process Abort:** Tool execution exceeds time limits or host process crashes.
+- **Unrecoverable Tool Failure:** Repeated tool execution errors without forward progress.
+
+### 3. Fail-Fast and Zero Contamination
+- **Fail-Fast:** A failing worker subagent terminates immediately. It MUST NOT loop in conversational apologies or repeated failing retries.
+- **Zero Master Contamination:** The master orchestrator MUST NOT pull the failed subagent's full conversational history, verbose stack traces, or corrupted tool logs into the master context. Only structured diagnostic metadata is retained: failure category (`quota_exhausted`, `timeout`, `tool_failure`), affected file path, and failed step summary.
+
+### 4. Isolated Re-dispatch Procedure
+When a subagent fails due to resource exhaustion or transient execution faults, the master orchestrator executes isolated re-dispatch:
+1. **Prompt & Context Compaction:** The master constructs a tighter, minimal prompt. Completed sub-tasks are omitted; only the unresolved delta, exact failure signature, and required files are admitted.
+2. **Clean Session Boundary:** The new worker is spawned in a completely fresh, isolated session (`clean-context worker`), ensuring zero memory leakage from the aborted run.
+3. **Alternative Endpoint / Channel Routing:** If failure was caused by provider quota exhaustion (`RESOURCE_EXHAUSTED` / 429), the master routes the re-dispatched worker to an alternate capable endpoint or fallback model family authorized in the active `CognitionPortfolio`, or enforces backoff if single-provider.
+4. **Retry Bound:** Exactly **one (1)** isolated re-dispatch attempt is permitted per delegated task. If the secondary worker fails, autonomous iteration halts immediately.
+
+### 5. Escalation and Anti-Bypass Gate
+- If the secondary subagent fails or all capable endpoints exhaust their quotas, the master MUST NOT attempt manual self-repair or directly edit code files in the master context.
+- Instead, the master raises a formal `EscalationRequest` (§13) to the Principal Engineer or Human Operator, recording the failure trajectory and structural blocker (DCI-009, DCI-015).
+
 ## 12. DisagreementReport
 
 When independent reviews disagree materially, preserve the disagreement as a first-class object rather than collapsing it into one verdict.

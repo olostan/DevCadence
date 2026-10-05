@@ -1,0 +1,20 @@
+{
+  "schema_version": "1.0",
+  "lesson_candidate_id": "lc_m3d_03_subagent_quota_recovery",
+  "scope": "project",
+  "type": "escalation_rule",
+  "observation": "During WP-M3D-5 repair execution, subagent 1 failed abruptly with RESOURCE_EXHAUSTED (HTTP code 429 quota reached) due to context inflation and repetitive tool calls. The orchestrator lacked a formal protocol for handling subagent quota failure, needing ad-hoc recovery by spawning a new repair subagent with a tighter prompt.",
+  "trajectory_refs": [
+    "traj_m3d_wp5_repair_subagent_429"
+  ],
+  "proposed_change": "Formalize Subagent Failure & Quota Recovery Protocol in docs/PROTOCOLS.md (§11c): enforce fail-fast termination on 429/timeout, zero master context contamination, prompt/scope compaction, and clean isolated re-dispatch to alternate endpoints or tighter scopes (max 1 retry before formal Principal escalation).",
+  "expected_benefit": "Prevents cascading failures, eliminates session deadlocks from quota exhaustion, and standardizes automated recovery without manual orchestrator improvisation.",
+  "possible_counterexamples": [
+    "If all available provider quotas are simultaneously exhausted, re-dispatch will fail immediately and require Principal/Human intervention."
+  ],
+  "conflict_refs": [],
+  "evaluation_plan": "Simulate quota exhaustion in staging/testbeds and verify clean re-dispatch and escalation behavior.",
+  "promotion_authority": "principal",
+  "rollback_plan": "Remove §11c quota recovery procedure from PROTOCOLS.md.",
+  "status": "proposed"
+}

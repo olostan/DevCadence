@@ -113,16 +113,28 @@ Acceptance scenarios are semantic. Validation commands below provide evidence th
 - command / deterministic check:
 - command / deterministic check:
 - mutation testing: [declare one: "mutation testing required: <scope/tool>" | "mutation review sufficient: <adversarial catalog below>" | "not applicable: <reason>"]
-- mutation catalog:
 
-| Mutant (Plausible Bug / Omission) | Expected Test Failure (Scenario / Check) |
+### Mutation Catalog (Mandatory)
+The Mutation Catalog Table is MANDATORY for all implementation EWPs (unless explicitly declared "not applicable" with architectural justification). For each critical positive requirement or fail-closed invariant, enumerate plausible omissions, condition flips, or bypassed checks and specify the exact test or scenario that must fail.
+
+| Mutant (Plausible Bug / Omission / Boundary Inversion) | Expected Test Failure (Scenario / Invariant Check) |
 | --- | --- |
-| [mutant 1 description] | [ACC-XX fails / invariant check fails] |
-| [mutant 2 description] | [ACC-YY fails / validator rejects] |
+| [mutant 1: e.g. inverted fallback condition or missing error check] | [ACC-XX fails / specific test assertion fails] |
+| [mutant 2: e.g. unauthenticated driver admitted or budget uncharged] | [ACC-YY fails / validator rejects with ErrUnauthorized] |
+| [mutant 3: e.g. status transition missing or partial rollback] | [ACC-ZZ fails / state verification fails] |
 
-- required independent review lenses:
-  - Contract & Authority Reviewer: verifies requirements REQ-*, invariants INV-*, boundaries, and fail-closed security.
-  - Test Adequacy & Mutation Reviewer: verifies coverage of ACC-*, checks edge cases, and kills all cataloged mutants.
+### Required Independent Review Lenses (Dual-Lens Review Pack)
+All implementation candidates must be evaluated by two independent review subagents dispatched with clean Reviewer Context Packs (DCI-046, DCI-049):
+1. **Contract & Authority Reviewer:**
+   - Verifies compliance with `REQ-*` requirements and `INV-*` invariants.
+   - Verifies package dependency direction and boundary isolation (`boundaries_test.go`).
+   - Verifies authority decisions (fail-closed budget, opaque credentials, rejection of unauthorized drivers/tools).
+   - Validates that error reporting does not leak secrets or credentials.
+2. **Test Adequacy & Mutation Reviewer:**
+   - Verifies scenario coverage (`ACC-*`) and assertional strength (rejects tautological or no-op checks).
+   - Verifies test independence and mock fidelity (ensures mocks cannot satisfy tests without exercising real logic).
+   - Evaluates code against the **Mutation Catalog**: actively verifies that every cataloged mutant causes existing tests to fail.
+
 - evidence to capture:
 
 ## Escalation triggers

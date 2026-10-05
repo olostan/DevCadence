@@ -1,0 +1,20 @@
+{
+  "schema_version": "1.0",
+  "lesson_candidate_id": "lc_m3d_02_dual_lens_standardization",
+  "scope": "project",
+  "type": "review_rule",
+  "observation": "Dual-lens independent review (Contract & Authority Reviewer vs. Test Adequacy & Mutation Reviewer) in WP-M3D-5 caught subtle, critical flaws that a single generic reviewer missed: a no-op assertion bug (len(res.FallbackReason) == 0), missing future-driver extensibility in the cross-portfolio verification matrix, and omitted budget exhaustion in the lifecycle test scenario.",
+  "trajectory_refs": [
+    "traj_m3d_wp5_dual_review_repair"
+  ],
+  "proposed_change": "Standardize the Dual-Lens Review Pack and require explicit Mutation Catalog Tables in docs/work-packages/IMPLEMENTATION_READY_TEMPLATE.md and docs/REVIEW_AND_CONVERGENCE.md for all implementation-ready EWPs.",
+  "expected_benefit": "Dramatically increases defect detection precision on edge-case logic and negative-path assertions while eliminating single-reviewer blind spots and anchoring bias.",
+  "possible_counterexamples": [
+    "Simple documentation-only or typo-fix EWPs do not require full dual mutation review; template already allows 'not applicable' declaration with recorded rationale."
+  ],
+  "conflict_refs": [],
+  "evaluation_plan": "Review findings and mutation kill rates across Window 2026-10-D EWPs to verify dual-lens catch rate and absence of undetected assertion bugs.",
+  "promotion_authority": "principal",
+  "rollback_plan": "Revert mandatory dual-lens requirement in EWP template back to single-reviewer optional configuration.",
+  "status": "proposed"
+}

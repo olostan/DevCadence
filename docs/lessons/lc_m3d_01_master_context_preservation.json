@@ -1,0 +1,21 @@
+{
+  "schema_version": "1.0",
+  "lesson_candidate_id": "lc_m3d_01_master_context_preservation",
+  "scope": "project",
+  "type": "task_decomposition",
+  "observation": "During Rolling Planning Window 2026-10-C and WP-M3D-5 execution, the master orchestrator directly read multi-thousand-line implementation files (tests/m3d_cross_portfolio_test.go) and voluminous test output logs into its own context instead of delegating immediately to bounded worker subagents. This led to master context saturation, severe token consumption, loss of high-level orchestration visibility, and increased vulnerability to attention degradation.",
+  "trajectory_refs": [
+    "traj_m3d_window_c_orchestration",
+    "traj_m3d_wp5_exit_matrix"
+  ],
+  "proposed_change": "Mandate a strict context admission threshold in AGENTS.md (§2, §3) and docs/PROTOCOLS.md (§11c): Master orchestrators MUST NEVER directly inspect implementation code, edit application files, or parse large test execution logs in their own context. All code inspection, debugging, and iterative test-fixing must be delegated to bounded clean-context implementation subagents.",
+  "expected_benefit": "Preserves master agent context window for strategic planning, invariant enforcement, and review aggregation; cuts orchestrator token usage by >60%; eliminates context contamination from implementation churn.",
+  "possible_counterexamples": [
+    "Trivial single-line configuration adjustments or reading small status metadata might feel slower if dispatched to a subagent, but the threshold prevents insidious context creep."
+  ],
+  "conflict_refs": [],
+  "evaluation_plan": "Evaluate during Planning Window 2026-10-D and Milestone M4: track master orchestrator token consumption and verify zero direct code/test inspections in master session logs.",
+  "promotion_authority": "principal",
+  "rollback_plan": "Revert delegation clause in AGENTS.md and PROTOCOLS.md to advisory status.",
+  "status": "proposed"
+}
