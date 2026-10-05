@@ -413,7 +413,7 @@ Stop and escalate if:
 
 4. **Integration with Existing Codebase:**
    - Replaced duplicate unexported `looksLikeSecret` in `internal/cognition/service.go` and `internal/cognition/remoteapi/remoteapi.go` with delegation to `protocol.LooksLikeSecret`.
-   - Updated `docs/PROTOCOLS.md` (§20) and `docs/ARCHITECTURE.md` (§6.7D) with component boundaries and invariants.
+   - Updated `docs/PROTOCOLS.md` (§20) and `docs/ARCHITECTURE.md` (§6.7E) with component boundaries and invariants.
 
 ### Deterministic verification results
 
