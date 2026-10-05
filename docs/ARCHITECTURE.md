@@ -388,7 +388,38 @@ The workflow topology itself is routable. More model calls are not automatically
 
 See [COGNITION_PORTFOLIO.md](COGNITION_PORTFOLIO.md) and [ADR-0018](adr/0018-adaptive-cognition-portfolio-and-workflow-synthesis.md).
 
-### 6.7D Credential references and secret isolation
+### 6.7D Workflow execution runtime boundary
+
+A `WorkflowPlan` is the logical engineering contract for execution, not the complete runtime task graph (DCI-159, ADR-0025). DevCadence owns the obligations that must survive every implementation: EWP/contract identity, policy, budget/source exposure, deterministic gates, review independence, evidence requirements and acceptance authority.
+
+The mechanism that executes an authorized plan is a separate responsibility above the individual cognition-session driver layer:
+
+```text
+DevCadence WorkflowPlan / policy / evidence / acceptance
+                         │
+                         ▼
+                 Workflow Executor
+                  /            \
+                 /              \
+       Native executor        External runtime
+             │                      │
+      SessionDrivers          private task graph
+      tools/validators        knowledge + wake logic
+```
+
+The native implementation may initially be a simple scheduler over existing SessionDrivers, processes and validators. A future external cognitive runtime may internally decompose a logical stage into a recursive task graph, suspend and resume work, or use event-driven scheduling without requiring those implementation details to become DevCadence protocol.
+
+Execution runtimes may also maintain private hierarchical task knowledge. Such knowledge may reference revision-pinned ProjectState, ContextPacks, EvidenceLeases and artifacts, but runtime hypotheses/blackboard facts are not canonical project truth. Candidate facts/evidence return through the normal DevCadence evidence/validation/review path (DCI-160).
+
+Likewise, activation is runtime-private below the logical stage boundary. An executor may use dependency completion, timers, external events, knowledge predicates, queues, receptors/ligands or another wait/wake mechanism. DevCadence requires semantic lifecycle/evidence/resource outcomes at the boundary, not one specific scheduler vocabulary.
+
+This boundary is deliberately narrow and YAGNI-driven: no plugin framework, COS-specific protocol types, hierarchical-blackboard implementation or generic pub/sub system is required until a concrete second executor or current native orchestration need justifies it.
+
+The native executor should therefore stay intentionally simple: single-node/process-local by default, direct scheduling of ready logical stages, and reuse of existing SessionDrivers/process/worktree/validation services. Future execution placement is not workflow semantics (DCI-161). An external runtime may later distribute its private tasks—for example through a task-synchronizing runtime fabric such as COS Nexus—without requiring the native executor or canonical WorkflowPlan to implement distributed ownership. A real distributed integration still requires its own security, source/artifact locality, recovery and consistency design; this architecture does not claim those problems are solved.
+
+See [ADR-0025](adr/0025-workflow-execution-runtime-boundary.md).
+
+### 6.7E Credential references and secret isolation
 
 `internal/credentials` provides provider-neutral, opaque authorization locators (`CredentialRefKind`: `env_var`, `cli_session`, `keychain_ref`). DevCadence holds no custody of raw secrets.
 

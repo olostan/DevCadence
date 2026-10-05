@@ -419,22 +419,53 @@ Bootstrap:
 
 See [ENVIRONMENT_INTELLIGENCE_AND_ONBOARDING.md](ENVIRONMENT_INTELLIGENCE_AND_ONBOARDING.md).
 
-## 21. Future distributed workers
+## 21. Future distributed workers and execution placement
 
-The cognition abstraction may later support remote local-model workers.
+The cognition abstraction may later support remote local-model workers. Separately, a future workflow execution runtime may distribute its own private runtime tasks across nodes.
 
-That does not mean M3 should introduce distributed scheduling.
+For example, a COS-backed executor may eventually use COS Nexus nodes to store/synchronize tasks among COS Runtime instances. That is a workflow-executor concern, not a reason to turn today's DevCadence scheduler into a distributed system.
 
-A true remote worker design requires:
+M3/M4 MUST NOT introduce distributed scheduling merely for future compatibility. The native executor remains single-node/process-local unless a current requirement independently demands otherwise.
+
+A true distributed worker or task-placement design requires concrete decisions for:
 
 - mutual authentication;
-- source/artifact synchronization;
+- task ownership / duplicate-execution semantics;
+- source/artifact synchronization and locality;
 - source confidentiality;
+- worktree and validation placement;
 - capability/resource reporting;
-- failure semantics;
+- failure/recovery semantics;
+- consistency/split-brain handling where applicable;
 - a separate threat model.
 
-## 22. Core principle
+The durable constraint is only that logical WorkflowPlan semantics do not derive authority or meaning from one process/node identity (DCI-161).
+
+## 22. Workflow execution runtime versus cognition session
+
+A cognition `SessionDriver` executes interaction with one model/runtime/access path. It is intentionally not the abstraction for a whole DevCadence workflow.
+
+Above session drivers, a workflow execution runtime may coordinate logical WorkflowPlan stages. The native DevCadence executor can directly use SessionDrivers, tools and validators. A future external runtime such as COS may instead create its own private task graph, hierarchical knowledge scopes and event-driven wait/wake machinery while consuming the same authorized cognition resources underneath.
+
+The separation is:
+
+```text
+WorkflowPlan + DevCadence authority
+              |
+       workflow executor
+          /       \
+       native    external
+         |          |
+   SessionDriver   private orchestration
+         \          /
+       cognition endpoints
+```
+
+Runtime-private task graphs, blackboards, receptors/ligands, scheduler state or equivalent mechanisms are not cognition endpoint/session properties and must not be forced into `AccessChannel` or `SessionDriver` merely to support an external orchestrator.
+
+See [ADR-0025](adr/0025-workflow-execution-runtime-boundary.md).
+
+## 23. Core principle
 
 The architectural distinction is not cloud versus local, and not frontier versus cheap.
 

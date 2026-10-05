@@ -71,6 +71,7 @@ Start with [AGENTS.md](../AGENTS.md), the applicable [role template](../prompts/
 | Agent context, rule admission, retrieval, prompt projection or driver capability | [ADR-0019](adr/0019-non-conversational-cognition-and-adaptive-review.md#context-working-set-contract), [ADR-0020](adr/0020-cognitive-invocation-compiler-and-review-ledger.md), [PROTOCOLS.md §10B](PROTOCOLS.md#10b-adaptive-context-architecture-and-evidence-working-set-implemented---wp-m3c-1--wp-m3c-2b), [LOCAL_AGENTS.md](LOCAL_AGENTS.md#context-admission-and-endpoint-envelopes) |
 | Tool output/history compaction or supervised process | [ADR-0016](adr/0016-validation-services-bounded-tools-and-context-compaction.md), [SECURITY.md](SECURITY.md) |
 | Machine, setup, credentials, runtime or routing | [ENVIRONMENT_INTELLIGENCE_AND_ONBOARDING.md](ENVIRONMENT_INTELLIGENCE_AND_ONBOARDING.md), [MODEL_RUNTIME.md](MODEL_RUNTIME.md), [SETUP.md](SETUP.md), [COGNITION_PORTFOLIO.md](COGNITION_PORTFOLIO.md), ADRs 0013/0014/0018, [SECURITY.md](SECURITY.md) |
+| Workflow execution runtime, scheduler boundary, task activation/suspension or external orchestrator integration | [ARCHITECTURE.md §6.7D](ARCHITECTURE.md#67d-workflow-execution-runtime-boundary), [ADR-0025](adr/0025-workflow-execution-runtime-boundary.md), [MODEL_RUNTIME.md §22](MODEL_RUNTIME.md#22-workflow-execution-runtime-versus-cognition-session), [INVARIANTS.md DCI-159–161](../INVARIANTS.md#o-workflow-execution-runtime-invariants) |
 | Capability-pack/plugin extension, ecosystem-specific prompt fragments, adding support for a new technology without core changes | [PROJECT_CAPABILITY_PACKS.md](PROJECT_CAPABILITY_PACKS.md), [ADR-0023](adr/0023-declarative-project-capability-packs.md), [PROJECT_TOOLCHAINS_AND_HEALTH.md](PROJECT_TOOLCHAINS_AND_HEALTH.md) |
 | Greenfield stack/framework choice, application type, ProjectBlueprint or project scaffolding | [PROJECT_CREATION_AND_SCAFFOLDING.md](PROJECT_CREATION_AND_SCAFFOLDING.md), [ADR-0022](adr/0022-greenfield-technology-selection-and-scaffolding.md), [DISCOVERY_AND_SPECIFICATION.md](DISCOVERY_AND_SPECIFICATION.md), [PROJECT_TOOLCHAINS_AND_HEALTH.md](PROJECT_TOOLCHAINS_AND_HEALTH.md) |
 | Target-project languages/toolchains, lint/test/build/coverage policy, presubmit/CI/merge health or health-policy drift | [PROJECT_TOOLCHAINS_AND_HEALTH.md](PROJECT_TOOLCHAINS_AND_HEALTH.md), [ADR-0021](adr/0021-project-toolchains-and-health-contracts.md), [PROJECT_ADOPTION.md](PROJECT_ADOPTION.md), [VERIFICATION.md](VERIFICATION.md) |
@@ -112,6 +113,11 @@ hierarchy below.
 | [0018](adr/0018-adaptive-cognition-portfolio-and-workflow-synthesis.md) | Adaptive cognition portfolios, economics/budget pools, AI-assisted recommendation and adaptive workflow topology |
 | [0019](adr/0019-non-conversational-cognition-and-adaptive-review.md) | Context Working-Set Architecture, deterministic admission, dynamic review lenses, living work packages, and dual independent review |
 | [0020](adr/0020-cognitive-invocation-compiler-and-review-ledger.md) | Cognitive Invocation Compiler, fail-safe mandatory admission, prompt projection, and durable review ledger |
+| [0021](adr/0021-project-toolchains-and-health-contracts.md) | Project toolchains and one canonical health contract |
+| [0022](adr/0022-greenfield-technology-selection-and-scaffolding.md) | Requirement-driven greenfield technology selection and bounded scaffolding |
+| [0023](adr/0023-declarative-project-capability-packs.md) | Declarative capability packs and Skills-first ecosystem extensibility |
+| [0024](adr/0024-implementation-ready-work-packages-and-contract-completeness.md) | Implementation-ready EWPs and contract completeness |
+| [0025](adr/0025-workflow-execution-runtime-boundary.md) | Workflow execution runtime boundary, runtime-private activation, and hierarchical knowledge separation |
 
 ## Normative hierarchy
 
