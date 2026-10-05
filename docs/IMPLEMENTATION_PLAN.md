@@ -605,21 +605,19 @@ M6; neither should block learning whether the adaptive cognition thesis is
 worth productizing.
 
 The M4 harness MUST preserve the workflow-execution boundary from ADR-0025:
-`WorkflowPlan` is the logical engineering contract, while native scheduling,
-task activation/suspension, and any runtime-private decomposition remain
-execution-mechanism concerns. M4 does not need a generic executor plugin system,
-but reusable orchestration code should not make the native scheduler the
-definition of WorkflowPlan semantics. This keeps a later native-vs-external
-runtime experiment possible without redesigning EWP, policy, evidence or
-acceptance contracts.
+`WorkflowPlan` is the logical engineering contract, while native scheduling
+and runtime-private decomposition remain execution-mechanism concerns. M4 does
+not need a generic executor plugin system, but reusable orchestration code must
+not make the native scheduler the definition of WorkflowPlan semantics.
 
 The reference/native executor should be the simplest implementation sufficient
 for the M4 experiments: single-node/process-local, direct scheduling of ready
 stages, and reuse of existing session/process/worktree/validation primitives.
-Do not add distributed task stores, synchronization/leases, hierarchical
-blackboards or a generic event fabric in anticipation of COS/Nexus. Execution
-placement remains non-semantic so a future external runtime may add those
-capabilities behind the same boundary (DCI-161).
+Independent stages may execute in any order consistent with binding dependencies
+and constraints; `WorkflowStage.Order` is deterministic plan ordering, not an
+implicit serial-scheduling edge. Do not add distributed task stores, leases,
+generic event fabrics or other speculative runtime machinery solely for future
+compatibility. Execution placement remains non-semantic (DCI-161).
 
 ### Experiment
 Compare direct strong coding-agent and other simple baselines with
