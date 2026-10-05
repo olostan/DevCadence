@@ -390,7 +390,7 @@ See [COGNITION_PORTFOLIO.md](COGNITION_PORTFOLIO.md) and [ADR-0018](adr/0018-ada
 
 ### 6.7D Workflow execution runtime boundary
 
-A `WorkflowPlan` is the logical engineering contract for execution, not the complete runtime task graph (DCI-159, ADR-0025). DevCadence owns the obligations that must survive every implementation: EWP/contract identity, policy, budget/source exposure, deterministic gates, review independence, evidence requirements and acceptance authority.
+A `WorkflowPlan` is the logical engineering contract for execution, not the complete runtime trace (DCI-159, ADR-0025). DevCadence owns the policy-significant obligations that must survive every implementation: EWP/contract identity, explicit stage bindings and bounds, deterministic gates, review requirements, evidence requirements and acceptance authority.
 
 The mechanism that executes an authorized plan is a separate responsibility above the individual cognition-session driver layer:
 
@@ -398,24 +398,23 @@ The mechanism that executes an authorized plan is a separate responsibility abov
 DevCadence WorkflowPlan / policy / evidence / acceptance
                          │
                          ▼
-                 Workflow Executor
-                  /            \
-                 /              \
-       Native executor        External runtime
-             │                      │
-      SessionDrivers          private task graph
-      tools/validators        knowledge + wake logic
+                 workflow execution
+                    boundary
+                  /          \
+                 /            \
+       native executor      alternate executor
+             │
+      SessionDrivers
+      tools/validators
 ```
 
-The native implementation may initially be a simple scheduler over existing SessionDrivers, processes and validators. A future external cognitive runtime may internally decompose a logical stage into a recursive task graph, suspend and resume work, or use event-driven scheduling without requiring those implementation details to become DevCadence protocol.
+The native implementation should initially be a simple scheduler over existing SessionDrivers, processes, worktrees and validators. An alternate executor may use a different private scheduling/decomposition strategy without requiring those details to become DevCadence protocol.
 
-Execution runtimes may also maintain private hierarchical task knowledge. Such knowledge may reference revision-pinned ProjectState, ContextPacks, EvidenceLeases and artifacts, but runtime hypotheses/blackboard facts are not canonical project truth. Candidate facts/evidence return through the normal DevCadence evidence/validation/review path (DCI-160).
+Executor-private state is non-authoritative. It may consume revision-pinned DevCadence facts/artifacts and return candidate outputs/evidence, but it cannot mutate accepted project truth, weaken authority, satisfy review by assertion, replace deterministic validation or establish acceptance (DCI-160).
 
-Likewise, activation is runtime-private below the logical stage boundary. An executor may use dependency completion, timers, external events, knowledge predicates, queues, receptors/ligands or another wait/wake mechanism. DevCadence requires semantic lifecycle/evidence/resource outcomes at the boundary, not one specific scheduler vocabulary.
+The boundary is deliberately narrow and YAGNI-driven: no plugin framework or generalized external-runtime machinery is required until a concrete second executor or current native orchestration need justifies it.
 
-This boundary is deliberately narrow and YAGNI-driven: no plugin framework, COS-specific protocol types, hierarchical-blackboard implementation or generic pub/sub system is required until a concrete second executor or current native orchestration need justifies it.
-
-The native executor should therefore stay intentionally simple: single-node/process-local by default, direct scheduling of ready logical stages, and reuse of existing SessionDrivers/process/worktree/validation services. Future execution placement is not workflow semantics (DCI-161). An external runtime may later distribute its private tasks—for example through a task-synchronizing runtime fabric such as COS Nexus—without requiring the native executor or canonical WorkflowPlan to implement distributed ownership. A real distributed integration still requires its own security, source/artifact locality, recovery and consistency design; this architecture does not claim those problems are solved.
+The native executor therefore remains single-node/process-local by default and directly schedules ready logical stages. Execution placement is not workflow semantics (DCI-161); any future distributed integration requires a separate concrete design for ownership, duplicate execution, locality, credentials, recovery and consistency.
 
 See [ADR-0025](adr/0025-workflow-execution-runtime-boundary.md).
 
