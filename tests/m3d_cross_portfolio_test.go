@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -1225,6 +1226,51 @@ func TestM3DCrossPortfolio_RecommendationSynthesisMatrix(t *testing.T) {
 					t.Errorf("expected OutcomeNoPlanner when no planner available, got %s", fallbackRes.Outcome)
 				}
 			})
+
+			// Paid API policy gating test (Test Adequacy Finding 4)
+			t.Run("PaidAPIPolicyGating_RejectsMeteredEndpointWhenForbidden", func(t *testing.T) {
+				if env.validationPol.MaxCostClass != protocol.CostSubscriptionIncluded {
+					return
+				}
+				hasMetered := false
+				for _, ep := range env.inventory.CognitionEndpoints {
+					if ep.ID == "ep-openai-api" {
+						hasMetered = true
+						break
+					}
+				}
+				if !hasMetered {
+					return
+				}
+				violatingPortfolio := synthesizePortfolioForEnv(env, protocol.IntentBalanced)
+				violatingPortfolio.RoleBindings[0].EndpointID = "ep-openai-api"
+				violatingPortfolio.RoleBindings[0].ChannelID = "chan-ep-openai-api"
+				violatingPortfolio.RoleBindings[0].BudgetPoolID = "pool-ep-openai-api"
+				violatingPortfolio.RoleBindings[0].ContextProfileID = "prof-ep-openai-api"
+
+				valRes := cognition.NewPortfolioValidator().Validate(cognition.ValidationInput{
+					Portfolio:       violatingPortfolio,
+					MachineProfile:  env.machineProfile,
+					Inventory:       env.inventory,
+					ContextProfiles: env.contextProfiles,
+					BudgetStates:    env.budgetStates,
+					Policy:          ptr(env.validationPol),
+					Clock:           clk,
+				})
+				if valRes.Valid {
+					t.Errorf("expected portfolio validator to reject CostRemoteEconomy endpoint when policy restricts to CostSubscriptionIncluded")
+				}
+				foundCostDiag := false
+				for _, d := range valRes.Diagnostics {
+					if d.Code == cognition.CodeUnauthorizedCostClass {
+						foundCostDiag = true
+						break
+					}
+				}
+				if !foundCostDiag {
+					t.Errorf("expected diagnostic CodeUnauthorizedCostClass, got diagnostics: %+v", valRes.Diagnostics)
+				}
+			})
 		})
 	}
 }
@@ -1366,7 +1412,7 @@ func TestM3DCrossPortfolio_WorkflowPlanning_ModelAndFallback(t *testing.T) {
 					},
 				},
 				budgetStates:       env.budgetStates,
-				wantFallbackReason: "validator_error",
+				wantFallbackReason: "validator_rejected_model_plan",
 			},
 			{
 				name: "BudgetAuthorization_ExhaustedPool",
@@ -1407,7 +1453,7 @@ func TestM3DCrossPortfolio_WorkflowPlanning_ModelAndFallback(t *testing.T) {
 						ObservedAt:       "2026-10-04T12:00:00Z",
 					},
 				},
-				wantFallbackReason: "budget_authorization_failed",
+				wantFallbackReason: "budget_unauthorized_model_plan",
 			},
 		}
 
@@ -1430,8 +1476,8 @@ func TestM3DCrossPortfolio_WorkflowPlanning_ModelAndFallback(t *testing.T) {
 				if res.Plan == nil {
 					t.Fatalf("expected deterministic baseline plan to be returned upon degradation (DCI-104)")
 				}
-				if tc.wantFallbackReason != "" && len(res.FallbackReason) == 0 {
-					t.Errorf("expected non-empty FallbackReason")
+				if tc.wantFallbackReason != "" && !strings.Contains(res.FallbackReason, tc.wantFallbackReason) {
+					t.Errorf("expected FallbackReason to contain %q, got %q", tc.wantFallbackReason, res.FallbackReason)
 				}
 
 				// Verify baseline plan validates against schema
@@ -1698,6 +1744,231 @@ func TestM3DCrossPortfolio_AdaptationDiffingAndActivationLineage(t *testing.T) {
 			t.Errorf("expected active portfolio to remain %s, got %s", p2.PortfolioID, activeP.PortfolioID)
 		}
 	})
+
+	t.Run("NewResourceAddition_DeltaAddedAndActivation", func(t *testing.T) {
+		stateDir := t.TempDir()
+		mgr, err := cognition.NewActivationManager(stateDir, nil, clk)
+		if err != nil {
+			t.Fatalf("NewActivationManager: %v", err)
+		}
+		service := cognition.NewAdaptationService(mgr)
+
+		envBase := createAppleMLXEnv()
+		pBase := synthesizePortfolioForEnv(envBase, protocol.IntentBalanced)
+
+		valInputBase := cognition.ValidationInput{
+			MachineProfile:  envBase.machineProfile,
+			Inventory:       envBase.inventory,
+			ContextProfiles: envBase.contextProfiles,
+			BudgetStates:    envBase.budgetStates,
+			Policy:          ptr(envBase.validationPol),
+			Clock:           clk,
+		}
+
+		// Initial activation of base local portfolio
+		prop1, err := cognition.CreateChangeProposal(cognition.TriggerManualProposal, "Initial local portfolio", nil, *pBase, clk.Now())
+		if err != nil {
+			t.Fatalf("CreateChangeProposal: %v", err)
+		}
+		rec1, err := service.ProposeAndActivate(ctx, prop1, valInputBase)
+		if err != nil {
+			t.Fatalf("ProposeAndActivate base: %v", err)
+		}
+
+		// Now a new subscription resource is added (e.g. Anthropic CLI subscription)
+		newSubEP := "ep-new-sub"
+		newSubChan := "chan-new-sub"
+		newSubPool := "pool-new-sub"
+		newSubProf := "prof-new-sub"
+
+		pAdded := *pBase
+		pAdded.PortfolioID = "port-apple-plus-sub"
+		pAdded.Revision = 2
+		pAdded.MaxSourceExposure = protocol.ExposureFocusedSnippets
+
+		// Add new access channel
+		pAdded.Channels = append(pAdded.Channels, protocol.AccessChannel{
+			SchemaVersion:         protocol.SchemaVersion1,
+			ChannelID:             newSubChan,
+			EndpointID:            newSubEP,
+			Kind:                  protocol.ChannelCLISubprocess,
+			SessionMode:           protocol.SessionResumableHandle,
+			ContextControl:        protocol.ContextControlAppendOnly,
+			PrefixCache:           protocol.PrefixCacheImplicit,
+			SupportsStreaming:     true,
+			SupportsTools:         true,
+			MaxConcurrentRequests: 2,
+		})
+
+		// Add new budget pool
+		pAdded.BudgetPools = append(pAdded.BudgetPools, protocol.BudgetPool{
+			SchemaVersion:  protocol.SchemaVersion1,
+			PoolID:         newSubPool,
+			Name:           "Subscription Quota Pool",
+			Regime:         protocol.RegimeSubscriptionQuota,
+			HardLimit:      1000,
+			SoftAlertLimit: 800,
+			Unit:           protocol.UnitRequests,
+			Period:         protocol.PeriodRollingDay,
+		})
+
+		// Add fallback to reviewer
+		pAdded.RoleBindings[1].Fallbacks = []protocol.FallbackBinding{
+			{
+				EndpointID:       newSubEP,
+				ChannelID:        newSubChan,
+				BudgetPoolID:     newSubPool,
+				ContextProfileID: newSubProf,
+			},
+		}
+
+		// Compute semantic diff between base and added
+		diff, err := cognition.DiffPortfolios(pBase, &pAdded)
+		if err != nil {
+			t.Fatalf("DiffPortfolios failed: %v", err)
+		}
+		if !diff.HasChanges {
+			t.Fatalf("expected HasChanges: true")
+		}
+
+		// Verify DeltaAdded on ChannelDiffs
+		foundChanAdded := false
+		for _, cd := range diff.ChannelDiffs {
+			if cd.ID == newSubChan && cd.Delta == cognition.DeltaAdded {
+				foundChanAdded = true
+				break
+			}
+		}
+		if !foundChanAdded {
+			t.Errorf("expected ChannelDiff with DeltaAdded for %s, got: %+v", newSubChan, diff.ChannelDiffs)
+		}
+
+		// Verify DeltaAdded on BudgetPoolDiffs
+		foundPoolAdded := false
+		for _, bpd := range diff.BudgetPoolDiffs {
+			if bpd.ID == newSubPool && bpd.Delta == cognition.DeltaAdded {
+				foundPoolAdded = true
+				break
+			}
+		}
+		if !foundPoolAdded {
+			t.Errorf("expected BudgetPoolDiff with DeltaAdded for %s, got: %+v", newSubPool, diff.BudgetPoolDiffs)
+		}
+
+		// Prepare updated validation environment with new subscription endpoint
+		updatedInventory := *envBase.inventory
+		updatedInventory.Policy = &protocol.PolicySummary{
+			MaxSourceExposure: protocol.ExposureFocusedSnippets,
+			MaxCostClass:      protocol.CostSubscriptionIncluded,
+		}
+		updatedInventory.CognitionEndpoints = append(updatedInventory.CognitionEndpoints, protocol.CognitionEndpointSummary{
+			ID:                     newSubEP,
+			Kind:                   protocol.EndpointAuthenticatedCLI,
+			Locality:               protocol.LocalityRemoteInferenceLocalTools,
+			Health:                 protocol.EndpointHealthReady,
+			Auth:                   protocol.AuthAuthenticated,
+			CostClass:              protocol.CostSubscriptionIncluded,
+			RequiredSourceExposure: protocol.ExposureFocusedSnippets,
+		})
+
+		updatedMachineProfile := *envBase.machineProfile
+		updatedMachineProfile.Endpoints = append(updatedMachineProfile.Endpoints, protocol.CognitionEndpoint{
+			ID:                     newSubEP,
+			Kind:                   protocol.EndpointAuthenticatedCLI,
+			Provider:               "anthropic",
+			ModelID:                "claude-3-7-sonnet",
+			Locality:               protocol.LocalityRemoteInferenceLocalTools,
+			Health:                 protocol.EndpointHealthReady,
+			Auth:                   protocol.AuthAuthenticated,
+			CostClass:              protocol.CostSubscriptionIncluded,
+			RequiredSourceExposure: protocol.ExposureFocusedSnippets,
+			StructuredOutput:       protocol.FeatureProbePassed,
+			ToolUse:                protocol.FeatureProbePassed,
+			Capabilities: []protocol.GradedCapability{
+				{Dimension: protocol.CapabilityImplementation, Grade: protocol.GradeStrong, Provenance: protocol.ProvenanceMeasured},
+				{Dimension: protocol.CapabilityReview, Grade: protocol.GradeStrong, Provenance: protocol.ProvenanceMeasured},
+			},
+		})
+
+		updatedContextProfiles := make(map[string]*protocol.ContextProfile, len(envBase.contextProfiles)+1)
+		for k, v := range envBase.contextProfiles {
+			updatedContextProfiles[k] = v
+		}
+		updatedContextProfiles[newSubProf] = &protocol.ContextProfile{
+			SchemaVersion:             protocol.SchemaVersion1,
+			ProfileID:                 newSubProf,
+			EndpointID:                newSubEP,
+			ChannelID:                 newSubChan,
+			Runtime:                   "claude-cli",
+			ModelRef:                  "claude-3-7-sonnet",
+			Revision:                  1,
+			DeclaredWindowTokens:      200000,
+			RuntimeWindowTokens:       200000,
+			TargetResidentTokens:      64000,
+			HardResidentCeilingTokens: 128000,
+			ProtectedCoreLimitTokens:  8000,
+			ContractLimitTokens:       20000,
+			MaxSingleLeaseTokens:      8000,
+			OutputReserveTokens:       4000,
+			ToolTailReserveTokens:     2000,
+			AccountingMethod:          protocol.AccountingProviderAPI,
+			ObservedContextControl:    protocol.ContextControlAppendOnly,
+			ObservedPrefixCache:       protocol.PrefixCacheImplicit,
+			WorkloadEnvelopes: []protocol.WorkloadEnvelope{
+				{Workload: protocol.WorkloadImplementation, EffectiveTokens: 50000, CalibrationTask: "claude-bench", CalibrationDate: "2026-10-01", ConfidenceLevel: "high"},
+			},
+		}
+
+		updatedBudgetStates := make(map[string]*protocol.BudgetState, len(envBase.budgetStates)+1)
+		for k, v := range envBase.budgetStates {
+			updatedBudgetStates[k] = v
+		}
+		updatedBudgetStates[newSubPool] = &protocol.BudgetState{
+			SchemaVersion:    protocol.SchemaVersion1,
+			PoolID:           newSubPool,
+			Status:           protocol.BudgetStatusHealthy,
+			RemainingBalance: ptr[int64](500),
+			ObservedAt:       "2026-10-04T12:00:00Z",
+		}
+
+		updatedValPol := envBase.validationPol
+		updatedValPol.MaxSourceExposure = protocol.ExposureFocusedSnippets
+		updatedValPol.MaxCostClass = protocol.CostSubscriptionIncluded
+
+		valInputAdded := cognition.ValidationInput{
+			MachineProfile:  &updatedMachineProfile,
+			Inventory:       &updatedInventory,
+			ContextProfiles: updatedContextProfiles,
+			BudgetStates:    updatedBudgetStates,
+			Policy:          ptr(updatedValPol),
+			Clock:           clk,
+		}
+
+		// Propose and activate new subscription resource
+		propAdded, err := cognition.CreateChangeProposal(cognition.TriggerResourceChange, "Added new Anthropic subscription endpoint", pBase, pAdded, clk.Now())
+		if err != nil {
+			t.Fatalf("CreateChangeProposal: %v", err)
+		}
+		recAdded, err := service.ProposeAndActivate(ctx, propAdded, valInputAdded)
+		if err != nil {
+			t.Fatalf("ProposeAndActivate added: %v", err)
+		}
+		if recAdded.Sequence != 2 {
+			t.Errorf("expected sequence 2, got %d", recAdded.Sequence)
+		}
+		if recAdded.PreviousActivationID != rec1.ActivationID {
+			t.Errorf("expected previous activation ID %s, got %s", rec1.ActivationID, recAdded.PreviousActivationID)
+		}
+
+		// Verify active portfolio on disk
+		activeP, _, err := mgr.GetActivePortfolio(ctx)
+		if err != nil {
+			t.Fatalf("GetActivePortfolio: %v", err)
+		}
+		if activeP.PortfolioID != pAdded.PortfolioID {
+			t.Errorf("expected active portfolio %s, got %s", pAdded.PortfolioID, activeP.PortfolioID)
+		}
+	})
 }
 
 // 4. Revalidation-Gated Rollback Under Changing Machine Conditions (INV-03, DCI-124).
@@ -1855,12 +2126,12 @@ func TestM3DCrossPortfolio_RevalidationGatedRollback(t *testing.T) {
 			t.Fatalf("activate p2: %v", err)
 		}
 
-		// Corrupt budget state: budget pool required by p1 has status: unknown
+		// 1. BudgetStatusUnknown fails closed
 		brokenBudgetStates := map[string]*protocol.BudgetState{
 			p1.BudgetPools[0].PoolID: {
 				SchemaVersion: protocol.SchemaVersion1,
 				PoolID:        p1.BudgetPools[0].PoolID,
-				Status:        protocol.BudgetStatusUnknown, // unknown
+				Status:        protocol.BudgetStatusUnknown,
 				ObservedAt:    "2026-10-04T12:00:00Z",
 			},
 		}
@@ -1879,7 +2150,28 @@ func TestM3DCrossPortfolio_RevalidationGatedRollback(t *testing.T) {
 			t.Fatalf("expected rollback to fail when budget state is unknown")
 		}
 		if errs.CategoryOf(err) != errs.CategoryValidationFailed {
-			t.Errorf("expected CategoryValidationFailed, got %v", err)
+			t.Errorf("expected CategoryValidationFailed for unknown budget, got %v", err)
+		}
+
+		// 2. BudgetStatusExhausted with zero balance fails closed (Test Adequacy Finding 3)
+		exhaustedBudgetStates := map[string]*protocol.BudgetState{
+			p1.BudgetPools[0].PoolID: {
+				SchemaVersion:    protocol.SchemaVersion1,
+				PoolID:           p1.BudgetPools[0].PoolID,
+				Status:           protocol.BudgetStatusExhausted,
+				RemainingBalance: ptr[int64](0),
+				ObservedAt:       "2026-10-04T12:00:00Z",
+			},
+		}
+		revalInputExhausted := revalInput
+		revalInputExhausted.BudgetStates = exhaustedBudgetStates
+
+		_, err = service.Rollback(ctx, "", &revalInputExhausted)
+		if err == nil {
+			t.Fatalf("expected rollback to fail when budget state is exhausted")
+		}
+		if errs.CategoryOf(err) != errs.CategoryValidationFailed {
+			t.Errorf("expected CategoryValidationFailed for exhausted budget, got %v", err)
 		}
 
 		// Ensure active portfolio untouched
@@ -2078,7 +2370,33 @@ func TestM3DCrossPortfolio_EndToEndLifecycle(t *testing.T) {
 		t.Errorf("step 4 expected sequence 2, got %d", rec2.Sequence)
 	}
 
-	// Step 5: Deterministic-only task arrives -> pure deterministic workflow plan
+	// Step 5: Budget exhaustion on secondary reviewer pool (pool-ep-claude-cli)
+	env.budgetStates["pool-ep-claude-cli"] = &protocol.BudgetState{
+		SchemaVersion:    protocol.SchemaVersion1,
+		PoolID:           "pool-ep-claude-cli",
+		Status:           protocol.BudgetStatusExhausted,
+		RemainingBalance: ptr[int64](0),
+		ObservedAt:       clk.Now().Format(time.RFC3339),
+	}
+
+	// Model planning high-risk task targeting exhausted pool degrades due to budget authorization failure (Test Adequacy Finding 2)
+	exhaustedRes, err := workflowplanner.PlanWorkflowWithModel(ctx, workflowplanner.ModelPlanRequest{
+		Task:         highRiskTask,
+		Portfolio:    &portfolioV2,
+		BudgetStates: env.budgetStates,
+		Invoker:      mockWorkflowInvoker,
+	})
+	if err != nil {
+		t.Fatalf("step 5 PlanWorkflowWithModel: %v", err)
+	}
+	if exhaustedRes.UsedModel {
+		t.Errorf("step 5 expected UsedModel: false when pool is exhausted, got true")
+	}
+	if !strings.Contains(exhaustedRes.FallbackReason, "budget_unauthorized_model_plan") {
+		t.Errorf("step 5 expected fallback reason containing budget_unauthorized_model_plan, got %s", exhaustedRes.FallbackReason)
+	}
+
+	// Deterministic-only task arrives -> pure deterministic workflow plan unaffected by cognitive budget
 	detTask := workflowplanner.TaskSpec{
 		TaskID:            "task-m3d-e2e-det",
 		WorkPackageID:     "WP-M3D-5",
@@ -2095,8 +2413,29 @@ func TestM3DCrossPortfolio_EndToEndLifecycle(t *testing.T) {
 		t.Errorf("step 5 expected DeterministicOnly, got %s", detPlanRes.Plan.Topology)
 	}
 
-	// Step 6: Rollback v2 -> v1 with revalidation gate
-	recRollback, err := service.Rollback(ctx, rec1.ActivationID, &valInput)
+	// Step 6: Operational remediation and rollback v2 -> v1 with revalidation gate
+	// While pool-ep-claude-cli is exhausted, attempting rollback to v1 fails revalidation gate
+	valInputExhausted := valInput
+	valInputExhausted.BudgetStates = env.budgetStates
+	_, err = service.Rollback(ctx, rec1.ActivationID, &valInputExhausted)
+	if err == nil {
+		t.Fatalf("step 6 expected rollback to fail revalidation when budget pool is exhausted")
+	}
+	if errs.CategoryOf(err) != errs.CategoryValidationFailed {
+		t.Errorf("step 6 expected CategoryValidationFailed, got %v", err)
+	}
+
+	// Remediate budget (quota replenished / reset), then rollback succeeds cleanly
+	env.budgetStates["pool-ep-claude-cli"] = &protocol.BudgetState{
+		SchemaVersion:    protocol.SchemaVersion1,
+		PoolID:           "pool-ep-claude-cli",
+		Status:           protocol.BudgetStatusHealthy,
+		RemainingBalance: ptr[int64](500),
+		ObservedAt:       clk.Now().Format(time.RFC3339),
+	}
+	valInputRemediated := valInput
+	valInputRemediated.BudgetStates = env.budgetStates
+	recRollback, err := service.Rollback(ctx, rec1.ActivationID, &valInputRemediated)
 	if err != nil {
 		t.Fatalf("step 6 Rollback failed: %v", err)
 	}
@@ -2133,5 +2472,249 @@ func TestM3DCrossPortfolio_EndToEndLifecycle(t *testing.T) {
 	}
 	if err := schemas.ValidateBytes(schema.Name("cognition-portfolio"), activeBytes); err != nil {
 		t.Errorf("step 7 cognition-portfolio schema validation failed: %v", err)
+	}
+}
+
+// 6. Future-Driver Extensibility Matrix Test (Contract Reviewer Finding 1).
+// Demonstrates that an arbitrary/fake session driver and provider (e.g. drv-future-test,
+// provider: "future-inference-corp", endpoint: "future:model-alpha") participates in portfolio
+// validation, driver resolution, and workflow planning without core code modifications.
+func TestM3DCrossPortfolio_FutureDriverExtensibility(t *testing.T) {
+	ctx := context.Background()
+	clk := clock.NewFake(time.Date(2026, 10, 4, 12, 0, 0, 0, time.UTC), time.Second)
+
+	futureProvider := "future-inference-corp"
+	futureEPID := "future:model-alpha"
+	futureDriverID := "drv-future-test"
+	futureChanID := "chan-future-01"
+	futureProfID := "prof-future-01"
+	futurePoolID := "pool-future-01"
+
+	futureDriver := &m3dMockDriver{
+		id: futureDriverID,
+		caps: drivers.DriverCapabilities{
+			Kind:                  protocol.ChannelDirectHTTPAPI,
+			SessionMode:           protocol.SessionStatelessPerCall,
+			ContextControl:        protocol.ContextControlExactStateless,
+			PrefixCache:           protocol.PrefixCacheSessionKV,
+			MaxConcurrentRequests: 5,
+			SupportsStreaming:     true,
+			SupportsTools:         true,
+		},
+		handler: func(ctx context.Context, input drivers.TurnInput) (drivers.TurnResult, error) {
+			return drivers.TurnResult{
+				TurnID:  input.TurnID,
+				Content: "future-driver response",
+			}, nil
+		},
+	}
+
+	resolver := &m3dDriverResolver{
+		drivers: map[string]drivers.SessionDriver{futureEPID: futureDriver},
+		models:  map[string]string{futureEPID: "model-alpha"},
+	}
+
+	inventory := &protocol.ResourceInventory{
+		SchemaVersion:      protocol.SchemaVersion1,
+		InventoryID:        "inv-future-01",
+		MachineFingerprint: "future123456789abcdef0123456789abcdef0123456789abcdef0123456789ab",
+		ObservedAt:         protocol.Timestamp(clk.Now()),
+		Hardware: protocol.HardwareSummary{
+			OSFamily:     protocol.OSLinux,
+			Arch:         "x86_64",
+			LogicalCores: 16,
+		},
+		Readiness: []protocol.ScopeReadiness{
+			{Scope: protocol.ScopeCanRunLocalInference, Status: protocol.ScopeStatusReady, Reason: "remote provider"},
+		},
+		Policy: &protocol.PolicySummary{
+			MaxSourceExposure: protocol.ExposureFocusedSnippets,
+			MaxCostClass:      protocol.CostRemoteEconomy,
+		},
+		CognitionEndpoints: []protocol.CognitionEndpointSummary{
+			{
+				ID:                     futureEPID,
+				Kind:                   protocol.EndpointRemoteAPI,
+				Locality:               protocol.LocalityRemote,
+				Health:                 protocol.EndpointHealthReady,
+				Auth:                   protocol.AuthAuthenticated,
+				CostClass:              protocol.CostRemoteEconomy,
+				RequiredSourceExposure: protocol.ExposureFocusedSnippets,
+			},
+		},
+	}
+
+	machineProfile := &protocol.MachineCapabilityProfile{
+		SchemaVersion:      protocol.SchemaVersion1,
+		ProfileID:          "mcp-future-01",
+		MachineFingerprint: inventory.MachineFingerprint,
+		ObservedAt:         inventory.ObservedAt,
+		KnowledgeRevision:  "rev-future-1",
+		ProbeDepth:         protocol.DepthInference,
+		Endpoints: []protocol.CognitionEndpoint{
+			{
+				ID:                     futureEPID,
+				Kind:                   protocol.EndpointRemoteAPI,
+				Provider:               futureProvider,
+				ModelID:                "model-alpha",
+				Locality:               protocol.LocalityRemote,
+				Health:                 protocol.EndpointHealthReady,
+				Auth:                   protocol.AuthAuthenticated,
+				CostClass:              protocol.CostRemoteEconomy,
+				RequiredSourceExposure: protocol.ExposureFocusedSnippets,
+				StructuredOutput:       protocol.FeatureProbePassed,
+				ToolUse:                protocol.FeatureProbePassed,
+				Capabilities: []protocol.GradedCapability{
+					{Dimension: protocol.CapabilityArchitecture, Grade: protocol.GradeStrong, Provenance: protocol.ProvenanceMeasured},
+					{Dimension: protocol.CapabilityImplementation, Grade: protocol.GradeStrong, Provenance: protocol.ProvenanceMeasured},
+					{Dimension: protocol.CapabilityReview, Grade: protocol.GradeStrong, Provenance: protocol.ProvenanceMeasured},
+				},
+			},
+		},
+	}
+
+	contextProfiles := map[string]*protocol.ContextProfile{
+		futureProfID: {
+			SchemaVersion:             protocol.SchemaVersion1,
+			ProfileID:                 futureProfID,
+			EndpointID:                futureEPID,
+			ChannelID:                 futureChanID,
+			Runtime:                   "future-runtime",
+			ModelRef:                  "model-alpha",
+			Revision:                  1,
+			DeclaredWindowTokens:      64000,
+			RuntimeWindowTokens:       64000,
+			TargetResidentTokens:      32000,
+			HardResidentCeilingTokens: 48000,
+			ProtectedCoreLimitTokens:  4000,
+			ContractLimitTokens:       10000,
+			MaxSingleLeaseTokens:      4000,
+			OutputReserveTokens:       2000,
+			ToolTailReserveTokens:     1000,
+			AccountingMethod:          protocol.AccountingProviderAPI,
+			ObservedContextControl:    protocol.ContextControlExactStateless,
+			ObservedPrefixCache:       protocol.PrefixCacheSessionKV,
+			WorkloadEnvelopes: []protocol.WorkloadEnvelope{
+				{Workload: protocol.WorkloadImplementation, EffectiveTokens: 25000, CalibrationTask: "future-bench", CalibrationDate: "2026-10-04", ConfidenceLevel: "high"},
+			},
+		},
+	}
+
+	budgetStates := map[string]*protocol.BudgetState{
+		futurePoolID: {
+			SchemaVersion:    protocol.SchemaVersion1,
+			PoolID:           futurePoolID,
+			Status:           protocol.BudgetStatusHealthy,
+			RemainingBalance: ptr[int64](5000),
+			ObservedAt:       "2026-10-04T12:00:00Z",
+		},
+	}
+
+	validationPolicy := cognition.DefaultValidationPolicy()
+	validationPolicy.MaxSourceExposure = protocol.ExposureFocusedSnippets
+	validationPolicy.MaxCostClass = protocol.CostRemoteEconomy
+
+	portfolio := protocol.CognitionPortfolio{
+		SchemaVersion:     protocol.SchemaVersion1,
+		PortfolioID:       "port-future-corp",
+		Revision:          1,
+		CreatedAt:         "2026-10-04T12:00:00Z",
+		MaxSourceExposure: protocol.ExposureFocusedSnippets,
+		Channels: []protocol.AccessChannel{
+			{
+				SchemaVersion:         protocol.SchemaVersion1,
+				ChannelID:             futureChanID,
+				EndpointID:            futureEPID,
+				Kind:                  protocol.ChannelDirectHTTPAPI,
+				SessionMode:           protocol.SessionStatelessPerCall,
+				ContextControl:        protocol.ContextControlExactStateless,
+				PrefixCache:           protocol.PrefixCacheSessionKV,
+				SupportsStreaming:     true,
+				SupportsTools:         true,
+				MaxConcurrentRequests: 5,
+			},
+		},
+		RoleBindings: []protocol.RoleBinding{
+			{
+				Role:             "implementer",
+				EndpointID:       futureEPID,
+				ChannelID:        futureChanID,
+				BudgetPoolID:     futurePoolID,
+				ContextProfileID: futureProfID,
+				Priority:         1,
+			},
+			{
+				Role:             "reviewer",
+				EndpointID:       futureEPID,
+				ChannelID:        futureChanID,
+				BudgetPoolID:     futurePoolID,
+				ContextProfileID: futureProfID,
+				Priority:         1,
+			},
+		},
+		BudgetPools: []protocol.BudgetPool{
+			{
+				SchemaVersion:  protocol.SchemaVersion1,
+				PoolID:         futurePoolID,
+				Name:           "Future Corp Metered Pool",
+				Regime:         protocol.RegimeMeteredAPI,
+				HardLimit:      10000,
+				SoftAlertLimit: 8000,
+				Unit:           protocol.UnitUSDCents,
+				Period:         protocol.PeriodRollingDay,
+			},
+		},
+	}
+
+	// 1. Portfolio validation passes without any custom/hardcoded knowledge of "future-inference-corp"
+	valInput := cognition.ValidationInput{
+		Portfolio:       &portfolio,
+		MachineProfile:  machineProfile,
+		Inventory:       inventory,
+		ContextProfiles: contextProfiles,
+		BudgetStates:    budgetStates,
+		Policy:          &validationPolicy,
+		Clock:           clk,
+	}
+	valRes := cognition.NewPortfolioValidator().Validate(valInput)
+	if !valRes.Valid {
+		t.Fatalf("expected future driver portfolio to validate, diags: %+v", valRes.Diagnostics)
+	}
+
+	// 2. Driver resolution successfully obtains the custom driver
+	drv, model, err := resolver.ResolveDriver(ctx, futureEPID)
+	if err != nil {
+		t.Fatalf("failed to resolve driver for future endpoint: %v", err)
+	}
+	if drv.ID() != futureDriverID || model != "model-alpha" {
+		t.Errorf("unexpected driver resolution: id=%s model=%s", drv.ID(), model)
+	}
+
+	// 3. Workflow planning synthesizes and validates against the future driver portfolio
+	task := workflowplanner.TaskSpec{
+		TaskID:        "task-future-01",
+		WorkPackageID: "WP-FUTURE-1",
+	}
+	planRes, err := workflowplanner.PlanWorkflow(workflowplanner.PlanRequest{
+		Task:      task,
+		Portfolio: &portfolio,
+	})
+	if err != nil {
+		t.Fatalf("PlanWorkflow failed with future driver: %v", err)
+	}
+	if planRes.Plan == nil || len(planRes.Plan.Stages) == 0 {
+		t.Fatalf("expected non-empty plan for future driver portfolio")
+	}
+	if *planRes.Plan.Stages[0].EndpointID != futureEPID {
+		t.Errorf("expected workflow stage to route to future endpoint %s, got %s", futureEPID, *planRes.Plan.Stages[0].EndpointID)
+	}
+
+	// Pure workflow validation passes
+	wfVal := cognition.NewWorkflowValidator().Validate(cognition.WorkflowValidationInput{
+		Plan:      planRes.Plan,
+		Portfolio: &portfolio,
+	})
+	if !wfVal.Valid {
+		t.Errorf("workflow validator rejected future driver plan: %+v", wfVal.Diagnostics)
 	}
 }
