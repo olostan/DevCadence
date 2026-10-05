@@ -1,0 +1,17 @@
+{
+  "task_id": "task-impl-02",
+  "name": "Deterministic Telemetry Metric Formatter",
+  "work_package_id": "WP-M4-TASK-IMPL-02",
+  "workload_kind": "implementation",
+  "complexity": "micro_refactor",
+  "contract": "Format aggregated execution telemetry into canonical markdown tables avoiding floating-point drift.",
+  "read_files": [
+    "internal/benchmark/telemetry/metrics.go"
+  ],
+  "target_files": [
+    "internal/benchmark/telemetry/reporter.go"
+  ],
+  "expected_mutations": [
+    "func FormatReport(r *AggregatedReport) string"
+  ]
+}

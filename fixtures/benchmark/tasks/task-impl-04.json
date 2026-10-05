@@ -1,0 +1,17 @@
+{
+  "task_id": "task-impl-04",
+  "name": "Error Category Remediation Mapper",
+  "work_package_id": "WP-M4-TASK-IMPL-04",
+  "workload_kind": "implementation",
+  "complexity": "greenfield_component",
+  "contract": "Map classified internal error categories into machine-verifiable exit codes and remediation guidance hints.",
+  "read_files": [
+    "internal/errs/errs.go"
+  ],
+  "target_files": [
+    "internal/errs/remediation.go"
+  ],
+  "expected_mutations": [
+    "func RemediationForCategory(c Category) string"
+  ]
+}

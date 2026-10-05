@@ -1,0 +1,14 @@
+{
+  "task_id": "task-nav-01",
+  "name": "Locate Invariant Definitions and Leases",
+  "work_package_id": "WP-M4-TASK-NAV-01",
+  "workload_kind": "navigation",
+  "complexity": "micro_refactor",
+  "contract": "Identify and map all normative invariant definitions and active evidence leases within internal/cognition/compiler without modifying files.",
+  "read_files": [
+    "internal/cognition/compiler/catalog.go",
+    "internal/cognition/compiler/invariants.go"
+  ],
+  "target_files": [],
+  "expected_mutations": []
+}

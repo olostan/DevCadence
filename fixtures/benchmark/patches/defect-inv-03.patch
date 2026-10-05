@@ -1,0 +1,3 @@
+package compiler
+
+func ValidateAdmission() error { return nil }

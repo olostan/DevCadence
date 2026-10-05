@@ -1,0 +1,17 @@
+{
+  "task_id": "task-impl-01",
+  "name": "Budget Reservation State Calculator",
+  "work_package_id": "WP-M4-TASK-IMPL-01",
+  "workload_kind": "implementation",
+  "complexity": "micro_refactor",
+  "contract": "Implement pure deterministic reservation deduction function respecting hard budget caps and floor limits.",
+  "read_files": [
+    "internal/protocol/budget.go"
+  ],
+  "target_files": [
+    "internal/controlplane/budget.go"
+  ],
+  "expected_mutations": [
+    "func ReserveBudget(pool *BudgetPool, amount int64) error"
+  ]
+}

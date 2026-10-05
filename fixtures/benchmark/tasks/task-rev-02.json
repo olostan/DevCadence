@@ -1,0 +1,17 @@
+{
+  "task_id": "task-rev-02",
+  "name": "Boundary Isolation and Patch Containment Audit",
+  "work_package_id": "WP-M4-TASK-REV-02",
+  "workload_kind": "review",
+  "complexity": "complex_evolution",
+  "contract": "Audit proposed diffs for boundary leakage, forbidden cross-package imports, and directory traversal vulnerabilities.",
+  "read_files": [
+    "internal/benchmark/defects.go"
+  ],
+  "target_files": [
+    "internal/review/boundary_lens.go"
+  ],
+  "expected_mutations": [
+    "func AuditPatchContainment(patch string, worktree string) error"
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "defect_id": "DEFECT-API-04",
+  "category": "api_mutation",
+  "severity": "critical",
+  "description": "WorkloadKind enum constant string altered breaking protocol compatibility",
+  "file_target": "internal/protocol/context.go",
+  "patch_content": "package protocol\n\nconst WorkloadNavigation WorkloadKind = \"invalid_nav\"\n",
+  "violated_invariant": "DCI-054"
+}

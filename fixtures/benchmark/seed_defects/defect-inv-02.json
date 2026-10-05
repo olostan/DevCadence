@@ -1,0 +1,9 @@
+{
+  "defect_id": "DEFECT-INV-02",
+  "category": "invariant_violation",
+  "severity": "critical",
+  "description": "Budget limit check inverted allowing negative balances",
+  "file_target": "internal/controlplane/budget.go",
+  "patch_content": "package controlplane\n\nfunc CheckLimit(balance int64) bool { return balance < 0 }\n",
+  "violated_invariant": "INV-BUDGET-CAP"
+}

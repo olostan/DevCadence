@@ -1,0 +1,14 @@
+{
+  "task_id": "task-nav-02",
+  "name": "Trace Control Plane Authority Routing",
+  "work_package_id": "WP-M4-TASK-NAV-02",
+  "workload_kind": "navigation",
+  "complexity": "micro_refactor",
+  "contract": "Trace the execution path of principal authority checks and budget reservations across the control plane subsystem.",
+  "read_files": [
+    "internal/controlplane/runner.go",
+    "internal/auth/checker.go"
+  ],
+  "target_files": [],
+  "expected_mutations": []
+}

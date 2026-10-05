@@ -1,0 +1,9 @@
+{
+  "defect_id": "DEFECT-API-02",
+  "category": "api_mutation",
+  "severity": "high",
+  "description": "Remediation lookup return type mutated from string to int",
+  "file_target": "internal/errs/remediation.go",
+  "patch_content": "package errs\n\nfunc RemediationForCategory(c Category) int { return 42 }\n",
+  "violated_invariant": "DCI-054"
+}

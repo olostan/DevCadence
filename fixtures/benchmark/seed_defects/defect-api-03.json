@@ -1,0 +1,9 @@
+{
+  "defect_id": "DEFECT-API-03",
+  "category": "api_mutation",
+  "severity": "high",
+  "description": "Exported metric struct field renamed breaking JSON wire contract",
+  "file_target": "internal/benchmark/telemetry/metrics.go",
+  "patch_content": "package telemetry\n\ntype Metrics struct { WrongField int `json:\"wrong\"` }\n",
+  "violated_invariant": "DCI-054"
+}

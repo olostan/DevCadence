@@ -1,0 +1,9 @@
+{
+  "defect_id": "DEFECT-BOUND-02",
+  "category": "boundary_violation",
+  "severity": "high",
+  "description": "Unauthorized cross-package internal package import",
+  "file_target": "internal/review/boundary_lens.go",
+  "patch_content": "package review\n\nimport _ \"github.com/olostan/DevCadence/internal/credentials/private\"\n",
+  "violated_invariant": "DCI-123"
+}

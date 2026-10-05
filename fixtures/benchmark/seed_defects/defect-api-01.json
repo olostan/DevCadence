@@ -1,0 +1,9 @@
+{
+  "defect_id": "DEFECT-API-01",
+  "category": "api_mutation",
+  "severity": "blocking",
+  "description": "HandleRequest exported signature mutated with unexpected parameter",
+  "file_target": "internal/api/handler.go",
+  "patch_content": "package api\n\nfunc HandleRequest(extraParam int) error { return nil }\n",
+  "violated_invariant": "DCI-054"
+}

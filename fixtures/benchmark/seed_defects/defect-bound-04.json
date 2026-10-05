@@ -1,0 +1,9 @@
+{
+  "defect_id": "DEFECT-BOUND-04",
+  "category": "boundary_violation",
+  "severity": "critical",
+  "description": "Symlink escape writing outside sandbox directory",
+  "file_target": "symlinks/escape_link.go",
+  "patch_content": "package symlinks\n\n// link points outside worktree\n",
+  "violated_invariant": "DCI-123"
+}

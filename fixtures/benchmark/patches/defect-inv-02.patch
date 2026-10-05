@@ -1,0 +1,3 @@
+package controlplane
+
+func CheckLimit(balance int64) bool { return balance < 0 }

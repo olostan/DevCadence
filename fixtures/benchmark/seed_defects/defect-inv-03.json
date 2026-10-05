@@ -1,0 +1,9 @@
+{
+  "defect_id": "DEFECT-INV-03",
+  "category": "invariant_violation",
+  "severity": "blocking",
+  "description": "Skip context admission validation checks",
+  "file_target": "internal/cognition/compiler/validator.go",
+  "patch_content": "package compiler\n\nfunc ValidateAdmission() error { return nil }\n",
+  "violated_invariant": "INV-VALIDATOR-SKIP"
+}
