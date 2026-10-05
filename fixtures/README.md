@@ -58,3 +58,7 @@ running on either.
 wire schemas. They are validated against the schemas by `tests/schema_fixtures_test.go`
 and, through the strict Go decoders, by `internal/principal`. They have no Go
 `protocol.Record` twin because they are wire objects, not durable records.
+
+## Principal tool fixtures (WP-M5-2)
+
+`principal-<tool>-request.*.json` and `principal-<tool>-response.*.json` cover the 22 tool schemas. Valid request fixtures must satisfy both the schema and the strict Go reader in `internal/principal/facade`; invalid ones must be refused by both. Valid response fixtures must round-trip through the Go response types. Nested durable records (a Work Package, a decision, an evidence packet, a project state) reuse the existing valid fixtures; request fixtures omit nulls because the strict principal reader refuses them.

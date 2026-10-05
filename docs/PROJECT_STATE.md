@@ -254,6 +254,10 @@ worktree (ARCHITECTURE.md §11).
 
 The optional **Work Package guard is the start-execution guard only**. It requires the task to be `READY`, the task's approved tuple and the latest `WorkPackageApproved` event to equal the guard's ID, version, digest and base commit, the digest-verified stored record to agree, no event correlated with the task after that approval, and, for a repository-backed project, the registered accepted base to equal the Work Package base (a missing accepted base blocks execution). The Work Package's planning revision is **not** compared with the current global prefix: approval itself advanced the prefix, and events of other tasks or of discovery do not make the plan stale. Mismatch returns `ErrStaleWorkPackage`. Accept, reject, validation and review check candidate lineage separately and do not use this guard. Exhausted lock contention returns `ErrStorageBusy`, never a staleness verdict. The existing `Apply` is unchanged and carries no expected prefix.
 
+### 7.1b Work Package proposals (WP-M5-2)
+
+`WorkPackageProposed` records an immutable Work Package revision proposed for a task in `designing`. It carries the task, Work Package id, version, planning `project_state_revision`, base commit and record digest, and is verified against the stored `EngineeringWorkPackage` like `WorkPackageApproved` (id, version, task, planning revision and base must agree with the record). The reducer requires the task to be `designing` and the version to exceed every earlier proposed version of that Work Package id and any approved version of it; it changes no task field, never replaces the approved tuple and does not make work `ready`. The proposal's planning revision equals the transaction-entry expected revision, so a stale plan is refused; a later approval reuses the stored proposal digest and keeps its historical planning revision. A journal containing the event cannot be read by a build that does not register it: an unknown event type is refused, never skipped. Because the event is correlated with the task, it also appears in the task's history.
+
 ### 7.2 Task buckets
 
 `tasks.{ready,running,blocked,awaiting_principal}` are derived from task state
@@ -445,6 +449,8 @@ Examples:
 - local hardware availability: runtime current.
 
 ProjectState should distinguish stale external knowledge when it can materially affect decisions.
+
+The principal facade additionally observes the registered repository live on each call to detect change made outside DevCadence (a moved HEAD, a modified tracked file); see [MCP_API.md §8.2](MCP_API.md#82-facade-launch-binding-and-limits-wp-m5-2). The journal-derived `git.accepted_commit` is not rewritten by such change: it is reported as drift and the principal refreshes.
 
 ## 14. Project state and principal sessions
 

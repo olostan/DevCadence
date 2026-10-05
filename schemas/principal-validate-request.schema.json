@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/olostan/DevCadence/schemas/principal-validate-request.schema.json",
+  "title": "DevCadence Principal validate request",
+  "description": "Strict request of the validate tool (WP-M5-2). No actor, grant or policy: the caller comes from the launch binding.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "meta",
+    "candidate",
+    "profile_id"
+  ],
+  "properties": {
+    "meta": {
+      "$ref": "devcadence:///principal-call-meta.schema.json"
+    },
+    "candidate": {
+      "$ref": "devcadence:///principal-candidate-ref.schema.json"
+    },
+    "profile_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[^\\p{Cc}]*\\S[^\\p{Cc}]*$"
+    }
+  }
+}

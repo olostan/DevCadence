@@ -1,0 +1,12 @@
+{
+  "meta": {
+    "schema_version": "1.0",
+    "project_id": "example",
+    "correlation_id": "corr-0001"
+  },
+  "kind": "symbol",
+  "base_commit": "91acd8273f1",
+  "path": "internal/controlplane/batch.go",
+  "symbol": "ApplyBatch",
+  "max_bytes": 2048
+}

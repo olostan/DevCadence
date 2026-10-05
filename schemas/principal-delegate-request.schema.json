@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/olostan/DevCadence/schemas/principal-delegate-request.schema.json",
+  "title": "DevCadence Principal delegate request",
+  "description": "Strict request of the delegate tool (WP-M5-2). No actor, grant or policy: the caller comes from the launch binding.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "meta",
+    "task_id",
+    "work_package"
+  ],
+  "properties": {
+    "meta": {
+      "allOf": [
+        {
+          "$ref": "devcadence:///principal-call-meta.schema.json"
+        },
+        {
+          "required": [
+            "expected_state_revision"
+          ]
+        }
+      ]
+    },
+    "task_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[^\\p{Cc}]*\\S[^\\p{Cc}]*$"
+    },
+    "work_package": {
+      "$ref": "devcadence:///principal-work-package-ref.schema.json"
+    }
+  }
+}

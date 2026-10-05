@@ -1,0 +1,15 @@
+{
+  "meta": {
+    "schema_version": "1.0",
+    "project_id": "example",
+    "correlation_id": "corr-0001"
+  },
+  "kind": "search",
+  "base_commit": "91acd8273f1",
+  "scope_paths": [
+    "internal/"
+  ],
+  "query": "ApplyBatch",
+  "max_matches": 5,
+  "max_bytes": 4096
+}

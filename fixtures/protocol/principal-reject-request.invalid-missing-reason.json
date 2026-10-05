@@ -1,0 +1,20 @@
+{
+  "meta": {
+    "schema_version": "1.0",
+    "project_id": "example",
+    "correlation_id": "corr-0001",
+    "expected_state_revision": "ps_000000042"
+  },
+  "candidate": {
+    "task_id": "tsk_00000000000000000000000C",
+    "attempt_id": "att_0001",
+    "work_package": {
+      "id": "wp_000000000000000000000012",
+      "version": 1,
+      "digest": "sha256:abababababababababababababababababababababababababababababababab",
+      "base_commit": "91acd8273f1"
+    },
+    "commit": "cafebabecafe"
+  },
+  "requested_repairs": []
+}

@@ -1,0 +1,13 @@
+{
+  "meta": {
+    "schema_version": "1.0",
+    "project_id": "example",
+    "correlation_id": "corr-0001"
+  },
+  "kind": "summary",
+  "record_kind": "EvidencePacket",
+  "record_id": "ep_000000000000000000000003",
+  "record_version": 1,
+  "digest": "sha256:cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+  "max_bytes": 4096
+}

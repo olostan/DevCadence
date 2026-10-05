@@ -56,6 +56,12 @@ Each planning window is captured in an overview document (e.g. `docs/work-packag
 
 ---
 
+## M5 — Principal proposals and approval
+
+A Work Package **proposal** (principal `create_work_package`, event `WorkPackageProposed`) is distinct from **approval** (trusted operator service, `WorkPackageApproved`). A proposal is an immutable, versioned record for a designing task whose planning revision equals the state it was written against; it grants no readiness, starts nothing and does not replace the approved tuple. Approval stays a separate trusted act that reuses the exact stored record and digest. See [PROJECT_STATE.md §7.1b](PROJECT_STATE.md#71b-work-package-proposals-wp-m5-2).
+
+---
+
 ## Execution Contract and Context Manifest
 
 **Effective now for new or amended delegated EWPs.** Scope cards below are roadmap entries, never substitutes for an approved EWP. Existing accepted EWPs remain historical artifacts; do not rewrite their accepted requirements or schema records retroactively.
@@ -603,6 +609,8 @@ new-resource addition, topology collapse and future-driver extensibility. Verifi
 The [2026-10-F planning window](work-packages/window-2026-10-f-overview.md) indexes the five proposed M5 preparation EWPs and owns their shared planning status, runtime prerequisites and required M4 reevaluation. Each EWP retains its own implementation readiness gates.
 
 **WP-M5-1 status:** implemented in the working tree under an explicit repository-owner authorization as a disclosed gate exception (the EWP header remained DRAFT/NOT_READY and no independent Contract/Authority or Test Adequacy review had occurred at implementation time). Independent review and the mutation observation by a separate reviewer remain required before acceptance. See [the EWP](work-packages/wp-m5-1-semantic-contract-ewp.md#implementation-record).
+
+**WP-M5-2 status:** implemented in the working tree, without commit, under the same disclosed owner authorization (header DRAFT/NOT_READY; no independent review yet). It delivers the host-neutral facade, `WorkPackageProposed`, the no-argument stdio MCP server and outside-change detection. Executor, scout and snippet runtimes are absent by design (`MODEL_UNAVAILABLE`) and acceptance is hard-disabled, so it is not M5 task execution. See [the EWP](work-packages/wp-m5-2-semantic-mcp-ewp.md#implementation-record).
 
 ## Future milestones
 

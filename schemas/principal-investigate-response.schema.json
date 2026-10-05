@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/olostan/DevCadence/schemas/principal-investigate-response.schema.json",
+  "title": "DevCadence Principal investigate response",
+  "description": "Response of the investigate tool (WP-M5-2): the same value for a Go and an MCP caller. state_revision is the prefix observed or committed and is omitted when the call was refused before any read.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "evidence_refs"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "state_revision": {
+      "type": "string",
+      "pattern": "^ps_([0-9]{9}|[1-9][0-9]{9,})$"
+    },
+    "evidence_refs": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128,
+        "pattern": "^[^\\p{Cc}]*\\S[^\\p{Cc}]*$"
+      }
+    },
+    "error": {
+      "$ref": "devcadence:///principal-semantic-error.schema.json"
+    },
+    "result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "evidence_packet"
+      ],
+      "properties": {
+        "evidence_packet": {
+          "$ref": "devcadence:///evidence-packet.schema.json"
+        }
+      }
+    }
+  },
+  "oneOf": [
+    {
+      "required": [
+        "result"
+      ],
+      "not": {
+        "required": [
+          "error"
+        ]
+      }
+    },
+    {
+      "required": [
+        "error"
+      ],
+      "not": {
+        "required": [
+          "result"
+        ]
+      }
+    }
+  ]
+}

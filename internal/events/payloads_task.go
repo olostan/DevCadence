@@ -16,6 +16,7 @@ const (
 	TypeTaskCreated                  Type = "TaskCreated"
 	TypeTaskScoutingStarted          Type = "TaskScoutingStarted"
 	TypeTaskDesignStarted            Type = "TaskDesignStarted"
+	TypeWorkPackageProposed          Type = "WorkPackageProposed"
 	TypeWorkPackageApproved          Type = "WorkPackageApproved"
 	TypeTaskDelegated                Type = "TaskDelegated"
 	TypeAttemptStarted               Type = "AttemptStarted"
@@ -100,6 +101,43 @@ func (p *TaskDesignStarted) Validate() error {
 	}
 	if p.Reason == "" {
 		return errs.New(errs.CategoryInvalidArgument, "TaskDesignStarted: reason is required")
+	}
+	return nil
+}
+
+// WorkPackageProposed records that an immutable Work Package revision was
+// proposed for a designing task (WP-M5-2). It is distinct from approval: it
+// changes no task state, never replaces the approved tuple and starts nothing.
+//
+// Like WorkPackageApproved, the blueprint body is a stored record referenced
+// by id, version and digest. Journals containing this event cannot be read by
+// builds that predate it: an unregistered type is refused, never skipped.
+type WorkPackageProposed struct {
+	TaskID               string `json:"task_id"`
+	WorkPackageID        string `json:"work_package_id"`
+	Version              int    `json:"version"`
+	ProjectStateRevision string `json:"project_state_revision"`
+	BaseCommit           string `json:"base_commit"`
+	RecordDigest         string `json:"record_digest"`
+}
+
+// Type implements Payload.
+func (p *WorkPackageProposed) Type() Type { return TypeWorkPackageProposed }
+
+// Validate implements Payload.
+func (p *WorkPackageProposed) Validate() error {
+	if err := requireTaskID("WorkPackageProposed", p.TaskID); err != nil {
+		return err
+	}
+	if p.WorkPackageID == "" || p.RecordDigest == "" || p.BaseCommit == "" {
+		return errs.New(errs.CategoryInvalidArgument,
+			"WorkPackageProposed: work_package_id, base_commit and record_digest are required")
+	}
+	if p.Version < 1 {
+		return errs.New(errs.CategoryInvalidArgument, "WorkPackageProposed: version must be >= 1")
+	}
+	if p.ProjectStateRevision == "" {
+		return errs.New(errs.CategoryInvalidArgument, "WorkPackageProposed: project_state_revision is required")
 	}
 	return nil
 }
@@ -615,6 +653,7 @@ func init() {
 	Register(TypeTaskCreated, func() Payload { return &TaskCreated{} })
 	Register(TypeTaskScoutingStarted, func() Payload { return &TaskScoutingStarted{} })
 	Register(TypeTaskDesignStarted, func() Payload { return &TaskDesignStarted{} })
+	Register(TypeWorkPackageProposed, func() Payload { return &WorkPackageProposed{} })
 	Register(TypeWorkPackageApproved, func() Payload { return &WorkPackageApproved{} })
 	Register(TypeTaskDelegated, func() Payload { return &TaskDelegated{} })
 	Register(TypeAttemptStarted, func() Payload { return &AttemptStarted{} })

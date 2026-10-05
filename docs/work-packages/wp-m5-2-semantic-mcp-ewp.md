@@ -7,7 +7,7 @@
 - Project state: no runtime project in repository authoring; capture implementation fixture prefix.
 - Contract digest: immutable reviewed Git blob; not a self-referential inline hash.
 - Endpoint: competent Go implementer, measured ≥32k admission for contract/clauses plus ≥8k reserves; unknown ceiling returns CONTEXT_UNFIT.
-- Status: **DRAFT / NOT_READY**. This independently reviewable boundary slice does not deliver production task/review executors. M5 exit requires the follow-on runtime window.
+- Status: **DRAFT / NOT_READY** (contract status unchanged). Implemented in the working tree, without commit, under an explicit repository-owner authorization as a disclosed gate exception; see the [implementation record](#implementation-record). This independently reviewable boundary slice does not deliver production task/review executors. M5 exit requires the follow-on runtime window.
 
 ## Objective
 
@@ -314,3 +314,53 @@ Official sources verified 2026-10-05: https://github.com/modelcontextprotocol/go
 
 
 - r2: consolidated transaction, evidence-dispatch and action-boundary repair; complete evidence dispatch, exact discovery grants, transaction read-guard seam, and explicitly disabled acceptance until canonical producer/policy contract exists.
+
+## Implementation record
+
+Implemented from base `c75b110` (WP-M5-1 merged) in the working tree, **without commit**. Authorization: the repository owner explicitly authorized implementation as a disclosed gate exception while the header status remained DRAFT/NOT_READY; no independent Contract/Authority or Test Adequacy review and no deliberate-mutant observation by a separate reviewer has run. This record does not change the contract above.
+
+**Owner directions that override or narrow the contract (each needs reviewer confirmation):**
+
+1. *Short commit ids everywhere.* The principal wire commit rule (`principal.ValidateCommit`, `principal-work-package-ref`, `principal-candidate-ref`, and every commit field of the new tool schemas) is now 7 to 64 lower-case hex digits instead of 40 or 64. Stored and wire ids are still compared by exact string; an abbreviation is resolved by Git only in the drift observer. The WP-M5-1 text that says 40 or 64 is superseded by this.
+2. *Outside-change detection instead of heavy verification.* `RepositoryObserver` (nil disables) re-reads the registered repository on each call; there is no cache. Stale means a tracked file affected by the request changed between the request's base and the current commit plus working tree (see MCP_API §8.2). `project_state` reports a live `repository` observation; evidence (search, symbol, snippet, investigate), `create_work_package`, `delegate`, `validate` and `review` return retryable `STALE_PROJECT_STATE` with a `git:<head>` handle. Untracked files do not count. Path scope of a Work Package is taken from path-like `scope.in_scope` and `repository_anchors` entries; with none usable any tracked change counts (conservative). `diff` is not drift-checked because candidate and base are immutable. `project_state` observes `git.accepted_commit` against the live tree only when the project has an accepted commit.
+
+**Deviations, interpretations and ambiguities needing a decision:**
+
+- *Package layout.* The facade is `internal/principal/facade`, not `internal/principal`, because `internal/controlplane` already imports `internal/principal` (WP-M5-1) and the facade imports the control plane. `internal/principal` gained only the exported `DecodeStrict`.
+- *`Options` additions.* `Repository RepositoryObserver` and `Logger *slog.Logger` are not in the proposed struct. The three required constructor refusals are as specified.
+- *Nil-port check.* A typed-nil port is treated as nil, so an adapter with a nil pointer cannot masquerade as an installed runtime.
+- *`hit_ref` matching is NOT implemented in the facade.* The contract says a supplied `hit_ref` must match project, base and path but defines no `hit_ref` format or resolver. The facade validates it as an identifier and forwards it in `SnippetRequest.HitRef`; verification is the worker's duty and is therefore unverified in this slice. **Implementation-critical ambiguity: needs a defined hit-ref format and a verifier before a snippet worker is accepted.**
+- *Symlink escape* needs the filesystem and is left to the worker's canonical resolution as specified; the facade rejects only the lexical forms.
+- *Depth ladder.* `summary` reaches summaries only; `symbol` adds search, symbol and `investigate`; `snippet` adds snippet and diff. The contract names the depths but not this mapping.
+- *Caps.* A zero binding cap (a Go-constructed caller) is treated as the hard cap 8192/200, never as unlimited. A request above the binding cap is `CONTEXT_UNFIT` (not retryable).
+- *Error codes chosen for unspecified cases:* a non-designing task or an alias used where an id is required is `INVALID_ARGUMENT`; a base that differs from the accepted base is `STALE_PROJECT_STATE`; reject on a task that is not reviewing is `STALE_PROJECT_STATE`, a lineage mismatch is `INVALID_ARGUMENT`; a duplicate proposal or decision is `INVALID_ARGUMENT`. `state_revision` is omitted from refusals raised before any read, so a response never claims an unobserved prefix.
+- *Operation kinds.* The closed `OperationRef.kind` set has no `diff`, so snippet and diff both use `snippet`.
+- *Backward initialize.* Version negotiation is the SDK's. The in-process and real-stdio tests negotiated `2026-07-28`; an older-client negotiation was not exercised.
+- *`CorrelationID`* is logged by the facade and carried in the call, not persisted: the journal has no generic correlation field, as specified.
+- *`record_decision`* writes `DecisionRecorded` including the record's `invariant_changes` as journal facts. It does not edit invariants, policy or Git.
+- *Retry after a lost commit response* is the WP-M5-1 behaviour (a repeat at the old prefix is stale); the facade adds no idempotency.
+- *Discovery grants.* A binding may carry the nine WP3 discovery names (they are canonical), but none is registered as a tool.
+- *Task id arguments* accept an id or a human alias for reads; mutating Work Package and candidate references require the task id.
+
+**Requirement coverage.**
+
+| Req | Where it is proved |
+| --- | --- |
+| R1 | `TestA14_GoAndMCPResultsAreIdentical`, `TestFixturesAgreeWithTheStrictGoReaders` |
+| R2 | `TestA2_DenialsMakeNoCallbacks`, `TestA2_RequestsCannotMintPermission`, `TestParseBinding`, `TestLoadBindingProtections` |
+| R3 | `TestA4_ProposalPersistsDistinctFromApproval`, `TestA3_StaleOrContradictoryProposalWritesNothing`, `TestProposalVersionsAreMonotonicAndTaskMustBeDesigning`, reducer tests in `internal/state/proposal_test.go` |
+| R4 | `TestA15_EvidenceDispatchPreservesEveryField`, `TestA7_EvidenceCapsAndIdentitiesAreEnforced` (`hit_ref` matching excepted, above) |
+| R5 | `TestA1_LaunchWorksFromASourceFreeDirectory`, `TestA12_BinaryOverStdio` |
+| R6 | `TestA5_ClosedToolAllowlistAndNoBackdoorPrimitives`, `TestMCPSDKIsConfinedToTheAdapter` |
+| R7 | `TestA11_OperationsYieldAndAreLostAcrossInstances`, `TestOperationRegistryBounds`, `TestOperationFailuresAreNormalisedAndCloseCancels` |
+| R8 | `TestA10_AcceptIsHardDisabled` (A9 is the same denial path; no gate exists to inject) |
+| R9 | `TestA8_MissingRuntimesDenyWithoutEffects`, `TestMissingRuntimeThroughMCP` |
+| R10 | schemas, fixtures, `TestEveryRegisteredTypeRoundTrips`, `TestHistoricalReadersRefuseTheNewEventType`, docs checks |
+
+A13 is `TestA13_*` (facade and MCP); A16 is limited to the canonical grant vocabulary (`TestToolAndGrantVocabulary`, `TestA5_*`) because no discovery tool exists yet; A17 is `TestA17_*` (policy pin and launched process). Drift: `TestDrift_*` in `internal/principal/facade/drift_test.go` and `TestLaunchDetectsRepositoryChangedOutsideDevCadence`.
+
+**Not delivered by design:** production task, review, snippet and scout runtimes, a durable operation queue, any enabled acceptance, WP3 discovery tools, host recipes (WP4) and real-host smoke tests. A live host session was not run.
+
+**Mutation observation.** The Mutation Catalog was not observed by a separate reviewer; the author ran none. Tests are written to fail for each catalogued mutant but that is unverified.
+
+SDK: `github.com/modelcontextprotocol/go-sdk v1.7.0` (resolved from the Go proxy on 2026-10-05; `go.sum` pinned; protocol `2026-07-28` negotiated in tests). `internal/mcpadapter` and `cmd/devcadence-mcp` are the only importers, enforced by `TestMCPSDKIsConfinedToTheAdapter`.

@@ -8,7 +8,7 @@ BIN_DIR ?= bin
 COVERAGE_PROFILE ?= coverage.out
 COVERAGE_REPORT ?= coverage.txt
 
-.PHONY: all build hooks-check fmt-check diff-check mod-check test vet race schemas docs-check coverage verify ci precommit prepush hooks-install update-goldens clean
+.PHONY: all build build-mcp hooks-check fmt-check diff-check mod-check test vet race schemas docs-check coverage verify ci precommit prepush hooks-install update-goldens clean
 
 all: verify
 
@@ -19,9 +19,13 @@ hooks-check:
 		echo "warning: repository health hooks are not enabled in this clone; run 'make hooks-install' once" >&2; \
 	fi
 
-## build: compile the CLI into bin/devcadence.
-build: hooks-check
+## build: compile the CLI into bin/devcadence and the MCP server into bin/devcadence-mcp.
+build: hooks-check build-mcp
 	$(GO) build -o $(BIN_DIR)/devcadence ./cmd/devcadence
+
+## build-mcp: compile the no-argument stdio MCP server into bin/devcadence-mcp.
+build-mcp:
+	$(GO) build -o $(BIN_DIR)/devcadence-mcp ./cmd/devcadence-mcp
 
 ## fmt-check: fail if Go files changed from the selected merge base are not gofmt-clean.
 fmt-check:

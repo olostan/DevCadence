@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/olostan/DevCadence/schemas/principal-record-decision-request.schema.json",
+  "title": "DevCadence Principal record_decision request",
+  "description": "Strict request of the record_decision tool (WP-M5-2). No actor, grant or policy: the caller comes from the launch binding.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "meta",
+    "decision"
+  ],
+  "properties": {
+    "meta": {
+      "allOf": [
+        {
+          "$ref": "devcadence:///principal-call-meta.schema.json"
+        },
+        {
+          "required": [
+            "expected_state_revision"
+          ]
+        }
+      ]
+    },
+    "decision": {
+      "$ref": "devcadence:///decision-record.schema.json"
+    }
+  }
+}

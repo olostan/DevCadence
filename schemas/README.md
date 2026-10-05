@@ -64,6 +64,10 @@ inference.
 
 These govern wire objects of the principal interface, **not durable records**: they have no record kind and are never stored. They are strict (`additionalProperties: false`, no actor/grant fields) and independent of the durable protocol versions. Their Go twin is `internal/principal`; closed enums and the fixed error messages are checked against the schemas by that package's tests. See [../docs/PROTOCOLS.md](../docs/PROTOCOLS.md#3c-1-principal-wire-identities-implemented---wp-m5-1).
 
+### Principal tool requests and responses (WP-M5-2)
+
+`principal-<tool>-request.schema.json` and `principal-<tool>-response.schema.json` for `project-state`, `investigate`, `create-work-package`, `delegate`, `task-status`, `validate`, `review`, `request-evidence`, `accept`, `reject` and `record-decision` (22 files). They are strict wire objects with no actor, grant or policy fields, reference the WP-M5-1 identities and the durable record schemas, and are checked against the strict readers of `internal/principal/facade`. Commit identifiers are 7 to 64 lower-case hex digits. The MCP adapter publishes each request schema with its cross-schema references inlined. See [../docs/MCP_API.md](../docs/MCP_API.md#82-facade-launch-binding-and-limits-wp-m5-2).
+
 ### Cognition resources, adaptive context, economics, and portfolios (M3C, ADR-0018, ADR-0019)
 
 - `access-channel.schema.json`

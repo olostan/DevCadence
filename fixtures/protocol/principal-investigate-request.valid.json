@@ -1,0 +1,13 @@
+{
+  "meta": {
+    "schema_version": "1.0",
+    "project_id": "example",
+    "correlation_id": "corr-0001"
+  },
+  "question": "Where is the journal reducer?",
+  "base_commit": "91acd8273f1",
+  "scope_paths": [
+    "internal/state/"
+  ],
+  "max_bytes": 4096
+}

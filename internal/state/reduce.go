@@ -92,6 +92,8 @@ func (p *Projection) applyPayload(e *events.Event) error {
 			t.Blocked = nil
 			return nil
 		})
+	case *events.WorkPackageProposed:
+		return p.applyWorkPackageProposed(payload)
 	case *events.WorkPackageApproved:
 		return p.applyWorkPackageApproved(e, payload)
 	case *events.TaskDelegated:
@@ -303,6 +305,28 @@ func (p *Projection) transitionTask(e *events.Event, taskID string, to tasks.Sta
 		return err
 	}
 	*task = staged
+	return nil
+}
+
+// applyWorkPackageProposed records a proposal without any lifecycle effect.
+// The task must be designing and the proposed version must exceed every
+// earlier proposed or approved version of the same Work Package id.
+func (p *Projection) applyWorkPackageProposed(payload *events.WorkPackageProposed) error {
+	task, err := p.requireTaskInState(payload.TaskID, tasks.StateDesigning, "work package proposal")
+	if err != nil {
+		return err
+	}
+	if payload.Version <= p.proposals[payload.WorkPackageID] {
+		return errs.New(errs.CategoryConflict,
+			"work package %s version %d does not supersede the proposed version %d",
+			payload.WorkPackageID, payload.Version, p.proposals[payload.WorkPackageID])
+	}
+	if task.WorkPackageID == payload.WorkPackageID && payload.Version <= task.WorkPackageVersion {
+		return errs.New(errs.CategoryConflict,
+			"work package %s version %d does not supersede the approved version %d",
+			payload.WorkPackageID, payload.Version, task.WorkPackageVersion)
+	}
+	p.proposals[payload.WorkPackageID] = payload.Version
 	return nil
 }
 

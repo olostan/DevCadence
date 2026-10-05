@@ -1,0 +1,13 @@
+{
+  "meta": {
+    "schema_version": "1.0",
+    "project_id": "example",
+    "correlation_id": "corr-0001"
+  },
+  "question": "q",
+  "base_commit": "91acd8273f1",
+  "scope_paths": [
+    "/etc"
+  ],
+  "max_bytes": 4096
+}
