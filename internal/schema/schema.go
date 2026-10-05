@@ -98,6 +98,17 @@ const (
 	NameResolutionVerification Name = "resolution-verification"
 )
 
+// Names of the principal wire-identity schemas (WP-M5-1). They govern wire
+// objects of the principal interface, not durable records, so they are
+// deliberately absent from RecordKindToSchema.
+const (
+	NamePrincipalCallMeta       Name = "principal-call-meta"
+	NamePrincipalWorkPackageRef Name = "principal-work-package-ref"
+	NamePrincipalCandidateRef   Name = "principal-candidate-ref"
+	NamePrincipalSemanticError  Name = "principal-semantic-error"
+	NamePrincipalOperationRef   Name = "principal-operation-ref"
+)
+
 // RecordKindToSchema maps a Go record kind to the schema that governs it.
 // It is the explicit statement of which twin belongs to which, so that a new
 // protocol type cannot be added without deciding on its schema.
@@ -290,6 +301,8 @@ func AllNames() []Name {
 		NameBudgetState, NameResourceState, NameCognitionPortfolio,
 		NamePortfolioRecommendation, NameWorkflowPlan,
 		NameReviewFinding, NameFindingResolution, NameResolutionVerification,
+		NamePrincipalCallMeta, NamePrincipalWorkPackageRef, NamePrincipalCandidateRef,
+		NamePrincipalSemanticError, NamePrincipalOperationRef,
 	}
 	sort.Slice(names, func(i, j int) bool {
 		if len(names[i]) != len(names[j]) {

@@ -51,3 +51,10 @@ Fixture *machines* — as opposed to fixture documents — live in
 behaviour rather than a finished document. Both exist for the same reason: the
 test suite must cover a Linux/AMD machine and an Apple Silicon machine without
 running on either.
+
+## Principal wire-identity fixtures (WP-M5-1)
+
+`principal-*.valid*.json` and `principal-*.invalid-*.json` cover the five principal
+wire schemas. They are validated against the schemas by `tests/schema_fixtures_test.go`
+and, through the strict Go decoders, by `internal/principal`. They have no Go
+`protocol.Record` twin because they are wire objects, not durable records.

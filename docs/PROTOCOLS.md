@@ -182,6 +182,10 @@ A bounded per-task topology compiled from task/risk requirements + CognitionPort
 ### PortfolioChangeProposal
 An explicit diff triggered by changed resources/policy/evidence. Applying it is auditable and reversible; learned evidence never silently mutates the active portfolio.
 
+## 3C-1. Principal wire identities [Implemented - WP-M5-1]
+
+Host-neutral request identities of the principal interface, defined in `internal/principal` and published as `principal-call-meta`, `principal-work-package-ref`, `principal-candidate-ref`, `principal-semantic-error` and `principal-operation-ref` schemas. They are **wire objects, not durable records**: they have no record kind, are never stored, and their schema family version (`1.0`) is independent of the durable protocol versions. Digests are `sha256:` plus 64 lower-case hex digits, commits are 40 or 64 lower-case hex Git object ids, identifiers are nonblank, at most 128 UTF-8 bytes and control-free, and state revisions are canonical `ps_` plus at least nine decimal digits. A wire object never embeds an actor, grant or policy: those are the internal `CallerContext`. Semantics: [MCP_API.md §7–8](MCP_API.md#7-error-model) and [PROJECT_STATE.md §7.1a](PROJECT_STATE.md#71a-guarded-writes-and-start-execution-freshness-wp-m5-1).
+
 ## 3D. Project capability, toolchain, and health protocols [Planned - M6]
 
 ### ProjectCapabilityPack

@@ -112,78 +112,11 @@ func (s *Service) Apply(ctx context.Context, cmd Command) (Result, error) {
 		if err != nil {
 			return err
 		}
-		// The first event of a project must be ProjectInitialized, and only
-		// the first: the reducer enforces both, here we only surface it early
-		// enough that nothing has been written.
-		if !projection.Initialised() && cmd.Payload.Type() != events.TypeProjectInitialized {
-			return errs.New(errs.CategoryNotFound,
-				"project %s has not been initialised", cmd.ProjectID)
-		}
-
-		result.RecordDigests = make(map[string]string, len(cmd.Records))
-		for _, record := range cmd.Records {
-			// High-value product-authority references are checked before the
-			// record becomes durable. This is deliberately not a general
-			// referential engine over every protocol relation; it covers the
-			// one relation where a dangling reference would let the system
-			// claim human authority it does not have (DCI-009, DCI-015).
-			if err := checkProductAuthorityRefs(ctx, tx, cmd.ProjectID, record.Record); err != nil {
-				return err
-			}
-			digest, err := tx.PutRecord(ctx, cmd.ProjectID, record.Version, record.Record)
-			if err != nil {
-				return err
-			}
-			result.RecordDigests[record.Record.RecordID()] = digest
-		}
-
-		// A payload claiming a durable record is verified against the store
-		// before anything is appended. Records supplied in this command were
-		// persisted just above, so a caller may either write the record here
-		// or reference one already stored (ADR-0002 §4d).
-		if err := checkReferencedRecord(ctx, tx, cmd.ProjectID, cmd.Payload); err != nil {
-			return err
-		}
-
-		// Correlation is derived from the typed payload here rather than
-		// taken from the caller. Task history and observability read the
-		// indexed correlation columns, so an adapter that omitted or
-		// mis-set them could append a valid state change that never appears
-		// in its task's history.
-		correlation, err := canonicalCorrelation(cmd.Payload, cmd.Correlation)
+		applied, err := s.applyMember(ctx, tx, projection, cmd, true)
 		if err != nil {
 			return err
 		}
-
-		now := s.clock.Now()
-		event := events.Event{
-			SchemaVersion: protocol.SchemaVersion1,
-			EventID:       s.newID("evt", now),
-			ProjectID:     cmd.ProjectID,
-			EventType:     cmd.Payload.Type(),
-			OccurredAt:    protocol.NewTimestamp(now),
-			Actor:         cmd.Actor,
-			Correlation:   correlation,
-			Payload:       cmd.Payload,
-		}
-		appended, err := tx.AppendEvent(ctx, event)
-		if err != nil {
-			return err
-		}
-		// Applying after the append is what makes an illegal transition roll
-		// the append back: the two are one unit of work.
-		if err := projection.Apply(&appended); err != nil {
-			return err
-		}
-		if err := tx.SaveProjection(ctx, projection); err != nil {
-			return err
-		}
-		projectState, err := projection.ProjectState()
-		if err != nil {
-			return err
-		}
-		result.Event = appended
-		result.ProjectState = projectState
+		result = applied
 		return nil
 	})
 	if err != nil {
@@ -208,6 +141,95 @@ func (s *Service) Apply(ctx context.Context, cmd Command) (Result, error) {
 		slog.Int64("seq", result.Event.Seq),
 		slog.String("state_revision", result.ProjectState.StateRevision),
 	)
+	return result, nil
+}
+
+// applyMember performs the transactional body of one command against a
+// projection that already reflects every earlier write of the transaction:
+// records, reference checks, event append and reduction. Apply and ApplyBatch
+// share it so that "what one command means" has exactly one implementation.
+//
+// savePerEvent persists the projection after the event (Apply). ApplyBatch
+// passes false and saves once, after its postconditions, so no intermediate
+// projection is ever written.
+func (s *Service) applyMember(
+	ctx context.Context, tx *storage.Tx, projection *state.Projection, cmd Command, savePerEvent bool,
+) (Result, error) {
+	// The first event of a project must be ProjectInitialized, and only
+	// the first: the reducer enforces both, here we only surface it early
+	// enough that nothing has been written.
+	if !projection.Initialised() && cmd.Payload.Type() != events.TypeProjectInitialized {
+		return Result{}, errs.New(errs.CategoryNotFound,
+			"project %s has not been initialised", cmd.ProjectID)
+	}
+
+	var result Result
+	result.RecordDigests = make(map[string]string, len(cmd.Records))
+	for _, record := range cmd.Records {
+		// High-value product-authority references are checked before the
+		// record becomes durable. This is deliberately not a general
+		// referential engine over every protocol relation; it covers the
+		// one relation where a dangling reference would let the system
+		// claim human authority it does not have (DCI-009, DCI-015).
+		if err := checkProductAuthorityRefs(ctx, tx, cmd.ProjectID, record.Record); err != nil {
+			return Result{}, err
+		}
+		digest, err := tx.PutRecord(ctx, cmd.ProjectID, record.Version, record.Record)
+		if err != nil {
+			return Result{}, err
+		}
+		result.RecordDigests[record.Record.RecordID()] = digest
+	}
+
+	// A payload claiming a durable record is verified against the store
+	// before anything is appended. Records supplied in this command were
+	// persisted just above, so a caller may either write the record here
+	// or reference one already stored (ADR-0002 §4d).
+	if err := checkReferencedRecord(ctx, tx, cmd.ProjectID, cmd.Payload); err != nil {
+		return Result{}, err
+	}
+
+	// Correlation is derived from the typed payload here rather than
+	// taken from the caller. Task history and observability read the
+	// indexed correlation columns, so an adapter that omitted or
+	// mis-set them could append a valid state change that never appears
+	// in its task's history.
+	correlation, err := canonicalCorrelation(cmd.Payload, cmd.Correlation)
+	if err != nil {
+		return Result{}, err
+	}
+
+	now := s.clock.Now()
+	event := events.Event{
+		SchemaVersion: protocol.SchemaVersion1,
+		EventID:       s.newID("evt", now),
+		ProjectID:     cmd.ProjectID,
+		EventType:     cmd.Payload.Type(),
+		OccurredAt:    protocol.NewTimestamp(now),
+		Actor:         cmd.Actor,
+		Correlation:   correlation,
+		Payload:       cmd.Payload,
+	}
+	appended, err := tx.AppendEvent(ctx, event)
+	if err != nil {
+		return Result{}, err
+	}
+	// Applying after the append is what makes an illegal transition roll
+	// the append back: the two are one unit of work.
+	if err := projection.Apply(&appended); err != nil {
+		return Result{}, err
+	}
+	if savePerEvent {
+		if err := tx.SaveProjection(ctx, projection); err != nil {
+			return Result{}, err
+		}
+	}
+	projectState, err := projection.ProjectState()
+	if err != nil {
+		return Result{}, err
+	}
+	result.Event = appended
+	result.ProjectState = projectState
 	return result, nil
 }
 

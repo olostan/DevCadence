@@ -1,0 +1,11 @@
+{
+  "task_id": "task_0001",
+  "attempt_id": "att_0001",
+  "work_package": {
+    "id": "wp_0001",
+    "version": 2,
+    "digest": "sha256:abababababababababababababababababababababababababababababababab",
+    "base_commit": "0123456789abcdef0123456789abcdef01234567"
+  },
+  "commit": "cafebabe"
+}

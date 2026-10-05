@@ -223,6 +223,8 @@ The principal can poll status or use future notification/event mechanisms.
 
 ## 7. Error model
 
+The principal v1 wire vocabulary (`internal/principal`, WP-M5-1) fixes a **closed** error-code set: `INVALID_ARGUMENT`, `UNSUPPORTED_SCHEMA_VERSION`, `NOT_FOUND`, `INTEGRITY`, `STALE_PROJECT_STATE`, `STALE_WORK_PACKAGE`, `POLICY_DENIED`, `VALIDATION_FAILED`, `REVIEW_DISAGREEMENT`, `NEEDS_PRINCIPAL`, `NEEDS_HUMAN`, `MODEL_UNAVAILABLE`, `CONTEXT_UNFIT`, `CONTRADICTED_ASSUMPTION`, `OPERATION_LOST`, `CANCELLED`, `INTERNAL`. Each code carries one fixed safe message; raw provider, shell or SQL text is never returned, and `evidence_refs` hold only authorized project-scoped immutable handles. `CONSULTANT_UNAVAILABLE` below is not in the v1 closed set and remains a future extension. The informal list that follows predates that set.
+
 Semantic errors include:
 - `STALE_PROJECT_STATE`;
 - `POLICY_DENIED`;
@@ -238,6 +240,10 @@ Semantic errors include:
 Errors should provide actionable evidence handles.
 
 ## 8. Project-state staleness
+
+### 8.1 Call envelope and transactional guard (WP-M5-1 foundation)
+
+Every principal call carries `CallMeta` (`schema_version` `"1.0"`, `project_id`, `correlation_id`, and for mutations `expected_state_revision`; bootstrap initialization must omit it). Requests carry **no actor, grant or policy field**: unknown keys are refused, and the caller's identity and grants come only from the local protected binding (`principal.CallerContext`, internal, never serialized). `WorkPackageRef`, `CandidateRef`, `SemanticError` and `OperationRef` complete the vocabulary; see [schemas/README.md](../schemas/README.md). Mutations reach the control plane through `controlplane.ApplyBatch`, which enforces the expected prefix and the start-execution Work Package guard inside one transaction ([PROJECT_STATE.md §7.1a](PROJECT_STATE.md#71a-guarded-writes-and-start-execution-freshness-wp-m5-1)). A facade maps `errors.Is(err, controlplane.ErrStaleProjectState)` to `STALE_PROJECT_STATE` and `ErrStaleWorkPackage` to `STALE_WORK_PACKAGE` before any generic conflict mapping. `correlation_id` is correlation only, not an idempotency promise: repeating a call at its old prefix after a successful commit is stale.
 
 Creating a Work Package against stale state must be detected.
 

@@ -1,0 +1,6 @@
+{
+  "id": "wp_0001",
+  "version": 2,
+  "digest": "sha256:ABC",
+  "base_commit": "0123456789abcdef0123456789abcdef01234567"
+}

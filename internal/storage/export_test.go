@@ -32,3 +32,31 @@ func (t *Tx) ExecWithoutImmutabilityForTest(ctx context.Context, statement strin
 	_, err := t.tx.ExecContext(ctx, statement, args...)
 	return err
 }
+
+// QueryIntForTest runs a statement returning one integer, such as a PRAGMA.
+func (t *Tx) QueryIntForTest(ctx context.Context, statement string, args ...any) (int, error) {
+	var value int
+	err := t.tx.QueryRowContext(ctx, statement, args...).Scan(&value)
+	return value, err
+}
+
+// IsBusyForTest exposes the busy classifier.
+func IsBusyForTest(err error) bool { return isBusy(err) }
+
+// NewCommitErrorForTest wraps cause as the store reports a failed commit.
+func NewCommitErrorForTest(cause error) error { return &commitError{cause: cause} }
+
+// ProvokeBusyForTest returns the real driver error produced when the write
+// lock is held elsewhere and no busy wait is allowed.
+func (s *Store) ProvokeBusyForTest(ctx context.Context) error {
+	conn, err := s.db.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = conn.Close() }()
+	if _, err := conn.ExecContext(ctx, "PRAGMA busy_timeout = 1"); err != nil {
+		return err
+	}
+	_, err = conn.ExecContext(ctx, "UPDATE principal_write_serialization SET marker = marker WHERE id = 1")
+	return err
+}

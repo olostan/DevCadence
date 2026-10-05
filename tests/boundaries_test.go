@@ -226,3 +226,47 @@ func TestPlannerDriverInvoker_ACC13_BoundaryIsNonVacuous(t *testing.T) {
 		t.Fatalf("plannerdriver dependency list lacks planner=%v drivers=%v (got %d deps); the check would be vacuous", hasPlanner, hasDrivers, len(deps))
 	}
 }
+
+// TestPrincipalContractIsPureAndCoreDoesNotDependOnIt keeps the host-neutral
+// principal vocabulary (WP-M5-1) free of persistence, control-plane, state,
+// event and adapter dependencies, and keeps the core and persistence layers
+// from depending on a wire vocabulary. Only the application service may
+// import it. The check fails rather than skipping when the dependency list is
+// empty, so it cannot pass vacuously.
+func TestPrincipalContractIsPureAndCoreDoesNotDependOnIt(t *testing.T) {
+	const (
+		module = "github.com/olostan/DevCadence/internal/"
+		pkg    = module + "principal"
+	)
+	deps := dependenciesOf(t, pkg)
+	if len(deps) < 2 {
+		t.Fatalf("dependency list of %s is implausibly small (%d); the check would be vacuous", pkg, len(deps))
+	}
+	allowed := map[string]bool{pkg: true, module + "errs": true}
+	for _, dep := range deps {
+		firstSegment, _, _ := strings.Cut(dep, "/")
+		if !strings.Contains(firstSegment, ".") {
+			continue // standard library
+		}
+		if !allowed[dep] {
+			t.Errorf("internal/principal depends on %s; the contract may import only internal/errs", dep)
+		}
+	}
+	for _, dependant := range []string{
+		module + "protocol", module + "events", module + "tasks", module + "state", module + "storage",
+		module + "schema",
+	} {
+		for _, dep := range dependenciesOf(t, dependant) {
+			if dep == pkg {
+				t.Errorf("%s depends on internal/principal; the wire vocabulary sits above the core", dependant)
+			}
+		}
+	}
+	for _, adapter := range adapterPackages {
+		for _, dep := range dependenciesOf(t, adapter) {
+			if dep == pkg {
+				t.Errorf("provider adapter %s depends on internal/principal", adapter)
+			}
+		}
+	}
+}
