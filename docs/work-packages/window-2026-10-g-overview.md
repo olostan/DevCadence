@@ -158,11 +158,11 @@ Nothing in this window is approved. All four EWPs remain NOT_READY; Part-level g
 
 ### Status after repair round 2 (r3)
 
-r2 verification (head e91f365) returned REJECT (narrow) with five blocking items; the owner's review of head 106dafd (comment 6006619681) confirmed them and added nine more blocking findings, four before-live-smoke items and a repair order. **Repair round 2 (r3, this revision) closes every item below in text; nothing is verified.** No Part may freeze before the full clean re-review of the repaired snapshot (Architecture/Contract/Authority, Implementability/Failure Semantics, Test Adequacy/Mutation), which is **PENDING**. All four EWPs remain **DRAFT / NOT_READY / NOT FROZEN** and carry **no implementation authority**. Items that remain open or became owner input are marked in the table. Safe default for every OWNER INPUT remains deny.
+r2 verification (head e91f365) returned REJECT (narrow) with five blocking items; the owner's review of head 106dafd (comment 6006619681) confirmed them and added nine more blocking findings, four before-live-smoke items and a repair order. **Repair round 2 (r3) closed the original owner-review items; focused repair r4 closes the second-order gaps found by independent review of r3. Nothing in r4 is independently verified yet.** No Part may freeze before the full clean re-review of the repaired snapshot (Architecture/Contract/Authority, Implementability/Failure Semantics, Test Adequacy/Mutation), which is **PENDING**. All four EWPs remain **DRAFT / NOT_READY / NOT FROZEN** and carry **no implementation authority**. Items that remain open or became owner input are marked in the table. Safe default for every OWNER INPUT remains deny.
 
 ### Review traceability (owner review 6006619681)
 
-Dispositions: **CLOSED r3** = specified in r3 text, pending re-review; **OWNER INPUT** = needs an owner answer (deny by default); **LATER GATE / LATER CARD** = an ordered gate or card with the stated entry condition, not done; **OPEN** = unresolved (reason given). "Owner item" numbers are those of the comment.
+Dispositions: **CLOSED r3/r4** = specified in the named repair revision, pending clean re-review; **OWNER INPUT** = needs an owner answer (deny by default); **LATER GATE / LATER CARD** = an ordered gate or card with the stated entry condition, not done; **OPEN** = unresolved (reason given). "Owner item" numbers are those of the comment.
 
 | # | Owner item | Disposition | Location |
 | --- | --- | --- | --- |
