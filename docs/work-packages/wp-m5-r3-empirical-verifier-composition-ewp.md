@@ -277,7 +277,7 @@ Until both exist, M5 cannot close and A9 cannot run.
 | A12 | loopback client refuses non-loopback host, redirect, proxy, oversize response, credential header, a tool call with a non-object `arguments` or an unlisted name; maps `/api/chat` usage to input/output known with cached unknown when both counts are present, so total remains known without fabricating cached=0; request above `MaxRequestBytes` refused before send; `num_predict` equals `MaxOutputTokensPerCall` | R8/R11 → I8/I11 |
 | A13 | `replay-empirical` with refused admission exits 3, no gate call; Inconclusive conclusion exits 2; legacy `--evidence-kind empirical_campaign` exits 4 | R9 → I9 |
 | A14 | profile with `sh -c`, network-looking arg, `..` dir → load refused; verifier env contains no proxy/credential variables | R10 → I10 |
-| A16 | Part 0 scenarios P0-1..P0-6 above | R11 → I11 |
+| A16 | Part 0 scenarios P0-1..P0-8 above | R11 → I11 |
 | A15 | nil authority/verifier/resolver → `NewAdmitter` refused; production `ValidateAdmission` still denies | R6/R1 → I6/I1 |
 
 The live A9 scenario of WP-M5-5 is **not** claimed by anything in this EWP; fixtures here are synthetic and prove schema and control flow only.
