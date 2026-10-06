@@ -2,7 +2,7 @@
 
 ## Identity
 
-- Revision: 3 (owner review of r2 head 106dafd repaired; verdicts pending re-verification); task: task-m5-r4-operator-ingress; window: [2026-10-G](window-2026-10-g-overview.md).
+- Revision: 4 (focused implementability repair after independent review of r3 head `0da5013`; verdicts pending clean re-verification); task: task-m5-r4-operator-ingress; window: [2026-10-G](window-2026-10-g-overview.md).
 - Base: `71bdaec6d6d81c1b6e52d8b30f0f8485f928925a` (`main` `cebb4f0` plus the PR #83 reconcile merge, 2026-10-05).
 - Contract digest: reviewed immutable Git blob. No fictitious runtime state revision; record the actual accepted dependency commits at execution.
 - Endpoint: competent Go implementer with POSIX filesystem/ownership and `crypto/ed25519` skill; complete admission of this contract is mandatory.
@@ -16,7 +16,7 @@ Make human/owner authority an enforceable property rather than a label. Define o
 
 ## Context Manifest
 
-Role: security-contract implementer / independent authority reviewer. Read envelope: `internal/mcpadapter/{binding,launch}*.go` (protected-file checks to reuse, not rewrite), `internal/controlplane/{batch,service,records}.go`, `internal/protocol` canonical JSON/digest and record registry, `internal/principalhosts/integration.go` (`ApprovalVerifier`), `internal/benchmark/empirical/types.go` (`operatorAuthority`), WP-M5-3 `HumanReceiptVerifier` text. Write scope: new `internal/operator/receipts/` (+ tests), one additive record kind `ReceiptConsumption` with schema and fixtures, optional `cmd/devcadence-operator/` (Part B only), owning docs. No change to `INVARIANTS.md` or the invariant catalog.
+Role: security-contract implementer / independent authority reviewer. Read envelope: `internal/mcpadapter/{binding,launch}*.go` (protected-file checks to reuse, not rewrite), `internal/controlplane/{batch,service,records}.go`, `internal/process` (fixed-argv runner semantics used by the macOS ACL probe), `internal/protocol` canonical JSON/digest and record registry, `internal/principalhosts/integration.go` (`ApprovalVerifier`), `internal/benchmark/empirical/types.go` (`operatorAuthority`), WP-M5-3 `HumanReceiptVerifier` text. Write scope: new `internal/operator/receipts/` (+ tests), one additive record kind `ReceiptConsumption` with schema and fixtures, optional `cmd/devcadence-operator/` (Part B only), owning docs. No change to `INVARIANTS.md` or the invariant catalog.
 
 Exact normative clauses (admit exact text at the readiness gate): AGENTS §§2–9, 12–15, 17; SECURITY §§1, 3, 7, 12A, 14–17; ADR-0024 §§3–5; DCI-005, 012, 015, 032, 033, 080–084, 090, 123–124, 134, 160 and the WP-M5-3 authority matrix. Risks: authority forgery, trust-anchor substitution, replay, confused-deputy rendering, TOCTOU between verification and effect, clock skew, key custody. Re-resolution triggers: the owner chooses a mechanism other than a separate OS identity, a new crypto dependency, a change to the record registry or `BatchGuard`, or a consumer needing a purpose not in the closed vocabulary.
 
@@ -295,6 +295,7 @@ Weaker-implementer check for Part A: author expectation only, to be tested by th
 
 ## Changelog
 
+- r4: focused repair after review of `0da5013`: adds `internal/process` to the mandatory read envelope because the normative macOS ACL probe is executed through `process.Runner`; no authority semantics changed.
 - r1: initial draft for window 2026-10-G.
 - r3: owner review of head 106dafd: `anchors.json` bytes pinned per process vs `revoked.json` re-read fresh at every `Verify` (fail closed), resolving the contradiction with "changed digests refuse until relaunch" (items 12); `HumanActorID == anchor.HumanActorID` required (R10, 13); explicit `OperatorUID` + `TrustedOwnerUIDs = {0, OperatorUID}` composition, mixed-chain acceptance cases and concrete Linux/macOS ACL probes (14); "every Evaluate" aligned to `Decide`; new refs `anchors-changed`, `revocation-unavailable`; `receipts` imports `controlplane` (stated in the overview dependency paragraph).
 - r2: repair round 1: trusted-owner allow-list and macOS notes; optional-`ReceiptID` subject lookup and one receipt location; exact subject table per purpose; host-plan path canonicalization and consumer adapters; `Verified.IsValid`, `AuditGrantUse`, grant `ConsumeOnce` refusal; per-use re-verification definition; explicit test seams; `ApprovalRequest` format noted as Part B; honest readiness tally.
