@@ -2,7 +2,7 @@
 
 ## Identity
 
-- Revision: 2 (window review round 1 repaired; verdicts pending re-verification); task: task-m5-r4-operator-ingress; window: [2026-10-G](window-2026-10-g-overview.md).
+- Revision: 3 (owner review of r2 head 106dafd repaired; verdicts pending re-verification); task: task-m5-r4-operator-ingress; window: [2026-10-G](window-2026-10-g-overview.md).
 - Base: `71bdaec6d6d81c1b6e52d8b30f0f8485f928925a` (`main` `cebb4f0` plus the PR #83 reconcile merge, 2026-10-05).
 - Contract digest: reviewed immutable Git blob. No fictitious runtime state revision; record the actual accepted dependency commits at execution.
 - Endpoint: competent Go implementer with POSIX filesystem/ownership and `crypto/ed25519` skill; complete admission of this contract is mandatory.
@@ -33,13 +33,14 @@ LOCAL_DISCRETION: file and helper layout, test fixtures, error wording that is s
 | ID | MUST requirement | Invariant |
 | --- | --- | --- |
 | R1 | A receipt verifies only if its Ed25519 signature checks against an enrolled, unexpired, unrevoked anchor whose public key is allowed for that purpose | I1: a request field, flag or file that merely says "human" is never authority |
-| R2 | The trust-anchor and revocation files are loaded only from a path whose every component is owned by a uid in the explicit `TrustedOwnerUIDs` allow-list (non-empty, supplied by composition from the operator account chosen in OWNER INPUT-1) that is also different from the verifier's effective UID, not group/world-writable and not a symlink; the verifier refuses to run as UID 0 | I2: an identity that can reach the model's tools cannot edit the thing that decides who is trusted; "owner is not me" alone is insufficient (any third account could own the directory) |
+| R2 | The trust-anchor and revocation files are loaded only from a path whose every component is owned by a uid in the explicit `TrustedOwnerUIDs` allow-list that is also different from the verifier's effective UID, not group/world-writable, not a symlink and free of ACL entries; the operator directory and its two files must be owned by the single configured `OperatorUID`. Composition supplies `TrustedOwnerUIDs = {0, OperatorUID}` (system ancestors such as `/`, `/etc`, `/Library` are normally root-owned; with OPTION A and root as operator, `OperatorUID = 0`). The verifier refuses to run as UID 0 | I2: an identity that can reach the model's tools cannot edit the thing that decides who is trusted; "owner is not me" alone is insufficient (any third account could own the directory) |
 | R3 | A receipt binds `project_id`, `purpose`, subject `{kind,id,version}`, `subject_digest`, optional `input_digest`, the rendered statement digest and a bounded validity window; any mismatch with the consumer's recomputed values fails | I3: a receipt cannot be reused for another project, purpose, artifact or revision |
 | R4 | A `once` receipt is consumed in the same transaction as the effect it authorizes; replay fails; a rolled-back effect leaves it unconsumed | I4: one human act authorizes at most one effect, and no effect commits without its consumption |
-| R5 | A `grant` receipt is accepted only until expiry or revocation and is re-verified at every use. "Use" is defined once for the window: every `Delegate`, every `Review` start, every `Evaluate`, every campaign run admission; the policy file bytes are pinned for the process, the receipt/anchor/revocation state is not | I5: standing authority is bounded and revocable |
+| R5 | A `grant` receipt is accepted only until expiry or revocation and is re-verified at every use. "Use" is defined once for the window: every `Delegate`, every `Review` start, every acceptance `Decide`, every campaign run admission; the policy file bytes and the **anchor set** are pinned for the process, while the receipt files and **`revoked.json`** are re-read and strictly decoded on every `Verify` (see Algorithm: protection check). Revocation therefore takes effect at the next use without relaunch; replacing `anchors.json` takes a relaunch (enrolment ceremony) | I5: standing authority is bounded and revocable; trust roots are immutable for the process |
 | R6 | Verification returns a trusted in-process `Verified` value; wire/request data never constructs it; the zero value is invalid and every consumer and `ConsumeOnce` refuse it via `Verified.IsValid()` | I6: no accepting JSON or test double can reach production authority, and a zero-value struct cannot pass as one |
 | R7 | The issuer renders the human-visible text from the exact artifact bytes by a typed renderer, never from request-supplied text | I7: the human signs what will be applied |
-| R8 | Missing, unreadable, malformed, expired, unknown-anchor, unprotected-anchor or ambiguous inputs deny with `NEEDS_HUMAN` and zero effects | I8: absence of authority is never defaulted |
+| R8 | Missing, unreadable, malformed, expired, unknown-anchor, unprotected-anchor, unreadable-revocation or ambiguous inputs deny with `NEEDS_HUMAN` and zero effects | I8: absence of authority is never defaulted |
+| R10 | `Statement.HumanActorID` is signer-controlled text and is **never** trusted by itself: `Verify` returns `Verified` only when `Statement.HumanActorID == anchor.HumanActorID` of the selected anchor, and the identity that consumers (WP-M5-3 adapter) report is taken from the anchor | I10: a signer cannot assert another human's identity under its own key |
 | R9 | Receipt creation, enrolment and revocation have no model-reachable surface | I9: the principal cannot mint, enrol or revoke |
 
 ## Verified facts and representability gaps
@@ -88,7 +89,7 @@ type Statement struct {
     InputDigest    string  // "" unless the purpose table requires it
     Text           string  // <= 4096 bytes, issuer-rendered, printable UTF-8, no control characters
     TextDigest     string  // sha256 of Text bytes
-    HumanActorID   string  // the enrolled anchor's human identity label
+    HumanActorID   string  // signed copy; MUST equal the selected anchor's human_actor_id (R10); the consumer-visible identity is the anchor's
     AnchorID       string
     IssuedAt, NotAfter string // RFC3339 UTC
 }
@@ -116,10 +117,11 @@ func AuditGrantUse(v Verified, effectKind, effectID string) (controlplane.Record
 type FileOptions struct {
     OperatorDir string        // default per platform; DEVCADENCE_OPERATOR_DIR override is protection-checked too
     ReceiptsDir string        // default DEVCADENCE_HOME/receipts; need NOT be protected (receipts are signed)
-    TrustedOwnerUIDs []uint32 // required non-empty; root (0) is allowed as an owner, never as the verifier euid
+    OperatorUID uint32        // owner required for OperatorDir, anchors.json and revoked.json (the operator account; 0 allowed when root is the operator)
+    TrustedOwnerUIDs []uint32 // required non-empty and MUST contain OperatorUID; expected composition {0, OperatorUID} so root-owned ancestors pass; root (0) is never the verifier euid; no entry may equal the verifier euid
     Clock clock.Clock         // required
 }
-func NewFileVerifier(opts FileOptions) (Verifier, error) // refuses when R2 protection fails or TrustedOwnerUIDs is empty
+func NewFileVerifier(opts FileOptions) (Verifier, error) // refuses when R2 protection fails, TrustedOwnerUIDs is empty or lacks OperatorUID, or OperatorUID/any entry equals the euid
 ~~~
 
 **Receipt location and lookup (single rule, replaces any per-consumer receipt path).** Every receipt is a file `DEVCADENCE_HOME/receipts/<ReceiptID>.json` (64 KiB cap). Consumers never read receipt files themselves, and policy loaders do **not** read `config/*.receipt.json`. With `Request.ReceiptID` set, exactly that file is verified. With it empty, `Verify` enumerates `receipts/*.json` (sorted by name, at most 256 files, files over the cap or failing strict decode are skipped), keeps those whose `Purpose`, `ProjectID`, `Subject` and `SubjectDigest` equal the request, fully verifies each, and returns the verifying one with the latest `IssuedAt` (ties: lexicographically greatest `ReceiptID`); none verifying returns `receipt-missing` (or the most specific failure of the best candidate). A `once` consumer is given the `ReceiptID` by the human/host (the `receiptRef`/`ref` argument of the consumer ports); `grant` consumers (policies, campaigns) discover by subject, so no receipt reference is ever embedded in the signed artifact (a receipt id is issuer-generated and signed over the digest of those same bytes, so it cannot live inside them).
@@ -144,23 +146,26 @@ WP-M5-3's write side MUST adopt the discovery rows verbatim (it owns the record 
 
 Fixed purpose table (use, maximum validity, `input_digest` required): `discovery.*` once, 1 h, required for decision/requirement/reflection/risk and not for ledger; `host.plan_apply` once, 1 h, no; `acceptance.policy_activate` and `execution.policy_activate` grant, 30 days, no; `empirical.campaign_authorize` grant, 7 days, no. A receipt whose `NotAfter - IssuedAt` exceeds the maximum, whose `Use` differs from the table, or whose `IssuedAt` is more than 5 minutes in the future refuses.
 
-Trust-anchor files (read-only to the verifier). Directory `OperatorDir` contains `anchors.json` `{version:"1.0", anchors:[{anchor_id, human_actor_id, public_key (base64 Ed25519), not_before, not_after, purposes:[Purpose]}]}` and `revoked.json` `{version:"1.0", receipt_ids:[], anchor_ids:[]}`. Default directory is a platform constant (`/etc/devcadence-operator` on Linux, `/Library/Application Support/DevCadence/operator` on macOS); `DEVCADENCE_OPERATOR_DIR` may name another path, but R2 protection is checked on whatever path is used, so the override cannot weaken the property. Windows and other platforms: `NewFileVerifier` refuses.
+Trust-anchor files (read-only to the verifier). Directory `OperatorDir` contains `anchors.json` `{version:"1.0", anchors:[{anchor_id, human_actor_id, public_key (base64 Ed25519), not_before, not_after, purposes:[Purpose]}]}` (pinned per process) and `revoked.json` `{version:"1.0", receipt_ids:[], anchor_ids:[]}` (re-read at every `Verify`; enrolment creates it with empty lists). Default directory is a platform constant (`/etc/devcadence-operator` on Linux, `/Library/Application Support/DevCadence/operator` on macOS); `DEVCADENCE_OPERATOR_DIR` may name another path, but R2 protection is checked on whatever path is used, so the override cannot weaken the property. Windows and other platforms: `NewFileVerifier` refuses.
 
 ### Algorithm: protection check (R2)
 
+Two files, two lifetimes. **`anchors.json` is immutable for the process**: its bytes are read once at construction, their sha256 is pinned and the decoded anchor set is held in memory; replacement (enrolment, key rotation, anchor revocation by expiry edit) takes effect only in a relaunched process. **`revoked.json` is dynamic**: it is protection-checked, read and strict-decoded fresh on every `Verify`; its content may change without relaunch. The directory and both files share the one chain check below.
+
 1. `euid := os.Geteuid()`; if `euid == 0` refuse (a root verifier has no separation to rely on).
-2. Resolve the absolute path without following symlinks; walk every component from `/` to each file with `Lstat`.
-3. For each component: not a symlink; owner uid is in `TrustedOwnerUIDs` **and** `!= euid`; `mode & 0022 == 0` (no group/world write; a sticky directory does not excuse this); regular file or directory as expected; file mode has no write bit for anyone but the owner. macOS note: system directories are often `root:wheel 0755` (acceptable) but user-created directories default to group-writable for the `admin`/`staff` groups on some setups, so the `0022` rule must be checked, not assumed; `/etc`, `/var` and `/tmp` are symlinks on macOS, so a path through them refuses and the operator must name the real path (the default `/Library/Application Support/DevCadence/operator` has no symlink component).
-4. Any unknown ownership/ACL capability, `Lstat` failure or mode ambiguity refuses. Re-run the check at every `Verify`, not only at construction, and compare file digests with the values loaded at construction; a changed file refuses until the process is relaunched.
+2. Resolve the absolute path without following symlinks; walk every component from `/` to each of the three targets (`OperatorDir`, `anchors.json`, `revoked.json`) with `Lstat`.
+3. For each component: not a symlink; owner uid is in `TrustedOwnerUIDs` **and** `!= euid`; `mode & 0022 == 0` (no group/world write; a sticky directory does not excuse this); regular file or directory as expected; a file has no write bit for anyone but its owner. **Operator ownership:** `OperatorDir`, `anchors.json` and `revoked.json` MUST be owned by exactly `OperatorUID`; ancestors above `OperatorDir` may be owned by any uid in `TrustedOwnerUIDs` (the mixed chain `/`=0, `/Library`=0, ... `operator`=OperatorUID is the expected macOS shape, `/etc`=0 ... `devcadence-operator`=OperatorUID the Linux shape). macOS note: user-created directories can be group-writable for `admin`/`staff`, so the `0022` rule is checked, not assumed; `/etc`, `/var` and `/tmp` are symlinks on macOS, so a path through them refuses and the operator names the real path (the default `/Library/Application Support/DevCadence/operator` has no symlink component).
+4. **ACL handling (concrete, per supported OS; no cgo, no new dependency).** *Linux:* for every component call the standard-library `syscall.Getxattr` for `system.posix_acl_access` and, for directories, `system.posix_acl_default`; `ENODATA` means absent (accept); `ENOTSUP`/`EOPNOTSUPP` means the filesystem cannot hold POSIX ACLs (accept); any success (an ACL exists) or any other error refuses. *macOS:* for every component run `/bin/ls -ld -- <path>` through `process.Runner` (fixed absolute executable, argv only, minimal environment, 5 s timeout) and parse the first whitespace-delimited field: it must match `^[-dl][-rwxsStT]{9}[@ ]?$`; a trailing `+` (ACL present) refuses, and any output not matching the pattern refuses. Other OS: `NewFileVerifier` refuses (as for Windows). Tests inject an `fs.ACLPresent(path) (bool, error)` seam; the OS adapters are exercised by the manual operator step. An unknown ownership/ACL capability is therefore never a vague refusal: each OS has the exact probe above and anything outside it refuses.
+5. The chain check runs at construction **and at every `Verify`** (all three targets). Additionally: at every `Verify` the sha256 of the `anchors.json` bytes is re-read and compared with the pinned value; a changed `anchors.json` refuses (`anchors-changed`) until relaunch. `revoked.json` is **not** digest-pinned; it is strictly decoded (`{version:"1.0", receipt_ids, anchor_ids}`, unknown fields, duplicates or trailing content refuse; 64 KiB cap) on every `Verify`; a missing, unreadable, malformed or unprotected `revoked.json` refuses (`revocation-unavailable`, or `anchor-unprotected` for a failed chain check): fail closed, never "no revocations".
 
 ### Algorithm: Verify
 
 1. Load nothing from the request except `ReceiptID` and the binding fields. With a non-empty `ReceiptID` resolve `DEVCADENCE_HOME/receipts/<ReceiptID>.json` only after the id matches `^rcpt_[a-z2-7]{26}$`; with an empty one apply the Lookup rule above. Size cap 64 KiB. Strict decode.
-2. Re-run R2 protection; read anchors and revocations from the verified files.
-3. Reject if the receipt id or its anchor is revoked; the anchor must exist, be inside `not_before..not_after`, and list `Purpose`.
-4. Check the fixed table (use, validity, input requirement) and that `ProjectID`, `Purpose`, `Subject`, `SubjectDigest`, `InputDigest` equal the **consumer's** values and `TextDigest == sha256(Text)`.
+2. Re-run the R2 protection check on all three targets; compare the `anchors.json` digest with the pinned value; read and strict-decode `revoked.json` fresh (step 5 of the protection check). The anchor set used is the in-memory set pinned at construction.
+3. Reject if the receipt id is in `revoked.json.receipt_ids` or its anchor id is in `revoked.json.anchor_ids`; the anchor must exist, be inside `not_before..not_after`, and list `Purpose`.
+4. Check the fixed table (use, validity, input requirement); that `ProjectID`, `Purpose`, `Subject`, `SubjectDigest`, `InputDigest` equal the **consumer's** values; `TextDigest == sha256(Text)`; and **`Statement.HumanActorID == anchor.HumanActorID`** of the anchor named by `Statement.AnchorID` (mismatch: `receipt-invalid`). `Verified.Statement().HumanActorID` is therefore always the anchor's enrolled identity.
 5. Verify the signature with the anchor key. Compare `now` (injected clock) with `[IssuedAt-5m, NotAfter]`.
-6. Return `Verified`. Any failure returns a typed sentinel mapped by consumers to `NEEDS_HUMAN` with a fixed evidence ref (`receipt-missing`, `receipt-invalid`, `receipt-expired`, `receipt-revoked`, `anchor-unprotected`, `receipt-binding-mismatch`, `receipt-replayed`) and never echoes receipt text, key material or paths.
+6. Return `Verified`. Any failure returns a typed sentinel mapped by consumers to `NEEDS_HUMAN` with a fixed evidence ref (`receipt-missing`, `receipt-invalid`, `receipt-expired`, `receipt-revoked`, `anchor-unprotected`, `anchors-changed`, `revocation-unavailable`, `receipt-binding-mismatch`, `receipt-replayed`) and never echoes receipt text, key material or paths.
 
 ### Algorithm: consumption and replay
 
@@ -197,7 +202,8 @@ Decision owner: repository owner. **Safe default: deny.** Until answered, no anc
 
 | Input | Missing | Unknown | Stale | Malformed/contradictory |
 | --- | --- | --- | --- | --- |
-| Anchor dir/files | `NEEDS_HUMAN`, zero effects | unknown owner/ACL: refuse | changed digest: refuse until relaunch | refuse |
+| Anchor dir / `anchors.json` | `NEEDS_HUMAN`, zero effects | unknown owner/ACL probe result: refuse | changed digest: `anchors-changed`, refuse until relaunch | refuse |
+| `revoked.json` | `revocation-unavailable`, refuse | unreadable/unprotected: refuse | edited content takes effect at the next `Verify` (no relaunch) | strict-decode failure: refuse |
 | Receipt | `receipt-missing` | unknown purpose/anchor: refuse | expired/revoked: refuse | signature/digest/binding mismatch: refuse |
 | Clock | injected clock required; unavailable denies | n/a | skew over 5 minutes denies | n/a |
 
@@ -206,7 +212,8 @@ Decision owner: repository owner. **Safe default: deny.** Until answered, no anc
 | Verification fails before batch | zero records/events | no consumption record |
 | Batch rolls back (stale prefix, guard, crash) | receipt unconsumed and reusable until expiry | state unchanged |
 | Ambiguous commit response | consult state/record before any retry; a repeat is `receipt-replayed` if the first committed | consumption record |
-| Anchor file replaced mid-run | next `Verify` refuses | digest comparison |
+| `anchors.json` replaced mid-run | next `Verify` refuses (`anchors-changed`) until relaunch | digest comparison |
+| `revoked.json` edited mid-run | next `Verify` sees the new content; a newly listed receipt/anchor refuses | fresh strict decode |
 
 ## Traceability and acceptance scenarios
 
@@ -220,7 +227,7 @@ Decision owner: repository owner. **Safe default: deny.** Until answered, no anc
 | A6 | same `once` receipt used twice → second effect → refused, no second event | R4 → I4 → `ConsumeOnce` |
 | A7 | batch rolls back after verification → retry → receipt still valid | R4 → I4 → same transaction |
 | A8 | two concurrent uses → exactly one commits | R4 → I4 → expected-prefix serialization |
-| A9 | grant revoked or anchor revoked → next use → refuse | R5 → I5 → revocation file |
+| A9 | grant receipt id or anchor id added to `revoked.json` while the process runs (no relaunch) → next use → refuse; removed again → verifies again | R5 → I5 → fresh revocation read |
 | A10 | test/fake or wire data → obtain `Verified` → impossible (unexported fields; package boundary test) | R6 → I6 |
 | A11 | issuer given a request whose text differs from the artifact → refuses; text rendered only from bytes | R7 → I7 → renderer (Part B) |
 | A12 | every missing/unknown input above → `NEEDS_HUMAN`, zero effects, no secret in message | R8 → I8 |
@@ -228,7 +235,11 @@ Decision owner: repository owner. **Safe default: deny.** Until answered, no anc
 | A14 | host-plan adapter: valid receipt bound to plan digest and exact path list → `ApprovalVerifier` true; changed, reordered-then-uncanonical, duplicate or relative path list → false | R1/R3 → I1/I3 |
 | A15 | zero-value `Verified{}` or one decoded from JSON → `ConsumeOnce`, `AuditGrantUse` and every adapter refuse; `ConsumeOnce` of a `grant` Verified refuses | R6 → I6 → `IsValid` |
 | A16 | empty `ReceiptID`: two valid receipts for one subject → latest `IssuedAt` wins; one revoked → the other is used; none → `receipt-missing`; a receipt whose subject digest differs is never selected | R3/R5 → I3/I5 → Lookup |
-| A17 | anchor directory owned by a uid not in `TrustedOwnerUIDs` (even if not the euid) → refuse; empty allow-list → construct refuses | R2 → I2 |
+| A17 | anchor directory owned by a uid not in `TrustedOwnerUIDs` (even if not the euid) → refuse; empty allow-list or allow-list without `OperatorUID` → construct refuses | R2 → I2 |
+| A18 | `anchors.json` bytes changed after construction → refuse `anchors-changed` until a new verifier is constructed; `revoked.json` malformed, missing, unreadable, group-writable or symlinked → every `Verify` refuses (fail closed) | R2/R5 → I2/I5 → split lifetimes |
+| A19 | receipt signed by a valid anchor whose `Statement.HumanActorID` differs from that anchor's enrolled `human_actor_id` → refuse `receipt-invalid`; equal → `Verified.Statement().HumanActorID` equals the anchor's; the `HumanReceipts` adapter reports the anchor's identity | R10 → I10 |
+| A20 | mixed chain: `/`=0, `/Library`=0, `.../operator`=OperatorUID(501), files=501, euid 502 → accepted; `.../operator` owned by 0 while OperatorUID=501 → refuse (final owner mismatch); an ancestor owned by 777 ∉ allow-list → refuse; an ancestor owned by the euid → refuse; OperatorUID=0 (root operator) with root chain → accepted; euid 0 → refuse | R2 → I2 → ownership model |
+| A21 | ACL per OS through the injected seam: Linux ACL xattr present on any component → refuse, `ENODATA`/`ENOTSUP` → accept, other errno → refuse; macOS `ls -ld` field with `+` → refuse, non-matching output → refuse; unsupported OS → construct refuses | R2 → I2 → ACL probe |
 
 A live A2 against a real separate account is a manual operator acceptance step after OWNER INPUT-1; unit tests use the `fs` abstraction and never claim it.
 
@@ -256,6 +267,11 @@ Test seams (explicit): ownership/mode/`Lstat` come from an `fs` interface in `Fi
 | `IsValid` ignored, or `ConsumeOnce` accepts a grant | A15 |
 | Lookup picks the first/any file without full verification or ignores subject digest | A16 |
 | Ownership check only compares to euid | A17 |
+| Revocation file digest-pinned (revocation needs relaunch) or cached, or missing file treated as no revocations | A9/A18 |
+| `anchors.json` replacement accepted in a running process | A18 |
+| `HumanActorID` taken from the statement without the anchor equality check | A19 |
+| Whole chain required to be OperatorUID-owned (rejects root ancestors), or any `TrustedOwnerUIDs` entry accepted for the operator dir | A20 |
+| ACL probe skipped, or unknown probe result treated as no ACL | A21 |
 
 Independent lenses: Contract/Authority; Test Adequacy/Mutation. The issuer author does not verify the verifier.
 
@@ -268,9 +284,9 @@ Escalate on: owner chooses B or a mechanism without a location the process ident
 Implementation Readiness Report:
 
 ~~~text
-author tally after repair round 1 (a self-count, not evidence; independent re-verification PENDING):
-requirements represented: 9 (R1-R9) with R2/R5/R6 tightened in r2
-acceptance scenarios mapped: 17 (A1-A17); mutation rows 17
+author tally after repair round 2 (r3) (a self-count, not evidence; independent re-verification PENDING):
+requirements represented: 10 (R1-R10) with R2/R5/R6 tightened in r2 and R2/R5/R10 in r3
+acceptance scenarios mapped: 21 (A1-A21); mutation rows 22
 unresolved architecture choices: 1 (OWNER INPUT-1, Part B only); 1 deferred format (`ApprovalRequest`, Part B)
 readiness: Part A NOT_READY pending independent re-verification, current-base gate and step-0 fact checks; Part B BLOCKED
 ~~~
@@ -280,4 +296,5 @@ Weaker-implementer check for Part A: author expectation only, to be tested by th
 ## Changelog
 
 - r1: initial draft for window 2026-10-G.
+- r3: owner review of head 106dafd: `anchors.json` bytes pinned per process vs `revoked.json` re-read fresh at every `Verify` (fail closed), resolving the contradiction with "changed digests refuse until relaunch" (items 12); `HumanActorID == anchor.HumanActorID` required (R10, 13); explicit `OperatorUID` + `TrustedOwnerUIDs = {0, OperatorUID}` composition, mixed-chain acceptance cases and concrete Linux/macOS ACL probes (14); "every Evaluate" aligned to `Decide`; new refs `anchors-changed`, `revocation-unavailable`; `receipts` imports `controlplane` (stated in the overview dependency paragraph).
 - r2: repair round 1: trusted-owner allow-list and macOS notes; optional-`ReceiptID` subject lookup and one receipt location; exact subject table per purpose; host-plan path canonicalization and consumer adapters; `Verified.IsValid`, `AuditGrantUse`, grant `ConsumeOnce` refusal; per-use re-verification definition; explicit test seams; `ApprovalRequest` format noted as Part B; honest readiness tally.
