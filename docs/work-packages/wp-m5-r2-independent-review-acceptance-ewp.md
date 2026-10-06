@@ -275,7 +275,7 @@ Decision owner: repository owner, expressed as the signed `AcceptancePolicy`. **
 | Evaluation denies | zero events/records | fixed ref |
 | Evidence changes between evaluation and commit | batch precondition fails, zero effects | guard digest mismatch |
 | Review output invalid / limit / driver failure / cancellation | durable executor-authored `unable_to_verify` review + `ReviewInvocation` (outcome names the cause); operation failed; the dimension is final for the attempt | fixed code, `review-partial` refs |
-| Persisting that outcome fails, or crash mid-invocation (loopback-only limitation) | no durable invocation; operation failed `review-outcome-unrecorded`; one new invocation may be requested | state lookup first; disclosed in Part B |
+| Persisting a terminal outcome fails, or crash occurs after durable intent | intent remains durable; no terminal review; operation failed/abandoned; same dimension cannot be invoked again and acceptance blocks until the attempt is rejected | `ReviewInvocationStarted` + intent record; state lookup first |
 | Review commit conflicts | result dropped; earlier dimensions stay durable | conflict error, `review-partial` + `completed:<n>`/`requested:<m>` refs |
 | Ambiguous accept commit | read state/record before retry | `AcceptanceEvidence` id |
 
@@ -313,7 +313,7 @@ Decision owner: repository owner, expressed as the signed `AcceptancePolicy`. **
 | B7 | `review` of [a,b,c]: a persisted `pass`, b ends `output_invalid` → a stays durable, b durable non-pass, c not run; `review` of [b] denies, [c] remains permitted. If b's terminal persistence fails or process crashes after b's intent, b's intent remains durable, `review` of [b] still denies, acceptance refuses orphan intent, and only [c] may later be requested. Reviewer unavailable during pre-resolution denies before any intent/model call | R5/R7 → I5/I7 |
 | B8 | reviewer endpoint whose bound actor equals the worker's (the pre-filter used the worker's stored `Basis`; a differing revision passes the conservative filter only if the `(EndpointID, ModelID)` differs, a derivation collision after `Bind` still denies) → `independent-actor-collision`, zero effects | R3 → I3 |
 | B9 | empty `dimensions` → `review-dimensions-required`; `Options.IndependenceBasis` outside the closed set → constructor refuses; `reviewexec` has no import of `internal/acceptance`, `execpolicy` acceptance types or any acceptance-policy reader (package-boundary test) | R3 → I3 |
-| B10 | review worktree id is `rv-<invocationID>`: a failed, unpersisted invocation followed by a new request never collides; the worktree is removed after the invocation on every path; `New` removes a clean orphan `rv-*` worktree and retains a dirty one | R11 → I11 |
+| B10 | review worktree id is `rv-<invocationID>`: a failure **before intent** may be retried with a fresh invocation id and cannot collide; after intent, the dimension is never retried. The worktree is removed on terminal paths; startup removes clean orphan `rv-*` trees and retains dirty ones without deleting their durable intent | R11/R5 → I11/I5 |
 | B11 | intent batch fails/ambiguous before model call → state lookup; model call count remains zero unless exact intent is confirmed durable; crash immediately after intent → same dimension forever refuses re-invocation and acceptance blocks on orphan intent | R5/R7 → I5/I7 |
 | B12 | a provenance for each persisted review carries the full six-field `Basis` and `IndependenceBasis` equal to `Options.IndependenceBasis`; terminal basis/binding mismatch with intent → `INTEGRITY` | R1/R3/R5 → I1/I3/I5 |
 
@@ -332,7 +332,7 @@ Test seams (explicit): as in R1 (wrappers around `Options` interfaces; a store w
 | Reviewer resolution not excluding the worker actor | B1 |
 | Worker transcript included in reviewer pack | B2 |
 | Worker actor read from the stored claim instead of re-derived under the policy basis; reviewer pre-filter by actor-id hash | C16/B8 |
-| Failed/invalid/limited/cancelled invocation leaves no durable record (retry until pass); second invocation allowed for a dimension; worktree id from review count | B3/B6/B7/C13/B10 |
+| Reviewer call occurs without a durable intent; orphan intent ignored; second invocation allowed after crash/terminal-persistence loss; worktree id from review count | B3/B6/B7/B10/B11/C13 |
 | Review executor reads an acceptance policy or defaults dimensions from it | B9 |
 | Acceptance inspects only `ReviewCompleted` verdicts and ignores `ReviewInvocation` outcome | C13 |
 | Persist invalid or partially decoded output; keep model identity fields | B3/B4 |
