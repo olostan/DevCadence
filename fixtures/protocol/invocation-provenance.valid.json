@@ -1,0 +1,29 @@
+{
+  "schema_version": "1.0",
+  "provenance_id": "rev_000000000000000000000011",
+  "project_id": "example",
+  "task_id": "tsk_000000000000000000000001",
+  "attempt_id": "att_000000000000000000000005",
+  "work_package_id": "wp_000000000000000000000012",
+  "role": "reviewer",
+  "actor": {
+    "actor_id": "actor:0123456789abcdef01234567",
+    "invocation_id": "inv_000000000000000000000001",
+    "role": "reviewer"
+  },
+  "basis": {
+    "endpoint_id": "ep-claude-3-5",
+    "model_id": "claude-3-5-sonnet",
+    "model_revision": "20241022",
+    "provider": "anthropic",
+    "model_family": "claude-3-5",
+    "account_ref": "acc-default"
+  },
+  "independence_basis": "endpoint_model",
+  "endpoint_binding_digest": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "context_manifest_digest": "sha256:123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0",
+  "prompt_digest": "sha256:23456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef01",
+  "candidate_commit": "c0ffee0000000000000000000000000000000000",
+  "dimension": "correctness",
+  "started_at": "2026-10-07T05:00:00Z"
+}

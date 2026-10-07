@@ -489,6 +489,12 @@ func NewRecord(kind string) (Record, error) {
 		return &FindingResolution{}, nil
 	case "ResolutionVerification":
 		return &ResolutionVerification{}, nil
+	case "InvocationProvenance":
+		return &InvocationProvenance{}, nil
+	case "ReviewInvocationIntent":
+		return &ReviewInvocationIntent{}, nil
+	case "ReviewInvocation":
+		return &ReviewInvocation{}, nil
 	}
 	return nil, errs.New(errs.CategoryInvalidArgument, "unknown record kind %q", kind)
 }

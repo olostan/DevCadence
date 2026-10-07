@@ -1,0 +1,107 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/olostan/DevCadence/schemas/review-invocation.schema.json",
+  "title": "DevCadence ReviewInvocation",
+  "description": "Terminal outcome record for an attempted review invocation (WP-M5-R2 Part A).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "review_id",
+    "project_id",
+    "task_id",
+    "attempt_id",
+    "work_package_id",
+    "dimension",
+    "invocation_id",
+    "provenance_id",
+    "candidate_commit",
+    "invocation_number",
+    "outcome",
+    "started_at",
+    "ended_at"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "review_id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S"
+    },
+    "project_id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S"
+    },
+    "task_id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S"
+    },
+    "attempt_id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S"
+    },
+    "work_package_id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S"
+    },
+    "dimension": {
+      "enum": [
+        "correctness",
+        "architecture",
+        "invariants",
+        "security",
+        "test_adequacy",
+        "concurrency",
+        "performance",
+        "maintainability",
+        "other"
+      ]
+    },
+    "invocation_id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S"
+    },
+    "provenance_id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S"
+    },
+    "candidate_commit": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S"
+    },
+    "invocation_number": {
+      "type": "integer",
+      "const": 1
+    },
+    "outcome": {
+      "enum": [
+        "completed",
+        "output_invalid",
+        "limit_reached",
+        "driver_error",
+        "cancelled"
+      ]
+    },
+    "started_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "ended_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "usage_artifact_digest": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    }
+  }
+}

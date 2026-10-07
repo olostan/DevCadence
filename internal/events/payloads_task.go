@@ -24,6 +24,7 @@ const (
 	TypeAttemptBlocked               Type = "AttemptBlocked"
 	TypeAttemptFailed                Type = "AttemptFailed"
 	TypeValidationCompleted          Type = "ValidationCompleted"
+	TypeReviewInvocationStarted      Type = "ReviewInvocationStarted"
 	TypeReviewCompleted              Type = "ReviewCompleted"
 	TypeChangeAccepted               Type = "ChangeAccepted"
 	TypeChangeRejected               Type = "ChangeRejected"
@@ -425,6 +426,46 @@ func (p *ValidationCompleted) Validate() error {
 	return nil
 }
 
+// ReviewInvocationStarted records that a review invocation has been scheduled
+// and attached before calling the reviewer model (WP-M5-R2 Part A).
+type ReviewInvocationStarted struct {
+	TaskID          string                   `json:"task_id"`
+	AttemptID       string                   `json:"attempt_id"`
+	WorkPackageID   string                   `json:"work_package_id"`
+	ReviewID        string                   `json:"review_id"`
+	InvocationID    string                   `json:"invocation_id"`
+	Dimension       protocol.ReviewDimension `json:"dimension"`
+	CandidateCommit string                   `json:"candidate_commit"`
+	RecordDigest    string                   `json:"record_digest"`
+}
+
+// Type implements Payload.
+func (p *ReviewInvocationStarted) Type() Type { return TypeReviewInvocationStarted }
+
+// Validate implements Payload.
+func (p *ReviewInvocationStarted) Validate() error {
+	if err := requireTaskID("ReviewInvocationStarted", p.TaskID); err != nil {
+		return err
+	}
+	if p.AttemptID == "" || p.ReviewID == "" || p.InvocationID == "" || p.RecordDigest == "" {
+		return errs.New(errs.CategoryInvalidArgument,
+			"ReviewInvocationStarted: attempt_id, review_id, invocation_id and record_digest are required")
+	}
+	if p.WorkPackageID == "" {
+		return errs.New(errs.CategoryInvalidArgument,
+			"ReviewInvocationStarted: work_package_id is required")
+	}
+	if p.CandidateCommit == "" {
+		return errs.New(errs.CategoryInvalidArgument,
+			"ReviewInvocationStarted: candidate_commit is required")
+	}
+	if !p.Dimension.Valid() {
+		return errs.New(errs.CategoryInvalidArgument,
+			"ReviewInvocationStarted: dimension %q is not a known review dimension", string(p.Dimension))
+	}
+	return nil
+}
+
 // ReviewCompleted records one review dimension's result.
 //
 // It does not change task state. A task leaves REVIEWING only through an
@@ -661,6 +702,7 @@ func init() {
 	Register(TypeAttemptBlocked, func() Payload { return &AttemptBlocked{} })
 	Register(TypeAttemptFailed, func() Payload { return &AttemptFailed{} })
 	Register(TypeValidationCompleted, func() Payload { return &ValidationCompleted{} })
+	Register(TypeReviewInvocationStarted, func() Payload { return &ReviewInvocationStarted{} })
 	Register(TypeReviewCompleted, func() Payload { return &ReviewCompleted{} })
 	Register(TypeChangeAccepted, func() Payload { return &ChangeAccepted{} })
 	Register(TypeChangeRejected, func() Payload { return &ChangeRejected{} })

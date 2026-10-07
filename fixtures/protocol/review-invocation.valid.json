@@ -1,0 +1,17 @@
+{
+  "schema_version": "1.0",
+  "review_id": "rev_000000000000000000000011",
+  "project_id": "example",
+  "task_id": "tsk_000000000000000000000001",
+  "attempt_id": "att_000000000000000000000005",
+  "work_package_id": "wp_000000000000000000000012",
+  "dimension": "correctness",
+  "invocation_id": "inv_000000000000000000000001",
+  "provenance_id": "rev_000000000000000000000011",
+  "candidate_commit": "c0ffee0000000000000000000000000000000000",
+  "invocation_number": 1,
+  "outcome": "completed",
+  "started_at": "2026-10-07T05:00:00Z",
+  "ended_at": "2026-10-07T05:01:00Z",
+  "usage_artifact_digest": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+}

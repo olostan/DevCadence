@@ -98,6 +98,13 @@ const (
 	NameResolutionVerification Name = "resolution-verification"
 )
 
+// Names of the WP-M5-R2 actor basis and invocation provenance schemas.
+const (
+	NameInvocationProvenance   Name = "invocation-provenance"
+	NameReviewInvocationIntent Name = "review-invocation-intent"
+	NameReviewInvocation       Name = "review-invocation"
+)
+
 // Names of the principal wire-identity schemas (WP-M5-1). They govern wire
 // objects of the principal interface, not durable records, so they are
 // deliberately absent from RecordKindToSchema.
@@ -169,6 +176,9 @@ var RecordKindToSchema = map[string]Name{
 	"ReviewFinding":             NameReviewFinding,
 	"FindingResolution":         NameFindingResolution,
 	"ResolutionVerification":    NameResolutionVerification,
+	"InvocationProvenance":      NameInvocationProvenance,
+	"ReviewInvocationIntent":    NameReviewInvocationIntent,
+	"ReviewInvocation":          NameReviewInvocation,
 }
 
 // Set is a compiled collection of schemas.
@@ -319,6 +329,7 @@ func AllNames() []Name {
 		NameBudgetState, NameResourceState, NameCognitionPortfolio,
 		NamePortfolioRecommendation, NameWorkflowPlan,
 		NameReviewFinding, NameFindingResolution, NameResolutionVerification,
+		NameInvocationProvenance, NameReviewInvocationIntent, NameReviewInvocation,
 		NamePrincipalCallMeta, NamePrincipalWorkPackageRef, NamePrincipalCandidateRef,
 		NamePrincipalSemanticError, NamePrincipalOperationRef,
 	}
