@@ -163,14 +163,14 @@ r2 verification (head e91f365) returned REJECT (narrow) with five blocking items
 
 ### Repair round r5 (owner independent review of r4 head `fc03164`, comment 6030903787)
 
-The owner's review returned **NEEDS_TARGETED_REPAIR** (one BLOCKER, five IMPORTANT findings). Repair round r5 is one targeted, minimal round; the findings are **CLOSED in r5 text, pending the owner's re-review**. Nothing here is a freeze decision, and no Part is marked freeze-ready by the author.
+The owner's review returned **NEEDS_TARGETED_REPAIR** (one BLOCKER, five IMPORTANT findings). Repair round r5 addressed the review findings; r6 adds two verification-derived tightenings (explicit reducer handling for the new intent event and conservative unknown usage after an invoked failed turn). The findings are **CLOSED in r5/r6 text, pending clean independent re-review**. Nothing here is a freeze decision, and no Part is marked freeze-ready by the author.
 
 | Finding | Closed in r5 text by | Where |
 | --- | --- | --- |
 | B1 [BLOCKER] intent uniqueness not transactionally enforceable | deterministic intent record id `intent:<attempt_id>:<dimension>` (verified valid under repository id rules: no record-id validator in `protocol`/`storage`/`controlplane`, colons already used by this window's ids, 53 bytes against `MaxIDBytes` 128; the schema MUST permit `:`); `intentAbsentGuard` via `view.Record`; R2-B no longer needs G-C1; scenario B13 | R2 Part A id-relationships, Part B steps 1/4/6, G-C1 text, failure tables, B13; overview graph and parallelism |
 | I1 [IMPORTANT] macOS ACL `@` masking; verification under the write lock | `/bin/ls -lde -- <path>` + pure `parseDarwinLsACL` (one line only; `@` accepted solely when no ACE lines); `Verify` before building the batch, guard is a pure `view.Record` replay check; R2-C `AcceptanceGate.Authorize` (outside) + pure `Decide`; A21/A21b/A22, C15 | R4 protection check step 4, consumption algorithm; R2 Part C |
 | I2 [IMPORTANT] DriverID binding integrity | explicit `opened.Observed.DriverID == opened.Driver.ID()` assertion (`driver-id-mismatch`) before `Bind` in R1 Delegate step 4 and R2-B Review step 3; mutation rows; A18 and B14 | R1 steps/tables/A18; R2 step 3, B14; R3 Part A `Open` |
-| I3 [IMPORTANT] token knownness poisoning, unprovable limits undefined | named `RecordOperationEnd` call sites (`KnownZeroUsage()` for the no-generation open-failure path, `sawUsage` for streams); `MeterSnapshot.UsageKnown` and `UnprovableLimits []string` (closed vocabulary), path into usage artifacts and `SessionEvidence`, no schema/golden consequence; scenario-to-mutant table P0-1..P0-11 | R3 Part 0; R1 Delegate run step 6 |
+| I3 [IMPORTANT] token knownness poisoning, unprovable limits undefined | named `RecordOperationEnd` call sites; accumulators use `KnownZeroUsage()` identity, but any turn method that was actually invoked and returns no usage remains unknown (r6); streams use `sawUsage`; `MeterSnapshot.UsageKnown` and closed `UnprovableLimits []string` flow into artifacts/`SessionEvidence`; P0-1..P0-11 | R3 Part 0; R1 Delegate run step 6 |
 | I4 [IMPORTANT] intent/terminal field equality | Decide step 5 field-by-field equality (binding digest, reviewer basis, independence basis, ids, candidate); scenario C17 with isolated per-field cases | R2 Decide step 5, C17 |
 | I5 [IMPORTANT] replay test passes with in-memory state | scenario A8b (consume, close, fresh service on the same SQLite file, replay `receipt-replayed`) | R4 A8b, mutants |
 
@@ -246,11 +246,11 @@ Dispositions: **CLOSED r3/r4** = specified in the named repair revision, pending
 | T58 | r4 review (comment 6030903787) B1 [BLOCKER] — R2-B intent uniqueness not transactionally enforceable without G-C1 | CLOSED r5 in text, pending owner re-review | R2 Part A id relationships, Part B steps 1/4/6, G-C1, B13; overview graph/parallelism |
 | T59 | r4 review I1 — macOS ACL `@` masking; verification inside the write lock | CLOSED r5 in text, pending owner re-review | R4 protection check step 4, consumption algorithm, A21/A21b/A22; R2 Part C `Authorize`/`Decide`, C15 |
 | T60 | r4 review I2 — DriverID binding integrity unchecked before `Bind` | CLOSED r5 in text, pending owner re-review | R1 Delegate step 4, A18; R2 Part B step 3, B14; R3 Part A `Open` |
-| T61 | r4 review I3 — token knownness poisoning; unprovable limits not representable | CLOSED r5 in text, pending owner re-review | R3 Part 0 call-site rule, `UnprovableLimits`, P0-1..P0-11; R1 run step 6 |
+| T61 | r4 review I3 — token knownness poisoning; unprovable limits not representable | CLOSED r5/r6 in text, pending clean re-review | R3 Part 0 call-site rule, fail-closed invoked-turn unknown semantics, `UnprovableLimits`, P0-1..P0-11; R1 run step 6 |
 | T62 | r4 review I4 — terminal records not compared to intent fields | CLOSED r5 in text, pending owner re-review | R2 Decide step 5, C17 |
 | T63 | r4 review I5 — replay coverage process-local only | CLOSED r5 in text, pending owner re-review | R4 A8b, mutation catalog |
 
-The disposition of the twelve previously open verification items is: all CLOSED r3 pending re-review; **no item is OPEN** and none is a new OWNER INPUT, except that T36 depends on INPUT-3 and T31/T42 on INPUT-2 as before.
+The disposition of the previously open review findings is: all are CLOSED in the current r3-r6 text and await the clean verification gate; **no finding is OPEN** and none became a new OWNER INPUT, except the already-declared dependencies of T36 on INPUT-3 and T31/T42 on INPUT-2.
 
 ## M5 closure checklist (delta over window F)
 
