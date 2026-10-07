@@ -105,6 +105,9 @@ const (
 	NameReviewInvocation       Name = "review-invocation"
 )
 
+// NameReceiptConsumption is the WP-M5-R4 operator ingress receipt consumption schema.
+const NameReceiptConsumption Name = "receipt-consumption"
+
 // Names of the principal wire-identity schemas (WP-M5-1). They govern wire
 // objects of the principal interface, not durable records, so they are
 // deliberately absent from RecordKindToSchema.
@@ -179,6 +182,7 @@ var RecordKindToSchema = map[string]Name{
 	"InvocationProvenance":      NameInvocationProvenance,
 	"ReviewInvocationIntent":    NameReviewInvocationIntent,
 	"ReviewInvocation":          NameReviewInvocation,
+	"ReceiptConsumption":        NameReceiptConsumption,
 }
 
 // Set is a compiled collection of schemas.
@@ -330,6 +334,7 @@ func AllNames() []Name {
 		NamePortfolioRecommendation, NameWorkflowPlan,
 		NameReviewFinding, NameFindingResolution, NameResolutionVerification,
 		NameInvocationProvenance, NameReviewInvocationIntent, NameReviewInvocation,
+		NameReceiptConsumption,
 		NamePrincipalCallMeta, NamePrincipalWorkPackageRef, NamePrincipalCandidateRef,
 		NamePrincipalSemanticError, NamePrincipalOperationRef,
 	}

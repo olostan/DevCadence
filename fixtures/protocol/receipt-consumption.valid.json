@@ -1,0 +1,10 @@
+{
+  "schema_version": "1.0",
+  "receipt_id": "rcpt_01j7abc1234567890abcdef",
+  "project_id": "devcadence-core",
+  "human_actor_id": "operator-alice",
+  "purpose": "host.plan_apply",
+  "effect_kind": "plan_apply",
+  "effect_id": "plan-12345",
+  "consumed_at": "2026-10-07T06:00:00Z"
+}

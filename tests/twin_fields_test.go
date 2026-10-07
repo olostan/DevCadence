@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/olostan/DevCadence/internal/operator/receipts"
 	"github.com/olostan/DevCadence/internal/protocol"
 )
 
@@ -72,6 +73,7 @@ func TestSchemaTopLevelFieldsMatchTheGoTwin(t *testing.T) {
 		{"invocation-provenance.schema.json", &protocol.InvocationProvenance{}},
 		{"review-invocation-intent.schema.json", &protocol.ReviewInvocationIntent{}},
 		{"review-invocation.schema.json", &protocol.ReviewInvocation{}},
+		{"receipt-consumption.schema.json", &receipts.Consumption{}},
 	} {
 		t.Run(tc.schema, func(t *testing.T) {
 			published := topLevelProperties(t, tc.schema)
