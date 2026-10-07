@@ -1,9 +1,11 @@
 package execpolicy
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
+	"github.com/olostan/DevCadence/internal/cognition/drivers"
 	"github.com/olostan/DevCadence/internal/errs"
 	"github.com/olostan/DevCadence/internal/principal"
 	"github.com/olostan/DevCadence/internal/protocol"
@@ -33,7 +35,13 @@ func (o EndpointObservation) Validate() error {
 
 // OpenedEndpoint represents an opened endpoint handle with its runtime observations.
 type OpenedEndpoint struct {
+	Driver   drivers.SessionDriver
 	Observed EndpointObservation
+}
+
+// DriverFactory opens a driver session for a resolved endpoint.
+type DriverFactory interface {
+	Open(context.Context, ResolvedEndpoint) (OpenedEndpoint, error)
 }
 
 // Bind combines a ResolvedEndpoint with its runtime EndpointObservation to produce a bound ResolvedEndpoint.
