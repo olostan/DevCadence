@@ -612,6 +612,8 @@ The [2026-10-F planning window](work-packages/window-2026-10-f-overview.md) inde
 
 **WP-M5-2 status:** implemented in the working tree, without commit, under the same disclosed owner authorization (header DRAFT/NOT_READY; no independent review yet). It delivers the host-neutral facade, `WorkPackageProposed`, the no-argument stdio MCP server and outside-change detection. Executor, scout and snippet runtimes are absent by design (`MODEL_UNAVAILABLE`) and acceptance is hard-disabled, so it is not M5 task execution. See [the EWP](work-packages/wp-m5-2-semantic-mcp-ewp.md#implementation-record).
 
+**2026-10-G follow-on window (draft, not frozen):** the [2026-10-G planning window](work-packages/window-2026-10-g-overview.md) indexes the four runtime-completion EWPs required before M5 can close: [M5-R1 native task executor](work-packages/wp-m5-r1-native-task-executor-ewp.md), [M5-R2 independent review executor and acceptance gate](work-packages/wp-m5-r2-independent-review-acceptance-ewp.md), [M5-R3 empirical verifier and provider composition](work-packages/wp-m5-r3-empirical-verifier-composition-ewp.md) and [M5-R4 protected operator evidence ingress](work-packages/wp-m5-r4-protected-operator-ingress-ewp.md). All are DRAFT/NOT_READY with explicit owner inputs; none grants implementation, endpoint, credential or spend authority.
+
 ## Future milestones
 
 Add a new `## <Milestone>` section here, following the same shape (branch
