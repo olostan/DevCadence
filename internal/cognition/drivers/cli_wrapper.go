@@ -611,7 +611,8 @@ func parseCLIStdout(output []byte) (string, []ToolCall, TokenUsage, string) {
 
 	var contentBuilder strings.Builder
 	var toolCalls []ToolCall
-	var usage TokenUsage
+	usage := KnownZeroUsage()
+	var sawUsage bool
 	var backendHandle string
 
 	for scanner.Scan() {
@@ -628,6 +629,7 @@ func parseCLIStdout(output []byte) (string, []ToolCall, TokenUsage, string) {
 			case EventTurnCompleted:
 				if ev.Usage != nil {
 					usage = usage.Add(*ev.Usage)
+					sawUsage = true
 				}
 				if ev.SessionID != "" {
 					backendHandle = ev.SessionID
@@ -637,6 +639,10 @@ func parseCLIStdout(output []byte) (string, []ToolCall, TokenUsage, string) {
 			contentBuilder.WriteString(line)
 			contentBuilder.WriteString("\n")
 		}
+	}
+
+	if !sawUsage {
+		usage = TokenUsage{}
 	}
 
 	return contentBuilder.String(), toolCalls, usage, backendHandle

@@ -49,11 +49,7 @@ func (m *mockDirectClient) Complete(ctx context.Context, req DirectAPIRequest) (
 	return DirectAPIResponse{
 		Content:   fmt.Sprintf("Direct response to: %s", req.Prompt),
 		ToolCalls: toolCalls,
-		Usage: TokenUsage{
-			InputTokens:  int64(len(req.Prompt)),
-			CachedTokens: 10,
-			OutputTokens: 25,
-		},
+		Usage:     KnownUsage(int64(len(req.Prompt)), 10, 25),
 	}, nil
 }
 
@@ -84,12 +80,10 @@ func (m *mockDirectClient) Stream(ctx context.Context, req DirectAPIRequest) (Ev
 			}
 		}
 
+		usage := KnownUsage(int64(len(req.Prompt)), 0, int64(len(words)*3))
 		stream.Send(DriverEvent{
-			Kind: EventTurnCompleted,
-			Usage: &TokenUsage{
-				InputTokens:  int64(len(req.Prompt)),
-				OutputTokens: int64(len(words) * 3),
-			},
+			Kind:      EventTurnCompleted,
+			Usage:     &usage,
 			Timestamp: time.Now(),
 		})
 		stream.CloseWithError(nil)

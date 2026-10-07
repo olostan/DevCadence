@@ -51,10 +51,7 @@ func TestFakeDriver_CustomTurnHandler(t *testing.T) {
 		return TurnResult{
 			TurnID:  input.TurnID,
 			Content: "scripted-turn-success",
-			Usage: TokenUsage{
-				InputTokens:  10,
-				OutputTokens: 20,
-			},
+			Usage:   KnownUsage(10, 0, 20),
 		}, nil
 	})
 

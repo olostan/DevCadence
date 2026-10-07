@@ -224,7 +224,7 @@ func (r *BenchmarkRunner) RunTask(
 	}
 
 	var (
-		totalUsage            drivers.TokenUsage
+		totalUsage            = drivers.KnownZeroUsage()
 		initialTokens         int64
 		peakResidentTokens    int64
 		cumulativeInputTokens int64
@@ -301,12 +301,12 @@ func (r *BenchmarkRunner) RunTask(
 		})
 
 		totalUsage = totalUsage.Add(turnRes.Usage)
-		cumulativeInputTokens += turnRes.Usage.InputTokens
+		cumulativeInputTokens += turnRes.Usage.Input.Value
 		if turn == 1 {
-			initialTokens = turnRes.Usage.InputTokens
+			initialTokens = turnRes.Usage.Input.Value
 		}
-		if turnRes.Usage.InputTokens > peakResidentTokens {
-			peakResidentTokens = turnRes.Usage.InputTokens
+		if turnRes.Usage.Input.Value > peakResidentTokens {
+			peakResidentTokens = turnRes.Usage.Input.Value
 		}
 
 		lastTurnResult = &turnRes
@@ -319,7 +319,7 @@ func (r *BenchmarkRunner) RunTask(
 
 	// INV-05: Driver token unobservability sets AccountingUncertain = true
 	accountingUncertain := false
-	if totalUsage.Total() == 0 {
+	if total, known := totalUsage.Total(); !known || total == 0 {
 		accountingUncertain = true
 	}
 

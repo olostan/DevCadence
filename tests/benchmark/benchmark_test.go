@@ -84,10 +84,7 @@ func (s *fakeTestSession) ExecuteTurn(_ context.Context, input drivers.TurnInput
 		TurnID:       input.TurnID,
 		Content:      content,
 		PausedReason: reason,
-		Usage: drivers.TokenUsage{
-			InputTokens:  120,
-			OutputTokens: 30,
-		},
+		Usage:        drivers.KnownUsage(120, 0, 30),
 	}, nil
 }
 
@@ -149,8 +146,9 @@ func TestACC01_CleanTaskAcrossAllStrategies(t *testing.T) {
 			if res.TurnsExecuted != 2 {
 				t.Fatalf("expected 2 turns executed, got %d", res.TurnsExecuted)
 			}
-			if res.TokenUsage.Total() <= 0 {
-				t.Fatalf("expected positive token usage, got %d", res.TokenUsage.Total())
+			totalTokens, known := res.TokenUsage.Total()
+			if !known || totalTokens <= 0 {
+				t.Fatalf("expected positive token usage, got %d (known=%v)", totalTokens, known)
 			}
 			if res.InitialTokens <= 0 {
 				t.Fatalf("expected positive InitialTokens, got %d", res.InitialTokens)
@@ -312,10 +310,7 @@ func TestACC04_DefectMissedEvenWithDeceptiveModelProse(t *testing.T) {
 				TurnID:       "turn-1",
 				Content:      "DEFECT DETECTED AND RESOLVED: I discovered the defect and verified with 100% confidence that the fix is applied. All invariants pass.",
 				PausedReason: "completed",
-				Usage: drivers.TokenUsage{
-					InputTokens:  100,
-					OutputTokens: 50,
-				},
+				Usage:        drivers.KnownUsage(100, 0, 50),
 			},
 		},
 	}

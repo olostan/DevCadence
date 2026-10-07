@@ -250,7 +250,7 @@ func (r *ExperimentRunner) runRepetition(ctx context.Context, spec ExperimentSpe
 		Prompt: ewpPrompt,
 	}
 	turnRes, err := session.ExecuteTurn(ctx, turnInput)
-	tokensConsumed := turnRes.Usage.Total()
+	tokensConsumed, _ := turnRes.Usage.Total()
 	if err != nil {
 		if ctx.Err() != nil {
 			return ExperimentRunResult{}, ctx.Err()
@@ -327,7 +327,8 @@ func (r *ExperimentRunner) runRepetition(ctx context.Context, spec ExperimentSpe
 			Prompt: fmt.Sprintf("Verification failed on repair round %d/%d for task %s. Repair the defect to satisfy contract requirements.", repairRounds, spec.MaxRepairRounds, spec.TaskID),
 		}
 		repairRes, repErr := session.ExecuteTurn(ctx, repairInput)
-		tokensConsumed += repairRes.Usage.Total()
+		repTokens, _ := repairRes.Usage.Total()
+		tokensConsumed += repTokens
 		if repErr != nil {
 			if ctx.Err() != nil {
 				return ExperimentRunResult{}, ctx.Err()

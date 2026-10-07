@@ -376,8 +376,8 @@ func (r *CampaignRunner) convertToSnapshot(
 	}
 
 	cumulativeInput := res.CumulativeInputTokens
-	if cumulativeInput == 0 && res.TokenUsage.InputTokens > 0 {
-		cumulativeInput = res.TokenUsage.InputTokens
+	if cumulativeInput == 0 && res.TokenUsage.Input.Value > 0 {
+		cumulativeInput = res.TokenUsage.Input.Value
 	}
 
 	return telemetry.RunTelemetrySnapshot{
@@ -387,8 +387,8 @@ func (r *CampaignRunner) convertToSnapshot(
 		Capability:            string(cap),
 		InitialTokens:         res.InitialTokens,
 		PeakResidentTokens:    res.PeakResidentTokens,
-		CachedTokens:          res.TokenUsage.CachedTokens,
-		OutputTokens:          res.TokenUsage.OutputTokens,
+		CachedTokens:          res.TokenUsage.Cached.Value,
+		OutputTokens:          res.TokenUsage.Output.Value,
 		CumulativeInputTokens: cumulativeInput,
 		Duration:              res.Duration,
 		Turns:                 res.TurnsExecuted,

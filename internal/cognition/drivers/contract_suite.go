@@ -77,7 +77,7 @@ func RunDriverContractTestSuite(t *testing.T, factory DriverFactory) {
 		if res.TurnID != "turn-1" {
 			t.Errorf("expected turn ID %q, got %q", "turn-1", res.TurnID)
 		}
-		if res.Usage.InputTokens < 0 || res.Usage.OutputTokens < 0 {
+		if (res.Usage.Input.Known && res.Usage.Input.Value < 0) || (res.Usage.Output.Known && res.Usage.Output.Value < 0) {
 			t.Errorf("negative tokens in usage: %+v", res.Usage)
 		}
 

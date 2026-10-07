@@ -48,11 +48,7 @@ func (s *mockSession) ExecuteTurn(_ context.Context, input drivers.TurnInput) (d
 	return drivers.TurnResult{
 		TurnID:  input.TurnID,
 		Content: "Task executed successfully. Task completed.",
-		Usage: drivers.TokenUsage{
-			InputTokens:  150,
-			OutputTokens: 35,
-			CachedTokens: 20,
-		},
+		Usage:   drivers.KnownUsage(150, 20, 35),
 	}, nil
 }
 
@@ -960,11 +956,7 @@ func TestSnapshotConversion_Fidelity(t *testing.T) {
 		CumulativeInputTokens: 99999,
 		Duration:              250 * time.Millisecond,
 		AccountingUncertain:   false,
-		TokenUsage: drivers.TokenUsage{
-			InputTokens:  99999,
-			OutputTokens: 5555,
-			CachedTokens: 4444,
-		},
+		TokenUsage:            drivers.KnownUsage(99999, 4444, 5555),
 	}
 
 	snap := runner.convertToSnapshot(spec, res, task, StrategyHybrid4Layer, CapabilityFrontierAPI, nil, 0, nil)
