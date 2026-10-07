@@ -2,7 +2,7 @@
 
 ## Identity
 
-- Revision: 5 (targeted repair after the owner's independent review of r4 head `fc03164`, comment 6030903787: B1, I2, I4 and the in-transaction purity part of I1; r5 repair applied; freeze decision pending owner re-review); task: task-m5-r2-review-acceptance; window: [2026-10-G](window-2026-10-g-overview.md).
+- Revision: 6 (final implementability tightening after verification of r5: explicitly specifies reducer handling for the new `ReviewInvocationStarted` durable-fact event; prior r5 repairs B1/I2/I4/I1 retained; freeze decision pending clean re-review); task: task-m5-r2-review-acceptance; window: [2026-10-G](window-2026-10-g-overview.md).
 - Base: `71bdaec6d6d81c1b6e52d8b30f0f8485f928925a` (`main` `cebb4f0` plus the PR #83 reconcile merge, 2026-10-05).
 - Contract digest: reviewed immutable Git blob. No fictitious runtime state revision; record the actual accepted dependency commits at execution.
 - Endpoint: competent Go implementer with protocol/record, SQLite-transaction and review-process skill; complete admission is mandatory. Each Part is sized for one endpoint session.
@@ -108,6 +108,8 @@ type ReviewInvocationStarted struct {
     Dimension protocol.ReviewDimension
     CandidateCommit, RecordDigest string    // digest of ReviewInvocationIntent
 }
+
+**Reducer/registry obligation (r6).** Current `internal/state.applyPayload` fails closed on any registered event without an explicit reducer case. Implementing `ReviewInvocationStarted` therefore MUST add the event type/payload to the normal event registry/codec **and** add an explicit `case *events.ReviewInvocationStarted: return nil` (or equivalent no-op case) to the state reducer. The event advances journal sequence/high-watermark but changes no task, attempt, candidate, acceptance, or Git projection field. This obligation belongs to Part A's additive event contract; R2-B may rely on successful replay of the event and must not invent reducer behavior locally.
 func DeriveActorID(basis string, b ActorBasis) (string, error) // "actor:" + first 24 hex of sha256(canonical{basis, selected fields})
 ~~~
 
@@ -295,6 +297,7 @@ Decision owner: repository owner, expressed as the signed `AcceptancePolicy`. **
 | A3 | model output claims an actor/profile → stored identity unchanged | R1 → I1 |
 | A4 | provenance record fails `Validate(kind, role)` or is a duplicate id → refused | R1 → I1 → record |
 | A5 | a stored provenance with all six `Basis` fields: `DeriveActorID` under both bases is computable; a record whose stored `Actor.ActorID` disagrees with the derivation under its own `IndependenceBasis` is `INTEGRITY`; `actors.ActorBasis` and `protocol.ActorBasis` are the same type | R1/R2 → I1/I2 |
+| A6 | append a valid `ReviewInvocationStarted` to a reviewing task → event validates, persists and advances journal high-watermark while task/attempt/candidate projection fields remain unchanged; removing the reducer's explicit no-op case makes replay fail | R5 → I5 → registered event + explicit no-op reducer case |
 | B1 | only the worker's actor available → `MODEL_UNAVAILABLE`, zero calls/effects | R3 → I3 |
 | B2 | reviewer context pack inspected → no worker prompt/transcript; lineage empty | R4 → I4 |
 | B3 | malformed or extra-field model output → durable executor-authored review (`unable_to_verify`, no findings) with `ReviewInvocation.outcome=output_invalid`, no model text copied, no retry; the same dimension then denies `review-already-recorded` | R5/R7 → I5/I7 |
@@ -362,6 +365,7 @@ Test seams (explicit): as in R1 (wrappers around `Options` interfaces; a store w
 | Intent record keyed by `ReviewID` so a duplicate intent for the same `(attempt, dimension)` cannot collide | B13/C13 |
 | `DriverID` mismatch between Driver and Observation not verified before `Bind` | B14 |
 | Terminal records not compared to intent fields (binding digest, basis, independence basis, ids, candidate) | C17 |
+| `ReviewInvocationStarted` registered without an explicit reducer case, or reducer mutates task/candidate projection state | A6 |
 | `verifier.Verify` (path walk, `/bin/ls`) executed inside the batch guard or `Decide` | C15 |
 | Collision checked only before `Bind` | B8 |
 | Accept advances accepted commit or merges | C2 |
@@ -380,7 +384,7 @@ Implementation Readiness Report:
 ~~~text
 author tally after repair round r5 (a self-count, not evidence; independent re-verification PENDING):
 requirements represented: 11 (R1-R11; R3/R5/R7 tightened in r3)
-acceptance scenarios mapped: 5 (A) + 14 (B1-B14) + 17 (C1-C17) = 36; mutation rows 29
+acceptance scenarios mapped: 6 (A1-A6) + 14 (B1-B14) + 17 (C1-C17) = 37; mutation rows 30
 unresolved architecture choices: OWNER INPUT-3; authorization of the disclosed amendments (`BatchReadView.AttemptEvidence`, `Service.ReadView`, `facade.AcceptanceGate`, additive `AcceptResult`, `principal.CodedError`, additive `ReviewInvocationStarted` event and `ReviewInvocationIntent`/`ReviewInvocation` record kinds; `AcceptanceGate.Authorize`/`PolicyAuthority`; deterministic intent record id)
 readiness: NOT_READY pending independent re-verification, owner inputs, R1 freeze for Part B and R4 freeze for Part C
 ~~~
@@ -389,6 +393,7 @@ Weaker-implementer check: author expectation only, to be re-tested by the indepe
 
 ## Changelog
 
+- r6: final implementability tightening after inspecting current `internal/state.applyPayload`: explicitly requires registry/codec registration plus a no-op reducer case for `ReviewInvocationStarted`, with A6 proving replay succeeds and projection state is unchanged.
 - r5: owner review of head `fc03164` (comment 6030903787): B1 deterministic intent record id `intent:<attempt_id>:<dimension>` with a `view.Record`-based `intentAbsentGuard` so R2-B no longer depends on G-C1 (G-C1 stays a Part C enumeration need), scenario B13 (barrier-based concurrent duplicate), id-relationship paragraph; I2 `driver-id-mismatch` assertion in Review step 3 (B14); I4 field-by-field intent/invocation/provenance equality in Decide step 5 (C17); I1 purity: `AcceptanceGate.Authorize` runs the receipt verification outside any transaction and `Decide` is pure (C15). Verdicts remain the owner's.
 - r4: focused repair after review of `0da5013`: adds durable `ReviewInvocationStarted` + `ReviewInvocationIntent` **before every reviewer call**, so crash or terminal-persistence loss leaves an orphan intent that blocks re-invocation and acceptance; `AttemptEvidence` enumerates intents as well as reviews; R2-B now passes its single verified execution-policy snapshot/digest into the resolver rather than triggering a second authority read.
 - r3: owner review of head 106dafd: reviewer exclusion by stored `Basis` (`ExcludeBases`) (item 1); `principal.CodedError` refs, `review-partial` counts as evidence refs (2); worker actor re-derived from stored `Basis` under the selected basis in R2-B step 2 and Decide step 4, implementer record basis specified at start (5); R2-B made policy-independent: explicit non-empty dimensions and a closed `Options.IndependenceBasis`, Part C alone judges sufficiency, dependency/freeze order updated, R2-C waits for R1-C (9 and note 2); review invocations vs verdicts: every outcome is durable, `ReviewInvocation` additive record, `MaxReviewInvocationsPerDimension = 1`, contradictory "no retry"/"re-requestable" text removed (10); worktree id `rv-<invocationID>` with cleanup (note 2); crash-accounting limitation and loopback-only restriction disclosed (note 1); leaf `execrt` imports.
