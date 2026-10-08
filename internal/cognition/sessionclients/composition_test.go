@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/olostan/DevCadence/internal/cognition/drivers"
 	"github.com/olostan/DevCadence/internal/cognition/sessionclients"
@@ -684,6 +685,286 @@ func TestComposition_Open_ProbeErrors(t *testing.T) {
 		_, err := comp.Open(context.Background(), ep)
 		if err == nil || !errors.Is(err, errs.ErrProbeFailed) {
 			t.Errorf("expected ErrProbeFailed, got %v", err)
+		}
+	})
+
+	t.Run("/api/version connection error on closed port", func(t *testing.T) {
+		ep := sampleResolvedEndpoint(protocol.EndpointLocalRuntime)
+		comp, _ := sessionclients.New(sessionclients.Options{
+			LoopbackBaseURLs: map[string]string{ep.EndpointID: "http://127.0.0.1:54321"},
+		})
+		_, err := comp.Open(context.Background(), ep)
+		if err == nil || !errors.Is(err, errs.ErrModelUnavailable) {
+			t.Errorf("expected ErrModelUnavailable, got %v", err)
+		}
+	})
+
+	t.Run("/api/tags connection error on closed connection", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == "/api/version" {
+				_ = json.NewEncoder(w).Encode(map[string]any{"version": "1.0"})
+				return
+			}
+			if hj, ok := w.(http.Hijacker); ok {
+				conn, _, _ := hj.Hijack()
+				_ = conn.Close()
+			}
+		}))
+		defer server.Close()
+
+		ep := sampleResolvedEndpoint(protocol.EndpointLocalRuntime)
+		comp, _ := sessionclients.New(sessionclients.Options{
+			LoopbackBaseURLs: map[string]string{ep.EndpointID: server.URL},
+		})
+		_, err := comp.Open(context.Background(), ep)
+		if err == nil || !errors.Is(err, errs.ErrModelUnavailable) {
+			t.Errorf("expected ErrModelUnavailable, got %v", err)
+		}
+	})
+
+	t.Run("default loopback URL used when endpoint not in map", func(t *testing.T) {
+		comp, _ := sessionclients.New(sessionclients.Options{})
+		ep := sampleResolvedEndpoint(protocol.EndpointLocalRuntime)
+		ep.EndpointID = "unmapped-ep"
+		// Exercises default loopback URL fallback
+		_, _ = comp.Open(context.Background(), ep)
+	})
+}
+
+func TestComposition_ProbeVersion_ControlCharacters(t *testing.T) {
+	t.Run("ASCII control characters are stripped from version", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			switch r.URL.Path {
+			case "/api/version":
+				// Version containing null byte, unit separator, and DEL (0x7f)
+				_ = json.NewEncoder(w).Encode(map[string]any{"version": "0.1.32\x00\x1f\x7f"})
+			case "/api/tags":
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"models": []map[string]any{
+						{"name": "llama3:latest", "digest": "365c0bd3c000a45d28dd41f479a500350203b80f010317355113d8ac5bc15084"},
+					},
+				})
+			default:
+				http.NotFound(w, r)
+			}
+		}))
+		defer server.Close()
+
+		ep := sampleResolvedEndpoint(protocol.EndpointLocalRuntime)
+		comp, err := sessionclients.New(sessionclients.Options{
+			LoopbackBaseURLs: map[string]string{ep.EndpointID: server.URL},
+		})
+		if err != nil {
+			t.Fatalf("unexpected New error: %v", err)
+		}
+
+		opened, err := comp.Open(context.Background(), ep)
+		if err != nil {
+			t.Fatalf("unexpected Open error: %v", err)
+		}
+		if opened.Observed.RuntimeVersion != "0.1.32" {
+			t.Errorf("RuntimeVersion = %q, want '0.1.32'", opened.Observed.RuntimeVersion)
+		}
+	})
+
+	t.Run("version with only control characters yields empty observation and Bind denies", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			switch r.URL.Path {
+			case "/api/version":
+				_ = json.NewEncoder(w).Encode(map[string]any{"version": "\x00\x1f\x7f\t\r\n"})
+			case "/api/tags":
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"models": []map[string]any{
+						{"name": "llama3:latest", "digest": "365c0bd3c000a45d28dd41f479a500350203b80f010317355113d8ac5bc15084"},
+					},
+				})
+			default:
+				http.NotFound(w, r)
+			}
+		}))
+		defer server.Close()
+
+		ep := sampleResolvedEndpoint(protocol.EndpointLocalRuntime)
+		comp, err := sessionclients.New(sessionclients.Options{
+			LoopbackBaseURLs: map[string]string{ep.EndpointID: server.URL},
+		})
+		if err != nil {
+			t.Fatalf("unexpected New error: %v", err)
+		}
+
+		opened, err := comp.Open(context.Background(), ep)
+		if err != nil {
+			t.Fatalf("unexpected Open error: %v", err)
+		}
+		if opened.Observed.RuntimeVersion != "" {
+			t.Errorf("expected empty RuntimeVersion, got %q", opened.Observed.RuntimeVersion)
+		}
+
+		_, bindErr := execpolicy.Bind(ep, opened.Observed)
+		if bindErr == nil || !strings.Contains(bindErr.Error(), "runtime-version-unknown") {
+			t.Errorf("expected runtime-version-unknown, got %v", bindErr)
+		}
+	})
+}
+
+func TestComposition_ProbeTags_HexDigestValidation(t *testing.T) {
+	testCases := []struct {
+		name       string
+		digest     string
+		wantRev    string
+		expectDeny bool
+	}{
+		{
+			name:       "short hex digest (<64 hex) rejected",
+			digest:     "sha256:abcd1234",
+			wantRev:    "",
+			expectDeny: true,
+		},
+		{
+			name:       "long hex digest (>64 hex) rejected",
+			digest:     "sha256:" + strings.Repeat("a", 65),
+			wantRev:    "",
+			expectDeny: true,
+		},
+		{
+			name:       "64-char non-hex characters rejected",
+			digest:     "sha256:" + strings.Repeat("z", 64),
+			wantRev:    "",
+			expectDeny: true,
+		},
+		{
+			name:       "raw 64-char hex without prefix accepted",
+			digest:     strings.Repeat("a", 64),
+			wantRev:    "sha256:" + strings.Repeat("a", 64),
+			expectDeny: false,
+		},
+		{
+			name:       "valid sha256: prefix with 64 hex characters accepted",
+			digest:     "sha256:" + strings.Repeat("f", 64),
+			wantRev:    "sha256:" + strings.Repeat("f", 64),
+			expectDeny: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				switch r.URL.Path {
+				case "/api/version":
+					_ = json.NewEncoder(w).Encode(map[string]any{"version": "1.0.0"})
+				case "/api/tags":
+					_ = json.NewEncoder(w).Encode(map[string]any{
+						"models": []map[string]any{
+							{"name": "llama3:latest", "digest": tc.digest},
+						},
+					})
+				default:
+					http.NotFound(w, r)
+				}
+			}))
+			defer server.Close()
+
+			ep := sampleResolvedEndpoint(protocol.EndpointLocalRuntime)
+			comp, err := sessionclients.New(sessionclients.Options{
+				LoopbackBaseURLs: map[string]string{ep.EndpointID: server.URL},
+			})
+			if err != nil {
+				t.Fatalf("unexpected New error: %v", err)
+			}
+
+			opened, err := comp.Open(context.Background(), ep)
+			if err != nil {
+				t.Fatalf("unexpected Open error: %v", err)
+			}
+			if opened.Observed.ModelRevision != tc.wantRev {
+				t.Errorf("ModelRevision = %q, want %q", opened.Observed.ModelRevision, tc.wantRev)
+			}
+
+			_, bindErr := execpolicy.Bind(ep, opened.Observed)
+			if tc.expectDeny {
+				if bindErr == nil || !strings.Contains(bindErr.Error(), "model-revision-unknown") {
+					t.Errorf("expected model-revision-unknown, got %v", bindErr)
+				}
+			} else {
+				if bindErr != nil {
+					t.Errorf("unexpected Bind error: %v", bindErr)
+				}
+			}
+		})
+	}
+}
+
+func TestComposition_Open_ProbeTimeout_MaxDurationSeconds(t *testing.T) {
+	t.Run("probeVersion times out when MaxDurationSeconds is reached", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == "/api/version" {
+				<-r.Context().Done()
+				return
+			}
+			http.NotFound(w, r)
+		}))
+		defer server.Close()
+
+		ep := sampleResolvedEndpoint(protocol.EndpointLocalRuntime)
+		ep.Limits.MaxDurationSeconds = 1 // 1 second timeout
+
+		comp, err := sessionclients.New(sessionclients.Options{
+			LoopbackBaseURLs: map[string]string{ep.EndpointID: server.URL},
+		})
+		if err != nil {
+			t.Fatalf("unexpected New error: %v", err)
+		}
+
+		start := time.Now()
+		_, err = comp.Open(context.Background(), ep)
+		elapsed := time.Since(start)
+
+		if err == nil {
+			t.Fatal("expected timeout error, got nil")
+		}
+		if !errors.Is(err, errs.ErrProbeTimeout) && !errors.Is(err, context.DeadlineExceeded) {
+			t.Errorf("expected ErrProbeTimeout or DeadlineExceeded, got %v", err)
+		}
+		if elapsed < 800*time.Millisecond || elapsed > 3*time.Second {
+			t.Errorf("elapsed duration %v unexpected for 1s MaxDurationSeconds", elapsed)
+		}
+	})
+
+	t.Run("probeTags times out when MaxDurationSeconds is reached", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			switch r.URL.Path {
+			case "/api/version":
+				_ = json.NewEncoder(w).Encode(map[string]any{"version": "1.0.0"})
+			case "/api/tags":
+				<-r.Context().Done()
+			default:
+				http.NotFound(w, r)
+			}
+		}))
+		defer server.Close()
+
+		ep := sampleResolvedEndpoint(protocol.EndpointLocalRuntime)
+		ep.Limits.MaxDurationSeconds = 1 // 1 second timeout
+
+		comp, err := sessionclients.New(sessionclients.Options{
+			LoopbackBaseURLs: map[string]string{ep.EndpointID: server.URL},
+		})
+		if err != nil {
+			t.Fatalf("unexpected New error: %v", err)
+		}
+
+		start := time.Now()
+		_, err = comp.Open(context.Background(), ep)
+		elapsed := time.Since(start)
+
+		if err == nil {
+			t.Fatal("expected timeout error, got nil")
+		}
+		if !errors.Is(err, errs.ErrProbeTimeout) && !errors.Is(err, context.DeadlineExceeded) {
+			t.Errorf("expected ErrProbeTimeout or DeadlineExceeded, got %v", err)
+		}
+		if elapsed < 800*time.Millisecond || elapsed > 3*time.Second {
+			t.Errorf("elapsed duration %v unexpected for 1s MaxDurationSeconds", elapsed)
 		}
 	})
 }

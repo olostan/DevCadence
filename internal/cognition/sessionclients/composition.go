@@ -3,10 +3,12 @@ package sessionclients
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/olostan/DevCadence/internal/benchmark/empirical"
 	"github.com/olostan/DevCadence/internal/clock"
@@ -75,6 +77,12 @@ func (c *Composition) Open(ctx context.Context, ep execpolicy.ResolvedEndpoint) 
 	}
 	if err := validateLoopbackURL(baseURL); err != nil {
 		return execpolicy.OpenedEndpoint{}, err
+	}
+
+	if ep.Limits.MaxDurationSeconds > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, time.Duration(ep.Limits.MaxDurationSeconds)*time.Second)
+		defer cancel()
 	}
 
 	ver, err := c.probeVersion(ctx, baseURL)
@@ -165,6 +173,9 @@ func (c *Composition) probeVersion(ctx context.Context, baseURL string) (string,
 	}
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+			return "", errs.Wrap(errs.CategoryProbeTimeout, err, "probe /api/version timed out or cancelled")
+		}
 		return "", errs.Wrap(errs.CategoryModelUnavailable, err, "probe /api/version failed")
 	}
 	defer func() { _ = resp.Body.Close() }()
@@ -185,7 +196,7 @@ func (c *Composition) probeVersion(ctx context.Context, baseURL string) (string,
 		return "", errs.Wrap(errs.CategoryProbeFailed, err, "decode /api/version response")
 	}
 
-	ver := strings.TrimSpace(v.Version)
+	ver := sanitizeVersion(v.Version)
 	if len(ver) < 1 || len(ver) > 64 {
 		return "", nil // missing/invalid version yields empty string observation
 	}
@@ -199,6 +210,9 @@ func (c *Composition) probeTags(ctx context.Context, baseURL, modelID string) (s
 	}
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+			return "", errs.Wrap(errs.CategoryProbeTimeout, err, "probe /api/tags timed out or cancelled")
+		}
 		return "", errs.Wrap(errs.CategoryModelUnavailable, err, "probe /api/tags failed")
 	}
 	defer func() { _ = resp.Body.Close() }()
@@ -227,7 +241,7 @@ func (c *Composition) probeTags(ctx context.Context, baseURL, modelID string) (s
 		if m.Name == modelID || m.Model == modelID {
 			rawDigest := strings.TrimSpace(m.Digest)
 			hexDigest := strings.TrimPrefix(rawDigest, "sha256:")
-			if hexDigest != "" && isHexString(hexDigest) {
+			if len(hexDigest) == 64 && isHexString(hexDigest) {
 				return "sha256:" + hexDigest, nil
 			}
 			return "", nil // empty or invalid digest yields empty revision
@@ -236,14 +250,24 @@ func (c *Composition) probeTags(ctx context.Context, baseURL, modelID string) (s
 	return "", nil // model not found yields empty revision
 }
 
-func isHexString(s string) bool {
-	if len(s) == 0 {
-		return false
+// sanitizeVersion de-fangs version text from untrusted runtime output (DCI-083).
+// Control characters (r < 0x20 || r == 0x7f) are dropped.
+func sanitizeVersion(value string) string {
+	var b strings.Builder
+	for _, r := range value {
+		if r < 0x20 || r == 0x7f {
+			continue
+		}
+		b.WriteRune(r)
 	}
+	return strings.TrimSpace(b.String())
+}
+
+func isHexString(s string) bool {
 	for _, r := range s {
 		if !((r >= '0' && r <= '9') || (r >= 'a' && r <= 'f') || (r >= 'A' && r <= 'F')) {
 			return false
 		}
 	}
-	return true
+	return len(s) > 0
 }
