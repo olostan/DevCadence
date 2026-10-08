@@ -250,6 +250,10 @@ func (v *Verifier) Verify(
 		return empirical.VerifiedOutcome{}, errs.New(errs.CategoryInvalidArgument,
 			"worker provenance task_id %q does not match run task %q", prov.TaskID, run.TaskID)
 	}
+	if run.EWP.ID != "" && prov.WorkPackageID != run.EWP.ID {
+		return empirical.VerifiedOutcome{}, errs.New(errs.CategoryIntegrity,
+			"worker provenance work_package_id mismatch: %s != %s", prov.WorkPackageID, run.EWP.ID)
+	}
 	if prov.AttemptID != sess.AttemptID && prov.AttemptID != run.RunID {
 		return empirical.VerifiedOutcome{}, errs.New(errs.CategoryInvalidArgument,
 			"worker provenance attempt_id %q mismatch", prov.AttemptID)
@@ -337,6 +341,11 @@ func (v *Verifier) Verify(
 			return empirical.VerifiedOutcome{}, errs.New(errs.CategoryInternal,
 				"VERIFIER_INFRASTRUCTURE: candidate commit %q not found in repository: %v", evidence.CandidateCommit, err)
 		}
+		baseCommit, err := repo.ResolveCommit(ctx, task.BaseCommit)
+		if err != nil {
+			return empirical.VerifiedOutcome{}, errs.New(errs.CategoryInternal,
+				"VERIFIER_INFRASTRUCTURE: task base commit %q not found in repository: %v", task.BaseCommit, err)
+		}
 
 		// Verify sole parent equals task's BaseCommit.
 		resParents, err := v.opts.Runner.Run(ctx, process.Spec{
@@ -351,14 +360,14 @@ func (v *Verifier) Verify(
 				"VERIFIER_INFRASTRUCTURE: failed to inspect commit parents: %v", err)
 		}
 		tokens := strings.Fields(string(resParents.Stdout))
-		if len(tokens) != 2 || tokens[1] != task.BaseCommit {
+		if len(tokens) != 2 || tokens[1] != baseCommit {
 			qualityVerdict = empirical.QualityRejected
 		}
 
 		// Verify every changed path lies inside task.WriteScope.
 		resDiff, err := v.opts.Runner.Run(ctx, process.Spec{
 			Executable: "git",
-			Args:       []string{"-C", repo.Path, "diff", "--name-status", task.BaseCommit + ".." + candCommit},
+			Args:       []string{"-C", repo.Path, "diff", "--name-status", baseCommit + ".." + candCommit},
 			Dir:        repo.Path,
 			Env:        process.BaseEnv(),
 			Timeout:    30 * time.Second,
@@ -397,14 +406,23 @@ func (v *Verifier) Verify(
 			Env:        process.BaseEnv(),
 			Timeout:    30 * time.Second,
 		})
-		if err == nil && resTree.Success() {
-			for _, line := range strings.Split(string(resTree.Stdout), "\n") {
-				fields := strings.Fields(line)
-				if len(fields) >= 2 {
-					mode := fields[1]
-					if mode == "120000" || mode == "160000" {
-						qualityVerdict = empirical.QualityRejected
-					}
+		if err != nil || !resTree.Success() {
+			msg := fmt.Sprintf("%v", err)
+			if err == nil {
+				msg = strings.TrimSpace(string(resTree.Stderr))
+				if msg == "" {
+					msg = fmt.Sprintf("exit code %d", resTree.ExitCode)
+				}
+			}
+			return empirical.VerifiedOutcome{}, errs.New(errs.CategoryInternal,
+				"VERIFIER_INFRASTRUCTURE: git diff-tree failed: %s", msg)
+		}
+		for _, line := range strings.Split(string(resTree.Stdout), "\n") {
+			fields := strings.Fields(line)
+			if len(fields) >= 2 {
+				mode := fields[1]
+				if mode == "120000" || mode == "160000" {
+					qualityVerdict = empirical.QualityRejected
 				}
 			}
 		}

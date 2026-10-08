@@ -284,14 +284,16 @@ func TestPackageIsolation(t *testing.T) {
 	}
 
 	prohibited := []string{
-		"internal/benchmark/receipts",
-		"internal/benchmark/actors",
-		"internal/benchmark/sessionclients",
-		"internal/benchmark/verifier",
+		"internal/operator/receipts",
+		"internal/actors",
+		"internal/cognition/sessionclients",
+		"internal/benchmark/empirical/verifier",
 	}
 
+	checkedFiles := 0
 	for _, pkg := range pkgs {
 		for filename, file := range pkg.Files {
+			checkedFiles++
 			for _, imp := range file.Imports {
 				path := strings.Trim(imp.Path.Value, `"`)
 				for _, p := range prohibited {
@@ -301,5 +303,8 @@ func TestPackageIsolation(t *testing.T) {
 				}
 			}
 		}
+	}
+	if checkedFiles == 0 {
+		t.Fatal("no production files were checked for isolation")
 	}
 }

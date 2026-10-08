@@ -1,6 +1,8 @@
 package verifier
 
 import (
+	"context"
+
 	"github.com/olostan/DevCadence/internal/benchmark/empirical"
 	"github.com/olostan/DevCadence/internal/clock"
 	"github.com/olostan/DevCadence/internal/execrt"
@@ -86,12 +88,17 @@ type VerifierReceipt struct {
 	AccountingEvidenceDigests []string   `json:"accounting_evidence_digests,omitempty"`
 }
 
+// CommandRunner abstracts execution of subprocesses, matching process.Runner.
+type CommandRunner interface {
+	Run(ctx context.Context, spec process.Spec) (process.Result, error)
+}
+
 // Options configures the IndependentVerifier.
 type Options struct {
 	Resolver     empirical.ArtifactResolver
 	Worktrees    *worktrees.Manager
 	Repositories execrt.RepositoryProvider
-	Runner       *process.Runner
+	Runner       CommandRunner
 	BuildInfo    BuildInfoSource
 	Clock        clock.Clock
 	IDs          ids.Source

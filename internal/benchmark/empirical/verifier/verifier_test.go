@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -15,6 +18,7 @@ import (
 	"github.com/olostan/DevCadence/internal/benchmark/empirical"
 	"github.com/olostan/DevCadence/internal/benchmark/empirical/verifier"
 	"github.com/olostan/DevCadence/internal/clock"
+	"github.com/olostan/DevCadence/internal/errs"
 	"github.com/olostan/DevCadence/internal/execrt"
 	"github.com/olostan/DevCadence/internal/ids"
 	"github.com/olostan/DevCadence/internal/process"
@@ -31,6 +35,17 @@ type mockBuildInfoSource struct {
 
 func (m mockBuildInfoSource) VCSRevision() (string, bool, bool) {
 	return m.rev, m.modified, m.ok
+}
+
+type mockCommandRunner struct {
+	runFn func(ctx context.Context, spec process.Spec) (process.Result, error)
+}
+
+func (m mockCommandRunner) Run(ctx context.Context, spec process.Spec) (process.Result, error) {
+	if m.runFn != nil {
+		return m.runFn(ctx, spec)
+	}
+	return (&process.Runner{}).Run(ctx, spec)
 }
 
 type testArtifactResolver map[string][]byte
@@ -989,6 +1004,122 @@ func TestDefaultBuildInfoSource(t *testing.T) {
 	_, _, _ = b.VCSRevision()
 }
 
+func TestBuildInfoSource_ProductionSeamAST(t *testing.T) {
+	dir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var repoRoot string
+	for {
+		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
+			repoRoot = dir
+			break
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			t.Fatal("could not find repo root containing go.mod")
+		}
+		dir = parent
+	}
+
+	fset := token.NewFileSet()
+	var checkedFiles int
+	var foundDefaultBuildInfoCalls int
+	var foundVCSRevisionImpls int
+
+	err = filepath.Walk(repoRoot, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			name := info.Name()
+			if strings.HasPrefix(name, ".") || name == "vendor" || name == "testdata" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+
+		relPath, _ := filepath.Rel(repoRoot, path)
+		node, err := parser.ParseFile(fset, path, nil, 0)
+		if err != nil {
+			t.Fatalf("failed to parse %s: %v", relPath, err)
+		}
+		checkedFiles++
+
+		ast.Inspect(node, func(n ast.Node) bool {
+			// Check method declarations: only defaultBuildInfoSource in buildinfo.go may implement VCSRevision.
+			if fn, ok := n.(*ast.FuncDecl); ok {
+				if fn.Name != nil && fn.Name.Name == "VCSRevision" && fn.Recv != nil {
+					foundVCSRevisionImpls++
+					expectedFile := filepath.Join("internal", "benchmark", "empirical", "verifier", "buildinfo.go")
+					if relPath != expectedFile {
+						t.Errorf("unauthorized VCSRevision method found in %s; only %s may implement it", relPath, expectedFile)
+					}
+				}
+			}
+
+			// Check composite literal KeyValueExpr for BuildInfo field.
+			if kv, ok := n.(*ast.KeyValueExpr); ok {
+				if kIdent, ok := kv.Key.(*ast.Ident); ok && kIdent.Name == "BuildInfo" {
+					switch val := kv.Value.(type) {
+					case *ast.CallExpr:
+						switch fun := val.Fun.(type) {
+						case *ast.SelectorExpr:
+							if fun.Sel.Name == "DefaultBuildInfoSource" {
+								foundDefaultBuildInfoCalls++
+							} else {
+								t.Errorf("file %s sets BuildInfo to non-default constructor: %s.%s", relPath, fun.X, fun.Sel.Name)
+							}
+						case *ast.Ident:
+							if fun.Name == "DefaultBuildInfoSource" {
+								foundDefaultBuildInfoCalls++
+							} else {
+								t.Errorf("file %s sets BuildInfo to non-default constructor: %s", relPath, fun.Name)
+							}
+						default:
+							t.Errorf("file %s sets BuildInfo to unexpected call expression", relPath)
+						}
+					case *ast.Ident:
+						if val.Name != "nil" {
+							t.Errorf("file %s sets BuildInfo to non-nil identifier: %s", relPath, val.Name)
+						}
+					default:
+						t.Errorf("file %s sets BuildInfo to unauthorized expression %T", relPath, kv.Value)
+					}
+				}
+			}
+
+			// Check for mock/fake BuildInfoSource identifiers in production code.
+			if ident, ok := n.(*ast.Ident); ok {
+				lower := strings.ToLower(ident.Name)
+				if (strings.Contains(lower, "mock") || strings.Contains(lower, "fake")) && strings.Contains(lower, "buildinfo") {
+					t.Errorf("file %s contains mock/fake BuildInfoSource identifier %q", relPath, ident.Name)
+				}
+			}
+
+			return true
+		})
+
+		return nil
+	})
+
+	if err != nil {
+		t.Fatalf("Walk failed: %v", err)
+	}
+	if checkedFiles == 0 {
+		t.Fatal("no production files were checked")
+	}
+	if foundVCSRevisionImpls != 1 {
+		t.Fatalf("expected exactly 1 production VCSRevision implementation, found %d", foundVCSRevisionImpls)
+	}
+	if foundDefaultBuildInfoCalls < 1 {
+		t.Fatalf("expected at least 1 production call to DefaultBuildInfoSource, found %d", foundDefaultBuildInfoCalls)
+	}
+}
+
 func TestVerifier_PreconditionErrors(t *testing.T) {
 	ctx := context.Background()
 	_, baseCommit, candGoodCommit, _, wtManager, repoProvider, scratchDir := setupBaseTestDependencies(t)
@@ -1520,6 +1651,21 @@ func TestVerifier_WorkerProvenanceAndTaskErrors(t *testing.T) {
 		}
 	}
 
+	// 2b. Worker provenance work_package_id mismatch
+	{
+		plan, run, evidence, res := mutateProv(func(p *protocol.InvocationProvenance) {
+			p.WorkPackageID = "diff-ewp"
+		})
+		_, err := v.Verify(ctx, plan, run, evidence, res)
+		if err == nil {
+			t.Errorf("expected error for worker provenance work_package_id mismatch")
+		} else if cat := errs.CategoryOf(err); cat != errs.CategoryIntegrity {
+			t.Errorf("expected CategoryIntegrity, got %v (err: %v)", cat, err)
+		} else if !strings.Contains(err.Error(), "worker provenance work_package_id mismatch") {
+			t.Errorf("expected mismatch error message, got: %v", err)
+		}
+	}
+
 	// 3. Worker provenance attempt_id mismatch
 	{
 		plan, run, evidence, res := mutateProv(func(p *protocol.InvocationProvenance) {
@@ -1974,5 +2120,240 @@ func TestVerifier_WriteScopeMatching(t *testing.T) {
 	}
 	if outcome.QualityVerdict != empirical.QualityAccepted {
 		t.Errorf("expected quality accepted for exact write scope match, got %s", outcome.QualityVerdict)
+	}
+}
+
+func TestVerifier_GitDiffTreeFailClosed_Error(t *testing.T) {
+	ctx := context.Background()
+	_, baseCommit, candGoodCommit, _, wtManager, repoProvider, scratchDir := setupBaseTestDependencies(t)
+	now := time.Date(2026, 10, 8, 12, 0, 0, 0, time.UTC)
+	sourceCommit := "commit-verifier-v1"
+	bSource := mockBuildInfoSource{rev: sourceCommit, modified: false, ok: true}
+
+	profile := verifier.VerificationProfile{
+		Version:     "1.0",
+		ProfileID:   "prof-diff-tree-err",
+		Executables: []string{"git"},
+		Tasks: []verifier.TaskVerification{
+			{
+				TaskID:             "task-01",
+				TaskDigest:         "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+				Class:              "implementation",
+				BaseCommit:         baseCommit,
+				WriteScope:         []string{"src/"},
+				Checks:             []verifier.CheckSpec{{CheckID: "chk-1", Argv: []string{"git", "status"}, TimeoutSeconds: 10}},
+				AcceptanceCheckIDs: []string{"chk-1"},
+			},
+		},
+	}
+
+	failingRunner := mockCommandRunner{
+		runFn: func(ctx context.Context, spec process.Spec) (process.Result, error) {
+			for _, arg := range spec.Args {
+				if arg == "diff-tree" {
+					return process.Result{}, errors.New("simulated diff-tree failure")
+				}
+			}
+			return (&process.Runner{}).Run(ctx, spec)
+		},
+	}
+
+	v, err := verifier.New(verifier.Options{
+		Worktrees:    wtManager,
+		Repositories: repoProvider,
+		BuildInfo:    bSource,
+		ScratchDir:   scratchDir,
+		Profile:      &profile,
+		Runner:       failingRunner,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	plan, run, evidence, resolver := helperMakeValidFixtures(
+		t, now, baseCommit, candGoodCommit, sourceCommit, profile, "implementation", empirical.QualityAccepted, []byte("cand"),
+	)
+
+	_, err = v.Verify(ctx, plan, run, evidence, resolver)
+	if err == nil {
+		t.Fatal("expected error on git diff-tree failure")
+	}
+	if cat := errs.CategoryOf(err); cat != errs.CategoryInternal {
+		t.Errorf("expected CategoryInternal, got %v", cat)
+	}
+	if !strings.Contains(err.Error(), "VERIFIER_INFRASTRUCTURE: git diff-tree failed") {
+		t.Errorf("expected VERIFIER_INFRASTRUCTURE message, got: %v", err)
+	}
+}
+
+func TestVerifier_GitDiffTreeFailClosed_NonZeroExit(t *testing.T) {
+	ctx := context.Background()
+	_, baseCommit, candGoodCommit, _, wtManager, repoProvider, scratchDir := setupBaseTestDependencies(t)
+	now := time.Date(2026, 10, 8, 12, 0, 0, 0, time.UTC)
+	sourceCommit := "commit-verifier-v1"
+	bSource := mockBuildInfoSource{rev: sourceCommit, modified: false, ok: true}
+
+	profile := verifier.VerificationProfile{
+		Version:     "1.0",
+		ProfileID:   "prof-diff-tree-exit",
+		Executables: []string{"git"},
+		Tasks: []verifier.TaskVerification{
+			{
+				TaskID:             "task-01",
+				TaskDigest:         "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+				Class:              "implementation",
+				BaseCommit:         baseCommit,
+				WriteScope:         []string{"src/"},
+				Checks:             []verifier.CheckSpec{{CheckID: "chk-1", Argv: []string{"git", "status"}, TimeoutSeconds: 10}},
+				AcceptanceCheckIDs: []string{"chk-1"},
+			},
+		},
+	}
+
+	failingRunner := mockCommandRunner{
+		runFn: func(ctx context.Context, spec process.Spec) (process.Result, error) {
+			for _, arg := range spec.Args {
+				if arg == "diff-tree" {
+					return process.Result{
+						Status:   process.StatusCompleted,
+						ExitCode: 128,
+						Stderr:   []byte("fatal: diff-tree failed"),
+					}, nil
+				}
+			}
+			return (&process.Runner{}).Run(ctx, spec)
+		},
+	}
+
+	v, err := verifier.New(verifier.Options{
+		Worktrees:    wtManager,
+		Repositories: repoProvider,
+		BuildInfo:    bSource,
+		ScratchDir:   scratchDir,
+		Profile:      &profile,
+		Runner:       failingRunner,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	plan, run, evidence, resolver := helperMakeValidFixtures(
+		t, now, baseCommit, candGoodCommit, sourceCommit, profile, "implementation", empirical.QualityAccepted, []byte("cand"),
+	)
+
+	_, err = v.Verify(ctx, plan, run, evidence, resolver)
+	if err == nil {
+		t.Fatal("expected error on git diff-tree exit failure")
+	}
+	if cat := errs.CategoryOf(err); cat != errs.CategoryInternal {
+		t.Errorf("expected CategoryInternal, got %v", cat)
+	}
+	if !strings.Contains(err.Error(), "VERIFIER_INFRASTRUCTURE: git diff-tree failed") {
+		t.Errorf("expected VERIFIER_INFRASTRUCTURE message, got: %v", err)
+	}
+}
+
+func TestVerifier_AbbreviatedBaseCommitResolution(t *testing.T) {
+	ctx := context.Background()
+	_, baseCommit, candGoodCommit, _, wtManager, repoProvider, scratchDir := setupBaseTestDependencies(t)
+	now := time.Date(2026, 10, 8, 12, 0, 0, 0, time.UTC)
+	sourceCommit := "commit-verifier-v1"
+	bSource := mockBuildInfoSource{rev: sourceCommit, modified: false, ok: true}
+
+	if len(baseCommit) < 12 {
+		t.Fatalf("baseCommit too short to abbreviate: %s", baseCommit)
+	}
+	abbrevBaseCommit := baseCommit[:8]
+
+	profile := verifier.VerificationProfile{
+		Version:     "1.0",
+		ProfileID:   "prof-abbrev-base",
+		Executables: []string{"git"},
+		Tasks: []verifier.TaskVerification{
+			{
+				TaskID:             "task-01",
+				TaskDigest:         "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+				Class:              "implementation",
+				BaseCommit:         abbrevBaseCommit,
+				WriteScope:         []string{"src/"},
+				Checks:             []verifier.CheckSpec{{CheckID: "chk-1", Argv: []string{"git", "status"}, TimeoutSeconds: 10}},
+				AcceptanceCheckIDs: []string{"chk-1"},
+			},
+		},
+	}
+
+	v, err := verifier.New(verifier.Options{
+		Worktrees:    wtManager,
+		Repositories: repoProvider,
+		BuildInfo:    bSource,
+		ScratchDir:   scratchDir,
+		Profile:      &profile,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	plan, run, evidence, resolver := helperMakeValidFixtures(
+		t, now, baseCommit, candGoodCommit, sourceCommit, profile, "implementation", empirical.QualityAccepted, []byte("cand"),
+	)
+	run.EWP.BaseCommit = abbrevBaseCommit
+
+	outcome, err := v.Verify(ctx, plan, run, evidence, resolver)
+	if err != nil {
+		t.Fatalf("unexpected error verifying with abbreviated base commit: %v", err)
+	}
+	if outcome.QualityVerdict != empirical.QualityAccepted {
+		t.Errorf("expected quality accepted for abbreviated base commit, got %s", outcome.QualityVerdict)
+	}
+}
+
+func TestVerifier_UnresolvableBaseCommitFailClosed(t *testing.T) {
+	ctx := context.Background()
+	_, baseCommit, candGoodCommit, _, wtManager, repoProvider, scratchDir := setupBaseTestDependencies(t)
+	now := time.Date(2026, 10, 8, 12, 0, 0, 0, time.UTC)
+	sourceCommit := "commit-verifier-v1"
+	bSource := mockBuildInfoSource{rev: sourceCommit, modified: false, ok: true}
+
+	profile := verifier.VerificationProfile{
+		Version:     "1.0",
+		ProfileID:   "prof-unresolv-base",
+		Executables: []string{"git"},
+		Tasks: []verifier.TaskVerification{
+			{
+				TaskID:             "task-01",
+				TaskDigest:         "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+				Class:              "implementation",
+				BaseCommit:         "deadbeefdeadbeef",
+				WriteScope:         []string{"src/"},
+				Checks:             []verifier.CheckSpec{{CheckID: "chk-1", Argv: []string{"git", "status"}, TimeoutSeconds: 10}},
+				AcceptanceCheckIDs: []string{"chk-1"},
+			},
+		},
+	}
+
+	v, err := verifier.New(verifier.Options{
+		Worktrees:    wtManager,
+		Repositories: repoProvider,
+		BuildInfo:    bSource,
+		ScratchDir:   scratchDir,
+		Profile:      &profile,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	plan, run, evidence, resolver := helperMakeValidFixtures(
+		t, now, baseCommit, candGoodCommit, sourceCommit, profile, "implementation", empirical.QualityAccepted, []byte("cand"),
+	)
+
+	_, err = v.Verify(ctx, plan, run, evidence, resolver)
+	if err == nil {
+		t.Fatal("expected error for unresolvable base commit")
+	}
+	if cat := errs.CategoryOf(err); cat != errs.CategoryInternal {
+		t.Errorf("expected CategoryInternal, got %v", cat)
+	}
+	if !strings.Contains(err.Error(), "VERIFIER_INFRASTRUCTURE: task base commit") {
+		t.Errorf("expected VERIFIER_INFRASTRUCTURE message, got: %v", err)
 	}
 }
