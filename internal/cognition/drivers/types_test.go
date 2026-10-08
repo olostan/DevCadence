@@ -326,3 +326,34 @@ func TestTokenUsage_JSON_Marshal(t *testing.T) {
 		t.Errorf("round trip Output mismatch: %+v", roundTrip.Output)
 	}
 }
+
+func TestSessionConfig_Validation(t *testing.T) {
+	cfgValid := SessionConfig{
+		SessionID:              "s1",
+		ModelID:                "m1",
+		MaxOutputTokensPerCall: 4096,
+	}
+	if err := cfgValid.Validate(); err != nil {
+		t.Errorf("expected valid config, got %v", err)
+	}
+
+	cfgNegativeTokens := SessionConfig{
+		SessionID:              "s1",
+		ModelID:                "m1",
+		MaxOutputTokensPerCall: -1,
+	}
+	if err := cfgNegativeTokens.Validate(); err == nil {
+		t.Errorf("expected error for negative MaxOutputTokensPerCall, got nil")
+	} else if errs.CategoryOf(err) != errs.CategoryInvalidArgument {
+		t.Errorf("expected CategoryInvalidArgument, got %v", err)
+	}
+
+	cfgZeroTokens := SessionConfig{
+		SessionID:              "s1",
+		ModelID:                "m1",
+		MaxOutputTokensPerCall: 0,
+	}
+	if err := cfgZeroTokens.Validate(); err != nil {
+		t.Errorf("expected zero MaxOutputTokensPerCall to be valid (optional in SessionConfig), got %v", err)
+	}
+}

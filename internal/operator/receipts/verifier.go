@@ -170,106 +170,93 @@ func (v *InMemoryVerifier) Verify(ctx context.Context, req Request) (Verified, e
 		return nil, err
 	}
 
-	reqTime := req.Time
-	if reqTime.IsZero() && v.clock != nil {
-		reqTime = v.clock.Now()
-	}
-	if reqTime.IsZero() {
-		reqTime = time.Now().UTC()
+	reqTime := time.Now().UTC()
+	if v.clock != nil {
+		reqTime = v.clock.Now().UTC()
 	}
 
 	var receipt Receipt
-	if req.Receipt.Statement.ReceiptID != "" {
-		receipt = req.Receipt
+	candidates := append([]Receipt(nil), v.receipts...)
+
+	if v.receiptsDir != "" {
+		entries, err := os.ReadDir(v.receiptsDir)
+		if err == nil {
+			var jsonFiles []string
+			for _, entry := range entries {
+				if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".json") {
+					jsonFiles = append(jsonFiles, entry.Name())
+				}
+			}
+			sort.Strings(jsonFiles)
+			if len(jsonFiles) > 256 {
+				jsonFiles = jsonFiles[:256]
+			}
+			for _, name := range jsonFiles {
+				filePath := filepath.Join(v.receiptsDir, name)
+				data, err := os.ReadFile(filePath)
+				if err != nil || len(data) > 64*1024 {
+					continue
+				}
+				decR := json.NewDecoder(bytes.NewReader(data))
+				decR.DisallowUnknownFields()
+				var r Receipt
+				if err := decR.Decode(&r); err != nil {
+					continue
+				}
+				if _, err := decR.Token(); err != io.EOF {
+					continue
+				}
+				candidates = append(candidates, r)
+			}
+		}
+	}
+
+	if req.ReceiptID != "" {
+		var found *Receipt
+		for _, r := range candidates {
+			if r.Statement.ReceiptID == req.ReceiptID {
+				cand := r
+				found = &cand
+				break
+			}
+		}
+		if found == nil {
+			return nil, errs.New(errs.CategoryNotFound, "receipt %s not found", req.ReceiptID)
+		}
+		receipt = *found
 	} else {
-		receiptsDir := req.ReceiptsDir
-		if receiptsDir == "" {
-			receiptsDir = v.receiptsDir
-		}
-
-		var candidates []Receipt
-		candidates = append(candidates, v.receipts...)
-
-		if receiptsDir != "" {
-			entries, err := os.ReadDir(receiptsDir)
-			if err == nil {
-				var jsonFiles []string
-				for _, entry := range entries {
-					if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".json") {
-						jsonFiles = append(jsonFiles, entry.Name())
-					}
-				}
-				sort.Strings(jsonFiles)
-				if len(jsonFiles) > 256 {
-					jsonFiles = jsonFiles[:256]
-				}
-				for _, name := range jsonFiles {
-					filePath := filepath.Join(receiptsDir, name)
-					data, err := os.ReadFile(filePath)
-					if err != nil || len(data) > 64*1024 {
-						continue
-					}
-					decR := json.NewDecoder(bytes.NewReader(data))
-					decR.DisallowUnknownFields()
-					var r Receipt
-					if err := decR.Decode(&r); err != nil {
-						continue
-					}
-					if _, err := decR.Token(); err != io.EOF {
-						continue
-					}
-					candidates = append(candidates, r)
-				}
+		var bestCandidate *Receipt
+		for _, r := range candidates {
+			stmt := r.Statement
+			if stmt.Purpose != req.Purpose || (req.ProjectID != "" && stmt.ProjectID != req.ProjectID) {
+				continue
+			}
+			if stmt.Subject != req.Subject {
+				continue
+			}
+			if stmt.SubjectDigest != req.SubjectDigest {
+				continue
+			}
+			if v.revocations != nil && v.revocations.IsRevoked(stmt.ReceiptID) {
+				continue
+			}
+			anchor, ok := v.anchors[stmt.AnchorID]
+			if !ok {
+				continue
+			}
+			if err := verifyStatementCommon(stmt, r.Signature, req, anchor, reqTime); err != nil {
+				continue
+			}
+			if bestCandidate == nil || stmt.IssuedAt.After(bestCandidate.Statement.IssuedAt) ||
+				(stmt.IssuedAt.Equal(bestCandidate.Statement.IssuedAt) && stmt.ReceiptID > bestCandidate.Statement.ReceiptID) {
+				cand := r
+				bestCandidate = &cand
 			}
 		}
-
-		if req.ReceiptID != "" {
-			var found *Receipt
-			for _, r := range candidates {
-				if r.Statement.ReceiptID == req.ReceiptID {
-					cand := r
-					found = &cand
-					break
-				}
-			}
-			if found == nil {
-				return nil, errs.New(errs.CategoryNotFound, "receipt %s not found", req.ReceiptID)
-			}
-			receipt = *found
-		} else {
-			var bestCandidate *Receipt
-			for _, r := range candidates {
-				stmt := r.Statement
-				if stmt.Purpose != req.Purpose || (req.ProjectID != "" && stmt.ProjectID != req.ProjectID) {
-					continue
-				}
-				if stmt.Subject != req.Subject {
-					continue
-				}
-				if req.SubjectDigest != "" && stmt.SubjectDigest != req.SubjectDigest {
-					continue
-				}
-				if v.revocations != nil && v.revocations.IsRevoked(stmt.ReceiptID) {
-					continue
-				}
-				anchor, ok := v.anchors[stmt.AnchorID]
-				if !ok {
-					continue
-				}
-				if err := verifyStatementCommon(stmt, r.Signature, req, anchor, reqTime); err != nil {
-					continue
-				}
-				if bestCandidate == nil || stmt.IssuedAt.After(bestCandidate.Statement.IssuedAt) ||
-					(stmt.IssuedAt.Equal(bestCandidate.Statement.IssuedAt) && stmt.ReceiptID > bestCandidate.Statement.ReceiptID) {
-					cand := r
-					bestCandidate = &cand
-				}
-			}
-			if bestCandidate == nil {
-				return nil, errs.New(errs.CategoryPolicyDenied, "receipt-missing: no verifying receipt found for subject")
-			}
-			receipt = *bestCandidate
+		if bestCandidate == nil {
+			return nil, errs.New(errs.CategoryPolicyDenied, "receipt-missing: no verifying receipt found for subject")
 		}
+		receipt = *bestCandidate
 	}
 
 	stmt := receipt.Statement
@@ -342,7 +329,7 @@ func NewFileVerifier(opts FileOptions) (*FileVerifier, error) {
 	}
 
 	if len(opts.TrustedOwnerUIDs) == 0 {
-		opts.TrustedOwnerUIDs = []uint32{0, opts.OperatorUID}
+		return nil, errs.New(errs.CategoryInvalidArgument, "trusted owner UIDs cannot be empty")
 	}
 
 	hasOperator := false
@@ -491,12 +478,9 @@ func (v *FileVerifier) Verify(ctx context.Context, req Request) (Verified, error
 		return nil, err
 	}
 
-	reqTime := req.Time
-	if reqTime.IsZero() && v.clock != nil {
-		reqTime = v.clock.Now()
-	}
-	if reqTime.IsZero() {
-		reqTime = time.Now().UTC()
+	reqTime := time.Now().UTC()
+	if v.clock != nil {
+		reqTime = v.clock.Now().UTC()
 	}
 
 	// 1. Re-run R2 protection check on OperatorDir, anchors.json, and revoked.json
@@ -545,13 +529,13 @@ func (v *FileVerifier) Verify(ctx context.Context, req Request) (Verified, error
 
 	// 4. Resolve receipts directory
 	receiptsDir := v.receiptsDir
-	if req.ReceiptsDir != "" {
-		receiptsDir = req.ReceiptsDir
-	}
 	if receiptsDir == "" {
 		if home := os.Getenv("DEVCADENCE_HOME"); home != "" {
 			receiptsDir = filepath.Join(home, "receipts")
 		}
+	}
+	if receiptsDir == "" {
+		return nil, errs.New(errs.CategoryNotFound, "receipts directory not configured")
 	}
 
 	var receipt Receipt
@@ -560,126 +544,112 @@ func (v *FileVerifier) Verify(ctx context.Context, req Request) (Verified, error
 		if strings.Contains(req.ReceiptID, "/") || strings.Contains(req.ReceiptID, "\\") || strings.Contains(req.ReceiptID, "..") {
 			return nil, errs.New(errs.CategoryInvalidArgument, "invalid receipt_id %q", req.ReceiptID)
 		}
-		if receiptsDir == "" && req.Receipt.Statement.ReceiptID == req.ReceiptID {
-			receipt = req.Receipt
-		} else {
-			if receiptsDir == "" {
-				return nil, errs.New(errs.CategoryNotFound, "receipts directory not configured")
+		path := filepath.Join(receiptsDir, req.ReceiptID+".json")
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return nil, errs.Wrap(errs.CategoryNotFound, err, "receipt-missing: receipt %s not found", req.ReceiptID)
+		}
+		if len(data) > 64*1024 {
+			return nil, errs.New(errs.CategoryPolicyDenied, "receipt-invalid: receipt %s exceeds 64 KiB cap", req.ReceiptID)
+		}
+		decR := json.NewDecoder(bytes.NewReader(data))
+		decR.DisallowUnknownFields()
+		var r Receipt
+		if err := decR.Decode(&r); err != nil {
+			return nil, errs.Wrap(errs.CategoryInvalidArgument, err, "receipt-invalid: invalid receipt JSON")
+		}
+		if _, err := decR.Token(); err != io.EOF {
+			return nil, errs.New(errs.CategoryInvalidArgument, "receipt-invalid: trailing content in receipt JSON")
+		}
+		if r.Statement.ReceiptID != req.ReceiptID {
+			return nil, errs.New(errs.CategoryPolicyDenied, "receipt_id mismatch: file has %q, request has %q", r.Statement.ReceiptID, req.ReceiptID)
+		}
+		receipt = r
+	} else {
+		// Subject discovery
+		entries, err := os.ReadDir(receiptsDir)
+		if err != nil {
+			return nil, errs.Wrap(errs.CategoryNotFound, err, "receipt-missing: cannot read receipts directory")
+		}
+		var jsonFiles []string
+		for _, entry := range entries {
+			if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".json") {
+				jsonFiles = append(jsonFiles, entry.Name())
 			}
-			path := filepath.Join(receiptsDir, req.ReceiptID+".json")
-			data, err := os.ReadFile(path)
-			if err != nil {
-				return nil, errs.Wrap(errs.CategoryNotFound, err, "receipt-missing: receipt %s not found", req.ReceiptID)
-			}
-			if len(data) > 64*1024 {
-				return nil, errs.New(errs.CategoryPolicyDenied, "receipt-invalid: receipt %s exceeds 64 KiB cap", req.ReceiptID)
+		}
+		sort.Strings(jsonFiles)
+		if len(jsonFiles) > 256 {
+			jsonFiles = jsonFiles[:256]
+		}
+
+		var bestCandidate *Receipt
+		for _, name := range jsonFiles {
+			filePath := filepath.Join(receiptsDir, name)
+			data, err := os.ReadFile(filePath)
+			if err != nil || len(data) > 64*1024 {
+				continue
 			}
 			decR := json.NewDecoder(bytes.NewReader(data))
 			decR.DisallowUnknownFields()
 			var r Receipt
 			if err := decR.Decode(&r); err != nil {
-				return nil, errs.Wrap(errs.CategoryInvalidArgument, err, "receipt-invalid: invalid receipt JSON")
+				continue
 			}
 			if _, err := decR.Token(); err != io.EOF {
-				return nil, errs.New(errs.CategoryInvalidArgument, "receipt-invalid: trailing content in receipt JSON")
+				continue
 			}
-			if r.Statement.ReceiptID != req.ReceiptID {
-				return nil, errs.New(errs.CategoryPolicyDenied, "receipt_id mismatch: file has %q, request has %q", r.Statement.ReceiptID, req.ReceiptID)
+
+			stmt := r.Statement
+			if stmt.Purpose != req.Purpose || stmt.ProjectID != req.ProjectID {
+				continue
 			}
-			receipt = r
+			if stmt.Subject != req.Subject {
+				continue
+			}
+			if req.SubjectDigest != "" && stmt.SubjectDigest != req.SubjectDigest {
+				continue
+			}
+
+			// Check revocation
+			isRevoked := false
+			for _, rid := range revDoc.ReceiptIDs {
+				if rid == stmt.ReceiptID {
+					isRevoked = true
+					break
+				}
+			}
+			for _, aid := range revDoc.AnchorIDs {
+				if aid == stmt.AnchorID {
+					isRevoked = true
+					break
+				}
+			}
+			if isRevoked {
+				continue
+			}
+
+			// Check anchor exists
+			anchor, ok := v.anchors[stmt.AnchorID]
+			if !ok {
+				continue
+			}
+
+			// Check full verification
+			if err := verifyStatementCommon(stmt, r.Signature, req, anchor, reqTime); err != nil {
+				continue
+			}
+
+			if bestCandidate == nil || stmt.IssuedAt.After(bestCandidate.Statement.IssuedAt) ||
+				(stmt.IssuedAt.Equal(bestCandidate.Statement.IssuedAt) && stmt.ReceiptID > bestCandidate.Statement.ReceiptID) {
+				candidate := r
+				bestCandidate = &candidate
+			}
 		}
-	} else {
-		// Subject discovery
-		if receiptsDir == "" && req.Receipt.Statement.ReceiptID != "" {
-			receipt = req.Receipt
-		} else {
-			if receiptsDir == "" {
-				return nil, errs.New(errs.CategoryNotFound, "receipt-missing: receipts directory not configured")
-			}
-			entries, err := os.ReadDir(receiptsDir)
-			if err != nil {
-				return nil, errs.Wrap(errs.CategoryNotFound, err, "receipt-missing: cannot read receipts directory")
-			}
-			var jsonFiles []string
-			for _, entry := range entries {
-				if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".json") {
-					jsonFiles = append(jsonFiles, entry.Name())
-				}
-			}
-			sort.Strings(jsonFiles)
-			if len(jsonFiles) > 256 {
-				jsonFiles = jsonFiles[:256]
-			}
 
-			var bestCandidate *Receipt
-			for _, name := range jsonFiles {
-				filePath := filepath.Join(receiptsDir, name)
-				data, err := os.ReadFile(filePath)
-				if err != nil || len(data) > 64*1024 {
-					continue
-				}
-				decR := json.NewDecoder(bytes.NewReader(data))
-				decR.DisallowUnknownFields()
-				var r Receipt
-				if err := decR.Decode(&r); err != nil {
-					continue
-				}
-				if _, err := decR.Token(); err != io.EOF {
-					continue
-				}
-
-				stmt := r.Statement
-				if stmt.Purpose != req.Purpose || stmt.ProjectID != req.ProjectID {
-					continue
-				}
-				if stmt.Subject != req.Subject {
-					continue
-				}
-				if req.SubjectDigest != "" && stmt.SubjectDigest != req.SubjectDigest {
-					continue
-				}
-
-				// Check revocation
-				isRevoked := false
-				for _, rid := range revDoc.ReceiptIDs {
-					if rid == stmt.ReceiptID {
-						isRevoked = true
-						break
-					}
-				}
-				for _, aid := range revDoc.AnchorIDs {
-					if aid == stmt.AnchorID {
-						isRevoked = true
-						break
-					}
-				}
-				if isRevoked {
-					continue
-				}
-
-				// Check anchor exists
-				anchor, ok := v.anchors[stmt.AnchorID]
-				if !ok {
-					continue
-				}
-
-				// Check full verification
-				if err := verifyStatementCommon(stmt, r.Signature, req, anchor, reqTime); err != nil {
-					continue
-				}
-
-				if bestCandidate == nil || stmt.IssuedAt.After(bestCandidate.Statement.IssuedAt) ||
-					(stmt.IssuedAt.Equal(bestCandidate.Statement.IssuedAt) && stmt.ReceiptID > bestCandidate.Statement.ReceiptID) {
-					candidate := r
-					bestCandidate = &candidate
-				}
-			}
-
-			if bestCandidate == nil {
-				return nil, errs.New(errs.CategoryPolicyDenied, "receipt-missing: no verifying receipt found for subject")
-			}
-			receipt = *bestCandidate
+		if bestCandidate == nil {
+			return nil, errs.New(errs.CategoryPolicyDenied, "receipt-missing: no verifying receipt found for subject")
 		}
+		receipt = *bestCandidate
 	}
 
 	// Revocation check
@@ -729,7 +699,7 @@ func verifyStatementCommon(stmt Statement, sig string, req Request, anchor Trust
 			"subject mismatch: receipt statement has %+v, request requires %+v", stmt.Subject, req.Subject)
 	}
 
-	if req.SubjectDigest != "" && stmt.SubjectDigest != req.SubjectDigest {
+	if stmt.SubjectDigest != req.SubjectDigest {
 		return errs.New(errs.CategoryPolicyDenied,
 			"subject_digest mismatch: receipt statement has %q, request requires %q", stmt.SubjectDigest, req.SubjectDigest)
 	}
@@ -737,11 +707,6 @@ func verifyStatementCommon(stmt Statement, sig string, req Request, anchor Trust
 	if req.InputDigest != "" && stmt.InputDigest != req.InputDigest {
 		return errs.New(errs.CategoryPolicyDenied,
 			"input_digest mismatch: receipt statement has %q, request has %q", stmt.InputDigest, req.InputDigest)
-	}
-
-	if req.Text != "" && stmt.Text != req.Text {
-		return errs.New(errs.CategoryPolicyDenied,
-			"text mismatch: receipt statement has %q, request has %q", stmt.Text, req.Text)
 	}
 
 	expectedTextDigest := protocol.DigestBytes([]byte(stmt.Text))

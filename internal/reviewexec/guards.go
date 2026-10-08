@@ -2,6 +2,7 @@ package reviewexec
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"github.com/olostan/DevCadence/internal/controlplane"
@@ -12,6 +13,7 @@ import (
 
 type intentAbsentGuard struct {
 	taskID          string
+	attemptID       string
 	candidateCommit string
 	intentID        string
 }
@@ -30,6 +32,22 @@ func (g intentAbsentGuard) Check(ctx context.Context, view controlplane.BatchRea
 	}
 	if !running {
 		return errs.New(errs.CategoryConflict, "task %s is not running", g.taskID)
+	}
+
+	if g.attemptID != "" {
+		workerKey := g.attemptID + ":implementer"
+		storedWorker, err := view.Record(ctx, "InvocationProvenance", workerKey, 1)
+		if err != nil && errs.CategoryOf(err) == errs.CategoryNotFound {
+			storedWorker, err = view.Record(ctx, "InvocationProvenance", "prov_"+g.attemptID, 1)
+		}
+		if err == nil && storedWorker.Document != "" {
+			var workerProv protocol.InvocationProvenance
+			if err := json.Unmarshal([]byte(storedWorker.Document), &workerProv); err == nil {
+				if workerProv.CandidateCommit != "" && g.candidateCommit != "" && workerProv.CandidateCommit != g.candidateCommit {
+					return errs.New(errs.CategoryConflict, "candidate commit mismatch: provenance has %s, request has %s", workerProv.CandidateCommit, g.candidateCommit)
+				}
+			}
+		}
 	}
 
 	_, err := view.Record(ctx, "ReviewInvocationIntent", g.intentID, 1)

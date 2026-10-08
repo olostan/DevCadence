@@ -33,15 +33,15 @@ func testSetup(t *testing.T) (ed25519.PublicKey, ed25519.PrivateKey, *receipts.I
 		Purposes:     []receipts.Purpose{receipts.PurposeExecutionPolicyActivate},
 	}
 
-	v, err := receipts.NewVerifier([]receipts.TrustAnchor{anchor})
-	if err != nil {
-		t.Fatalf("NewVerifier: %v", err)
-	}
-
 	tempDir := t.TempDir()
 	receiptsDir := filepath.Join(tempDir, "receipts")
 	if err := os.MkdirAll(receiptsDir, 0755); err != nil {
 		t.Fatalf("MkdirAll receiptsDir: %v", err)
+	}
+
+	v, err := receipts.NewVerifier([]receipts.TrustAnchor{anchor}, receipts.WithReceiptsDir(receiptsDir))
+	if err != nil {
+		t.Fatalf("NewVerifier: %v", err)
 	}
 
 	return pub, priv, v, tempDir, receiptsDir
@@ -144,7 +144,7 @@ func TestPolicyLoadAndCurrent_Success(t *testing.T) {
 	now := time.Now().UTC()
 
 	policy := createTestPolicy(now)
-	signReceipt(t, priv, policy, receiptsDir, "rcpt_01j7valid1234567890abcdef", now.Add(-1*time.Hour), now.Add(24*time.Hour))
+	signReceipt(t, priv, policy, receiptsDir, "rcpt_01j7valid1234567890abcdef1", now.Add(-1*time.Hour), now.Add(24*time.Hour))
 
 	policyPath := filepath.Join(tempDir, "policy.json")
 	policyBytes, err := json.MarshalIndent(policy, "", "  ")
@@ -190,7 +190,7 @@ func TestPolicyLoad_ByteDriftFailsClosed(t *testing.T) {
 	now := time.Now().UTC()
 
 	policy := createTestPolicy(now)
-	signReceipt(t, priv, policy, receiptsDir, "rcpt_01j7drift1234567890abcdef", now.Add(-1*time.Hour), now.Add(24*time.Hour))
+	signReceipt(t, priv, policy, receiptsDir, "rcpt_01j7drift1234567890abcdef1", now.Add(-1*time.Hour), now.Add(24*time.Hour))
 
 	policyPath := filepath.Join(tempDir, "policy.json")
 	policyBytes, err := json.MarshalIndent(policy, "", "  ")
@@ -268,7 +268,7 @@ func TestPolicyLoad_RevokedAndExpiredReceiptFailsClosed(t *testing.T) {
 	_, priv, v, tempDir, receiptsDir := testSetup(t)
 	now := time.Now().UTC()
 
-	receiptID := "rcpt_01j7revoked1234567890abc"
+	receiptID := "rcpt_01j7revoked1234567890abcde"
 	policy := createTestPolicy(now)
 	signReceipt(t, priv, policy, receiptsDir, receiptID, now.Add(-1*time.Hour), now.Add(24*time.Hour))
 
@@ -313,7 +313,7 @@ func TestPolicyLoad_RevokedAndExpiredReceiptFailsClosed(t *testing.T) {
 	t.Run("expired receipt rejected at Load", func(t *testing.T) {
 		_, privExp, vExp, tempDirExp, receiptsDirExp := testSetup(t)
 		expPolicy := createTestPolicy(now)
-		expReceiptID := "rcpt_01j7expired1234567890abc"
+		expReceiptID := "rcpt_01j7expired1234567890abcde"
 		// Receipt expired 5 minutes ago
 		signReceipt(t, privExp, expPolicy, receiptsDirExp, expReceiptID, now.Add(-2*time.Hour), now.Add(-5*time.Minute))
 

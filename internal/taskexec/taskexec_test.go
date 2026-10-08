@@ -1280,3 +1280,34 @@ func TestDelegate_MaxRequestBytesExceeded(t *testing.T) {
 		t.Errorf("summary %q violates closed grammar", att.FailureSummary)
 	}
 }
+
+func TestDelegate_NonPositiveMaxOutputTokensPerCallRefusal(t *testing.T) {
+	f := setupFixture(t, "proj-maxoutput")
+	f.policy.Grants[0].Limits.MaxOutputTokensPerCall = 0
+	taskID, wp, wpDigest := initProjectAndApproveWP(t, f, "DC-002", "wp-002", []string{"base.txt"})
+
+	exec, err := taskexec.New(f.opts)
+	if err != nil {
+		t.Fatalf("taskexec.New: %v", err)
+	}
+
+	authTask := facade.AuthorizedTask{
+		Caller: principal.CallerContext{ProjectID: f.projectID},
+		Meta:   principal.CallMeta{ProjectID: f.projectID},
+		TaskID: taskID,
+		WorkPackage: principal.WorkPackageRef{
+			ID:         wp.WorkPackageID,
+			Version:    wp.Version,
+			Digest:     wpDigest,
+			BaseCommit: wp.BaseCommit,
+		},
+	}
+
+	_, err = exec.Delegate(context.Background(), authTask)
+	if err == nil {
+		t.Fatal("expected Delegate to fail synchronously with invalid_argument, got nil")
+	}
+	if errs.CategoryOf(err) != errs.CategoryInvalidArgument {
+		t.Fatalf("expected CategoryInvalidArgument, got %v", err)
+	}
+}

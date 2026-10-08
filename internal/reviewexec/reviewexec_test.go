@@ -2,6 +2,7 @@ package reviewexec_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -1186,6 +1187,7 @@ func TestReview_CleanupWorktrees(t *testing.T) {
 type fakeGuardView struct {
 	ps        *protocol.ProjectState
 	recordErr error
+	records   map[string]storage.StoredRecord
 }
 
 func (v fakeGuardView) ProjectState() *protocol.ProjectState { return v.ps }
@@ -1193,12 +1195,20 @@ func (v fakeGuardView) Record(ctx context.Context, kind, id string, version int)
 	if v.recordErr != nil {
 		return storage.StoredRecord{}, v.recordErr
 	}
+	if v.records != nil {
+		key := kind + ":" + id
+		if rec, ok := v.records[key]; ok {
+			return rec, nil
+		}
+		return storage.StoredRecord{}, errs.New(errs.CategoryNotFound, "record %s not found", key)
+	}
 	return storage.StoredRecord{Document: "{}"}, nil
 }
 
 func TestReview_IntentAbsentGuard_TaskNotRunning(t *testing.T) {
 	guard := reviewexec.NewIntentAbsentGuardForTesting(
 		"tsk_nonexistent",
+		"att_1",
 		"c123",
 		"intent_1",
 	)
@@ -1230,6 +1240,7 @@ func TestReview_IntentAbsentGuard_TaskNotRunning(t *testing.T) {
 	// task running but intent already recorded
 	guardRunning := reviewexec.NewIntentAbsentGuardForTesting(
 		"task-running-1",
+		"att_1",
 		"c123",
 		"intent_1",
 	)
@@ -1243,6 +1254,60 @@ func TestReview_IntentAbsentGuard_TaskNotRunning(t *testing.T) {
 	var coded *principal.CodedError
 	if !errors.As(errExists, &coded) || coded.Code() != principal.CodePolicyDenied {
 		t.Fatalf("expected CodePolicyDenied, got %v", errExists)
+	}
+}
+
+func TestReview_IntentAbsentGuard_CandidateCommitMismatch(t *testing.T) {
+	ps := &protocol.ProjectState{
+		Tasks: protocol.TaskBuckets{
+			Running: []string{"task-1"},
+		},
+	}
+
+	provBytes, err := json.Marshal(map[string]any{
+		"candidate_commit": "commit-aaa",
+	})
+	if err != nil {
+		t.Fatalf("json.Marshal: %v", err)
+	}
+
+	viewMismatch := fakeGuardView{
+		ps: ps,
+		records: map[string]storage.StoredRecord{
+			"InvocationProvenance:att-1:implementer": {
+				Document: string(provBytes),
+			},
+		},
+	}
+
+	guard := reviewexec.NewIntentAbsentGuardForTesting(
+		"task-1",
+		"att-1",
+		"commit-bbb", // mismatched commit
+		"intent-1",
+	)
+
+	err = guard.Check(context.Background(), viewMismatch)
+	if err == nil {
+		t.Fatal("expected conflict error for candidate commit mismatch, got nil")
+	}
+	if errs.CategoryOf(err) != errs.CategoryConflict {
+		t.Fatalf("expected CategoryConflict, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "candidate commit mismatch") {
+		t.Fatalf("unexpected error message: %v", err)
+	}
+
+	// Matching commit passes guard
+	guardMatching := reviewexec.NewIntentAbsentGuardForTesting(
+		"task-1",
+		"att-1",
+		"commit-aaa",
+		"intent-1",
+	)
+	errMatch := guardMatching.Check(context.Background(), viewMismatch)
+	if errMatch != nil {
+		t.Fatalf("expected nil error for matching candidate commit, got %v", errMatch)
 	}
 }
 
@@ -1286,6 +1351,32 @@ func TestReview_InvalidExecutionLimits(t *testing.T) {
 	caller := principal.CallerContext{PrincipalID: "princ_1", ProjectID: f.projectID}
 	meta := principal.CallMeta{ProjectID: f.projectID}
 	cand := principal.CandidateRef{TaskID: taskID, AttemptID: "att-invlimits", Commit: commit}
+
+	opRef, err := exec.Review(ctx, caller, meta, cand, []string{"correctness"})
+	if err != nil {
+		t.Fatalf("Review call failed: %v", err)
+	}
+
+	completedRef := f.registry.Wait(ctx, opRef, 5*time.Second)
+	if completedRef.Status != principal.StatusFailed {
+		t.Fatalf("expected review to fail, got %s", completedRef.Status)
+	}
+}
+
+func TestReview_NonPositiveMaxOutputTokensPerCallRefusal(t *testing.T) {
+	f := setupFixture(t, "proj-maxoutref")
+	f.policy.Grants[0].Limits.MaxOutputTokensPerCall = 0
+
+	exec, err := reviewexec.New(f.opts)
+	if err != nil {
+		t.Fatalf("reviewexec.New: %v", err)
+	}
+
+	taskID, commit := driveTaskToReviewing(t, f, "T-maxoutref", "wp-maxoutref", "att-maxoutref", defaultWorkerBasis())
+	ctx := context.Background()
+	caller := principal.CallerContext{PrincipalID: "princ_1", ProjectID: f.projectID}
+	meta := principal.CallMeta{ProjectID: f.projectID}
+	cand := principal.CandidateRef{TaskID: taskID, AttemptID: "att-maxoutref", Commit: commit}
 
 	opRef, err := exec.Review(ctx, caller, meta, cand, []string{"correctness"})
 	if err != nil {

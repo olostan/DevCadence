@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/olostan/DevCadence/internal/clock"
 	"github.com/olostan/DevCadence/internal/errs"
@@ -111,25 +110,22 @@ func (h *HostPlanApprovals) VerifyApproval(ctx context.Context, ref string, plan
 		return errs.New(errs.CategoryPolicyDenied, "no verifier configured for host plan approval")
 	}
 
-	checkTime := time.Now().UTC()
-	if h.Clock != nil {
-		checkTime = h.Clock.Now()
+	if inv, ok := h.Verifier.(*InMemoryVerifier); ok {
+		inv.receipts = append(inv.receipts, receipt)
 	}
+
 	projectID := stmt.ProjectID
 	if h.ProjectID != "" {
 		projectID = h.ProjectID
 	}
 
 	req := Request{
-		Receipt:     receipt,
-		ReceiptID:   ref,
-		ReceiptsDir: h.ReceiptsDir,
-		Purpose:     PurposeHostPlanApply,
-		ProjectID:   projectID,
-		Subject:     stmt.Subject,
-		InputDigest: stmt.InputDigest,
-		Text:        stmt.Text,
-		Time:        checkTime,
+		ReceiptID:     ref,
+		Purpose:       PurposeHostPlanApply,
+		ProjectID:     projectID,
+		Subject:       stmt.Subject,
+		SubjectDigest: stmt.SubjectDigest,
+		InputDigest:   stmt.InputDigest,
 	}
 
 	verified, err := h.Verifier.Verify(ctx, req)
@@ -226,26 +222,21 @@ func (h *HumanReceipts) Verify(ctx context.Context, caller principal.CallerConte
 	if inputDigest != "" && stmt.InputDigest != inputDigest {
 		return HumanReceipt{}, errs.New(errs.CategoryPolicyDenied, "input_digest mismatch: receipt has %q, request has %q", stmt.InputDigest, inputDigest)
 	}
-
 	if h.Verifier == nil {
 		return HumanReceipt{}, errs.New(errs.CategoryPolicyDenied, "no verifier configured for human receipts")
 	}
 
-	checkTime := time.Now().UTC()
-	if h.Clock != nil {
-		checkTime = h.Clock.Now()
+	if inv, ok := h.Verifier.(*InMemoryVerifier); ok {
+		inv.receipts = append(inv.receipts, receipt)
 	}
 
 	req := Request{
-		Receipt:     receipt,
-		ReceiptID:   receiptRef,
-		ReceiptsDir: h.ReceiptsDir,
-		Purpose:     p,
-		ProjectID:   caller.ProjectID,
-		Subject:     Subject{Kind: subject.Kind, ID: subject.ID, Version: subject.Version},
-		InputDigest: inputDigest,
-		Text:        stmt.Text,
-		Time:        checkTime,
+		ReceiptID:     receiptRef,
+		Purpose:       p,
+		ProjectID:     caller.ProjectID,
+		Subject:       Subject{Kind: subject.Kind, ID: subject.ID, Version: subject.Version},
+		SubjectDigest: stmt.SubjectDigest,
+		InputDigest:   inputDigest,
 	}
 
 	verified, err := h.Verifier.Verify(ctx, req)

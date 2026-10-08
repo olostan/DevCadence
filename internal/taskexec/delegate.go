@@ -410,12 +410,13 @@ func (e *Executor) runDelegate(
 
 	// 4. Session Start
 	sessionConfig := drivers.SessionConfig{
-		SessionID:     attemptID + "-s1",
-		ModelID:       ep.ModelID,
-		SystemPrompt:  compiled.Projection.SystemPrompt,
-		Tools:         toolDefs,
-		WorktreeScope: scope,
-		Mediator:      mediator,
+		SessionID:              attemptID + "-s1",
+		ModelID:                ep.ModelID,
+		SystemPrompt:           compiled.Projection.SystemPrompt,
+		Tools:                  toolDefs,
+		WorktreeScope:          scope,
+		Mediator:               mediator,
+		MaxOutputTokensPerCall: ep.Limits.MaxOutputTokensPerCall,
 	}
 
 	session, err := md.StartSession(ctx, sessionConfig)

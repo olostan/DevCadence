@@ -303,13 +303,14 @@ type DriverEvent struct {
 
 // SessionConfig configures the initialization or resumption of a session.
 type SessionConfig struct {
-	SessionID     string            `json:"session_id"`
-	ModelID       string            `json:"model_id"`
-	SystemPrompt  string            `json:"system_prompt,omitempty"`
-	Tools         []ToolDefinition  `json:"tools,omitempty"`
-	WorktreeScope *tools.Scope      `json:"worktree_scope,omitempty"`
-	Mediator      ToolMediator      `json:"-"`
-	Options       map[string]string `json:"options,omitempty"`
+	SessionID              string            `json:"session_id"`
+	ModelID                string            `json:"model_id"`
+	SystemPrompt           string            `json:"system_prompt,omitempty"`
+	Tools                  []ToolDefinition  `json:"tools,omitempty"`
+	WorktreeScope          *tools.Scope      `json:"worktree_scope,omitempty"`
+	Mediator               ToolMediator      `json:"-"`
+	Options                map[string]string `json:"options,omitempty"`
+	MaxOutputTokensPerCall int64             `json:"max_output_tokens_per_call,omitempty"`
 }
 
 // Validate checks the basic validity of a SessionConfig.
@@ -320,6 +321,9 @@ func (cfg SessionConfig) Validate() error {
 	}
 	if cfg.ModelID == "" {
 		return errs.New(errs.CategoryInvalidArgument, "%s: model_id cannot be empty", kind)
+	}
+	if cfg.MaxOutputTokensPerCall < 0 {
+		return errs.New(errs.CategoryInvalidArgument, "%s: max_output_tokens_per_call cannot be negative: %d", kind, cfg.MaxOutputTokensPerCall)
 	}
 	return nil
 }

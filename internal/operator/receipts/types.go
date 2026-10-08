@@ -3,6 +3,7 @@ package receipts
 import (
 	"crypto/ed25519"
 	"encoding/base64"
+	"regexp"
 	"strings"
 	"time"
 	"unicode"
@@ -182,14 +183,14 @@ type Statement struct {
 	NotAfter      time.Time `json:"not_after"`
 }
 
-// Validate enforces all fields, time ranges (NotAfter.After(IssuedAt)), and ReceiptID prefix rcpt_.
+// Validate enforces all fields, time ranges (NotAfter.After(IssuedAt)), and ReceiptID pattern.
 func (s Statement) Validate() error {
 	const kind = "Statement"
 	if s.Version != "1.0" {
 		return errs.New(errs.CategoryInvalidArgument, "%s: version must be 1.0, got %q", kind, s.Version)
 	}
-	if !strings.HasPrefix(s.ReceiptID, "rcpt_") || len(strings.TrimSpace(s.ReceiptID)) <= 5 {
-		return errs.New(errs.CategoryInvalidArgument, "%s: receipt_id must start with rcpt_, got %q", kind, s.ReceiptID)
+	if !IsValidReceiptID(s.ReceiptID) {
+		return errs.New(errs.CategoryInvalidArgument, "%s: receipt_id must match ^rcpt_[0-9a-z]{26}$, got %q", kind, s.ReceiptID)
 	}
 	if !s.Purpose.Valid() {
 		return errs.New(errs.CategoryInvalidArgument, "%s: invalid purpose %q", kind, string(s.Purpose))
@@ -329,18 +330,20 @@ func (r Receipt) Validate() error {
 	return nil
 }
 
+var receiptIDPattern = regexp.MustCompile(`^rcpt_[0-9a-z]{26}$`)
+
+func IsValidReceiptID(id string) bool {
+	return receiptIDPattern.MatchString(id)
+}
+
 // Request bundles verification arguments.
 type Request struct {
-	Receipt       Receipt   `json:"receipt"`
-	ReceiptID     string    `json:"receipt_id,omitempty"`
-	ReceiptsDir   string    `json:"receipts_dir,omitempty"`
-	Purpose       Purpose   `json:"purpose"`
-	ProjectID     string    `json:"project_id"`
-	Subject       Subject   `json:"subject"`
-	SubjectDigest string    `json:"subject_digest,omitempty"`
-	InputDigest   string    `json:"input_digest"`
-	Text          string    `json:"text"`
-	Time          time.Time `json:"time"`
+	ReceiptID     string  `json:"receipt_id,omitempty"`
+	Purpose       Purpose `json:"purpose"`
+	ProjectID     string  `json:"project_id"`
+	Subject       Subject `json:"subject"`
+	SubjectDigest string  `json:"subject_digest"`
+	InputDigest   string  `json:"input_digest,omitempty"`
 }
 
 // Validate checks request completeness.
@@ -355,16 +358,11 @@ func (r Request) Validate() error {
 	if err := r.Subject.Validate(); err != nil {
 		return errs.Wrap(errs.CategoryInvalidArgument, err, "%s: invalid subject", kind)
 	}
-	if r.Time.IsZero() {
-		return errs.New(errs.CategoryInvalidArgument, "%s: time is required", kind)
+	if strings.TrimSpace(r.SubjectDigest) == "" {
+		return errs.New(errs.CategoryInvalidArgument, "%s: subject_digest is required", kind)
 	}
-	if r.ReceiptID != "" && (!strings.HasPrefix(r.ReceiptID, "rcpt_") || len(strings.TrimSpace(r.ReceiptID)) <= 5) {
-		return errs.New(errs.CategoryInvalidArgument, "%s: receipt_id must start with rcpt_, got %q", kind, r.ReceiptID)
-	}
-	if r.ReceiptID == "" && r.Receipt.Statement.ReceiptID != "" {
-		if err := r.Receipt.Validate(); err != nil {
-			return err
-		}
+	if r.ReceiptID != "" && !IsValidReceiptID(r.ReceiptID) {
+		return errs.New(errs.CategoryInvalidArgument, "%s: receipt_id must match ^rcpt_[0-9a-z]{26}$, got %q", kind, r.ReceiptID)
 	}
 	return nil
 }

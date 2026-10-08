@@ -89,16 +89,14 @@ func (s *filePolicySource) verify(ctx context.Context, policy ExecutionPolicy, r
 	}
 
 	req := receipts.Request{
-		ReceiptsDir: s.receiptsDir,
-		Purpose:     receipts.PurposeExecutionPolicyActivate,
-		ProjectID:   s.projectID,
+		Purpose:   receipts.PurposeExecutionPolicyActivate,
+		ProjectID: s.projectID,
 		Subject: receipts.Subject{
 			Kind:    "ExecutionPolicy",
 			ID:      policy.PolicyID,
 			Version: policy.Revision,
 		},
 		SubjectDigest: s.pinnedDigest,
-		Time:          time.Now().UTC(),
 	}
 
 	verified, err := s.verifier.Verify(ctx, req)

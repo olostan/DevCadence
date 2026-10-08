@@ -325,7 +325,7 @@ func TestHostPlanApprovals_Adapter(t *testing.T) {
 
 	now := time.Now().UTC()
 	text := "Approve host plan"
-	receiptID := "rcpt_01j7hostplan1234567890abcdef"
+	receiptID := "rcpt_01j7hostplan1234567890abcd"
 
 	stmt := Statement{
 		Version:       "1.0",
@@ -497,7 +497,7 @@ func TestHumanReceipts_Adapter(t *testing.T) {
 
 	now := time.Now().UTC()
 	text := "Confirm product decision D-101"
-	receiptID := "rcpt_01j7decision1234567890abcdef"
+	receiptID := "rcpt_01j7decision1234567890abcd"
 	projectID := "project-alpha"
 	inputDigest := "sha256:input1234567890abcdef"
 

@@ -540,6 +540,7 @@ func (e *Executor) reviewDimension(
 		Preconditions: []controlplane.BatchGuard{
 			intentAbsentGuard{
 				taskID:          task.ID,
+				attemptID:       candidate.AttemptID,
 				candidateCommit: candidate.Commit,
 				intentID:        intentID,
 			},
@@ -756,12 +757,13 @@ func (e *Executor) runReviewSession(
 	toolDefs := setupReviewerTools(mediator, scope, e.opts.Runner)
 
 	sessionConfig := drivers.SessionConfig{
-		SessionID:     invocationID + "-s1",
-		ModelID:       ep.ModelID,
-		SystemPrompt:  compiled.Projection.SystemPrompt,
-		Tools:         toolDefs,
-		WorktreeScope: scope,
-		Mediator:      mediator,
+		SessionID:              invocationID + "-s1",
+		ModelID:                ep.ModelID,
+		SystemPrompt:           compiled.Projection.SystemPrompt,
+		Tools:                  toolDefs,
+		WorktreeScope:          scope,
+		Mediator:               mediator,
+		MaxOutputTokensPerCall: ep.Limits.MaxOutputTokensPerCall,
 	}
 
 	session, err := md.StartSession(ctx, sessionConfig)

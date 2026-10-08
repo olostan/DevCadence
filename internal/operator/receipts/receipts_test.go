@@ -71,7 +71,7 @@ func validStatement(pub ed25519.PublicKey, anchorID, humanActorID string) Statem
 	text := "Approve host execution plan plan-123"
 	return Statement{
 		Version:       "1.0",
-		ReceiptID:     "rcpt_01j7abc1234567890abcdef",
+		ReceiptID:     "rcpt_01j7abc1234567890abcdef123",
 		Purpose:       PurposeHostPlanApply,
 		Use:           UseOnce,
 		ProjectID:     "test-project",
@@ -186,14 +186,15 @@ func TestVerify_Success(t *testing.T) {
 		t.Fatalf("Sign: %v", err)
 	}
 
+	v.receipts = append(v.receipts, receipt)
+
 	req := Request{
-		Receipt:     receipt,
-		Purpose:     stmt.Purpose,
-		ProjectID:   stmt.ProjectID,
-		Subject:     stmt.Subject,
-		InputDigest: stmt.InputDigest,
-		Text:        stmt.Text,
-		Time:        time.Now().UTC(),
+		ReceiptID:     stmt.ReceiptID,
+		Purpose:       stmt.Purpose,
+		ProjectID:     stmt.ProjectID,
+		Subject:       stmt.Subject,
+		SubjectDigest: stmt.SubjectDigest,
+		InputDigest:   stmt.InputDigest,
 	}
 
 	verified, err := v.Verify(context.Background(), req)
@@ -215,10 +216,6 @@ func TestVerify_SignatureForgeryRejection(t *testing.T) {
 	actorID := "operator-alice"
 
 	anchor := testAnchor(pub, anchorID, actorID)
-	v, err := NewVerifier([]TrustAnchor{anchor})
-	if err != nil {
-		t.Fatalf("NewVerifier: %v", err)
-	}
 
 	stmt := validStatement(pub, anchorID, actorID)
 
@@ -227,16 +224,19 @@ func TestVerify_SignatureForgeryRejection(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Sign: %v", err)
 		}
-		req := Request{
-			Receipt:     forgedReceipt,
-			Purpose:     stmt.Purpose,
-			ProjectID:   stmt.ProjectID,
-			Subject:     stmt.Subject,
-			InputDigest: stmt.InputDigest,
-			Text:        stmt.Text,
-			Time:        time.Now().UTC(),
+		vf, err := NewVerifierWithReceipts([]TrustAnchor{anchor}, []Receipt{forgedReceipt})
+		if err != nil {
+			t.Fatalf("NewVerifierWithReceipts: %v", err)
 		}
-		_, err = v.Verify(context.Background(), req)
+		req := Request{
+			ReceiptID:     stmt.ReceiptID,
+			Purpose:       stmt.Purpose,
+			ProjectID:     stmt.ProjectID,
+			Subject:       stmt.Subject,
+			SubjectDigest: stmt.SubjectDigest,
+			InputDigest:   stmt.InputDigest,
+		}
+		_, err = vf.Verify(context.Background(), req)
 		if err == nil {
 			t.Fatal("expected failure on forged signature, got nil")
 		}
@@ -256,16 +256,19 @@ func TestVerify_SignatureForgeryRejection(t *testing.T) {
 			Statement: stmt,
 			Signature: base64.StdEncoding.EncodeToString(rawSig),
 		}
-		req := Request{
-			Receipt:     corruptedReceipt,
-			Purpose:     stmt.Purpose,
-			ProjectID:   stmt.ProjectID,
-			Subject:     stmt.Subject,
-			InputDigest: stmt.InputDigest,
-			Text:        stmt.Text,
-			Time:        time.Now().UTC(),
+		vf, err := NewVerifierWithReceipts([]TrustAnchor{anchor}, []Receipt{corruptedReceipt})
+		if err != nil {
+			t.Fatalf("NewVerifierWithReceipts: %v", err)
 		}
-		_, err = v.Verify(context.Background(), req)
+		req := Request{
+			ReceiptID:     stmt.ReceiptID,
+			Purpose:       stmt.Purpose,
+			ProjectID:     stmt.ProjectID,
+			Subject:       stmt.Subject,
+			SubjectDigest: stmt.SubjectDigest,
+			InputDigest:   stmt.InputDigest,
+		}
+		_, err = vf.Verify(context.Background(), req)
 		if err == nil {
 			t.Fatal("expected failure on corrupted signature, got nil")
 		}
@@ -296,14 +299,15 @@ func TestVerify_ExpiredReceiptRejection(t *testing.T) {
 		t.Fatalf("Sign: %v", err)
 	}
 
+	v.receipts = append(v.receipts, receipt)
+
 	req := Request{
-		Receipt:     receipt,
-		Purpose:     stmt.Purpose,
-		ProjectID:   stmt.ProjectID,
-		Subject:     stmt.Subject,
-		InputDigest: stmt.InputDigest,
-		Text:        stmt.Text,
-		Time:        time.Now().UTC(),
+		ReceiptID:     stmt.ReceiptID,
+		Purpose:       stmt.Purpose,
+		ProjectID:     stmt.ProjectID,
+		Subject:       stmt.Subject,
+		SubjectDigest: stmt.SubjectDigest,
+		InputDigest:   stmt.InputDigest,
 	}
 
 	_, err = v.Verify(context.Background(), req)
@@ -339,14 +343,15 @@ func TestVerify_ExpiredAnchorRejection(t *testing.T) {
 		t.Fatalf("Sign: %v", err)
 	}
 
+	v.receipts = append(v.receipts, receipt)
+
 	req := Request{
-		Receipt:     receipt,
-		Purpose:     stmt.Purpose,
-		ProjectID:   stmt.ProjectID,
-		Subject:     stmt.Subject,
-		InputDigest: stmt.InputDigest,
-		Text:        stmt.Text,
-		Time:        time.Now().UTC(),
+		ReceiptID:     stmt.ReceiptID,
+		Purpose:       stmt.Purpose,
+		ProjectID:     stmt.ProjectID,
+		Subject:       stmt.Subject,
+		SubjectDigest: stmt.SubjectDigest,
+		InputDigest:   stmt.InputDigest,
 	}
 
 	_, err = v.Verify(context.Background(), req)
@@ -383,14 +388,15 @@ func TestVerify_RevokedReceiptRejection(t *testing.T) {
 		t.Fatalf("NewVerifier: %v", err)
 	}
 
+	v.receipts = append(v.receipts, receipt)
+
 	req := Request{
-		Receipt:     receipt,
-		Purpose:     stmt.Purpose,
-		ProjectID:   stmt.ProjectID,
-		Subject:     stmt.Subject,
-		InputDigest: stmt.InputDigest,
-		Text:        stmt.Text,
-		Time:        time.Now().UTC(),
+		ReceiptID:     stmt.ReceiptID,
+		Purpose:       stmt.Purpose,
+		ProjectID:     stmt.ProjectID,
+		Subject:       stmt.Subject,
+		SubjectDigest: stmt.SubjectDigest,
+		InputDigest:   stmt.InputDigest,
 	}
 
 	_, err = v.Verify(context.Background(), req)
@@ -408,10 +414,6 @@ func TestVerify_PurposeSubjectProjectMismatchRejection(t *testing.T) {
 	actorID := "operator-alice"
 
 	anchor := testAnchor(pub, anchorID, actorID)
-	v, err := NewVerifier([]TrustAnchor{anchor})
-	if err != nil {
-		t.Fatalf("NewVerifier: %v", err)
-	}
 
 	stmt := validStatement(pub, anchorID, actorID)
 	receipt, err := stmt.Sign(priv)
@@ -465,27 +467,24 @@ func TestVerify_PurposeSubjectProjectMismatchRejection(t *testing.T) {
 				r.InputDigest = "different_digest"
 			},
 		},
-		{
-			name: "text mismatch",
-			mut: func(r *Request) {
-				r.Text = "different text"
-			},
-		},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			vf, err := NewVerifierWithReceipts([]TrustAnchor{anchor}, []Receipt{receipt})
+			if err != nil {
+				t.Fatalf("NewVerifierWithReceipts: %v", err)
+			}
 			req := Request{
-				Receipt:     receipt,
-				Purpose:     stmt.Purpose,
-				ProjectID:   stmt.ProjectID,
-				Subject:     stmt.Subject,
-				InputDigest: stmt.InputDigest,
-				Text:        stmt.Text,
-				Time:        time.Now().UTC(),
+				ReceiptID:     stmt.ReceiptID,
+				Purpose:       stmt.Purpose,
+				ProjectID:     stmt.ProjectID,
+				Subject:       stmt.Subject,
+				SubjectDigest: stmt.SubjectDigest,
+				InputDigest:   stmt.InputDigest,
 			}
 			tc.mut(&req)
-			_, err := v.Verify(context.Background(), req)
+			_, err = vf.Verify(context.Background(), req)
 			if err == nil {
 				t.Fatalf("expected verification failure for %s, got nil", tc.name)
 			}
@@ -514,14 +513,15 @@ func TestVerify_AnchorHumanActorIDMismatchRejection(t *testing.T) {
 		t.Fatalf("Sign: %v", err)
 	}
 
+	v.receipts = append(v.receipts, receipt)
+
 	req := Request{
-		Receipt:     receipt,
-		Purpose:     stmt.Purpose,
-		ProjectID:   stmt.ProjectID,
-		Subject:     stmt.Subject,
-		InputDigest: stmt.InputDigest,
-		Text:        stmt.Text,
-		Time:        time.Now().UTC(),
+		ReceiptID:     stmt.ReceiptID,
+		Purpose:       stmt.Purpose,
+		ProjectID:     stmt.ProjectID,
+		Subject:       stmt.Subject,
+		SubjectDigest: stmt.SubjectDigest,
+		InputDigest:   stmt.InputDigest,
 	}
 
 	_, err = v.Verify(context.Background(), req)
@@ -552,14 +552,15 @@ func TestConsumeOnce_GrantReceiptRejection(t *testing.T) {
 		t.Fatalf("Sign: %v", err)
 	}
 
+	v.receipts = append(v.receipts, receipt)
+
 	req := Request{
-		Receipt:     receipt,
-		Purpose:     stmt.Purpose,
-		ProjectID:   stmt.ProjectID,
-		Subject:     stmt.Subject,
-		InputDigest: stmt.InputDigest,
-		Text:        stmt.Text,
-		Time:        time.Now().UTC(),
+		ReceiptID:     stmt.ReceiptID,
+		Purpose:       stmt.Purpose,
+		ProjectID:     stmt.ProjectID,
+		Subject:       stmt.Subject,
+		SubjectDigest: stmt.SubjectDigest,
+		InputDigest:   stmt.InputDigest,
 	}
 
 	verified, err := v.Verify(context.Background(), req)
@@ -593,14 +594,15 @@ func TestConsumeOnce_BatchGuardReplayProtection(t *testing.T) {
 		t.Fatalf("Sign: %v", err)
 	}
 
+	v.receipts = append(v.receipts, receipt)
+
 	req := Request{
-		Receipt:     receipt,
-		Purpose:     stmt.Purpose,
-		ProjectID:   stmt.ProjectID,
-		Subject:     stmt.Subject,
-		InputDigest: stmt.InputDigest,
-		Text:        stmt.Text,
-		Time:        time.Now().UTC(),
+		ReceiptID:     stmt.ReceiptID,
+		Purpose:       stmt.Purpose,
+		ProjectID:     stmt.ProjectID,
+		Subject:       stmt.Subject,
+		SubjectDigest: stmt.SubjectDigest,
+		InputDigest:   stmt.InputDigest,
 	}
 
 	verified, err := v.Verify(context.Background(), req)
@@ -677,14 +679,15 @@ func TestAuditGrantUse_SuccessAndRejection(t *testing.T) {
 		t.Fatalf("Sign: %v", err)
 	}
 
+	v.receipts = append(v.receipts, receipt)
+
 	req := Request{
-		Receipt:     receipt,
-		Purpose:     stmt.Purpose,
-		ProjectID:   stmt.ProjectID,
-		Subject:     stmt.Subject,
-		InputDigest: stmt.InputDigest,
-		Text:        stmt.Text,
-		Time:        time.Now().UTC(),
+		ReceiptID:     stmt.ReceiptID,
+		Purpose:       stmt.Purpose,
+		ProjectID:     stmt.ProjectID,
+		Subject:       stmt.Subject,
+		SubjectDigest: stmt.SubjectDigest,
+		InputDigest:   stmt.InputDigest,
 	}
 
 	verified, err := v.Verify(context.Background(), req)
@@ -716,20 +719,21 @@ func TestAuditGrantUse_SuccessAndRejection(t *testing.T) {
 
 	// Try AuditGrantUse on a UseOnce receipt
 	onceStmt := validStatement(pub, anchorID, actorID)
+	onceStmt.ReceiptID = "rcpt_01once1234567890abcdef1234"
 	onceStmt.Purpose = PurposeHostPlanApply
 	onceStmt.Use = UseOnce
 	onceReceipt, err := onceStmt.Sign(priv)
 	if err != nil {
 		t.Fatalf("Sign: %v", err)
 	}
+	v.receipts = append(v.receipts, onceReceipt)
 	onceReq := Request{
-		Receipt:     onceReceipt,
-		Purpose:     onceStmt.Purpose,
-		ProjectID:   onceStmt.ProjectID,
-		Subject:     onceStmt.Subject,
-		InputDigest: onceStmt.InputDigest,
-		Text:        onceStmt.Text,
-		Time:        time.Now().UTC(),
+		ReceiptID:     onceStmt.ReceiptID,
+		Purpose:       onceStmt.Purpose,
+		ProjectID:     onceStmt.ProjectID,
+		Subject:       onceStmt.Subject,
+		SubjectDigest: onceStmt.SubjectDigest,
+		InputDigest:   onceStmt.InputDigest,
 	}
 	onceVerified, err := v.Verify(context.Background(), onceReq)
 	if err != nil {
@@ -841,7 +845,7 @@ func TestStatementValidation_PurposeTable(t *testing.T) {
 	t.Run("discovery.product_decision requires input digest", func(t *testing.T) {
 		s := Statement{
 			Version:       "1.0",
-			ReceiptID:     "rcpt_01j7abc1234567890abcdef",
+			ReceiptID:     "rcpt_01j7abc1234567890abcdef123",
 			Purpose:       PurposeDiscoveryProductDecision,
 			Use:           UseOnce,
 			ProjectID:     "p1",
@@ -879,7 +883,7 @@ func TestStatementValidation_PurposeTable(t *testing.T) {
 	t.Run("discovery.ledger_resolution forbids input digest", func(t *testing.T) {
 		s := Statement{
 			Version:       "1.0",
-			ReceiptID:     "rcpt_01j7abc1234567890abcdef",
+			ReceiptID:     "rcpt_01j7abc1234567890abcdef123",
 			Purpose:       PurposeDiscoveryLedgerResolution,
 			Use:           UseOnce,
 			ProjectID:     "p1",
@@ -911,7 +915,7 @@ func TestStatementValidation_PurposeTable(t *testing.T) {
 
 		grantStmt := Statement{
 			Version:       "1.0",
-			ReceiptID:     "rcpt_01j7abc1234567890abcdef",
+			ReceiptID:     "rcpt_01j7abc1234567890abcdef123",
 			Purpose:       PurposeAcceptancePolicyActivate,
 			Use:           UseOnce, // acceptance policy requires UseGrant
 			ProjectID:     "p1",
@@ -940,7 +944,7 @@ func TestStatementValidation_PurposeTable(t *testing.T) {
 
 		grantStmt := Statement{
 			Version:       "1.0",
-			ReceiptID:     "rcpt_01j7abc1234567890abcdef",
+			ReceiptID:     "rcpt_01j7abc1234567890abcdef123",
 			Purpose:       PurposeAcceptancePolicyActivate,
 			Use:           UseGrant,
 			ProjectID:     "p1",
@@ -1040,11 +1044,11 @@ func TestFileVerifier_RevokedReceiptAndAnchorRejection(t *testing.T) {
 	}
 
 	req := Request{
-		ReceiptID: stmt.ReceiptID,
-		Purpose:   stmt.Purpose,
-		ProjectID: stmt.ProjectID,
-		Subject:   stmt.Subject,
-		Time:      time.Now().UTC(),
+		ReceiptID:     stmt.ReceiptID,
+		Purpose:       stmt.Purpose,
+		ProjectID:     stmt.ProjectID,
+		Subject:       stmt.Subject,
+		SubjectDigest: stmt.SubjectDigest,
 	}
 
 	// 1. Initially valid
@@ -1118,11 +1122,11 @@ func TestFileVerifier_PinnedAnchorsChangedRejection(t *testing.T) {
 	}
 
 	req := Request{
-		ReceiptID: stmt.ReceiptID,
-		Purpose:   stmt.Purpose,
-		ProjectID: stmt.ProjectID,
-		Subject:   stmt.Subject,
-		Time:      time.Now().UTC(),
+		ReceiptID:     stmt.ReceiptID,
+		Purpose:       stmt.Purpose,
+		ProjectID:     stmt.ProjectID,
+		Subject:       stmt.Subject,
+		SubjectDigest: stmt.SubjectDigest,
 	}
 
 	// Succeeded initially
@@ -1174,16 +1178,17 @@ func TestFileVerifier_MalformedJSONRejection(t *testing.T) {
 	}
 
 	t.Run("malformed receipt json", func(t *testing.T) {
-		badPath := filepath.Join(receiptsDir, "rcpt_broken.json")
+		badID := "rcpt_01broken1234567890abcdef"
+		badPath := filepath.Join(receiptsDir, badID+".json")
 		if err := os.WriteFile(badPath, []byte("NOT_JSON{"), 0o600); err != nil {
 			t.Fatal(err)
 		}
 		req := Request{
-			ReceiptID: "rcpt_broken",
-			Purpose:   stmt.Purpose,
-			ProjectID: stmt.ProjectID,
-			Subject:   stmt.Subject,
-			Time:      time.Now().UTC(),
+			ReceiptID:     badID,
+			Purpose:       stmt.Purpose,
+			ProjectID:     stmt.ProjectID,
+			Subject:       stmt.Subject,
+			SubjectDigest: stmt.SubjectDigest,
 		}
 		_, err := fv.Verify(context.Background(), req)
 		if err == nil {
@@ -1192,22 +1197,25 @@ func TestFileVerifier_MalformedJSONRejection(t *testing.T) {
 	})
 
 	t.Run("unknown fields in receipt json rejected via strict decode", func(t *testing.T) {
+		unknownID := "rcpt_01unknown1234567890abcde"
+		stmtUnknown := stmt
+		stmtUnknown.ReceiptID = unknownID
 		m := map[string]any{
-			"statement": stmt,
+			"statement": stmtUnknown,
 			"signature": receipt.Signature,
 			"injected":  "evil_extra_field",
 		}
 		bytesData, _ := json.Marshal(m)
-		unknownPath := filepath.Join(receiptsDir, "rcpt_unknown.json")
+		unknownPath := filepath.Join(receiptsDir, unknownID+".json")
 		if err := os.WriteFile(unknownPath, bytesData, 0o600); err != nil {
 			t.Fatal(err)
 		}
 		req := Request{
-			ReceiptID: "rcpt_unknown",
-			Purpose:   stmt.Purpose,
-			ProjectID: stmt.ProjectID,
-			Subject:   stmt.Subject,
-			Time:      time.Now().UTC(),
+			ReceiptID:     unknownID,
+			Purpose:       stmt.Purpose,
+			ProjectID:     stmt.ProjectID,
+			Subject:       stmt.Subject,
+			SubjectDigest: stmt.SubjectDigest,
 		}
 		_, err := fv.Verify(context.Background(), req)
 		if err == nil {
@@ -1216,20 +1224,27 @@ func TestFileVerifier_MalformedJSONRejection(t *testing.T) {
 	})
 
 	t.Run("trailing content in receipt json rejected", func(t *testing.T) {
-		rcptBytes, _ := json.Marshal(receipt)
+		trailingID := "rcpt_01trailing1234567890abcdef"
+		stmtTrailing := stmt
+		stmtTrailing.ReceiptID = trailingID
+		rcptTrailing, err := stmtTrailing.Sign(priv)
+		if err != nil {
+			t.Fatal(err)
+		}
+		rcptBytes, _ := json.Marshal(rcptTrailing)
 		rcptBytes = append(rcptBytes, []byte(" trailing_garbage")...)
-		trailingPath := filepath.Join(receiptsDir, "rcpt_trailing.json")
+		trailingPath := filepath.Join(receiptsDir, trailingID+".json")
 		if err := os.WriteFile(trailingPath, rcptBytes, 0o600); err != nil {
 			t.Fatal(err)
 		}
 		req := Request{
-			ReceiptID: "rcpt_trailing",
-			Purpose:   stmt.Purpose,
-			ProjectID: stmt.ProjectID,
-			Subject:   stmt.Subject,
-			Time:      time.Now().UTC(),
+			ReceiptID:     trailingID,
+			Purpose:       stmt.Purpose,
+			ProjectID:     stmt.ProjectID,
+			Subject:       stmt.Subject,
+			SubjectDigest: stmt.SubjectDigest,
 		}
-		_, err := fv.Verify(context.Background(), req)
+		_, err = fv.Verify(context.Background(), req)
 		if err == nil {
 			t.Fatal("expected error on receipt JSON with trailing content")
 		}
@@ -1247,11 +1262,11 @@ func TestFileVerifier_MalformedJSONRejection(t *testing.T) {
 			t.Fatal(err)
 		}
 		req := Request{
-			ReceiptID: stmt.ReceiptID,
-			Purpose:   stmt.Purpose,
-			ProjectID: stmt.ProjectID,
-			Subject:   stmt.Subject,
-			Time:      time.Now().UTC(),
+			ReceiptID:     stmt.ReceiptID,
+			Purpose:       stmt.Purpose,
+			ProjectID:     stmt.ProjectID,
+			Subject:       stmt.Subject,
+			SubjectDigest: stmt.SubjectDigest,
 		}
 		_, err := fv.Verify(context.Background(), req)
 		if err == nil {
@@ -1274,7 +1289,7 @@ func TestFileVerifier_SubjectDiscovery(t *testing.T) {
 
 	// Create older receipt (IssuedAt: now - 15m)
 	olderStmt := validStatement(pub, anchorID, actorID)
-	olderStmt.ReceiptID = "rcpt_01older1234567890abcdef"
+	olderStmt.ReceiptID = "rcpt_01older1234567890abcdef123"
 	olderStmt.IssuedAt = now.Add(-15 * time.Minute)
 	olderStmt.NotAfter = now.Add(40 * time.Minute)
 	olderRcpt, err := olderStmt.Sign(priv)
@@ -1288,7 +1303,7 @@ func TestFileVerifier_SubjectDiscovery(t *testing.T) {
 
 	// Create newer receipt (IssuedAt: now - 2m)
 	newerStmt := validStatement(pub, anchorID, actorID)
-	newerStmt.ReceiptID = "rcpt_02newer1234567890abcdef"
+	newerStmt.ReceiptID = "rcpt_02newer1234567890abcdef123"
 	newerStmt.IssuedAt = now.Add(-2 * time.Minute)
 	newerStmt.NotAfter = now.Add(55 * time.Minute)
 	newerRcpt, err := newerStmt.Sign(priv)
@@ -1307,7 +1322,6 @@ func TestFileVerifier_SubjectDiscovery(t *testing.T) {
 		ProjectID:     olderStmt.ProjectID,
 		Subject:       olderStmt.Subject,
 		SubjectDigest: olderStmt.SubjectDigest,
-		Time:          now,
 	}
 
 	verified, err := fv.Verify(context.Background(), req)
@@ -1316,6 +1330,74 @@ func TestFileVerifier_SubjectDiscovery(t *testing.T) {
 	}
 	if verified.Statement().ReceiptID != newerStmt.ReceiptID {
 		t.Errorf("discovered ReceiptID = %q, want newer receipt %q", verified.Statement().ReceiptID, newerStmt.ReceiptID)
+	}
+}
+
+func TestNewFileVerifier_EmptyTrustedOwnerUIDsRejected(t *testing.T) {
+	_, err := NewFileVerifier(FileOptions{
+		OperatorDir:      t.TempDir(),
+		ReceiptsDir:      t.TempDir(),
+		OperatorUID:      2000,
+		TrustedOwnerUIDs: []uint32{},
+	})
+	if err == nil {
+		t.Fatal("expected error for empty TrustedOwnerUIDs, got nil")
+	}
+	if cat := errs.CategoryOf(err); cat != errs.CategoryInvalidArgument {
+		t.Errorf("category = %v, want CategoryInvalidArgument", cat)
+	}
+}
+
+func TestVerify_VerifierClockDeterminesValidity(t *testing.T) {
+	pub, priv := testKeypair(t)
+	anchorID := "anchor_clock_01"
+	actorID := "operator-alice"
+
+	anchor := testAnchor(pub, anchorID, actorID)
+	// Base time T0
+	t0 := time.Date(2026, 10, 7, 12, 0, 0, 0, time.UTC)
+	mockClock := clock.NewFake(t0, 0)
+
+	v, err := NewVerifier([]TrustAnchor{anchor}, WithClock(mockClock))
+	if err != nil {
+		t.Fatalf("NewVerifier: %v", err)
+	}
+
+	stmt := validStatement(pub, anchorID, actorID)
+	stmt.ReceiptID = "rcpt_01clock1234567890abcdef123"
+	stmt.IssuedAt = t0.Add(-10 * time.Minute)
+	stmt.NotAfter = t0.Add(20 * time.Minute)
+	receipt, err := stmt.Sign(priv)
+	if err != nil {
+		t.Fatalf("Sign: %v", err)
+	}
+	v.receipts = append(v.receipts, receipt)
+
+	req := Request{
+		ReceiptID:     stmt.ReceiptID,
+		Purpose:       stmt.Purpose,
+		ProjectID:     stmt.ProjectID,
+		Subject:       stmt.Subject,
+		SubjectDigest: stmt.SubjectDigest,
+	}
+
+	// 1. Valid at T0
+	verified, err := v.Verify(context.Background(), req)
+	if err != nil {
+		t.Fatalf("expected valid at t0: %v", err)
+	}
+	if !verified.IsValid() {
+		t.Fatal("expected verified.IsValid() = true")
+	}
+
+	// 2. Advance verifier clock past NotAfter (T0 + 25m) -> Expired, regardless of caller
+	mockClock.Advance(25 * time.Minute)
+	_, err = v.Verify(context.Background(), req)
+	if err == nil {
+		t.Fatal("expected expiry rejection when verifier clock advances past NotAfter, got nil")
+	}
+	if cat := errs.CategoryOf(err); cat != errs.CategoryPolicyDenied {
+		t.Errorf("category = %v, want CategoryPolicyDenied", cat)
 	}
 }
 
