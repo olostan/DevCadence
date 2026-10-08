@@ -2,7 +2,6 @@ package receipts
 
 import (
 	"context"
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"runtime"
