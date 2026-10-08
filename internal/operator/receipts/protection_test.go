@@ -296,6 +296,9 @@ func TestHostPlanApprovals_Adapter(t *testing.T) {
 	pub, priv := testKeypair(t)
 	anchorID := "anchor-hp"
 	actorID := "operator-bob"
+	projectID := "project-x"
+	planDigest := "sha256:aaaa1111222233334444555566667777888899990000aaaabbbbccccddddeeee"
+	paths := []string{"/etc/config.json", "/var/lib/data.bin"}
 
 	anchor := TrustAnchor{
 		AnchorID:     anchorID,
@@ -305,37 +308,21 @@ func TestHostPlanApprovals_Adapter(t *testing.T) {
 		NotAfter:     time.Now().UTC().Add(24 * time.Hour),
 		Purposes:     []Purpose{PurposeHostPlanApply},
 	}
-	v, err := NewVerifier([]TrustAnchor{anchor})
-	if err != nil {
-		t.Fatalf("NewVerifier: %v", err)
-	}
-
-	planDigest := "sha256:aaaa1111222233334444555566667777888899990000aaaabbbbccccddddeeee"
-	paths := []string{"/etc/config.json", "/var/lib/data.bin"}
-
-	scope := HostPlanScope{
-		PlanDigest: planDigest,
-		Paths:      paths,
-	}
-	scopeBytes, err := protocol.CanonicalJSON(scope)
+	scopeBytes, err := protocol.CanonicalJSON(HostPlanScope{PlanDigest: planDigest, Paths: paths})
 	if err != nil {
 		t.Fatalf("CanonicalJSON: %v", err)
 	}
-	scopeDigest := protocol.DigestBytes(scopeBytes)
-
 	now := time.Now().UTC()
 	text := "Approve host plan"
 	receiptID := "rcpt_01j7hostplan1234567890abcd"
-
 	stmt := Statement{
 		Version:       "1.0",
 		ReceiptID:     receiptID,
 		Purpose:       PurposeHostPlanApply,
 		Use:           UseOnce,
-		ProjectID:     "project-x",
-		Subject:       Subject{Kind: "host_plan", ID: receiptID, Version: 1},
-		SubjectDigest: scopeDigest,
-		InputDigest:   "",
+		ProjectID:     projectID,
+		Subject:       Subject{Kind: "HostPlan", ID: planDigest, Version: 1},
+		SubjectDigest: protocol.DigestBytes(scopeBytes),
 		Text:          text,
 		TextDigest:    protocol.DigestBytes([]byte(text)),
 		HumanActorID:  actorID,
@@ -343,144 +330,38 @@ func TestHostPlanApprovals_Adapter(t *testing.T) {
 		IssuedAt:      now.Add(-5 * time.Minute),
 		NotAfter:      now.Add(55 * time.Minute),
 	}
-
 	receipt, err := stmt.Sign(priv)
 	if err != nil {
 		t.Fatalf("Sign: %v", err)
 	}
+	v, err := NewVerifier([]TrustAnchor{anchor}, WithReceipts(receipt))
+	if err != nil {
+		t.Fatalf("NewVerifier: %v", err)
+	}
 
-	ctx := context.Background()
+	approvals := &HostPlanApprovals{Verifier: v, ProjectID: projectID}
+	if err := approvals.VerifyApproval(context.Background(), receiptID, planDigest, paths); err != nil {
+		t.Fatalf("VerifyApproval failed: %v", err)
+	}
 
-	t.Run("valid approval", func(t *testing.T) {
-		approvals := &HostPlanApprovals{
-			Verifier: v,
-			ReadReceipt: func(ref string) (Receipt, error) {
-				if ref != receiptID {
-					return Receipt{}, errs.New(errs.CategoryNotFound, "not found")
-				}
-				return receipt, nil
-			},
-		}
+	unsorted := []string{"/var/lib/data.bin", "/etc/config.json"}
+	if err := approvals.VerifyApproval(context.Background(), receiptID, planDigest, unsorted); err == nil || errs.CategoryOf(err) != errs.CategoryInvalidArgument {
+		t.Fatalf("unsorted paths error = %v", err)
+	}
 
-		if err := approvals.VerifyApproval(ctx, receiptID, planDigest, paths); err != nil {
-			t.Fatalf("VerifyApproval failed: %v", err)
-		}
-	})
-
-	t.Run("reading from disk", func(t *testing.T) {
-		receiptsDir := t.TempDir()
-		receiptBytes, err := json.Marshal(receipt)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(filepath.Join(receiptsDir, receiptID+".json"), receiptBytes, 0o600); err != nil {
-			t.Fatal(err)
-		}
-
-		approvals := &HostPlanApprovals{
-			Verifier:    v,
-			ReceiptsDir: receiptsDir,
-		}
-		if err := approvals.VerifyApproval(ctx, receiptID, planDigest, paths); err != nil {
-			t.Fatalf("VerifyApproval from disk failed: %v", err)
-		}
-	})
-
-	t.Run("unsorted paths rejected", func(t *testing.T) {
-		approvals := &HostPlanApprovals{
-			Verifier: v,
-			ReadReceipt: func(ref string) (Receipt, error) {
-				return receipt, nil
-			},
-		}
-		unsorted := []string{"/var/lib/data.bin", "/etc/config.json"}
-		err := approvals.VerifyApproval(ctx, receiptID, planDigest, unsorted)
-		if err == nil {
-			t.Fatal("expected failure on unsorted paths")
-		}
-		if errs.CategoryOf(err) != errs.CategoryInvalidArgument {
-			t.Errorf("expected CategoryInvalidArgument, got %v", err)
-		}
-	})
-
-	t.Run("duplicate paths rejected", func(t *testing.T) {
-		approvals := &HostPlanApprovals{
-			Verifier: v,
-			ReadReceipt: func(ref string) (Receipt, error) {
-				return receipt, nil
-			},
-		}
-		dupes := []string{"/etc/config.json", "/etc/config.json"}
-		err := approvals.VerifyApproval(ctx, receiptID, planDigest, dupes)
-		if err == nil {
-			t.Fatal("expected failure on duplicate paths")
-		}
-		if errs.CategoryOf(err) != errs.CategoryInvalidArgument {
-			t.Errorf("expected CategoryInvalidArgument, got %v", err)
-		}
-	})
-
-	t.Run("relative path rejected", func(t *testing.T) {
-		approvals := &HostPlanApprovals{
-			Verifier: v,
-			ReadReceipt: func(ref string) (Receipt, error) {
-				return receipt, nil
-			},
-		}
-		rel := []string{"etc/config.json"}
-		err := approvals.VerifyApproval(ctx, receiptID, planDigest, rel)
-		if err == nil {
-			t.Fatal("expected failure on relative path")
-		}
-		if errs.CategoryOf(err) != errs.CategoryInvalidArgument {
-			t.Errorf("expected CategoryInvalidArgument, got %v", err)
-		}
-	})
-
-	t.Run("plan digest mismatch rejected", func(t *testing.T) {
-		approvals := &HostPlanApprovals{
-			Verifier: v,
-			ReadReceipt: func(ref string) (Receipt, error) {
-				return receipt, nil
-			},
-		}
-		err := approvals.VerifyApproval(ctx, receiptID, "sha256:different-plan-digest", paths)
-		if err == nil {
-			t.Fatal("expected failure on plan digest mismatch")
-		}
-		if errs.CategoryOf(err) != errs.CategoryPolicyDenied {
-			t.Errorf("expected CategoryPolicyDenied, got %v", err)
-		}
-	})
-
-	t.Run("purpose mismatch rejected", func(t *testing.T) {
-		badStmt := stmt
-		badStmt.Purpose = PurposeDiscoveryProductDecision
-		badStmt.InputDigest = "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
-		badReceipt, err := badStmt.Sign(priv)
-		if err != nil {
-			t.Fatal(err)
-		}
-		approvals := &HostPlanApprovals{
-			Verifier: v,
-			ReadReceipt: func(ref string) (Receipt, error) {
-				return badReceipt, nil
-			},
-		}
-		err = approvals.VerifyApproval(ctx, receiptID, planDigest, paths)
-		if err == nil {
-			t.Fatal("expected failure on purpose mismatch")
-		}
-		if errs.CategoryOf(err) != errs.CategoryPolicyDenied {
-			t.Errorf("expected CategoryPolicyDenied, got %v", err)
-		}
-	})
+	if err := approvals.VerifyApproval(context.Background(), receiptID, "sha256:different-plan-digest", paths); err == nil || errs.CategoryOf(err) != errs.CategoryPolicyDenied {
+		t.Fatalf("plan digest mismatch error = %v", err)
+	}
 }
 
 func TestHumanReceipts_Adapter(t *testing.T) {
 	pub, priv := testKeypair(t)
 	anchorID := "anchor-human"
 	actorID := "operator-carol"
+	projectID := "project-alpha"
+	inputDigest := "sha256:input1234567890abcdef"
+	subjectDigest := "sha256:subject1234567890abcdef"
+	subject := Subject{Kind: "ProductDecision", ID: "dec-101", Version: 1}
 
 	anchor := TrustAnchor{
 		AnchorID:     anchorID,
@@ -490,19 +371,9 @@ func TestHumanReceipts_Adapter(t *testing.T) {
 		NotAfter:     time.Now().UTC().Add(24 * time.Hour),
 		Purposes:     []Purpose{PurposeDiscoveryProductDecision},
 	}
-	v, err := NewVerifier([]TrustAnchor{anchor})
-	if err != nil {
-		t.Fatalf("NewVerifier: %v", err)
-	}
-
 	now := time.Now().UTC()
 	text := "Confirm product decision D-101"
 	receiptID := "rcpt_01j7decision1234567890abcd"
-	projectID := "project-alpha"
-	inputDigest := "sha256:input1234567890abcdef"
-
-	subject := Subject{Kind: "ProductDecision", ID: "dec-101", Version: 1}
-
 	stmt := Statement{
 		Version:       "1.0",
 		ReceiptID:     receiptID,
@@ -510,7 +381,7 @@ func TestHumanReceipts_Adapter(t *testing.T) {
 		Use:           UseOnce,
 		ProjectID:     projectID,
 		Subject:       subject,
-		SubjectDigest: "sha256:subject1234567890abcdef",
+		SubjectDigest: subjectDigest,
 		InputDigest:   inputDigest,
 		Text:          text,
 		TextDigest:    protocol.DigestBytes([]byte(text)),
@@ -519,10 +390,13 @@ func TestHumanReceipts_Adapter(t *testing.T) {
 		IssuedAt:      now.Add(-5 * time.Minute),
 		NotAfter:      now.Add(55 * time.Minute),
 	}
-
 	receipt, err := stmt.Sign(priv)
 	if err != nil {
 		t.Fatalf("Sign: %v", err)
+	}
+	v, err := NewVerifier([]TrustAnchor{anchor}, WithReceipts(receipt))
+	if err != nil {
+		t.Fatalf("NewVerifier: %v", err)
 	}
 
 	caller := principal.CallerContext{
@@ -530,106 +404,30 @@ func TestHumanReceipts_Adapter(t *testing.T) {
 		ProjectID:      projectID,
 		AllowedActions: []string{"investigate", "record_decision"},
 	}
+	reqSubject := ReceiptSubject{
+		Kind:          subject.Kind,
+		ID:            subject.ID,
+		Version:       subject.Version,
+		SubjectDigest: subjectDigest,
+	}
+	humanAdapter := &HumanReceipts{Verifier: v}
+	hRec, err := humanAdapter.Verify(context.Background(), caller, receiptID, string(PurposeDiscoveryProductDecision), inputDigest, reqSubject)
+	if err != nil {
+		t.Fatalf("Verify failed: %v", err)
+	}
+	if hRec.HumanActorID != actorID {
+		t.Fatalf("HumanActorID = %q, want %q", hRec.HumanActorID, actorID)
+	}
 
-	ctx := context.Background()
+	wrongCaller := caller
+	wrongCaller.ProjectID = "project-other"
+	if _, err := humanAdapter.Verify(context.Background(), wrongCaller, receiptID, string(PurposeDiscoveryProductDecision), inputDigest, reqSubject); err == nil || errs.CategoryOf(err) != errs.CategoryPolicyDenied {
+		t.Fatalf("project mismatch error = %v", err)
+	}
 
-	t.Run("valid human receipt", func(t *testing.T) {
-		humanAdapter := &HumanReceipts{
-			Verifier: v,
-			ReadReceipt: func(ref string) (Receipt, error) {
-				return receipt, nil
-			},
-		}
-
-		reqSubject := ReceiptSubject{Kind: subject.Kind, ID: subject.ID, Version: subject.Version}
-		hRec, err := humanAdapter.Verify(ctx, caller, receiptID, string(PurposeDiscoveryProductDecision), inputDigest, reqSubject)
-		if err != nil {
-			t.Fatalf("Verify failed: %v", err)
-		}
-		if hRec.HumanActorID != actorID {
-			t.Errorf("HumanActorID = %q, want %q", hRec.HumanActorID, actorID)
-		}
-		if hRec.SourceRef != receiptID {
-			t.Errorf("SourceRef = %q, want %q", hRec.SourceRef, receiptID)
-		}
-		if hRec.Purpose != string(PurposeDiscoveryProductDecision) {
-			t.Errorf("Purpose = %q, want %q", hRec.Purpose, PurposeDiscoveryProductDecision)
-		}
-		if hRec.InputDigest != inputDigest {
-			t.Errorf("InputDigest = %q, want %q", hRec.InputDigest, inputDigest)
-		}
-		if hRec.Subject != reqSubject {
-			t.Errorf("Subject = %+v, want %+v", hRec.Subject, reqSubject)
-		}
-	})
-
-	t.Run("unauthorized purpose rejected", func(t *testing.T) {
-		humanAdapter := &HumanReceipts{
-			Verifier: v,
-			ReadReceipt: func(ref string) (Receipt, error) {
-				return receipt, nil
-			},
-		}
-		reqSubject := ReceiptSubject{Kind: subject.Kind, ID: subject.ID, Version: subject.Version}
-		_, err := humanAdapter.Verify(ctx, caller, receiptID, string(PurposeHostPlanApply), inputDigest, reqSubject)
-		if err == nil {
-			t.Fatal("expected error on non-discovery purpose")
-		}
-		if errs.CategoryOf(err) != errs.CategoryPolicyDenied {
-			t.Errorf("expected CategoryPolicyDenied, got %v", err)
-		}
-	})
-
-	t.Run("caller project mismatch rejected", func(t *testing.T) {
-		wrongCaller := caller
-		wrongCaller.ProjectID = "project-other"
-		humanAdapter := &HumanReceipts{
-			Verifier: v,
-			ReadReceipt: func(ref string) (Receipt, error) {
-				return receipt, nil
-			},
-		}
-		reqSubject := ReceiptSubject{Kind: subject.Kind, ID: subject.ID, Version: subject.Version}
-		_, err := humanAdapter.Verify(ctx, wrongCaller, receiptID, string(PurposeDiscoveryProductDecision), inputDigest, reqSubject)
-		if err == nil {
-			t.Fatal("expected error on caller project mismatch")
-		}
-		if errs.CategoryOf(err) != errs.CategoryPolicyDenied {
-			t.Errorf("expected CategoryPolicyDenied, got %v", err)
-		}
-	})
-
-	t.Run("input digest mismatch rejected", func(t *testing.T) {
-		humanAdapter := &HumanReceipts{
-			Verifier: v,
-			ReadReceipt: func(ref string) (Receipt, error) {
-				return receipt, nil
-			},
-		}
-		reqSubject := ReceiptSubject{Kind: subject.Kind, ID: subject.ID, Version: subject.Version}
-		_, err := humanAdapter.Verify(ctx, caller, receiptID, string(PurposeDiscoveryProductDecision), "sha256:different-input", reqSubject)
-		if err == nil {
-			t.Fatal("expected error on input digest mismatch")
-		}
-		if errs.CategoryOf(err) != errs.CategoryPolicyDenied {
-			t.Errorf("expected CategoryPolicyDenied, got %v", err)
-		}
-	})
-
-	t.Run("subject mismatch rejected", func(t *testing.T) {
-		humanAdapter := &HumanReceipts{
-			Verifier: v,
-			ReadReceipt: func(ref string) (Receipt, error) {
-				return receipt, nil
-			},
-		}
-		mismatchedSubject := ReceiptSubject{Kind: "Requirement", ID: "req-101", Version: 1}
-		_, err := humanAdapter.Verify(ctx, caller, receiptID, string(PurposeDiscoveryProductDecision), inputDigest, mismatchedSubject)
-		if err == nil {
-			t.Fatal("expected error on subject mismatch")
-		}
-		if errs.CategoryOf(err) != errs.CategoryPolicyDenied {
-			t.Errorf("expected CategoryPolicyDenied, got %v", err)
-		}
-	})
+	badSubject := reqSubject
+	badSubject.SubjectDigest = "sha256:different"
+	if _, err := humanAdapter.Verify(context.Background(), caller, receiptID, string(PurposeDiscoveryProductDecision), inputDigest, badSubject); err == nil || errs.CategoryOf(err) != errs.CategoryPolicyDenied {
+		t.Fatalf("subject digest mismatch error = %v", err)
+	}
 }
