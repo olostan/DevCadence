@@ -1,0 +1,670 @@
+package verifier
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"os"
+	"path"
+	"path/filepath"
+	"regexp"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/olostan/DevCadence/internal/actors"
+	"github.com/olostan/DevCadence/internal/benchmark/empirical"
+	"github.com/olostan/DevCadence/internal/clock"
+	"github.com/olostan/DevCadence/internal/errs"
+	"github.com/olostan/DevCadence/internal/ids"
+	"github.com/olostan/DevCadence/internal/process"
+	"github.com/olostan/DevCadence/internal/protocol"
+	"github.com/olostan/DevCadence/internal/worktrees"
+)
+
+// Verifier implements empirical.IndependentVerifier (WP-M5-R3 Part B).
+type Verifier struct {
+	opts Options
+}
+
+var _ empirical.IndependentVerifier = (*Verifier)(nil)
+
+// New constructs an IndependentVerifier with injected dependencies.
+func New(opts Options) (*Verifier, error) {
+	if opts.Worktrees == nil {
+		return nil, errs.New(errs.CategoryInvalidArgument, "verifier: worktrees manager is required")
+	}
+	if opts.Repositories == nil {
+		return nil, errs.New(errs.CategoryInvalidArgument, "verifier: repositories provider is required")
+	}
+	if opts.Runner == nil {
+		opts.Runner = process.NewRunner()
+	}
+	if opts.BuildInfo == nil {
+		opts.BuildInfo = DefaultBuildInfoSource()
+	}
+	if opts.Clock == nil {
+		opts.Clock = clock.System()
+	}
+	if opts.IDs == nil {
+		opts.IDs = ids.NewULIDSource()
+	}
+	if opts.ScratchDir == "" {
+		opts.ScratchDir = filepath.Join(os.TempDir(), "devcadence-verifier")
+	}
+	if err := os.MkdirAll(opts.ScratchDir, 0700); err != nil {
+		return nil, errs.Wrap(errs.CategoryInternal, err, "verifier: create scratch directory")
+	}
+	return &Verifier{opts: opts}, nil
+}
+
+// Verify implements empirical.IndependentVerifier.Verify following the exact 9-step algorithm.
+func (v *Verifier) Verify(
+	ctx context.Context,
+	plan empirical.CampaignPlan,
+	run empirical.PlannedRun,
+	evidence empirical.RunEvidence,
+	resolver empirical.ArtifactResolver,
+) (empirical.VerifiedOutcome, error) {
+	if err := ctx.Err(); err != nil {
+		return empirical.VerifiedOutcome{}, err
+	}
+
+	// 1. Preconditions.
+	if evidence.Status != empirical.StatusCompleted {
+		return empirical.VerifiedOutcome{}, errs.New(errs.CategoryInvalidArgument,
+			"run %q is not completed (status: %q)", run.RunID, evidence.Status)
+	}
+	if run.RunID != evidence.RunID || run.TaskID != evidence.TaskID || run.TaskDigest != evidence.TaskDigest ||
+		run.Seed != evidence.Seed || run.Strategy != evidence.Strategy || run.Repetition != evidence.Repetition ||
+		run.Endpoint != evidence.Endpoint {
+		return empirical.VerifiedOutcome{}, errs.New(errs.CategoryInvalidArgument,
+			"run %q identity or endpoint binding mismatch between plan and evidence", run.RunID)
+	}
+
+	// 2. Resolve and digest-check artifacts.
+	res := resolver
+	if res == nil {
+		res = v.opts.Resolver
+	}
+	if res == nil {
+		return empirical.VerifiedOutcome{}, errs.New(errs.CategoryInvalidArgument, "no artifact resolver provided")
+	}
+
+	rcptBytes, err := fetchArtifact(ctx, res, evidence.VerifierReceiptRef, evidence.VerifierReceiptDigest)
+	if err != nil {
+		return empirical.VerifiedOutcome{}, errs.Wrap(errs.CategoryInternal, err, "receipt unavailable")
+	}
+	var receipt VerifierReceipt
+	decR := json.NewDecoder(bytes.NewReader(rcptBytes))
+	decR.DisallowUnknownFields()
+	if err := decR.Decode(&receipt); err != nil {
+		return empirical.VerifiedOutcome{}, errs.Wrap(errs.CategoryInvalidArgument, err, "invalid receipt json")
+	}
+	if _, err := decR.Token(); err != io.EOF {
+		return empirical.VerifiedOutcome{}, errs.New(errs.CategoryInvalidArgument, "trailing tokens in receipt")
+	}
+
+	sessBytes, err := fetchArtifact(ctx, res, evidence.SessionEvidenceRef, evidence.SessionEvidenceDigest)
+	if err != nil {
+		return empirical.VerifiedOutcome{}, errs.Wrap(errs.CategoryInternal, err, "session evidence unavailable")
+	}
+	var sess empirical.SessionEvidence
+	decS := json.NewDecoder(bytes.NewReader(sessBytes))
+	decS.DisallowUnknownFields()
+	if err := decS.Decode(&sess); err != nil {
+		return empirical.VerifiedOutcome{}, errs.Wrap(errs.CategoryInvalidArgument, err, "invalid session evidence json")
+	}
+	if _, err := decS.Token(); err != io.EOF {
+		return empirical.VerifiedOutcome{}, errs.New(errs.CategoryInvalidArgument, "trailing tokens in session evidence")
+	}
+	if err := sess.Validate(); err != nil {
+		return empirical.VerifiedOutcome{}, errs.Wrap(errs.CategoryInvalidArgument, err, "invalid session evidence")
+	}
+	sessDigest, err := sess.Digest()
+	if err != nil || sessDigest != evidence.SessionEvidenceDigest {
+		return empirical.VerifiedOutcome{}, errs.New(errs.CategoryInvalidArgument, "session evidence digest mismatch")
+	}
+
+	provBytes, err := fetchArtifact(ctx, res, sess.InvocationProvenanceDigest, sess.InvocationProvenanceDigest)
+	if err != nil {
+		return empirical.VerifiedOutcome{}, errs.Wrap(errs.CategoryInternal, err, "invocation provenance unavailable")
+	}
+	var prov protocol.InvocationProvenance
+	decP := json.NewDecoder(bytes.NewReader(provBytes))
+	decP.DisallowUnknownFields()
+	if err := decP.Decode(&prov); err != nil {
+		return empirical.VerifiedOutcome{}, errs.Wrap(errs.CategoryInvalidArgument, err, "invalid invocation provenance json")
+	}
+	if _, err := decP.Token(); err != io.EOF {
+		return empirical.VerifiedOutcome{}, errs.New(errs.CategoryInvalidArgument, "trailing tokens in invocation provenance")
+	}
+	if err := prov.Validate(); err != nil {
+		return empirical.VerifiedOutcome{}, errs.Wrap(errs.CategoryInvalidArgument, err, "invalid invocation provenance")
+	}
+
+	candidateBytes, err := fetchArtifact(ctx, res, evidence.CandidateArtifactRef, evidence.CandidateArtifactDigest)
+	if err != nil {
+		return empirical.VerifiedOutcome{}, errs.Wrap(errs.CategoryInternal, err, "candidate artifact unavailable")
+	}
+
+	// Cross-check IDs, digests, and identity.
+	if receipt.ReceiptVersion != "1.0" {
+		return empirical.VerifiedOutcome{}, errs.New(errs.CategoryInvalidArgument, "receipt_version must be 1.0, got %q", receipt.ReceiptVersion)
+	}
+	if receipt.CampaignID != plan.CampaignID || receipt.RunID != run.RunID || receipt.TaskDigest != run.TaskDigest ||
+		receipt.Seed != run.Seed || receipt.Strategy != run.Strategy {
+		return empirical.VerifiedOutcome{}, errs.New(errs.CategoryInvalidArgument, "receipt identity fields mismatch with plan/run")
+	}
+
+	epDigest, err := protocol.Digest(run.Endpoint)
+	if err != nil {
+		return empirical.VerifiedOutcome{}, err
+	}
+	if receipt.EndpointBindingDigest != epDigest || prov.EndpointBindingDigest != epDigest || sess.Endpoint != run.Endpoint {
+		return empirical.VerifiedOutcome{}, errs.New(errs.CategoryInvalidArgument, "endpoint binding digest mismatch")
+	}
+	if receipt.PromptDigest != evidence.PromptDigest || sess.PromptDigest != evidence.PromptDigest {
+		return empirical.VerifiedOutcome{}, errs.New(errs.CategoryInvalidArgument, "prompt digest mismatch")
+	}
+	if receipt.SessionEvidenceDigest != evidence.SessionEvidenceDigest {
+		return empirical.VerifiedOutcome{}, errs.New(errs.CategoryInvalidArgument, "session evidence digest mismatch in receipt")
+	}
+	if receipt.CandidateCommit != evidence.CandidateCommit || receipt.CandidateArtifactDigest != evidence.CandidateArtifactDigest {
+		return empirical.VerifiedOutcome{}, errs.New(errs.CategoryInvalidArgument, "candidate commit/artifact digest mismatch in receipt")
+	}
+	if receipt.SnapshotDigest != evidence.SnapshotDigest {
+		return empirical.VerifiedOutcome{}, errs.New(errs.CategoryInvalidArgument, "snapshot digest mismatch in receipt")
+	}
+	if receipt.VerifierProducerID != evidence.VerifierProducerID {
+		return empirical.VerifiedOutcome{}, errs.New(errs.CategoryInvalidArgument, "verifier producer id mismatch in receipt")
+	}
+	if receipt.VerifierSourceCommit != plan.VerifierSourceCommit {
+		return empirical.VerifiedOutcome{}, errs.New(errs.CategoryInvalidArgument, "verifier source commit mismatch with plan")
+	}
+	if receipt.VerificationProfileDigest != plan.VerificationProfileDigest {
+		return empirical.VerifiedOutcome{}, errs.New(errs.CategoryInvalidArgument, "verification profile digest mismatch with plan")
+	}
+	if sess.RunID != run.RunID || sess.CampaignID != plan.CampaignID || sess.TaskDigest != run.TaskDigest {
+		return empirical.VerifiedOutcome{}, errs.New(errs.CategoryInvalidArgument, "session evidence identity mismatch with plan/run")
+	}
+
+	// 3. Determine own identity and profile.
+	rev, modified, ok := v.opts.BuildInfo.VCSRevision()
+	if !ok {
+		return empirical.VerifiedOutcome{}, errs.New(errs.CategoryPolicyDenied, "verifier build info unknown (ok=false)")
+	}
+	if modified {
+		return empirical.VerifiedOutcome{}, errs.New(errs.CategoryPolicyDenied, "verifier source tree modified (dirty build)")
+	}
+	if rev != plan.VerifierSourceCommit {
+		return empirical.VerifiedOutcome{}, errs.New(errs.CategoryPolicyDenied,
+			"verifier source commit %q does not match plan %q", rev, plan.VerifierSourceCommit)
+	}
+
+	var profile *VerificationProfile
+	if v.opts.Profile != nil {
+		profile = v.opts.Profile
+	} else {
+		profBytes, err := fetchArtifact(ctx, res, plan.VerificationProfileDigest, plan.VerificationProfileDigest)
+		if err != nil {
+			return empirical.VerifiedOutcome{}, errs.Wrap(errs.CategoryInternal, err, "verification profile artifact unavailable")
+		}
+		profile, err = LoadProfile(profBytes)
+		if err != nil {
+			return empirical.VerifiedOutcome{}, errs.Wrap(errs.CategoryInvalidArgument, err, "failed to load verification profile")
+		}
+	}
+	profDigest, err := profile.Digest()
+	if err != nil || profDigest != plan.VerificationProfileDigest {
+		return empirical.VerifiedOutcome{}, errs.New(errs.CategoryPolicyDenied,
+			"verification profile digest mismatch with plan (got %q, plan has %q)", profDigest, plan.VerificationProfileDigest)
+	}
+
+	// 4. Build Verifier ActorProvenance and Worker ActorProvenance; evaluate independence.
+	verifierBasis := protocol.ActorBasis{
+		EndpointID:    "devcadence-verifier",
+		ModelID:       plan.VerifierSourceCommit,
+		ModelRevision: plan.VerificationProfileDigest,
+	}
+	verifierActorID, err := actors.DeriveActorID("endpoint_model", verifierBasis)
+	if err != nil {
+		return empirical.VerifiedOutcome{}, errs.Wrap(errs.CategoryInternal, err, "failed to derive verifier actor id")
+	}
+	verifierProv := protocol.ActorProvenance{
+		ActorID:      verifierActorID,
+		InvocationID: v.opts.IDs.New("inv"),
+		Role:         protocol.ProvenanceRoleVerifier,
+	}
+	if err := verifierProv.Validate("verifier", protocol.ProvenanceRoleVerifier); err != nil {
+		return empirical.VerifiedOutcome{}, errs.Wrap(errs.CategoryInternal, err, "verifier provenance invalid")
+	}
+
+	if prov.Role != protocol.ProvenanceRoleImplementer && prov.Role != protocol.ProvenanceRoleReviewer {
+		return empirical.VerifiedOutcome{}, errs.New(errs.CategoryInvalidArgument,
+			"worker provenance role %q must be implementer or reviewer", prov.Role)
+	}
+	if prov.TaskID != run.TaskID {
+		return empirical.VerifiedOutcome{}, errs.New(errs.CategoryInvalidArgument,
+			"worker provenance task_id %q does not match run task %q", prov.TaskID, run.TaskID)
+	}
+	if prov.AttemptID != sess.AttemptID && prov.AttemptID != run.RunID {
+		return empirical.VerifiedOutcome{}, errs.New(errs.CategoryInvalidArgument,
+			"worker provenance attempt_id %q mismatch", prov.AttemptID)
+	}
+	if prov.Basis.EndpointID != sess.Endpoint.EndpointID || prov.Basis.ModelID != sess.Endpoint.ModelID ||
+		prov.Basis.ModelRevision != sess.Endpoint.ModelRevision {
+		return empirical.VerifiedOutcome{}, errs.New(errs.CategoryInvalidArgument,
+			"worker provenance basis does not match session evidence endpoint")
+	}
+
+	reDerivedWorkerActorID, err := actors.DeriveActorID("endpoint_model", prov.Basis)
+	if err != nil {
+		return empirical.VerifiedOutcome{}, errs.Wrap(errs.CategoryPolicyDenied, err, "failed to re-derive worker actor id")
+	}
+	if reDerivedWorkerActorID != prov.Actor.ActorID {
+		return empirical.VerifiedOutcome{}, errs.New(errs.CategoryPolicyDenied,
+			"worker provenance stored actor_id %q differs from re-derived actor_id %q",
+			prov.Actor.ActorID, reDerivedWorkerActorID)
+	}
+
+	workerProv := prov.Actor
+	workerProv.ActorID = reDerivedWorkerActorID
+
+	if !protocol.ActorsIndependent(workerProv, verifierProv) {
+		return empirical.VerifiedOutcome{}, errs.New(errs.CategoryPolicyDenied,
+			"VERIFIER_NOT_INDEPENDENT: verifier actor %q is not independent of worker actor %q",
+			verifierProv.ActorID, workerProv.ActorID)
+	}
+
+	// 5. Look up task in verification profile and verify candidate.
+	var task *TaskVerification
+	for i := range profile.Tasks {
+		if profile.Tasks[i].TaskID == run.TaskID {
+			task = &profile.Tasks[i]
+			break
+		}
+	}
+	if task == nil {
+		return empirical.VerifiedOutcome{}, errs.New(errs.CategoryInternal,
+			"VERIFIER_INFRASTRUCTURE: task %q not found in verification profile", run.TaskID)
+	}
+
+	qualityVerdict := empirical.QualityAccepted
+	var worktreeDir string
+	var revResult *protocol.ReviewResult
+
+	runScratch := filepath.Join(v.opts.ScratchDir, run.RunID)
+	if err := os.MkdirAll(runScratch, 0700); err != nil {
+		return empirical.VerifiedOutcome{}, errs.New(errs.CategoryInternal, "VERIFIER_INFRASTRUCTURE: %v", err)
+	}
+
+	if task.Class == "review" {
+		worktreeDir = runScratch
+		decRev := json.NewDecoder(bytes.NewReader(candidateBytes))
+		decRev.DisallowUnknownFields()
+		var rr protocol.ReviewResult
+		if err := decRev.Decode(&rr); err != nil {
+			qualityVerdict = empirical.QualityRejected
+		} else if _, err := decRev.Token(); err != io.EOF {
+			qualityVerdict = empirical.QualityRejected
+		} else if err := rr.Validate(); err != nil {
+			qualityVerdict = empirical.QualityRejected
+		} else {
+			revResult = &rr
+		}
+	} else if task.Class == "implementation" {
+		projectID := v.opts.ProjectID
+		if projectID == "" {
+			projectID = plan.CampaignID
+		}
+		repo, err := v.opts.Repositories.Repository(ctx, projectID)
+		if err != nil && projectID != "devcadence" {
+			if r2, err2 := v.opts.Repositories.Repository(ctx, "devcadence"); err2 == nil {
+				repo = r2
+				err = nil
+			}
+		}
+		if err != nil || repo == nil {
+			return empirical.VerifiedOutcome{}, errs.New(errs.CategoryInternal,
+				"VERIFIER_INFRASTRUCTURE: repository unavailable for project %q: %v", projectID, err)
+		}
+
+		candCommit, err := repo.ResolveCommit(ctx, evidence.CandidateCommit)
+		if err != nil {
+			return empirical.VerifiedOutcome{}, errs.New(errs.CategoryInternal,
+				"VERIFIER_INFRASTRUCTURE: candidate commit %q not found in repository: %v", evidence.CandidateCommit, err)
+		}
+
+		// Verify sole parent equals task's BaseCommit.
+		resParents, err := v.opts.Runner.Run(ctx, process.Spec{
+			Executable: "git",
+			Args:       []string{"-C", repo.Path, "rev-list", "--parents", "-n", "1", candCommit},
+			Dir:        repo.Path,
+			Env:        process.BaseEnv(),
+			Timeout:    30 * time.Second,
+		})
+		if err != nil || !resParents.Success() {
+			return empirical.VerifiedOutcome{}, errs.New(errs.CategoryInternal,
+				"VERIFIER_INFRASTRUCTURE: failed to inspect commit parents: %v", err)
+		}
+		tokens := strings.Fields(string(resParents.Stdout))
+		if len(tokens) != 2 || tokens[1] != task.BaseCommit {
+			qualityVerdict = empirical.QualityRejected
+		}
+
+		// Verify every changed path lies inside task.WriteScope.
+		resDiff, err := v.opts.Runner.Run(ctx, process.Spec{
+			Executable: "git",
+			Args:       []string{"-C", repo.Path, "diff", "--name-status", task.BaseCommit + ".." + candCommit},
+			Dir:        repo.Path,
+			Env:        process.BaseEnv(),
+			Timeout:    30 * time.Second,
+		})
+		if err != nil || !resDiff.Success() {
+			return empirical.VerifiedOutcome{}, errs.New(errs.CategoryInternal,
+				"VERIFIER_INFRASTRUCTURE: git diff failed: %v", err)
+		}
+		diffLines := strings.Split(strings.TrimSpace(string(resDiff.Stdout)), "\n")
+		for _, line := range diffLines {
+			line = strings.TrimSpace(line)
+			if line == "" {
+				continue
+			}
+			parts := strings.Split(line, "\t")
+			if len(parts) < 2 {
+				continue
+			}
+			for _, p := range parts[1:] {
+				if strings.HasPrefix(p, ".git") || strings.Contains(p, "..") {
+					qualityVerdict = empirical.QualityRejected
+					break
+				}
+				if !matchesWriteScope(p, task.WriteScope) {
+					qualityVerdict = empirical.QualityRejected
+					break
+				}
+			}
+		}
+
+		// Verify no symlinks or submodules.
+		resTree, err := v.opts.Runner.Run(ctx, process.Spec{
+			Executable: "git",
+			Args:       []string{"-C", repo.Path, "diff-tree", "-r", "--no-commit-id", candCommit},
+			Dir:        repo.Path,
+			Env:        process.BaseEnv(),
+			Timeout:    30 * time.Second,
+		})
+		if err == nil && resTree.Success() {
+			for _, line := range strings.Split(string(resTree.Stdout), "\n") {
+				fields := strings.Fields(line)
+				if len(fields) >= 2 {
+					mode := fields[1]
+					if mode == "120000" || mode == "160000" {
+						qualityVerdict = empirical.QualityRejected
+					}
+				}
+			}
+		}
+
+		// Create isolated worktree.
+		wtAttemptID := run.RunID + "-verify"
+		wtSpec := worktrees.Spec{
+			ProjectID:  repo.ProjectID,
+			TaskID:     task.TaskID,
+			AttemptID:  wtAttemptID,
+			BaseCommit: candCommit,
+		}
+		wt, err := v.opts.Worktrees.Create(ctx, repo, wtSpec)
+		if err != nil {
+			return empirical.VerifiedOutcome{}, errs.New(errs.CategoryInternal,
+				"VERIFIER_INFRASTRUCTURE: failed to create worktree: %v", err)
+		}
+		defer func() {
+			_ = v.opts.Worktrees.Cleanup(context.Background(), repo, repo.ProjectID, wt.ID, worktrees.CleanupOptions{Force: true})
+		}()
+		worktreeDir = wt.Path
+	}
+
+	// 6. Execute CheckSpecs through process.Runner.
+	pathEnv := os.Getenv("PATH")
+	if pathEnv == "" {
+		pathEnv = "/usr/local/bin:/usr/bin:/bin"
+	}
+	cleanEnv := []string{
+		"PATH=" + pathEnv,
+		"HOME=" + runScratch,
+		"TMPDIR=" + runScratch,
+		"GOFLAGS=-mod=readonly",
+		"GOPROXY=off",
+		"GOTOOLCHAIN=local",
+		"LANG=C.UTF-8",
+		"LC_ALL=C.UTF-8",
+	}
+
+	var verifiedArtifactRefs []string
+	checkPassed := make(map[string]bool, len(task.Checks))
+	var orderedExitCodes []int
+
+	for _, check := range task.Checks {
+		checkDir := worktreeDir
+		if check.Dir != "" && check.Dir != "." {
+			checkDir = filepath.Join(worktreeDir, check.Dir)
+		}
+
+		runSpec := process.Spec{
+			Executable: check.Argv[0],
+			Args:       check.Argv[1:],
+			Dir:        checkDir,
+			Env:        cleanEnv,
+			Timeout:    time.Duration(check.TimeoutSeconds) * time.Second,
+		}
+		res, err := v.opts.Runner.Run(ctx, runSpec)
+		if err != nil {
+			return empirical.VerifiedOutcome{}, errs.New(errs.CategoryInternal,
+				"VERIFIER_INFRASTRUCTURE: cannot start executable %q for check %q: %v",
+				check.Argv[0], check.CheckID, err)
+		}
+		if res.Status == process.StatusTimeout {
+			return empirical.VerifiedOutcome{}, errs.New(errs.CategoryInternal,
+				"VERIFIER_INFRASTRUCTURE: check %q timed out", check.CheckID)
+		}
+		if res.Status == process.StatusCancelled {
+			return empirical.VerifiedOutcome{}, errs.New(errs.CategoryInternal,
+				"VERIFIER_INFRASTRUCTURE: check %q was cancelled", check.CheckID)
+		}
+		if res.Signal != "" {
+			return empirical.VerifiedOutcome{}, errs.New(errs.CategoryInternal,
+				"VERIFIER_INFRASTRUCTURE: check %q killed by signal %s", check.CheckID, res.Signal)
+		}
+		if res.StdoutTruncated || res.StderrTruncated {
+			return empirical.VerifiedOutcome{}, errs.New(errs.CategoryInternal,
+				"VERIFIER_INFRASTRUCTURE: check %q output cap exceeded", check.CheckID)
+		}
+
+		logPath := filepath.Join(runScratch, fmt.Sprintf("check-%s.log", check.CheckID))
+		var logBuf bytes.Buffer
+		logBuf.WriteString(fmt.Sprintf("=== check: %s ===\nexit: %d\n--- stdout ---\n", check.CheckID, res.ExitCode))
+		logBuf.Write(res.Stdout)
+		logBuf.WriteString("\n--- stderr ---\n")
+		logBuf.Write(res.Stderr)
+		_ = os.WriteFile(logPath, logBuf.Bytes(), 0600)
+		verifiedArtifactRefs = append(verifiedArtifactRefs, logPath)
+
+		checkPassed[check.CheckID] = (res.ExitCode == check.ExpectExitCode)
+		orderedExitCodes = append(orderedExitCodes, res.ExitCode)
+	}
+
+	if task.Class == "review" {
+		revLogPath := filepath.Join(runScratch, "review-verification.log")
+		_ = os.WriteFile(revLogPath, []byte(fmt.Sprintf("review validation verdict: %s\n", qualityVerdict)), 0600)
+		verifiedArtifactRefs = append(verifiedArtifactRefs, revLogPath)
+	}
+
+	// 7. Compute results and quality verdict.
+	var passedAcceptanceIDs []string
+	for _, aid := range task.AcceptanceCheckIDs {
+		if checkPassed[aid] {
+			passedAcceptanceIDs = append(passedAcceptanceIDs, aid)
+		}
+	}
+
+	seededDefectsCaught := 0
+	reviewAnchorRe := regexp.MustCompile(`^([^:\s]+):([1-9][0-9]*)$`)
+
+	for _, def := range task.Defects {
+		if task.Class == "implementation" {
+			caught := true
+			for _, cid := range def.CatchCheckIDs {
+				if !checkPassed[cid] {
+					caught = false
+					break
+				}
+			}
+			if caught {
+				seededDefectsCaught++
+			}
+		} else if task.Class == "review" {
+			caught := false
+			if def.Anchor != nil && revResult != nil {
+				for _, f := range revResult.Findings {
+					for _, rRef := range f.EvidenceRefs {
+						matches := reviewAnchorRe.FindStringSubmatch(rRef)
+						if len(matches) == 3 {
+							refPath := path.Clean(filepath.ToSlash(matches[1]))
+							if !strings.HasPrefix(refPath, "/") && !strings.Contains(refPath, "..") && refPath == def.Anchor.Path {
+								lineNum, _ := strconv.Atoi(matches[2])
+								if lineNum >= def.Anchor.StartLine && lineNum <= def.Anchor.EndLine {
+									caught = true
+									break
+								}
+							}
+						}
+					}
+					if caught {
+						break
+					}
+				}
+			}
+			if caught {
+				seededDefectsCaught++
+			}
+		}
+	}
+
+	if task.Class == "implementation" {
+		allPassed := true
+		for _, aid := range task.AcceptanceCheckIDs {
+			if !checkPassed[aid] {
+				allPassed = false
+				break
+			}
+		}
+		if qualityVerdict == empirical.QualityAccepted && !allPassed {
+			qualityVerdict = empirical.QualityRejected
+		}
+	}
+
+	// 8. Deterministic re-run consistency check against original claimed receipt.
+	if len(passedAcceptanceIDs) != len(receipt.PassedAcceptanceIDs) {
+		return empirical.VerifiedOutcome{}, errs.New(errs.CategoryIntegrity,
+			"INCONSISTENT_VERIFICATION: passed acceptance IDs count mismatch: rerun=%d, claimed=%d",
+			len(passedAcceptanceIDs), len(receipt.PassedAcceptanceIDs))
+	}
+	for i := range passedAcceptanceIDs {
+		if passedAcceptanceIDs[i] != receipt.PassedAcceptanceIDs[i] {
+			return empirical.VerifiedOutcome{}, errs.New(errs.CategoryIntegrity,
+				"INCONSISTENT_VERIFICATION: passed acceptance IDs mismatch: rerun=%v, claimed=%v",
+				passedAcceptanceIDs, receipt.PassedAcceptanceIDs)
+		}
+	}
+
+	if len(orderedExitCodes) != len(receipt.CommandExitCodes) {
+		return empirical.VerifiedOutcome{}, errs.New(errs.CategoryIntegrity,
+			"INCONSISTENT_VERIFICATION: command exit codes count mismatch: rerun=%d, claimed=%d",
+			len(orderedExitCodes), len(receipt.CommandExitCodes))
+	}
+	for i := range orderedExitCodes {
+		if orderedExitCodes[i] != receipt.CommandExitCodes[i] {
+			return empirical.VerifiedOutcome{}, errs.New(errs.CategoryIntegrity,
+				"INCONSISTENT_VERIFICATION: command exit codes mismatch: rerun=%v, claimed=%v",
+				orderedExitCodes, receipt.CommandExitCodes)
+		}
+	}
+
+	if seededDefectsCaught != receipt.SeededDefectsCaught {
+		return empirical.VerifiedOutcome{}, errs.New(errs.CategoryIntegrity,
+			"INCONSISTENT_VERIFICATION: seeded defects caught mismatch: rerun=%d, claimed=%d",
+			seededDefectsCaught, receipt.SeededDefectsCaught)
+	}
+	if len(task.Defects) != receipt.SeededDefectTotal {
+		return empirical.VerifiedOutcome{}, errs.New(errs.CategoryIntegrity,
+			"INCONSISTENT_VERIFICATION: seeded defect total mismatch: rerun=%d, claimed=%d",
+			len(task.Defects), receipt.SeededDefectTotal)
+	}
+
+	if qualityVerdict != receipt.QualityVerdict {
+		return empirical.VerifiedOutcome{}, errs.New(errs.CategoryIntegrity,
+			"INCONSISTENT_VERIFICATION: quality verdict mismatch: rerun=%s, claimed=%s",
+			qualityVerdict, receipt.QualityVerdict)
+	}
+
+	// 9. Construct and return VerifiedOutcome.
+	planDigest, err := protocol.Digest(plan)
+	if err != nil {
+		return empirical.VerifiedOutcome{}, err
+	}
+
+	return empirical.VerifiedOutcome{
+		RunID:                       run.RunID,
+		PlanDigest:                  planDigest,
+		SessionDigest:               evidence.SessionEvidenceDigest,
+		CandidateDigest:             evidence.CandidateArtifactDigest,
+		SnapshotDigest:              evidence.SnapshotDigest,
+		ReceiptDigest:               evidence.VerifierReceiptDigest,
+		VerifierSourceCommit:        plan.VerifierSourceCommit,
+		VerificationProfileDigest:   plan.VerificationProfileDigest,
+		Worker:                      workerProv,
+		Verifier:                    verifierProv,
+		QualityVerdict:              qualityVerdict,
+		SeededDefectTotal:           len(task.Defects),
+		SeededDefectsCaught:         seededDefectsCaught,
+		VerifiedCommandArtifactRefs: verifiedArtifactRefs,
+	}, nil
+}
+
+func fetchArtifact(ctx context.Context, r empirical.ArtifactResolver, ref, digest string) ([]byte, error) {
+	if strings.TrimSpace(ref) == "" {
+		return nil, errs.New(errs.CategoryInvalidArgument, "artifact ref is empty")
+	}
+	if strings.TrimSpace(digest) == "" {
+		return nil, errs.New(errs.CategoryInvalidArgument, "artifact digest is empty")
+	}
+	b, err := r.ReadVerified(ctx, ref, digest)
+	if err != nil {
+		return nil, err
+	}
+	if protocol.DigestBytes(b) != digest {
+		return nil, errs.New(errs.CategoryIntegrity, "artifact %q does not match digest %q", ref, digest)
+	}
+	return b, nil
+}
+
+func matchesWriteScope(p string, scopes []string) bool {
+	cleanP := path.Clean(p)
+	for _, s := range scopes {
+		if strings.HasSuffix(s, "/") {
+			prefix := strings.TrimSuffix(s, "/") + "/"
+			if strings.HasPrefix(cleanP, prefix) || cleanP == strings.TrimSuffix(s, "/") {
+				return true
+			}
+		} else {
+			if cleanP == path.Clean(s) {
+				return true
+			}
+		}
+	}
+	return false
+}
