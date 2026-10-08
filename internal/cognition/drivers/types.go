@@ -322,8 +322,8 @@ func (cfg SessionConfig) Validate() error {
 	if cfg.ModelID == "" {
 		return errs.New(errs.CategoryInvalidArgument, "%s: model_id cannot be empty", kind)
 	}
-	if cfg.MaxOutputTokensPerCall < 0 {
-		return errs.New(errs.CategoryInvalidArgument, "%s: max_output_tokens_per_call cannot be negative: %d", kind, cfg.MaxOutputTokensPerCall)
+	if cfg.MaxOutputTokensPerCall <= 0 {
+		return errs.New(errs.CategoryInvalidArgument, "%s: max_output_tokens_per_call must be > 0, got %d", kind, cfg.MaxOutputTokensPerCall)
 	}
 	return nil
 }

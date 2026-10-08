@@ -353,7 +353,9 @@ func TestSessionConfig_Validation(t *testing.T) {
 		ModelID:                "m1",
 		MaxOutputTokensPerCall: 0,
 	}
-	if err := cfgZeroTokens.Validate(); err != nil {
-		t.Errorf("expected zero MaxOutputTokensPerCall to be valid (optional in SessionConfig), got %v", err)
+	if err := cfgZeroTokens.Validate(); err == nil {
+		t.Errorf("expected error for zero MaxOutputTokensPerCall, got nil")
+	} else if errs.CategoryOf(err) != errs.CategoryInvalidArgument {
+		t.Errorf("expected CategoryInvalidArgument, got %v", err)
 	}
 }

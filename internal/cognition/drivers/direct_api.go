@@ -18,12 +18,13 @@ type DirectAPIClient interface {
 
 // DirectAPIRequest is the payload sent to the direct API client.
 type DirectAPIRequest struct {
-	ModelID      string           `json:"model_id"`
-	SystemPrompt string           `json:"system_prompt,omitempty"`
-	Prompt       string           `json:"prompt,omitempty"`
-	Messages     []DirectMessage  `json:"messages,omitempty"`
-	Tools        []ToolDefinition `json:"tools,omitempty"`
-	Stream       bool             `json:"stream,omitempty"`
+	ModelID         string           `json:"model_id"`
+	SystemPrompt    string           `json:"system_prompt,omitempty"`
+	Prompt          string           `json:"prompt,omitempty"`
+	Messages        []DirectMessage  `json:"messages,omitempty"`
+	Tools           []ToolDefinition `json:"tools,omitempty"`
+	Stream          bool             `json:"stream,omitempty"`
+	MaxOutputTokens int64            `json:"max_output_tokens,omitempty"`
 }
 
 // DirectMessage represents a single message in the direct API conversation history.
@@ -238,12 +239,13 @@ func (s *directAPISession) ExecuteTurn(ctx context.Context, input TurnInput) (Tu
 	}
 
 	req := DirectAPIRequest{
-		ModelID:      s.config.ModelID,
-		SystemPrompt: s.config.SystemPrompt,
-		Prompt:       input.Prompt,
-		Messages:     append([]DirectMessage(nil), s.messages...),
-		Tools:        s.config.Tools,
-		Stream:       false,
+		ModelID:         s.config.ModelID,
+		SystemPrompt:    s.config.SystemPrompt,
+		Prompt:          input.Prompt,
+		Messages:        append([]DirectMessage(nil), s.messages...),
+		Tools:           s.config.Tools,
+		Stream:          false,
+		MaxOutputTokens: s.config.MaxOutputTokensPerCall,
 	}
 	s.mu.Unlock()
 
@@ -324,12 +326,13 @@ func (s *directAPISession) StreamTurn(ctx context.Context, input TurnInput) (Eve
 	}
 
 	req := DirectAPIRequest{
-		ModelID:      s.config.ModelID,
-		SystemPrompt: s.config.SystemPrompt,
-		Prompt:       input.Prompt,
-		Messages:     append([]DirectMessage(nil), s.messages...),
-		Tools:        s.config.Tools,
-		Stream:       true,
+		ModelID:         s.config.ModelID,
+		SystemPrompt:    s.config.SystemPrompt,
+		Prompt:          input.Prompt,
+		Messages:        append([]DirectMessage(nil), s.messages...),
+		Tools:           s.config.Tools,
+		Stream:          true,
+		MaxOutputTokens: s.config.MaxOutputTokensPerCall,
 	}
 	s.mu.Unlock()
 

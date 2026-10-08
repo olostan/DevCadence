@@ -22,8 +22,9 @@ func TestMetering_TokenBudgets(t *testing.T) {
 
 	ctx := context.Background()
 	session, err := meteredDriver.StartSession(ctx, SessionConfig{
-		SessionID: "sess-meter-tokens",
-		ModelID:   "test-model",
+		SessionID:              "sess-meter-tokens",
+		ModelID:                "test-model",
+		MaxOutputTokensPerCall: 4096,
 	})
 	if err != nil {
 		t.Fatalf("StartSession failed: %v", err)
@@ -83,8 +84,9 @@ func TestMetering_ResumePreservesMeterState(t *testing.T) {
 
 	ctx := context.Background()
 	cfg := SessionConfig{
-		SessionID: "sess-continuity-1",
-		ModelID:   "test-model",
+		SessionID:              "sess-continuity-1",
+		ModelID:                "test-model",
+		MaxOutputTokensPerCall: 4096,
 	}
 
 	session1, err := meteredDriver.StartSession(ctx, cfg)
@@ -138,8 +140,9 @@ func TestMetering_ActiveMaxDurationPerOpTimeout(t *testing.T) {
 
 	ctx := context.Background()
 	session, err := meteredDriver.StartSession(ctx, SessionConfig{
-		SessionID: "sess-op-timeout",
-		ModelID:   "test-model",
+		SessionID:              "sess-op-timeout",
+		ModelID:                "test-model",
+		MaxOutputTokensPerCall: 4096,
 	})
 	if err != nil {
 		t.Fatalf("StartSession failed: %v", err)
@@ -186,8 +189,9 @@ func TestMetering_OscillatingEditsViaMediator(t *testing.T) {
 	})
 
 	cfg := SessionConfig{
-		SessionID: "sess-oscillate-test",
-		ModelID:   "test-model",
+		SessionID:              "sess-oscillate-test",
+		ModelID:                "test-model",
+		MaxOutputTokensPerCall: 4096,
 		Tools: []ToolDefinition{
 			{Name: "write_file", Description: "write file", MutatesFiles: true},
 		},
@@ -247,8 +251,9 @@ func TestMetering_ClosedSessionStatus(t *testing.T) {
 	})
 
 	session, err := meteredDriver.StartSession(context.Background(), SessionConfig{
-		SessionID: "sess-close-check",
-		ModelID:   "test-model",
+		SessionID:              "sess-close-check",
+		ModelID:                "test-model",
+		MaxOutputTokensPerCall: 4096,
 	})
 	if err != nil {
 		t.Fatalf("StartSession failed: %v", err)
@@ -281,8 +286,9 @@ func TestMetering_ToolCallCeiling(t *testing.T) {
 
 	ctx := context.Background()
 	session, err := meteredDriver.StartSession(ctx, SessionConfig{
-		SessionID: "sess-meter-tool-calls",
-		ModelID:   "test-model",
+		SessionID:              "sess-meter-tool-calls",
+		ModelID:                "test-model",
+		MaxOutputTokensPerCall: 4096,
 	})
 	if err != nil {
 		t.Fatalf("StartSession failed: %v", err)
@@ -321,8 +327,9 @@ func TestMetering_LoopDetectionSuspension(t *testing.T) {
 
 	ctx := context.Background()
 	session, err := meteredDriver.StartSession(ctx, SessionConfig{
-		SessionID: "sess-meter-loop",
-		ModelID:   "test-model",
+		SessionID:              "sess-meter-loop",
+		ModelID:                "test-model",
+		MaxOutputTokensPerCall: 4096,
 	})
 	if err != nil {
 		t.Fatalf("StartSession failed: %v", err)
@@ -390,8 +397,9 @@ func TestMetering_NoPromptCountdownInjection(t *testing.T) {
 
 	ctx := context.Background()
 	session, err := meteredDriver.StartSession(ctx, SessionConfig{
-		SessionID: "sess-no-countdown",
-		ModelID:   "test-model",
+		SessionID:              "sess-no-countdown",
+		ModelID:                "test-model",
+		MaxOutputTokensPerCall: 4096,
 	})
 	if err != nil {
 		t.Fatalf("StartSession failed: %v", err)
@@ -485,8 +493,9 @@ func TestMetering_DriverInternalToolExecutionTracked(t *testing.T) {
 
 	ctx := context.Background()
 	session, err := meteredDriver.StartSession(ctx, SessionConfig{
-		SessionID: "sess-internal-tool-loop",
-		ModelID:   "direct-model-v1",
+		SessionID:              "sess-internal-tool-loop",
+		ModelID:                "direct-model-v1",
+		MaxOutputTokensPerCall: 4096,
 		Tools: []ToolDefinition{
 			{Name: "failing_tool", Description: "always fails"},
 		},
@@ -635,8 +644,9 @@ func TestMetering_ResumeDoesNotDuplicateListeners(t *testing.T) {
 
 	ctx := context.Background()
 	cfg := SessionConfig{
-		SessionID: "sess-resume-listener-test",
-		ModelID:   "test-model",
+		SessionID:              "sess-resume-listener-test",
+		ModelID:                "test-model",
+		MaxOutputTokensPerCall: 4096,
 		Tools: []ToolDefinition{
 			{Name: "failing_tool", Description: "always fails"},
 		},
@@ -991,8 +1001,9 @@ func TestMetering_StreamTurn_ImmediateErrorRecordsUnknown(t *testing.T) {
 	// with AllowUnknownUsage=false and a configured token limit the meter suspends with usage_unknown.
 	fakeDriver := NewFakeDriver("fake-stream-err")
 	rawSession, err := fakeDriver.StartSession(context.Background(), SessionConfig{
-		SessionID: "sess-imm-err",
-		ModelID:   "test-model",
+		SessionID:              "sess-imm-err",
+		ModelID:                "test-model",
+		MaxOutputTokensPerCall: 4096,
 	})
 	if err != nil {
 		t.Fatalf("StartSession failed: %v", err)
@@ -1055,8 +1066,9 @@ func TestMetering_StreamTurn_StreamWithoutUsageRecordsUnknown(t *testing.T) {
 	// suspends usage_unknown; a stream with usage events accumulates from KnownZeroUsage() and stays known.
 	fakeDriver := NewFakeDriver("fake-stream-nousage")
 	rawSession, err := fakeDriver.StartSession(context.Background(), SessionConfig{
-		SessionID: "sess-no-usage-ev",
-		ModelID:   "test-model",
+		SessionID:              "sess-no-usage-ev",
+		ModelID:                "test-model",
+		MaxOutputTokensPerCall: 4096,
 	})
 	if err != nil {
 		t.Fatalf("StartSession failed: %v", err)

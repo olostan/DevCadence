@@ -47,8 +47,9 @@ func RunDriverContractTestSuite(t *testing.T, factory DriverFactory) {
 
 		ctx := context.Background()
 		cfg := SessionConfig{
-			SessionID: "sess-lifecycle-test-1",
-			ModelID:   "test-model",
+			SessionID:              "sess-lifecycle-test-1",
+			ModelID:                "test-model",
+			MaxOutputTokensPerCall: 4096,
 		}
 
 		session, err := driver.StartSession(ctx, cfg)
@@ -107,9 +108,10 @@ func RunDriverContractTestSuite(t *testing.T, factory DriverFactory) {
 
 		ctx := context.Background()
 		cfg := SessionConfig{
-			SessionID: "sess-immut-1",
-			ModelID:   "orig-model",
-			Options:   map[string]string{"key": "orig"},
+			SessionID:              "sess-immut-1",
+			ModelID:                "orig-model",
+			Options:                map[string]string{"key": "orig"},
+			MaxOutputTokensPerCall: 4096,
 		}
 
 		session, err := driver.StartSession(ctx, cfg)
@@ -139,8 +141,9 @@ func RunDriverContractTestSuite(t *testing.T, factory DriverFactory) {
 
 		ctx := context.Background()
 		cfg := SessionConfig{
-			SessionID: "sess-streaming-test-1",
-			ModelID:   "test-model",
+			SessionID:              "sess-streaming-test-1",
+			ModelID:                "test-model",
+			MaxOutputTokensPerCall: 4096,
 		}
 
 		session, err := driver.StartSession(ctx, cfg)
@@ -183,8 +186,9 @@ func RunDriverContractTestSuite(t *testing.T, factory DriverFactory) {
 		defer cleanup()
 
 		cfg := SessionConfig{
-			SessionID: "sess-cancel-test-1",
-			ModelID:   "test-model",
+			SessionID:              "sess-cancel-test-1",
+			ModelID:                "test-model",
+			MaxOutputTokensPerCall: 4096,
 		}
 
 		session, err := driver.StartSession(context.Background(), cfg)
@@ -221,8 +225,9 @@ func RunDriverContractTestSuite(t *testing.T, factory DriverFactory) {
 
 		ctx := context.Background()
 		cfg := SessionConfig{
-			SessionID: "sess-resume-test-1",
-			ModelID:   "test-model",
+			SessionID:              "sess-resume-test-1",
+			ModelID:                "test-model",
+			MaxOutputTokensPerCall: 4096,
 		}
 
 		session, err := driver.StartSession(ctx, cfg)
@@ -273,8 +278,9 @@ func RunDriverContractTestSuite(t *testing.T, factory DriverFactory) {
 		})
 
 		cfg := SessionConfig{
-			SessionID: "sess-tool-mediation-1",
-			ModelID:   "test-model",
+			SessionID:              "sess-tool-mediation-1",
+			ModelID:                "test-model",
+			MaxOutputTokensPerCall: 4096,
 			Tools: []ToolDefinition{
 				{
 					Name:        "test_tool",
@@ -326,9 +332,10 @@ func RunDriverContractTestSuite(t *testing.T, factory DriverFactory) {
 		})
 
 		cfg := SessionConfig{
-			SessionID:     "sess-containment-1",
-			ModelID:       "test-model",
-			WorktreeScope: scope,
+			SessionID:              "sess-containment-1",
+			ModelID:                "test-model",
+			WorktreeScope:          scope,
+			MaxOutputTokensPerCall: 4096,
 			Tools: []ToolDefinition{
 				{
 					Name:        "read_file",
@@ -370,8 +377,9 @@ func RunDriverContractTestSuite(t *testing.T, factory DriverFactory) {
 
 		// Missing session ID
 		_, err := driver.StartSession(ctx, SessionConfig{
-			SessionID: "",
-			ModelID:   "test-model",
+			SessionID:              "",
+			ModelID:                "test-model",
+			MaxOutputTokensPerCall: 4096,
 		})
 		if err == nil {
 			t.Errorf("expected error for empty session ID, got nil")
@@ -379,11 +387,22 @@ func RunDriverContractTestSuite(t *testing.T, factory DriverFactory) {
 
 		// Missing model ID
 		_, err = driver.StartSession(ctx, SessionConfig{
-			SessionID: "valid-id",
-			ModelID:   "",
+			SessionID:              "valid-id",
+			ModelID:                "",
+			MaxOutputTokensPerCall: 4096,
 		})
 		if err == nil {
 			t.Errorf("expected error for empty model ID, got nil")
+		}
+
+		// Non-positive MaxOutputTokensPerCall
+		_, err = driver.StartSession(ctx, SessionConfig{
+			SessionID:              "valid-id",
+			ModelID:                "test-model",
+			MaxOutputTokensPerCall: 0,
+		})
+		if err == nil {
+			t.Errorf("expected error for zero MaxOutputTokensPerCall, got nil")
 		}
 	})
 }

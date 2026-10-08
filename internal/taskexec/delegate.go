@@ -286,9 +286,6 @@ func (e *Executor) Delegate(ctx context.Context, task facade.AuthorizedTask) (pr
 			ModelIdentity:        fmt.Sprintf("%s/%s@%s", ep.EndpointID, ep.ModelID, ep.ModelRevision),
 			WorktreeID:           attemptID,
 		},
-		Records: []controlplane.RecordToStore{
-			{Version: 1, Record: prov},
-		},
 	}
 
 	batchCmd := controlplane.BatchCommand{
@@ -327,7 +324,7 @@ func (e *Executor) Delegate(ctx context.Context, task facade.AuthorizedTask) (pr
 	// 8. Start asynchronous run
 	deadline := time.Duration(ep.Limits.MaxDurationSeconds)*time.Second + 60*time.Second
 	opRef, err := e.opts.Registry.Start(e.opts.ProjectID, "delegate", deadline, func(opCtx context.Context) (string, error) {
-		return e.runDelegate(opCtx, task.TaskID, foundTask.Alias, attemptID, wp, ep, opened, compiled)
+		return e.runDelegate(opCtx, task.TaskID, foundTask.Alias, attemptID, wp, ep, opened, compiled, prov)
 	})
 	if err != nil {
 		// Operation registry failed to schedule
@@ -364,6 +361,7 @@ func (e *Executor) runDelegate(
 	ep execpolicy.ResolvedEndpoint,
 	opened execpolicy.OpenedEndpoint,
 	compiled *compiler.CompiledInvocation,
+	prov *protocol.InvocationProvenance,
 ) (string, error) {
 	// 1. Create Worktree
 	repo, err := e.opts.Repositories.Repository(ctx, e.opts.ProjectID)
@@ -520,9 +518,29 @@ func (e *Executor) runDelegate(
 	}
 
 	// 8. Commit CandidateProduced
+	if prov != nil {
+		prov.CandidateCommit = headCommit
+	}
 	freshPS, err := e.opts.ControlPlane.ProjectState(ctx, e.opts.ProjectID)
 	if err != nil {
 		return "", principal.NewCodedError(principal.CodeInternal, true, []string{"attempt-outcome-unrecorded"}, fmt.Sprintf("failed to get project state: %v", err))
+	}
+
+	candCmd := controlplane.Command{
+		ProjectID: e.opts.ProjectID,
+		Actor:     protocol.Actor{Kind: protocol.ActorControlPlane, ID: "taskexec"},
+		Payload: &events.CandidateProduced{
+			TaskID:          taskID,
+			AttemptID:       attemptID,
+			CandidateCommit: headCommit,
+			Summary:         fmt.Sprintf("candidate produced: %d files", len(changedPaths)),
+			Artifacts:       []protocol.ArtifactRef{diffRef, usageRef},
+		},
+	}
+	if prov != nil {
+		candCmd.Records = []controlplane.RecordToStore{
+			{Version: 1, Record: prov},
+		}
 	}
 
 	batchCmd := controlplane.BatchCommand{
@@ -532,19 +550,7 @@ func (e *Executor) runDelegate(
 		Preconditions: []controlplane.BatchGuard{
 			attemptStillRunningGuard{taskAlias: taskAlias},
 		},
-		Commands: []controlplane.Command{
-			{
-				ProjectID: e.opts.ProjectID,
-				Actor:     protocol.Actor{Kind: protocol.ActorControlPlane, ID: "taskexec"},
-				Payload: &events.CandidateProduced{
-					TaskID:          taskID,
-					AttemptID:       attemptID,
-					CandidateCommit: headCommit,
-					Summary:         fmt.Sprintf("candidate produced: %d files", len(changedPaths)),
-					Artifacts:       []protocol.ArtifactRef{diffRef, usageRef},
-				},
-			},
-		},
+		Commands: []controlplane.Command{candCmd},
 	}
 
 	if _, err := e.opts.ControlPlane.ApplyBatch(ctx, batchCmd); err != nil {

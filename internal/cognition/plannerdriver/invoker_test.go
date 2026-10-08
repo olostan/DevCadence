@@ -214,7 +214,7 @@ func TestPlannerDriverInvoker_ACC03_FreshSessionIDsAndPrefix(t *testing.T) {
 func TestPlannerDriverInvoker_ACC04_StartFailure(t *testing.T) {
 	d := newRec(okHandler("OK"))
 	// Occupy planner-1 so the adapter's first StartSession conflicts.
-	if _, err := d.inner.StartSession(context.Background(), drivers.SessionConfig{SessionID: "planner-1", ModelID: "m"}); err != nil {
+	if _, err := d.inner.StartSession(context.Background(), drivers.SessionConfig{SessionID: "planner-1", ModelID: "m", MaxOutputTokensPerCall: 4096}); err != nil {
 		t.Fatal(err)
 	}
 	inv := mustInvoker(t, d, Config{})

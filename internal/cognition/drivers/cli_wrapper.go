@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -44,6 +45,7 @@ type CLIWrapperOptions struct {
 	SystemPromptFlag              string            // e.g. "--system"
 	ToolsFlag                     string            // e.g. "--tools"
 	ToolResultsFlag               string            // e.g. "--tool-results"
+	MaxTokensFlag                 string            // e.g. "--max-tokens"
 	AllowLogicalSessionIDAsHandle bool              // If true, allows using DevCadence SessionID as resume handle
 	VerifiedSandbox               bool              // If true, declares NativeWorktreeAccess
 	InvocationMapper              CLIInvocationMapper
@@ -363,6 +365,13 @@ func (s *cliSession) buildArgs(input TurnInput) ([]string, error) {
 		args = append(args, s.driver.opts.ResumeFlag, s.backendSessionHandle)
 	}
 
+	// Convey max output tokens if flag configured or options mapping
+	if s.driver.opts.MaxTokensFlag != "" && s.config.MaxOutputTokensPerCall > 0 {
+		args = append(args, s.driver.opts.MaxTokensFlag, strconv.FormatInt(s.config.MaxOutputTokensPerCall, 10))
+	} else if s.config.Options != nil && s.config.Options["max_tokens_flag"] != "" && s.config.MaxOutputTokensPerCall > 0 {
+		args = append(args, s.config.Options["max_tokens_flag"], strconv.FormatInt(s.config.MaxOutputTokensPerCall, 10))
+	}
+
 	if s.driver.opts.PromptFlag != "" {
 		args = append(args, s.driver.opts.PromptFlag)
 	}
@@ -370,6 +379,22 @@ func (s *cliSession) buildArgs(input TurnInput) ([]string, error) {
 		args = append(args, input.Prompt)
 	}
 	return args, nil
+}
+
+func (s *cliSession) canEnforceMaxOutputTokens() bool {
+	if s.config.MaxOutputTokensPerCall <= 0 {
+		return true
+	}
+	if s.driver.opts.InvocationMapper != nil {
+		return true
+	}
+	if s.driver.opts.MaxTokensFlag != "" {
+		return true
+	}
+	if s.config.Options != nil && s.config.Options["max_tokens_flag"] != "" {
+		return true
+	}
+	return false
 }
 
 func (s *cliSession) workingDir() string {
@@ -395,6 +420,10 @@ func (s *cliSession) buildSpec(args []string, timeout time.Duration) process.Spe
 func (s *cliSession) ExecuteTurn(ctx context.Context, input TurnInput) (TurnResult, error) {
 	if err := ctx.Err(); err != nil {
 		return TurnResult{}, err
+	}
+
+	if !s.canEnforceMaxOutputTokens() {
+		return TurnResult{}, errs.New(errs.CategoryUnsupported, "cli driver %q cannot enforce max_output_tokens_per_call: neither MaxTokensFlag nor InvocationMapper is configured", s.driver.id)
 	}
 
 	if len(input.ToolResults) > 0 && s.driver.opts.ToolResultsFlag == "" && s.driver.opts.InvocationMapper == nil {
@@ -484,6 +513,10 @@ func (s *cliSession) StreamTurn(ctx context.Context, input TurnInput) (EventStre
 
 	if !s.driver.capabilities.SupportsStreaming {
 		return nil, errs.New(errs.CategoryUnsupported, "cli driver %q does not support streaming", s.driver.id)
+	}
+
+	if !s.canEnforceMaxOutputTokens() {
+		return nil, errs.New(errs.CategoryUnsupported, "cli driver %q cannot enforce max_output_tokens_per_call: neither MaxTokensFlag nor InvocationMapper is configured", s.driver.id)
 	}
 
 	if len(input.ToolResults) > 0 && s.driver.opts.ToolResultsFlag == "" && s.driver.opts.InvocationMapper == nil {

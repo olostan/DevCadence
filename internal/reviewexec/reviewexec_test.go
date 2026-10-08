@@ -362,14 +362,36 @@ func driveTaskToReviewing(t *testing.T, f *testFixture, taskAlias, wpID, attempt
 		t.Fatalf("append TaskDelegated: %v", err)
 	}
 
-	// 5. Worker attempt started + record worker provenance
+	// 5. Worker attempt started
+	ps, _ = f.harness.Service.ProjectState(ctx, f.projectID)
+	_, err = f.harness.Service.AppendTypedEvent(ctx, controlplane.AppendTypedEventInput{
+		ProjectID: f.projectID,
+		Payload: &events.AttemptStarted{
+			TaskID:               taskID,
+			AttemptID:            attemptID,
+			WorkPackageID:        wpID,
+			WorkPackageVersion:   1,
+			ProjectStateRevision: ps.StateRevision,
+			WorkerRole:           "implementer",
+			WorktreeID:           attemptID,
+		},
+	})
+	if err != nil {
+		t.Fatalf("append AttemptStarted: %v", err)
+	}
+
+	// 6. Produce candidate commit
+	f.gitRepo.WriteFile("main.go", "package main\n\n// candidate change\nfunc main() {}\n")
+	f.gitRepo.Commit("candidate commit")
+	candidateCommit := f.gitRepo.Head()
+
 	workerActorID, err := actors.DeriveActorID(actors.BasisEndpointModel, workerBasis)
 	if err != nil {
 		t.Fatalf("derive worker actor id: %v", err)
 	}
 	workerProv := &protocol.InvocationProvenance{
 		SchemaVersion: protocol.SchemaVersion1,
-		ProvenanceID:  attemptID + ":implementer",
+		ProvenanceID:  "prov_" + attemptID,
 		ProjectID:     f.projectID,
 		TaskID:        taskID,
 		AttemptID:     attemptID,
@@ -386,32 +408,8 @@ func driveTaskToReviewing(t *testing.T, f *testFixture, taskAlias, wpID, attempt
 		ContextManifestDigest: "sha256:" + strings.Repeat("3", 64),
 		PromptDigest:          "sha256:" + strings.Repeat("4", 64),
 		StartedAt:             time.Now().UTC(),
+		CandidateCommit:       candidateCommit,
 	}
-
-	ps, _ = f.harness.Service.ProjectState(ctx, f.projectID)
-	_, err = f.harness.Service.AppendTypedEvent(ctx, controlplane.AppendTypedEventInput{
-		ProjectID: f.projectID,
-		Payload: &events.AttemptStarted{
-			TaskID:               taskID,
-			AttemptID:            attemptID,
-			WorkPackageID:        wpID,
-			WorkPackageVersion:   1,
-			ProjectStateRevision: ps.StateRevision,
-			WorkerRole:           "implementer",
-			WorktreeID:           attemptID,
-		},
-		Records: []controlplane.RecordToStore{
-			{Version: 1, Record: workerProv},
-		},
-	})
-	if err != nil {
-		t.Fatalf("append AttemptStarted: %v", err)
-	}
-
-	// 6. Produce candidate commit
-	f.gitRepo.WriteFile("main.go", "package main\n\n// candidate change\nfunc main() {}\n")
-	f.gitRepo.Commit("candidate commit")
-	candidateCommit := f.gitRepo.Head()
 
 	_, err = f.harness.Service.AppendTypedEvent(ctx, controlplane.AppendTypedEventInput{
 		ProjectID: f.projectID,
@@ -420,6 +418,9 @@ func driveTaskToReviewing(t *testing.T, f *testFixture, taskAlias, wpID, attempt
 			AttemptID:       attemptID,
 			CandidateCommit: candidateCommit,
 			Summary:         "candidate produced",
+		},
+		Records: []controlplane.RecordToStore{
+			{Version: 1, Record: workerProv},
 		},
 	})
 	if err != nil {
@@ -1238,6 +1239,9 @@ func TestReview_IntentAbsentGuard_TaskNotRunning(t *testing.T) {
 	}
 
 	// task running but intent already recorded
+	validProvBytes, _ := json.Marshal(map[string]any{
+		"candidate_commit": "c123",
+	})
 	guardRunning := reviewexec.NewIntentAbsentGuardForTesting(
 		"task-running-1",
 		"att_1",
@@ -1245,8 +1249,15 @@ func TestReview_IntentAbsentGuard_TaskNotRunning(t *testing.T) {
 		"intent_1",
 	)
 	errExists := guardRunning.Check(context.Background(), fakeGuardView{
-		ps:        ps,
-		recordErr: nil, // found!
+		ps: ps,
+		records: map[string]storage.StoredRecord{
+			"InvocationProvenance:prov_att_1": {
+				Document: string(validProvBytes),
+			},
+			"ReviewInvocationIntent:intent_1": {
+				Document: `{"intent_id":"intent_1"}`,
+			},
+		},
 	})
 	if errExists == nil {
 		t.Fatal("expected error for existing intent, got nil")
@@ -1255,6 +1266,113 @@ func TestReview_IntentAbsentGuard_TaskNotRunning(t *testing.T) {
 	if !errors.As(errExists, &coded) || coded.Code() != principal.CodePolicyDenied {
 		t.Fatalf("expected CodePolicyDenied, got %v", errExists)
 	}
+}
+
+func TestReview_IntentAbsentGuard_NegativeCandidateEvidence(t *testing.T) {
+	ps := &protocol.ProjectState{
+		Tasks: protocol.TaskBuckets{
+			Running: []string{"task-1"},
+		},
+	}
+
+	t.Run("missing_evidence", func(t *testing.T) {
+		guard := reviewexec.NewIntentAbsentGuardForTesting("task-1", "att-missing", "c123", "intent-1")
+		view := fakeGuardView{
+			ps:      ps,
+			records: map[string]storage.StoredRecord{},
+		}
+		err := guard.Check(context.Background(), view)
+		if err == nil {
+			t.Fatal("expected error for missing evidence, got nil")
+		}
+		var coded *principal.CodedError
+		if !errors.As(err, &coded) || coded.Code() != principal.CodeConflict {
+			t.Fatalf("expected CodeConflict, got %v", err)
+		}
+		if errs.CategoryOf(err) != errs.CategoryConflict {
+			t.Fatalf("expected CategoryConflict, got %v", err)
+		}
+	})
+
+	t.Run("empty_evidence_document", func(t *testing.T) {
+		guard := reviewexec.NewIntentAbsentGuardForTesting("task-1", "att-empty-doc", "c123", "intent-1")
+		view := fakeGuardView{
+			ps: ps,
+			records: map[string]storage.StoredRecord{
+				"InvocationProvenance:prov_att-empty-doc": {
+					Document: "",
+				},
+			},
+		}
+		err := guard.Check(context.Background(), view)
+		if err == nil {
+			t.Fatal("expected error for empty document, got nil")
+		}
+		var coded *principal.CodedError
+		if !errors.As(err, &coded) || coded.Code() != principal.CodeConflict {
+			t.Fatalf("expected CodeConflict, got %v", err)
+		}
+	})
+
+	t.Run("malformed_evidence", func(t *testing.T) {
+		guard := reviewexec.NewIntentAbsentGuardForTesting("task-1", "att-malformed", "c123", "intent-1")
+		view := fakeGuardView{
+			ps: ps,
+			records: map[string]storage.StoredRecord{
+				"InvocationProvenance:prov_att-malformed": {
+					Document: "{not valid json",
+				},
+			},
+		}
+		err := guard.Check(context.Background(), view)
+		if err == nil {
+			t.Fatal("expected error for malformed evidence, got nil")
+		}
+		var coded *principal.CodedError
+		if !errors.As(err, &coded) || coded.Code() != principal.CodeConflict {
+			t.Fatalf("expected CodeConflict, got %v", err)
+		}
+	})
+
+	t.Run("empty_candidate_commit", func(t *testing.T) {
+		guard := reviewexec.NewIntentAbsentGuardForTesting("task-1", "att-empty-commit", "c123", "intent-1")
+		view := fakeGuardView{
+			ps: ps,
+			records: map[string]storage.StoredRecord{
+				"InvocationProvenance:prov_att-empty-commit": {
+					Document: `{"candidate_commit":""}`,
+				},
+			},
+		}
+		err := guard.Check(context.Background(), view)
+		if err == nil {
+			t.Fatal("expected error for empty candidate commit, got nil")
+		}
+		var coded *principal.CodedError
+		if !errors.As(err, &coded) || coded.Code() != principal.CodeConflict {
+			t.Fatalf("expected CodeConflict, got %v", err)
+		}
+	})
+
+	t.Run("candidate_commit_mismatch", func(t *testing.T) {
+		guard := reviewexec.NewIntentAbsentGuardForTesting("task-1", "att-mismatch", "expected-c", "intent-1")
+		view := fakeGuardView{
+			ps: ps,
+			records: map[string]storage.StoredRecord{
+				"InvocationProvenance:prov_att-mismatch": {
+					Document: `{"candidate_commit":"actual-c"}`,
+				},
+			},
+		}
+		err := guard.Check(context.Background(), view)
+		if err == nil {
+			t.Fatal("expected error for commit mismatch, got nil")
+		}
+		var coded *principal.CodedError
+		if !errors.As(err, &coded) || coded.Code() != principal.CodeConflict {
+			t.Fatalf("expected CodeConflict, got %v", err)
+		}
+	})
 }
 
 func TestReview_IntentAbsentGuard_CandidateCommitMismatch(t *testing.T) {

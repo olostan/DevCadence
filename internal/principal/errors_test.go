@@ -3,6 +3,7 @@ package principal_test
 import (
 	"testing"
 
+	"github.com/olostan/DevCadence/internal/errs"
 	"github.com/olostan/DevCadence/internal/principal"
 )
 
@@ -51,6 +52,32 @@ func TestCodedError(t *testing.T) {
 		}
 		if err.Retryable() {
 			t.Errorf("Retryable() = true, want false")
+		}
+	})
+
+	t.Run("unwrap category mappings", func(t *testing.T) {
+		codes := []struct {
+			code string
+			want errs.Category
+		}{
+			{principal.CodeConflict, errs.CategoryConflict},
+			{principal.CodePolicyDenied, errs.CategoryPolicyDenied},
+			{principal.CodeInvalidArgument, errs.CategoryInvalidArgument},
+			{principal.CodeNotFound, errs.CategoryNotFound},
+			{principal.CodeIntegrity, errs.CategoryIntegrity},
+			{principal.CodeValidationFailed, errs.CategoryValidationFailed},
+			{principal.CodeContradictedAssumption, errs.CategoryContradictedAssumption},
+			{principal.CodeNeedsPrincipal, errs.CategoryNeedsPrincipal},
+			{principal.CodeModelUnavailable, errs.CategoryModelUnavailable},
+			{principal.CodeContextUnfit, errs.CategoryContextUnfit},
+			{"UNKNOWN_CODE", errs.CategoryInternal},
+		}
+		for _, tc := range codes {
+			err := principal.NewCodedError(tc.code, false, nil, "some detail")
+			unwrapped := err.Unwrap()
+			if got := errs.CategoryOf(unwrapped); got != tc.want {
+				t.Errorf("code %s: got category %v, want %v", tc.code, got, tc.want)
+			}
 		}
 	})
 }

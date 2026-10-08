@@ -18,6 +18,7 @@ import (
 type mockDirectClient struct {
 	delay        time.Duration
 	lastMessages []DirectMessage
+	lastReq      DirectAPIRequest
 }
 
 func (m *mockDirectClient) Complete(ctx context.Context, req DirectAPIRequest) (DirectAPIResponse, error) {
@@ -25,6 +26,7 @@ func (m *mockDirectClient) Complete(ctx context.Context, req DirectAPIRequest) (
 		return DirectAPIResponse{}, err
 	}
 
+	m.lastReq = req
 	m.lastMessages = req.Messages
 
 	if m.delay > 0 {
@@ -57,6 +59,8 @@ func (m *mockDirectClient) Stream(ctx context.Context, req DirectAPIRequest) (Ev
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
+
+	m.lastReq = req
 
 	stream := NewChannelEventStream(8)
 	go func() {
@@ -131,8 +135,9 @@ func TestDirectAPIDriver_ResumeAfterClosePreservesHistory(t *testing.T) {
 	ctx := context.Background()
 
 	session, err := driver.StartSession(ctx, SessionConfig{
-		SessionID: "sess-history-preserve",
-		ModelID:   "direct-model-v1",
+		SessionID:              "sess-history-preserve",
+		ModelID:                "direct-model-v1",
+		MaxOutputTokensPerCall: 4096,
 	})
 	if err != nil {
 		t.Fatalf("StartSession failed: %v", err)
@@ -156,8 +161,9 @@ func TestDirectAPIDriver_ResumeAfterClosePreservesHistory(t *testing.T) {
 
 	// Resume session
 	resumed, err := driver.ResumeSession(ctx, "sess-history-preserve", SessionConfig{
-		SessionID: "sess-history-preserve",
-		ModelID:   "direct-model-v1",
+		SessionID:              "sess-history-preserve",
+		ModelID:                "direct-model-v1",
+		MaxOutputTokensPerCall: 4096,
 	})
 	if err != nil {
 		t.Fatalf("ResumeSession failed: %v", err)
@@ -199,8 +205,9 @@ func TestDirectAPIDriver_Cancellation(t *testing.T) {
 	defer cancel()
 
 	session, err := driver.StartSession(context.Background(), SessionConfig{
-		SessionID: "sess-api-cancel",
-		ModelID:   "direct-model-v1",
+		SessionID:              "sess-api-cancel",
+		ModelID:                "direct-model-v1",
+		MaxOutputTokensPerCall: 4096,
 	})
 	if err != nil {
 		t.Fatalf("StartSession failed: %v", err)
@@ -227,8 +234,9 @@ func TestDirectAPIDriver_ToolMediationExecution(t *testing.T) {
 	})
 
 	session, err := driver.StartSession(context.Background(), SessionConfig{
-		SessionID: "sess-api-tool-exec",
-		ModelID:   "direct-model-v1",
+		SessionID:              "sess-api-tool-exec",
+		ModelID:                "direct-model-v1",
+		MaxOutputTokensPerCall: 4096,
 		Tools: []ToolDefinition{
 			{Name: "fetch_data", Description: "fetches data"},
 		},
@@ -259,8 +267,9 @@ func TestDirectAPIDriver_StreamingEvents(t *testing.T) {
 	driver := MustNewDirectAPIDriver("direct-api-stream", client)
 
 	session, err := driver.StartSession(context.Background(), SessionConfig{
-		SessionID: "sess-api-stream",
-		ModelID:   "direct-model-v1",
+		SessionID:              "sess-api-stream",
+		ModelID:                "direct-model-v1",
+		MaxOutputTokensPerCall: 4096,
 	})
 	if err != nil {
 		t.Fatalf("StartSession failed: %v", err)
@@ -336,8 +345,9 @@ func TestDirectAPIDriver_StreamEarlyCloseCancelsUnderlyingStream(t *testing.T) {
 
 	ctx := context.Background()
 	session, err := driver.StartSession(ctx, SessionConfig{
-		SessionID: "sess-api-cancel-stream",
-		ModelID:   "direct-model-v1",
+		SessionID:              "sess-api-cancel-stream",
+		ModelID:                "direct-model-v1",
+		MaxOutputTokensPerCall: 4096,
 	})
 	if err != nil {
 		t.Fatalf("StartSession failed: %v", err)
@@ -378,5 +388,46 @@ func TestDirectAPIDriver_StreamEarlyCloseCancelsUnderlyingStream(t *testing.T) {
 	}
 	if !canceled {
 		t.Errorf("expected stream context to be canceled on consumer early close")
+	}
+}
+
+func TestDirectAPIDriver_MaxOutputTokensPropagated(t *testing.T) {
+	client := &mockDirectClient{}
+	driver := MustNewDirectAPIDriver("direct-api-tokens", client)
+
+	ctx := context.Background()
+	const maxTokens = int64(2048)
+	session, err := driver.StartSession(ctx, SessionConfig{
+		SessionID:              "sess-tokens-check",
+		ModelID:                "direct-model-v1",
+		MaxOutputTokensPerCall: maxTokens,
+	})
+	if err != nil {
+		t.Fatalf("StartSession failed: %v", err)
+	}
+
+	// 1. Complete turn receives MaxOutputTokens
+	_, err = session.ExecuteTurn(ctx, TurnInput{
+		TurnID: "turn-tokens-complete",
+		Prompt: "test tokens complete",
+	})
+	if err != nil {
+		t.Fatalf("ExecuteTurn failed: %v", err)
+	}
+	if client.lastReq.MaxOutputTokens != maxTokens {
+		t.Errorf("ExecuteTurn: expected MaxOutputTokens=%d, got %d", maxTokens, client.lastReq.MaxOutputTokens)
+	}
+
+	// 2. Stream turn receives MaxOutputTokens
+	stream, err := session.StreamTurn(ctx, TurnInput{
+		TurnID: "turn-tokens-stream",
+		Prompt: "test tokens stream",
+	})
+	if err != nil {
+		t.Fatalf("StreamTurn failed: %v", err)
+	}
+	defer stream.Close()
+	if client.lastReq.MaxOutputTokens != maxTokens {
+		t.Errorf("StreamTurn: expected MaxOutputTokens=%d, got %d", maxTokens, client.lastReq.MaxOutputTokens)
 	}
 }

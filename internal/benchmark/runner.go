@@ -151,8 +151,9 @@ func (r *BenchmarkRunner) RunTask(
 
 	// 4. Start new driver session (INV-02: isolated session with guaranteed defer cleanup)
 	cfg := drivers.SessionConfig{
-		SessionID: runID,
-		ModelID:   r.ModelID,
+		SessionID:              runID,
+		ModelID:                r.ModelID,
+		MaxOutputTokensPerCall: 4096,
 	}
 	if cfg.ModelID == "" {
 		cfg.ModelID = "benchmark-model"

@@ -105,6 +105,7 @@ const (
 	CodeOperationLost            = "OPERATION_LOST"
 	CodeCancelled                = "CANCELLED"
 	CodeInternal                 = "INTERNAL"
+	CodeConflict                 = "CONFLICT"
 )
 
 // Operation kinds and statuses. Both sets are closed.
@@ -144,6 +145,7 @@ var fixedMessages = map[string]string{
 	CodeOperationLost:            "The operation handle is no longer available.",
 	CodeCancelled:                "The operation was cancelled.",
 	CodeInternal:                 "An internal error occurred.",
+	CodeConflict:                 "A conflict occurred.",
 }
 
 // ErrorCodes returns the closed error-code set in specification order.

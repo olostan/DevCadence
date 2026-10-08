@@ -21,7 +21,7 @@ type intentAbsentGuard struct {
 func (g intentAbsentGuard) Check(ctx context.Context, view controlplane.BatchReadView) error {
 	ps := view.ProjectState()
 	if ps == nil {
-		return errs.New(errs.CategoryInternal, "nil project state in guard")
+		return principal.NewCodedError(principal.CodeInternal, false, []string{"nil-project-state"}, "nil project state in guard")
 	}
 	running := false
 	for _, id := range ps.Tasks.Running {
@@ -31,26 +31,70 @@ func (g intentAbsentGuard) Check(ctx context.Context, view controlplane.BatchRea
 		}
 	}
 	if !running {
-		return errs.New(errs.CategoryConflict, "task %s is not running", g.taskID)
+		return principal.NewCodedError(
+			principal.CodeConflict,
+			false,
+			[]string{"task-not-running"},
+			fmt.Sprintf("task %s is not running", g.taskID),
+		)
 	}
 
-	if g.attemptID != "" {
-		workerKey := g.attemptID + ":implementer"
-		storedWorker, err := view.Record(ctx, "InvocationProvenance", workerKey, 1)
-		if err != nil && errs.CategoryOf(err) == errs.CategoryNotFound {
-			storedWorker, err = view.Record(ctx, "InvocationProvenance", "prov_"+g.attemptID, 1)
-		}
-		if err == nil && storedWorker.Document != "" {
-			var workerProv protocol.InvocationProvenance
-			if err := json.Unmarshal([]byte(storedWorker.Document), &workerProv); err == nil {
-				if workerProv.CandidateCommit != "" && g.candidateCommit != "" && workerProv.CandidateCommit != g.candidateCommit {
-					return errs.New(errs.CategoryConflict, "candidate commit mismatch: provenance has %s, request has %s", workerProv.CandidateCommit, g.candidateCommit)
-				}
-			}
-		}
+	if g.attemptID == "" || g.candidateCommit == "" {
+		return principal.NewCodedError(
+			principal.CodeConflict,
+			false,
+			[]string{"missing-candidate-evidence"},
+			"attemptID and candidateCommit required",
+		)
 	}
 
-	_, err := view.Record(ctx, "ReviewInvocationIntent", g.intentID, 1)
+	storedWorker, err := view.Record(ctx, "InvocationProvenance", "prov_"+g.attemptID, 1)
+	if err != nil && errs.CategoryOf(err) == errs.CategoryNotFound {
+		storedWorker, err = view.Record(ctx, "InvocationProvenance", g.attemptID+":implementer", 1)
+	}
+	if err != nil {
+		return principal.NewCodedError(
+			principal.CodeConflict,
+			false,
+			[]string{"missing-candidate-evidence"},
+			fmt.Sprintf("candidate evidence missing for attempt %s: %v", g.attemptID, err),
+		)
+	}
+	if storedWorker.Document == "" {
+		return principal.NewCodedError(
+			principal.CodeConflict,
+			false,
+			[]string{"empty-candidate-evidence"},
+			fmt.Sprintf("candidate evidence document is empty for attempt %s", g.attemptID),
+		)
+	}
+	var workerProv protocol.InvocationProvenance
+	if err := json.Unmarshal([]byte(storedWorker.Document), &workerProv); err != nil {
+		return principal.NewCodedError(
+			principal.CodeConflict,
+			false,
+			[]string{"malformed-candidate-evidence"},
+			fmt.Sprintf("failed to decode candidate evidence: %v", err),
+		)
+	}
+	if workerProv.CandidateCommit == "" {
+		return principal.NewCodedError(
+			principal.CodeConflict,
+			false,
+			[]string{"empty-candidate-commit"},
+			fmt.Sprintf("candidate evidence for attempt %s has no candidate commit", g.attemptID),
+		)
+	}
+	if workerProv.CandidateCommit != g.candidateCommit {
+		return principal.NewCodedError(
+			principal.CodeConflict,
+			false,
+			[]string{"candidate-commit-mismatch"},
+			fmt.Sprintf("candidate commit mismatch: provenance has %s, request has %s", workerProv.CandidateCommit, g.candidateCommit),
+		)
+	}
+
+	_, err = view.Record(ctx, "ReviewInvocationIntent", g.intentID, 1)
 	if err == nil {
 		return principal.NewCodedError(
 			principal.CodePolicyDenied,

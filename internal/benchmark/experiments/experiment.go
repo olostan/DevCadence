@@ -222,8 +222,9 @@ func (r *ExperimentRunner) runRepetition(ctx context.Context, spec ExperimentSpe
 		modelID = string(spec.TargetCapability)
 	}
 	cfg := drivers.SessionConfig{
-		SessionID: runID,
-		ModelID:   modelID,
+		SessionID:              runID,
+		ModelID:                modelID,
+		MaxOutputTokensPerCall: 4096,
 	}
 
 	session, err := driver.StartSession(ctx, cfg)

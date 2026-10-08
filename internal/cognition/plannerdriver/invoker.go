@@ -29,11 +29,12 @@ var _ planner.Invoker = (*Invoker)(nil)
 // Config binds the endpoint and model a planner call uses. Values are passed
 // verbatim; the adapter never normalizes or derives them.
 type Config struct {
-	EndpointID       string
-	ModelID          string
-	SessionIDPrefix  string
-	Timeout          time.Duration
-	IncludeErrorText bool
+	EndpointID             string
+	ModelID                string
+	SessionIDPrefix        string
+	Timeout                time.Duration
+	IncludeErrorText       bool
+	MaxOutputTokensPerCall int64
 }
 
 // Invoker is a planner.Invoker backed by a drivers.SessionDriver.
@@ -83,9 +84,14 @@ func (i *Invoker) Invoke(ctx context.Context, inv planner.Invocation) (planner.I
 		defer cancel()
 	}
 
+	maxTokens := i.cfg.MaxOutputTokensPerCall
+	if maxTokens <= 0 {
+		maxTokens = 4096
+	}
 	session, err := i.driver.StartSession(callCtx, drivers.SessionConfig{
-		SessionID: sessionID,
-		ModelID:   i.cfg.ModelID,
+		SessionID:              sessionID,
+		ModelID:                i.cfg.ModelID,
+		MaxOutputTokensPerCall: maxTokens,
 	})
 	if err != nil {
 		return planner.InvocationResult{}, i.driverError(callCtx, "start", err)

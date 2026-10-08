@@ -23,8 +23,9 @@ func TestFakeDriver_CancellationWithDelay(t *testing.T) {
 	defer cancel()
 
 	session, err := driver.StartSession(context.Background(), SessionConfig{
-		SessionID: "sess-delay-cancel",
-		ModelID:   "test-model",
+		SessionID:              "sess-delay-cancel",
+		ModelID:                "test-model",
+		MaxOutputTokensPerCall: 4096,
 	})
 	if err != nil {
 		t.Fatalf("failed to start session: %v", err)
@@ -56,8 +57,9 @@ func TestFakeDriver_CustomTurnHandler(t *testing.T) {
 	})
 
 	session, err := driver.StartSession(context.Background(), SessionConfig{
-		SessionID: "sess-custom",
-		ModelID:   "test-model",
+		SessionID:              "sess-custom",
+		ModelID:                "test-model",
+		MaxOutputTokensPerCall: 4096,
 	})
 	if err != nil {
 		t.Fatalf("StartSession failed: %v", err)
@@ -84,8 +86,9 @@ func TestFakeDriver_StreamTurnCancellation(t *testing.T) {
 	defer cancel()
 
 	session, err := driver.StartSession(context.Background(), SessionConfig{
-		SessionID: "sess-stream-timeout",
-		ModelID:   "test-model",
+		SessionID:              "sess-stream-timeout",
+		ModelID:                "test-model",
+		MaxOutputTokensPerCall: 4096,
 	})
 	if err != nil {
 		t.Fatalf("StartSession failed: %v", err)
