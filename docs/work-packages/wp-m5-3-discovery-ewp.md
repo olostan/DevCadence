@@ -187,7 +187,7 @@ All input structs use explicit named fields, not arbitrary events/raw protocol.R
 Options has exact fields `ControlPlane *controlplane.Service`, `Policy principal.PolicyResolver`, `ReviewPort IndependentReviewPort`, `HumanReceipts HumanReceiptVerifier`, `Evidence EvidenceResolver`. Missing ControlPlane/Policy/Evidence is INVALID_ARGUMENT; ReviewPort/HumanReceipts may be nil, producing MODEL_UNAVAILABLE/NEEDS_HUMAN for their respective operation. Every method uses exact action-grant admission plus Policy.Check; do not add mutable alias grants or treat PolicyRef as authorization by itself.
 
 ```go
-type ReceiptSubject struct { Kind, ID string; Version int }
+type ReceiptSubject struct { Kind, ID string; Version int; SubjectDigest string }
 type HumanReceipt struct { HumanActorID, SourceRef, Purpose, InputDigest string; Subject ReceiptSubject }
 type PolicyResolver interface {
     Check(ctx context.Context, caller principal.CallerContext, meta principal.CallMeta, action string) error
@@ -202,7 +202,7 @@ type EvidenceResolver interface {
 }
 ```
 
-Verify must validate authentic issuance, subject/input/purpose binding and caller/project eligibility, and return an independently established human identity. HumanReceipt is not wire input. This defines the consumer contract only; secure issuer/isolation/protected ingress remains BLOCKED, not delegated invention. A nil verifier cannot be substituted with an accepting fake in production. EvidenceResolver proves authorized retrievability; it does not prove a claim true merely because a source exists. Implement resolver against WP2 progressive evidence policy only after its exact port is reconciled. Local SourceRef attestation for external independent review has the same provenance isolation blocker and cannot be accepted from model JSON alone.
+Verify must validate authentic issuance, subject/input/purpose binding and caller/project eligibility, and return an independently established human identity. SubjectDigest is recomputed by the discovery consumer from the authority-bearing artifact defined by R4 and must never be copied from receipt bytes. HumanReceipt is not wire input. This defines the consumer contract only; secure issuer/isolation/protected ingress remains BLOCKED, not delegated invention. A nil verifier cannot be substituted with an accepting fake in production. EvidenceResolver proves authorized retrievability; it does not prove a claim true merely because a source exists. Implement resolver against WP2 progressive evidence policy only after its exact port is reconciled. Local SourceRef attestation for external independent review has the same provenance isolation blocker and cannot be accepted from model JSON alone.
 
 MutationResult `{ProjectState *protocol.ProjectState; Snapshot RecordPointer; Events []events.Event}`; DiscoveryView `{ProjectID, StateRevision string; Snapshot *RecordPointer; Problem *RecordPointer; Ledger *RecordPointer; Requirements, Decisions, Experiments, Reviews []RecordPointer; Readiness, Reflection *RecordPointer; InputDigest, ReadinessBasisDigest string; DecisionStatuses []DecisionStatusEntry; LegacyUnbound bool}`. Empty initialized project returns empty arrays and nil pointers, not false readiness. Summary fields follow WP2 response envelope and bounded evidence policy; no document bodies in View.
 
