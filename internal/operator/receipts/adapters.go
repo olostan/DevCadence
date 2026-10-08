@@ -2,12 +2,9 @@ package receipts
 
 import (
 	"context"
-	"encoding/json"
-	"os"
 	"path/filepath"
 	"strings"
 
-	"github.com/olostan/DevCadence/internal/clock"
 	"github.com/olostan/DevCadence/internal/errs"
 	"github.com/olostan/DevCadence/internal/principal"
 	"github.com/olostan/DevCadence/internal/principalhosts"
@@ -20,40 +17,45 @@ type HostPlanScope struct {
 	Paths      []string `json:"paths"`
 }
 
-// HostPlanApprovals wraps Verifier to implement principalhosts.ApprovalVerifier.
+// HostPlanApprovals implements principalhosts.ApprovalVerifier without reading receipts.
+// Receipt lookup and strict decoding belong exclusively to the configured Verifier.
 type HostPlanApprovals struct {
-	Verifier    Verifier
-	ReceiptsDir string
-	ReadReceipt func(ref string) (Receipt, error)
-	ProjectID   string
-	Clock       clock.Clock
+	Verifier  Verifier
+	ProjectID string
 }
 
 var _ principalhosts.ApprovalVerifier = (*HostPlanApprovals)(nil)
 
-// VerifyApproval verifies an approval reference for host plan application.
-// It verifies that paths are canonical and sorted, that the receipt purpose is
-// PurposeHostPlanApply, subject is bound to the plan, and digests match.
+// VerifyApproval recomputes the exact host-plan authority binding from consumer inputs
+// and asks the verifier to validate the named receipt against that binding.
 func (h *HostPlanApprovals) VerifyApproval(ctx context.Context, ref string, planDigest string, paths []string) error {
-	if strings.TrimSpace(ref) == "" {
-		return errs.New(errs.CategoryInvalidArgument, "approval ref is required")
+	if !IsValidReceiptID(ref) {
+		return errs.New(errs.CategoryInvalidArgument, "invalid approval receipt id %q", ref)
 	}
 	if strings.TrimSpace(planDigest) == "" {
 		return errs.New(errs.CategoryInvalidArgument, "plan digest is required")
+	}
+	if strings.TrimSpace(h.ProjectID) == "" {
+		return errs.New(errs.CategoryInvalidArgument, "project id is required")
+	}
+	if h.Verifier == nil {
+		return errs.New(errs.CategoryPolicyDenied, "no verifier configured for host plan approval")
 	}
 
 	for i, p := range paths {
 		if !filepath.IsAbs(p) {
 			return errs.New(errs.CategoryInvalidArgument, "path %q must be absolute", p)
 		}
-		if strings.Contains(p, "\x00") {
+		if strings.ContainsRune(p, '\x00') {
 			return errs.New(errs.CategoryInvalidArgument, "path %q contains NUL", p)
 		}
 		if filepath.Clean(p) != p {
 			return errs.New(errs.CategoryInvalidArgument, "path %q is not clean", p)
 		}
-		if strings.Contains(p, "..") {
-			return errs.New(errs.CategoryInvalidArgument, "path %q contains ..", p)
+		for _, part := range strings.Split(filepath.ToSlash(p), "/") {
+			if part == ".." {
+				return errs.New(errs.CategoryInvalidArgument, "path %q contains ..", p)
+			}
 		}
 		if i > 0 {
 			if paths[i-1] == p {
@@ -65,69 +67,18 @@ func (h *HostPlanApprovals) VerifyApproval(ctx context.Context, ref string, plan
 		}
 	}
 
-	scope := HostPlanScope{
-		PlanDigest: planDigest,
-		Paths:      paths,
-	}
-	scopeBytes, err := protocol.CanonicalJSON(scope)
+	scopeBytes, err := protocol.CanonicalJSON(HostPlanScope{PlanDigest: planDigest, Paths: paths})
 	if err != nil {
-		return errs.Wrap(errs.CategoryInvalidArgument, err, "failed to compute canonical scope")
-	}
-	expectedScopeDigest := protocol.DigestBytes(scopeBytes)
-
-	var receipt Receipt
-	if h.ReadReceipt != nil {
-		r, err := h.ReadReceipt(ref)
-		if err != nil {
-			return errs.Wrap(errs.CategoryPolicyDenied, err, "failed to read receipt %s", ref)
-		}
-		receipt = r
-	} else {
-		r, err := readReceiptFromDisk(h.ReceiptsDir, ref)
-		if err != nil {
-			return err
-		}
-		receipt = r
-	}
-
-	stmt := receipt.Statement
-	if stmt.Purpose != PurposeHostPlanApply {
-		return errs.New(errs.CategoryPolicyDenied, "purpose mismatch: receipt has %q, want %q", stmt.Purpose, PurposeHostPlanApply)
-	}
-
-	kindValid := stmt.Subject.Kind == "host_plan" || stmt.Subject.Kind == "HostPlan"
-	idValid := stmt.Subject.ID == ref || stmt.Subject.ID == planDigest
-	versionValid := stmt.Subject.Version == 1
-	if !kindValid || !idValid || !versionValid {
-		return errs.New(errs.CategoryPolicyDenied, "subject mismatch: receipt has %+v, want Kind=host_plan, ID=%s, Version=1", stmt.Subject, ref)
-	}
-
-	if stmt.SubjectDigest != expectedScopeDigest && stmt.SubjectDigest != planDigest {
-		return errs.New(errs.CategoryPolicyDenied, "subject digest mismatch: receipt has %s, want %s or %s", stmt.SubjectDigest, expectedScopeDigest, planDigest)
-	}
-
-	if h.Verifier == nil {
-		return errs.New(errs.CategoryPolicyDenied, "no verifier configured for host plan approval")
-	}
-
-	if inv, ok := h.Verifier.(*InMemoryVerifier); ok {
-		inv.receipts = append(inv.receipts, receipt)
-	}
-
-	projectID := stmt.ProjectID
-	if h.ProjectID != "" {
-		projectID = h.ProjectID
+		return errs.Wrap(errs.CategoryInvalidArgument, err, "failed to compute canonical host plan scope")
 	}
 
 	req := Request{
 		ReceiptID:     ref,
 		Purpose:       PurposeHostPlanApply,
-		ProjectID:     projectID,
-		Subject:       stmt.Subject,
-		SubjectDigest: stmt.SubjectDigest,
-		InputDigest:   stmt.InputDigest,
+		ProjectID:     h.ProjectID,
+		Subject:       Subject{Kind: "HostPlan", ID: planDigest, Version: 1},
+		SubjectDigest: protocol.DigestBytes(scopeBytes),
 	}
-
 	verified, err := h.Verifier.Verify(ctx, req)
 	if err != nil {
 		return err
@@ -138,11 +89,13 @@ func (h *HostPlanApprovals) VerifyApproval(ctx context.Context, ref string, plan
 	return nil
 }
 
-// ReceiptSubject identifies the subject of a human discovery receipt.
+// ReceiptSubject identifies the subject of a human discovery receipt and carries
+// the consumer-recomputed digest of the authority-bearing artifact.
 type ReceiptSubject struct {
-	Kind    string `json:"kind"`
-	ID      string `json:"id"`
-	Version int    `json:"version"`
+	Kind          string `json:"kind"`
+	ID            string `json:"id"`
+	Version       int    `json:"version"`
+	SubjectDigest string `json:"subject_digest"`
 }
 
 // HumanReceipt represents the verified human ingress receipt returned to discovery consumers.
@@ -160,24 +113,28 @@ type HumanReceiptVerifier interface {
 		receiptRef, purpose, inputDigest string, subject ReceiptSubject) (HumanReceipt, error)
 }
 
-// HumanReceipts implements HumanReceiptVerifier.
+// HumanReceipts implements HumanReceiptVerifier without reading receipts.
+// The consumer must supply the recomputed SubjectDigest in ReceiptSubject.
 type HumanReceipts struct {
-	Verifier    Verifier
-	ReceiptsDir string
-	ReadReceipt func(ref string) (Receipt, error)
-	Clock       clock.Clock
+	Verifier Verifier
 }
 
 var _ HumanReceiptVerifier = (*HumanReceipts)(nil)
 
-// Verify verifies a human receipt for discovery mutations.
+// Verify asks the verifier to validate the named receipt against only caller/consumer-derived values.
 func (h *HumanReceipts) Verify(ctx context.Context, caller principal.CallerContext,
 	receiptRef, purpose, inputDigest string, subject ReceiptSubject) (HumanReceipt, error) {
 	if err := caller.Validate(); err != nil {
 		return HumanReceipt{}, err
 	}
-	if !strings.HasPrefix(receiptRef, "rcpt_") {
+	if !IsValidReceiptID(receiptRef) {
 		return HumanReceipt{}, errs.New(errs.CategoryInvalidArgument, "invalid receipt reference %q", receiptRef)
+	}
+	if strings.TrimSpace(subject.SubjectDigest) == "" {
+		return HumanReceipt{}, errs.New(errs.CategoryInvalidArgument, "subject digest is required")
+	}
+	if h.Verifier == nil {
+		return HumanReceipt{}, errs.New(errs.CategoryPolicyDenied, "no verifier configured for human receipts")
 	}
 
 	p := Purpose(purpose)
@@ -190,44 +147,8 @@ func (h *HumanReceipts) Verify(ctx context.Context, caller principal.CallerConte
 	default:
 		return HumanReceipt{}, errs.New(errs.CategoryPolicyDenied, "purpose %q is not an authorized human discovery purpose", purpose)
 	}
-
-	var receipt Receipt
-	if h.ReadReceipt != nil {
-		r, err := h.ReadReceipt(receiptRef)
-		if err != nil {
-			return HumanReceipt{}, errs.Wrap(errs.CategoryPolicyDenied, err, "failed to read receipt %s", receiptRef)
-		}
-		receipt = r
-	} else {
-		r, err := readReceiptFromDisk(h.ReceiptsDir, receiptRef)
-		if err != nil {
-			return HumanReceipt{}, err
-		}
-		receipt = r
-	}
-
-	stmt := receipt.Statement
-	if stmt.ReceiptID != receiptRef {
-		return HumanReceipt{}, errs.New(errs.CategoryPolicyDenied, "receipt_id mismatch: receipt has %s, request has %s", stmt.ReceiptID, receiptRef)
-	}
-	if stmt.ProjectID != caller.ProjectID {
-		return HumanReceipt{}, errs.New(errs.CategoryPolicyDenied, "project_id mismatch: receipt has %q, caller has %q", stmt.ProjectID, caller.ProjectID)
-	}
-	if stmt.Purpose != p {
-		return HumanReceipt{}, errs.New(errs.CategoryPolicyDenied, "purpose mismatch: receipt has %q, request has %q", stmt.Purpose, p)
-	}
-	if stmt.Subject.Kind != subject.Kind || stmt.Subject.ID != subject.ID || stmt.Subject.Version != subject.Version {
-		return HumanReceipt{}, errs.New(errs.CategoryPolicyDenied, "subject mismatch: receipt has %+v, request has %+v", stmt.Subject, subject)
-	}
-	if inputDigest != "" && stmt.InputDigest != inputDigest {
-		return HumanReceipt{}, errs.New(errs.CategoryPolicyDenied, "input_digest mismatch: receipt has %q, request has %q", stmt.InputDigest, inputDigest)
-	}
-	if h.Verifier == nil {
-		return HumanReceipt{}, errs.New(errs.CategoryPolicyDenied, "no verifier configured for human receipts")
-	}
-
-	if inv, ok := h.Verifier.(*InMemoryVerifier); ok {
-		inv.receipts = append(inv.receipts, receipt)
+	if RequiresInputDigest(p) && strings.TrimSpace(inputDigest) == "" {
+		return HumanReceipt{}, errs.New(errs.CategoryInvalidArgument, "input digest is required for purpose %q", p)
 	}
 
 	req := Request{
@@ -235,10 +156,9 @@ func (h *HumanReceipts) Verify(ctx context.Context, caller principal.CallerConte
 		Purpose:       p,
 		ProjectID:     caller.ProjectID,
 		Subject:       Subject{Kind: subject.Kind, ID: subject.ID, Version: subject.Version},
-		SubjectDigest: stmt.SubjectDigest,
+		SubjectDigest: subject.SubjectDigest,
 		InputDigest:   inputDigest,
 	}
-
 	verified, err := h.Verifier.Verify(ctx, req)
 	if err != nil {
 		return HumanReceipt{}, err
@@ -254,38 +174,4 @@ func (h *HumanReceipts) Verify(ctx context.Context, caller principal.CallerConte
 		InputDigest:  inputDigest,
 		Subject:      subject,
 	}, nil
-}
-
-func readReceiptFromDisk(dir, ref string) (Receipt, error) {
-	if !strings.HasPrefix(ref, "rcpt_") {
-		return Receipt{}, errs.New(errs.CategoryInvalidArgument, "invalid receipt reference %q", ref)
-	}
-	if dir == "" {
-		home := os.Getenv("DEVCADENCE_HOME")
-		if home != "" {
-			dir = filepath.Join(home, "receipts")
-		}
-	}
-	if dir == "" {
-		return Receipt{}, errs.New(errs.CategoryNotFound, "receipts directory not configured and DEVCADENCE_HOME not set")
-	}
-	path := filepath.Join(dir, ref+".json")
-	data, err := os.ReadFile(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			path = filepath.Join(dir, ref)
-			data, err = os.ReadFile(path)
-		}
-		if err != nil {
-			return Receipt{}, errs.Wrap(errs.CategoryNotFound, err, "receipt %s not found", ref)
-		}
-	}
-	if len(data) > 64*1024 {
-		return Receipt{}, errs.New(errs.CategoryPolicyDenied, "receipt %s exceeds 64 KiB size limit", ref)
-	}
-	var r Receipt
-	if err := json.Unmarshal(data, &r); err != nil {
-		return Receipt{}, errs.Wrap(errs.CategoryInvalidArgument, err, "invalid receipt json: %s", ref)
-	}
-	return r, nil
 }
