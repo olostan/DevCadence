@@ -635,7 +635,7 @@ func TestSmokeAgainstTheRealServerBinary(t *testing.T) {
 	}
 	root, _ := filepath.EvalSymlinks(t.TempDir())
 	home := filepath.Join(root, "home")
-	for _, d := range []string{home, filepath.Join(home, "config"), filepath.Join(home, "state")} {
+	for _, d := range []string{root, home, filepath.Join(home, "config"), filepath.Join(home, "state")} {
 		if err := os.MkdirAll(d, 0o700); err != nil {
 			t.Fatal(err)
 		}
