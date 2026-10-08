@@ -108,6 +108,9 @@ const (
 // NameReceiptConsumption is the WP-M5-R4 operator ingress receipt consumption schema.
 const NameReceiptConsumption Name = "receipt-consumption"
 
+// NameEmpiricalSession is the WP-M5-R3 empirical session evidence schema.
+const NameEmpiricalSession Name = "empirical-session"
+
 // Names of the principal wire-identity schemas (WP-M5-1). They govern wire
 // objects of the principal interface, not durable records, so they are
 // deliberately absent from RecordKindToSchema.
@@ -335,6 +338,7 @@ func AllNames() []Name {
 		NameReviewFinding, NameFindingResolution, NameResolutionVerification,
 		NameInvocationProvenance, NameReviewInvocationIntent, NameReviewInvocation,
 		NameReceiptConsumption,
+		NameEmpiricalSession,
 		NamePrincipalCallMeta, NamePrincipalWorkPackageRef, NamePrincipalCandidateRef,
 		NamePrincipalSemanticError, NamePrincipalOperationRef,
 	}

@@ -120,9 +120,9 @@ func finiteNonNeg(f float64) bool { return !math.IsNaN(f) && !math.IsInf(f, 0) &
 func limitsProblem(l RunLimits) string {
 	switch {
 	case l.MaxTotalRuns < 0 || l.MaxCallsPerRun < 0 || l.MaxTotalCalls < 0 || l.MaxRunSeconds < 0 ||
-		l.MaxCampaignSeconds < 0 || l.MaxSubscriptionCalls < 0:
+		l.MaxCampaignSeconds < 0 || l.MaxSubscriptionCalls < 0 || l.MaxAPISpendMicroUSD < 0:
 		return "negative cap"
-	case !finiteNonNeg(l.MaxAPISpendUSD) || !finiteNonNeg(l.MaxLocalComputeSeconds):
+	case !finiteNonNeg(l.MaxLocalComputeSeconds):
 		return "non-finite or negative cap"
 	case l.MaxTotalRuns > ceilingRuns || l.MaxCallsPerRun > ceilingCallsPerRun ||
 		l.MaxTotalCalls > ceilingTotalCalls || l.MaxRunSeconds > ceilingRunSeconds ||
@@ -141,6 +141,12 @@ func ValidatePlan(p CampaignPlan) []string {
 	}
 	if blank(p.CampaignID) || blank(p.SourceCommit) {
 		add("campaign_id and source_commit are required")
+	}
+	if blank(p.VerifierSourceCommit) {
+		add("verifier_source_commit is required")
+	}
+	if !validDigest(p.VerificationProfileDigest) {
+		add("verification_profile_digest must be a sha256 digest")
 	}
 	if !validDigest(p.CorpusDigest) || !validDigest(p.CriteriaDigest) {
 		add("corpus_digest and criteria_digest must be sha256 digests")
@@ -269,7 +275,7 @@ func validateAuthorization(a CampaignAuthorization, plan CampaignPlan, planDiges
 		add("expiry must be RFC3339")
 	}
 	lim := RunLimits{MaxTotalRuns: a.MaxTotalRuns, MaxCallsPerRun: a.MaxCallsPerRun, MaxTotalCalls: a.MaxTotalCalls,
-		MaxRunSeconds: a.MaxRunSeconds, MaxCampaignSeconds: a.MaxCampaignSeconds, MaxAPISpendUSD: a.MaxAPISpendUSD,
+		MaxRunSeconds: a.MaxRunSeconds, MaxCampaignSeconds: a.MaxCampaignSeconds, MaxAPISpendMicroUSD: a.MaxAPISpendMicroUSD,
 		MaxSubscriptionCalls: a.MaxSubscriptionCalls, MaxLocalComputeSeconds: a.MaxLocalComputeSeconds}
 	if m := limitsProblem(lim); m != "" {
 		add("caps: %s", m)
@@ -277,7 +283,7 @@ func validateAuthorization(a CampaignAuthorization, plan CampaignPlan, planDiges
 	pl := plan.Limits
 	if a.MaxTotalRuns > pl.MaxTotalRuns || a.MaxCallsPerRun > pl.MaxCallsPerRun || a.MaxTotalCalls > pl.MaxTotalCalls ||
 		a.MaxRunSeconds > pl.MaxRunSeconds || a.MaxCampaignSeconds > pl.MaxCampaignSeconds ||
-		a.MaxAPISpendUSD > pl.MaxAPISpendUSD || a.MaxSubscriptionCalls > pl.MaxSubscriptionCalls ||
+		a.MaxAPISpendMicroUSD > pl.MaxAPISpendMicroUSD || a.MaxSubscriptionCalls > pl.MaxSubscriptionCalls ||
 		a.MaxLocalComputeSeconds > pl.MaxLocalComputeSeconds ||
 		(a.AllowMetered && !pl.AllowMetered) || (a.AllowUnknownSubscriptionQuota && !pl.AllowUnknownSubscriptionQuota) {
 		add("authorized caps exceed the plan ceilings")
@@ -298,7 +304,7 @@ func validateAuthorization(a CampaignAuthorization, plan CampaignPlan, planDiges
 		}
 		switch r.Endpoint.CapabilityClass {
 		case string(experiments.CapabilityFrontierAPI):
-			if !a.AllowMetered || !(a.MaxAPISpendUSD > 0) {
+			if !a.AllowMetered || !(a.MaxAPISpendMicroUSD > 0) {
 				add("run %q needs an explicit metered grant with a positive spend cap", r.RunID)
 			}
 		case string(experiments.CapabilitySubscriptionCLI):

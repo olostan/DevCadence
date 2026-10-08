@@ -1,0 +1,103 @@
+{
+  "schema_version": "1.0",
+  "run_id": "run-1-t1-full_history",
+  "campaign_id": "camp-2026-10-g",
+  "attempt_id": "att-1",
+  "task_digest": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "endpoint": {
+    "endpoint_id": "ep-sub",
+    "driver_id": "claude-cli",
+    "model_id": "model-a",
+    "model_revision": "r1",
+    "channel_id": "ch1",
+    "capability_class": "subscription_cli",
+    "runtime_version": "1.0",
+    "context_profile_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "policy_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "subscription_quota_unit": "unknown"
+  },
+  "prompt_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "context_manifest_digest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+  "invocation_provenance_digest": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+  "execution_policy_digest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+  "authorization_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+  "started_at": "2026-10-08T12:00:00Z",
+  "finished_at": "2026-10-08T12:00:05Z",
+  "driver_outcome": "completed",
+  "turns": 2,
+  "usage": {
+    "cumulative_input_tokens": {
+      "known": true,
+      "value": 1000,
+      "unit": "token",
+      "provenance": "measured",
+      "evidence_ref": "ev/cumulative_input_tokens"
+    },
+    "cached_input_tokens": {
+      "known": true,
+      "value": 10,
+      "unit": "token",
+      "provenance": "measured",
+      "evidence_ref": "ev/cached_input_tokens"
+    },
+    "output_tokens": {
+      "known": true,
+      "value": 20,
+      "unit": "token",
+      "provenance": "measured",
+      "evidence_ref": "ev/output_tokens"
+    },
+    "resident_peak_tokens": {
+      "known": true,
+      "value": 500,
+      "unit": "token",
+      "provenance": "measured",
+      "evidence_ref": "ev/resident_peak_tokens"
+    },
+    "api_spend_usd": {
+      "known": false,
+      "value": null,
+      "unit": "USD",
+      "provenance": "unknown",
+      "evidence_ref": "why/api_spend_usd"
+    },
+    "subscription_quota": {
+      "known": false,
+      "value": null,
+      "unit": "provider_unit",
+      "provenance": "unknown",
+      "evidence_ref": "why/subscription_quota"
+    },
+    "local_compute_seconds": {
+      "known": false,
+      "value": null,
+      "unit": "second",
+      "provenance": "unknown",
+      "evidence_ref": "why/local_compute_seconds"
+    },
+    "wall_seconds": {
+      "known": true,
+      "value": 2.5,
+      "unit": "second",
+      "provenance": "measured",
+      "evidence_ref": "ev/wall_seconds"
+    },
+    "repair_rounds": {
+      "known": true,
+      "value": 1,
+      "unit": "count",
+      "provenance": "measured",
+      "evidence_ref": "ev/repair_rounds"
+    },
+    "principal_reentries": {
+      "known": true,
+      "value": 0,
+      "unit": "count",
+      "provenance": "measured",
+      "evidence_ref": "ev/principal_reentries"
+    }
+  },
+  "unprovable_limits": [
+    "max_cumulative_cached_tokens"
+  ]
+}

@@ -9,6 +9,7 @@ import (
 
 	"github.com/olostan/DevCadence/internal/benchmark/experiments"
 	"github.com/olostan/DevCadence/internal/benchmark/telemetry"
+	"github.com/olostan/DevCadence/internal/clock"
 	"github.com/olostan/DevCadence/internal/protocol"
 )
 
@@ -51,8 +52,8 @@ type admittedSet struct {
 // authentic and admission fails closed before any verifier effect.
 type denyAuthority struct{}
 
-func (denyAuthority) VerifyAuthorization(context.Context, string, string, []byte) error {
-	return errors.New("no protected operator-receipt verifier is accepted (M5-R4)")
+func (denyAuthority) VerifyAuthorization(context.Context, string, string, []byte) (AuthorityWindow, error) {
+	return AuthorityWindow{}, errors.New("no protected operator-receipt verifier is accepted (M5-R4)")
 }
 
 // ValidateAdmission admits a post-run manifest as empirical evidence. It never
@@ -61,7 +62,7 @@ func (denyAuthority) VerifyAuthorization(context.Context, string, string, []byte
 // accepted operator authority (current state) it always returns Admitted=false
 // and makes zero verifier calls.
 func ValidateAdmission(ctx context.Context, m CampaignManifest, r ArtifactResolver, v IndependentVerifier) (AdmissionResult, error) {
-	return validateAdmission(ctx, m, r, v, denyAuthority{})
+	return validateAdmission(ctx, m, r, v, denyAuthority{}, clock.System())
 }
 
 type collector struct {
@@ -107,7 +108,7 @@ func (c *collector) load(ctx context.Context, r ArtifactResolver, ref, digest st
 	return true
 }
 
-func validateAdmission(ctx context.Context, m CampaignManifest, r ArtifactResolver, v IndependentVerifier, auth operatorAuthority) (AdmissionResult, error) {
+func validateAdmission(ctx context.Context, m CampaignManifest, r ArtifactResolver, v IndependentVerifier, auth OperatorAuthority, clk clock.Clock) (AdmissionResult, error) {
 	c := &collector{codes: map[string]bool{}}
 	res := AdmissionResult{}
 	finish := func() (AdmissionResult, error) {
@@ -249,9 +250,77 @@ func validateAdmission(ctx context.Context, m CampaignManifest, r ArtifactResolv
 
 	// 4. Operator authority: absent verifier means no authentic authorization and
 	// no verifier effect is ever started.
-	if err := auth.VerifyAuthorization(ctx, m.PlanDigest, m.AuthorizationDigest, authBytes); err != nil {
-		c.code(ReasonOperatorAuthority, "%v", err)
+	authWindow, authErr := auth.VerifyAuthorization(ctx, m.PlanDigest, m.AuthorizationDigest, authBytes)
+	if authErr != nil {
+		c.code(ReasonOperatorAuthority, "%v", authErr)
+	} else if authWindow.IssuedAt.IsZero() || authWindow.NotAfter.IsZero() || authWindow.NotAfter.Before(authWindow.IssuedAt) {
+		c.code(ReasonOperatorAuthority, "invalid authority window")
 	}
+	if len(c.codes) > 0 {
+		return finish()
+	}
+
+	var totalSessionSpendMicroUSD int64
+	now := clk.Now()
+	for _, p := range plan.Runs {
+		run, ok := runs[p.RunID]
+		if !ok {
+			continue
+		}
+		if run.Status != StatusCompleted && run.SessionEvidenceRef == "" && run.SessionEvidenceDigest == "" {
+			continue
+		}
+		var sess SessionEvidence
+		if !c.load(ctx, r, run.SessionEvidenceRef, run.SessionEvidenceDigest, &sess) {
+			continue
+		}
+		if err := sess.Validate(); err != nil {
+			c.code(ReasonRunInvalid, "run %q session evidence invalid: %v", run.RunID, err)
+			continue
+		}
+		computedDigest, err := sess.Digest()
+		if err != nil || computedDigest != run.SessionEvidenceDigest {
+			c.code(ReasonDigestMismatch, "run %q session evidence digest mismatch", run.RunID)
+			continue
+		}
+		if sess.RunID != run.RunID || sess.CampaignID != plan.CampaignID || sess.TaskDigest != run.TaskDigest ||
+			sess.Endpoint != run.Endpoint || sess.PromptDigest != run.PromptDigest || sess.AuthorizationDigest != m.AuthorizationDigest {
+			c.code(ReasonRunMismatch, "run %q session evidence identity differs from plan/run/authorization", run.RunID)
+			continue
+		}
+		if sess.StartedAt.Before(authWindow.IssuedAt) || sess.StartedAt.After(authWindow.NotAfter) {
+			c.code(ReasonAuthorizationBad, "run %q session started outside authority window", run.RunID)
+		}
+		if sess.StartedAt.After(now) {
+			c.code(ReasonRunInvalid, "run %q session started in the future", run.RunID)
+		}
+		if ms, ok := sess.Usage["api_spend_usd"]; ok && ms.Known && ms.Value != nil {
+			spend, err := USDToMicroUSD(*ms.Value)
+			if err != nil {
+				c.code(ReasonMeasurementInvalid, "run %q api spend invalid: %v", run.RunID, err)
+			} else {
+				if math.MaxInt64-totalSessionSpendMicroUSD < spend {
+					c.code(ReasonAuthorizationBad, "total session spend overflows int64 micro-USD")
+				} else {
+					totalSessionSpendMicroUSD += spend
+				}
+			}
+		}
+		for k, mSess := range sess.Usage {
+			mRun, ok := run.Measurements[k]
+			if !ok {
+				continue
+			}
+			if mSess.Known != mRun.Known || (mSess.Known && (mSess.Value == nil || mRun.Value == nil || *mSess.Value != *mRun.Value)) {
+				c.code(ReasonRunMismatch, "run %q measurement %q differs from session evidence", run.RunID, k)
+			}
+		}
+	}
+
+	if totalSessionSpendMicroUSD > authz.MaxAPISpendMicroUSD {
+		c.code(ReasonAuthorizationBad, "total session API spend (%d micro-USD) exceeds authorized cap (%d micro-USD)", totalSessionSpendMicroUSD, authz.MaxAPISpendMicroUSD)
+	}
+
 	completed := 0
 	for _, run := range m.Runs {
 		if run.Status == StatusCompleted {
@@ -281,7 +350,7 @@ func validateAdmission(ctx context.Context, m CampaignManifest, r ArtifactResolv
 			c.code(ReasonUnverifiedOutcome, "verifier failed for run %q: %v", p.RunID, err)
 			continue
 		}
-		if !crossCheckOutcome(c, m, run, out) {
+		if !crossCheckOutcome(c, plan, m, run, out) {
 			continue
 		}
 		if !crossCheckSnapshot(c, run, out, snaps[p.RunID]) {
@@ -385,6 +454,11 @@ func checkRun(c *collector, run RunEvidence) {
 		c.code(ReasonRunInvalid, "run %q is accepted but not completed", run.RunID)
 	}
 	checkMeasurements(c, run)
+	if run.SessionEvidenceRef != "" || run.SessionEvidenceDigest != "" {
+		if blank(run.SessionEvidenceRef) || !validDigest(run.SessionEvidenceDigest) {
+			c.code(ReasonRunInvalid, "run %q session evidence ref or digest is invalid", run.RunID)
+		}
+	}
 	if run.Status != StatusCompleted {
 		return
 	}
@@ -401,6 +475,7 @@ func checkRun(c *collector, run RunEvidence) {
 	for name, val := range map[string]string{
 		"prompt_digest": run.PromptDigest, "candidate_artifact_digest": run.CandidateArtifactDigest,
 		"snapshot_digest": run.SnapshotDigest, "verifier_receipt_digest": run.VerifierReceiptDigest,
+		"session_evidence_digest": run.SessionEvidenceDigest,
 	} {
 		if !validDigest(val) {
 			c.code(ReasonRunInvalid, "completed run %q has no valid %s", run.RunID, name)
@@ -458,12 +533,21 @@ func hasUnknown(ms map[string]Measurement) bool {
 }
 
 // crossCheckOutcome compares trusted verifier output with the run and plan.
-func crossCheckOutcome(c *collector, m CampaignManifest, run RunEvidence, o VerifiedOutcome) bool {
+func crossCheckOutcome(c *collector, plan CampaignPlan, m CampaignManifest, run RunEvidence, o VerifiedOutcome) bool {
 	ok := true
 	bad := func(code, f string, a ...any) { ok = false; c.code(code, f, a...) }
 	if o.RunID != run.RunID || o.PlanDigest != m.PlanDigest || o.CandidateDigest != run.CandidateArtifactDigest ||
 		o.SnapshotDigest != run.SnapshotDigest || o.ReceiptDigest != run.VerifierReceiptDigest {
 		bad(ReasonVerifierRejected, "run %q: verified outcome digests/identity differ from the run (receipt for another candidate or plan)", run.RunID)
+	}
+	if o.SessionDigest != run.SessionEvidenceDigest {
+		bad(ReasonVerifierRejected, "run %q: verified outcome session digest differs from run session evidence digest", run.RunID)
+	}
+	if o.VerifierSourceCommit != plan.VerifierSourceCommit {
+		bad(ReasonVerifierRejected, "run %q: verifier source commit differs from plan", run.RunID)
+	}
+	if o.VerificationProfileDigest != plan.VerificationProfileDigest {
+		bad(ReasonVerifierRejected, "run %q: verification profile digest differs from plan", run.RunID)
 	}
 	if !validDigest(o.SessionDigest) || !validDigest(o.VerificationProfileDigest) || blank(o.VerifierSourceCommit) ||
 		len(o.VerifiedCommandArtifactRefs) == 0 {

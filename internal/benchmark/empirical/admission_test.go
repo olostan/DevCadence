@@ -182,9 +182,9 @@ func TestStructuralRefusalsMakeZeroVerifierCalls(t *testing.T) {
 			var err error
 			if name == "dropped planned limitation" {
 				m := f.manifest()
-				res, err = validateAdmission(context.Background(), m, f.store, v, allowAuthority{})
+				res, err = validateAdmission(context.Background(), m, f.store, v, allowAuthority{}, testClock)
 			} else {
-				res, err = validateAdmission(context.Background(), f.manifest(), f.store, v, allowAuthority{})
+				res, err = validateAdmission(context.Background(), f.manifest(), f.store, v, allowAuthority{}, testClock)
 			}
 			if err != nil {
 				t.Fatal(err)
@@ -222,18 +222,18 @@ func TestArtifactIntegrity(t *testing.T) {
 				s[k] = v
 			}
 			mut(&mm, s)
-			res, _ := validateAdmission(context.Background(), mm, s, &countingVerifier{}, allowAuthority{})
+			res, _ := validateAdmission(context.Background(), mm, s, &countingVerifier{}, allowAuthority{}, testClock)
 			if res.Admitted || len(res.ReasonCodes) == 0 {
 				t.Fatalf("%v", res.ReasonCodes)
 			}
 		})
 	}
-	if res, _ := validateAdmission(context.Background(), m, nil, &countingVerifier{}, allowAuthority{}); res.Admitted || !hasCode(res, ReasonArtifactUnavailable) {
+	if res, _ := validateAdmission(context.Background(), m, nil, &countingVerifier{}, allowAuthority{}, testClock); res.Admitted || !hasCode(res, ReasonArtifactUnavailable) {
 		t.Fatalf("nil resolver: %v", res.ReasonCodes)
 	}
 	// A resolver returning bytes that do not match the digest is not trusted.
 	lying := lyingResolver{f.store}
-	if res, _ := validateAdmission(context.Background(), m, lying, &countingVerifier{}, allowAuthority{}); res.Admitted || !hasCode(res, ReasonDigestMismatch) {
+	if res, _ := validateAdmission(context.Background(), m, lying, &countingVerifier{}, allowAuthority{}, testClock); res.Admitted || !hasCode(res, ReasonDigestMismatch) {
 		t.Fatalf("lying resolver: %v", res.ReasonCodes)
 	}
 }
@@ -425,12 +425,14 @@ func TestValidatePlan(t *testing.T) {
 			p.Runs[0], p.Runs[1] = p.Runs[1], p.Runs[0]
 			p.Runs[0].Ordinal, p.Runs[1].Ordinal = 1, 2
 		},
-		"unpaired":      func(p *CampaignPlan) { p.Runs = p.Runs[:19] },
-		"ceiling":       func(p *CampaignPlan) { p.Limits.MaxTotalCalls = 481 },
-		"negative cap":  func(p *CampaignPlan) { p.Limits.MaxAPISpendUSD = -1 },
-		"tier unknown":  func(p *CampaignPlan) { p.RequestedTiers = []string{"bogus"} },
-		"tier unsorted": func(p *CampaignPlan) { p.RequestedTiers = []string{"subscription_cli", "local_small"} },
-		"tier no runs":  func(p *CampaignPlan) { p.RequestedTiers = []string{"local_small", "subscription_cli"} },
+		"unpaired":                          func(p *CampaignPlan) { p.Runs = p.Runs[:19] },
+		"ceiling":                           func(p *CampaignPlan) { p.Limits.MaxTotalCalls = 481 },
+		"negative cap":                      func(p *CampaignPlan) { p.Limits.MaxAPISpendMicroUSD = -1 },
+		"missing verifier source commit":    func(p *CampaignPlan) { p.VerifierSourceCommit = "" },
+		"missing verification profile hash": func(p *CampaignPlan) { p.VerificationProfileDigest = "invalid" },
+		"tier unknown":                      func(p *CampaignPlan) { p.RequestedTiers = []string{"bogus"} },
+		"tier unsorted":                     func(p *CampaignPlan) { p.RequestedTiers = []string{"subscription_cli", "local_small"} },
+		"tier no runs":                      func(p *CampaignPlan) { p.RequestedTiers = []string{"local_small", "subscription_cli"} },
 		"limit cause": func(p *CampaignPlan) {
 			p.MissingTiers = []TierLimitation{{Tier: "subscription_cli", Cause: "x", EvidenceRef: "e"}}
 		},
