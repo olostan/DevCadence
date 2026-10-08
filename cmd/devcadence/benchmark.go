@@ -2,18 +2,30 @@ package main
 
 import (
 	"context"
+	"crypto/ed25519"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/olostan/DevCadence/internal/benchmark/campaign"
+	"github.com/olostan/DevCadence/internal/benchmark/empirical"
+	"github.com/olostan/DevCadence/internal/benchmark/empirical/verifier"
 	"github.com/olostan/DevCadence/internal/benchmark/experiments"
 	"github.com/olostan/DevCadence/internal/benchmark/gate"
 	"github.com/olostan/DevCadence/internal/benchmark/telemetry"
+	"github.com/olostan/DevCadence/internal/clock"
 	"github.com/olostan/DevCadence/internal/errs"
+	"github.com/olostan/DevCadence/internal/execrt"
+	"github.com/olostan/DevCadence/internal/ids"
+	"github.com/olostan/DevCadence/internal/operator/receipts"
+	"github.com/olostan/DevCadence/internal/process"
+	"github.com/olostan/DevCadence/internal/protocol"
+	"github.com/olostan/DevCadence/internal/repository"
+	"github.com/olostan/DevCadence/internal/worktrees"
 )
 
 // gateExitError implements ExitCoder to support discrete exit codes for gate evaluation (REQ-07).
@@ -27,7 +39,7 @@ func (e *gateExitError) ExitCode() int { return e.code }
 
 func runBenchmark(ctx context.Context, e *env, args []string) error {
 	if len(args) == 0 {
-		return errs.New(errs.CategoryInvalidArgument, "usage: devcadence benchmark <evaluate-gate|report|gate>")
+		return errs.New(errs.CategoryInvalidArgument, "usage: devcadence benchmark <evaluate-gate|report|gate|replay-empirical>")
 	}
 	switch args[0] {
 	case "evaluate-gate":
@@ -36,6 +48,8 @@ func runBenchmark(ctx context.Context, e *env, args []string) error {
 		return runBenchmarkReport(ctx, e, args[1:])
 	case "gate":
 		return runBenchmarkGate(ctx, e, args[1:])
+	case "replay-empirical":
+		return runBenchmarkReplayEmpirical(ctx, e, args[1:])
 	default:
 		return errs.New(errs.CategoryInvalidArgument, "unknown benchmark subcommand %q", args[0])
 	}
@@ -97,6 +111,13 @@ func runBenchmarkEvaluateGate(ctx context.Context, e *env, args []string) error 
 
 	if err := parseFlags(fs, e, args); err != nil {
 		return err
+	}
+
+	if *evidenceKind == "empirical_campaign" || *evidenceKind == gate.EvidenceKindEmpiricalCampaign {
+		return &gateExitError{
+			code: 4,
+			msg:  "empirical campaign evidence must be admitted through 'benchmark replay-empirical'",
+		}
 	}
 
 	var provenance *gate.EvidenceProvenance
@@ -246,4 +267,515 @@ func provenanceKind(p *gate.EvidenceProvenance) string {
 		return "unspecified"
 	}
 	return p.Kind
+}
+
+// newIndependentVerifier constructs the production independent verifier (WP-M5-R3 Part B).
+// Package tests may override this seam to inject test verification runners.
+var newIndependentVerifier = func(ctx context.Context, e *env, resolver empirical.ArtifactResolver) (empirical.IndependentVerifier, error) {
+	worktreeRoot := filepath.Join(e.homeDir(), "worktrees")
+	wtMgr, err := worktrees.NewManager(worktreeRoot, process.NewRunner())
+	if err != nil {
+		return nil, errs.Wrap(errs.CategoryInternal, err, "failed to create worktree manager")
+	}
+
+	var repoProvider execrt.RepositoryProvider
+	if repo, err := repository.Register(ctx, "devcadence", ".", repository.Options{}); err == nil {
+		repoProvider = execrt.NewSingleRepositoryProvider(repo)
+	} else {
+		repoProvider = execrt.NewMapRepositoryProvider(map[string]*repository.Repository{})
+	}
+
+	opts := verifier.Options{
+		Resolver:     resolver,
+		Worktrees:    wtMgr,
+		Repositories: repoProvider,
+		Runner:       process.NewRunner(),
+		BuildInfo:    verifier.DefaultBuildInfoSource(),
+		Clock:        clock.System(),
+		IDs:          ids.NewULIDSource(),
+		ScratchDir:   filepath.Join(e.homeDir(), "verifier-scratch"),
+	}
+	return verifier.New(opts)
+}
+
+// directoryArtifactResolver implements empirical.ArtifactResolver over a local digest-addressed directory.
+type directoryArtifactResolver struct {
+	dir   string
+	extra map[string][]byte
+}
+
+func newDirectoryArtifactResolver(dir string, extra map[string][]byte) *directoryArtifactResolver {
+	return &directoryArtifactResolver{
+		dir:   dir,
+		extra: extra,
+	}
+}
+
+func (r *directoryArtifactResolver) ReadVerified(ctx context.Context, ref, digest string) ([]byte, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	if r.extra != nil {
+		if b, ok := r.extra[ref]; ok {
+			if digest == "" || protocol.DigestBytes(b) == digest {
+				return b, nil
+			}
+		}
+		if digest != "" {
+			if b, ok := r.extra[digest]; ok {
+				if protocol.DigestBytes(b) == digest {
+					return b, nil
+				}
+			}
+		}
+	}
+
+	var candidates []string
+	if ref != "" {
+		candidates = append(candidates,
+			filepath.Join(r.dir, ref),
+			filepath.Join(r.dir, filepath.Base(ref)),
+			filepath.Join(r.dir, ref+".json"),
+			filepath.Join(r.dir, filepath.Base(ref)+".json"),
+		)
+		if strings.HasPrefix(ref, "sha256:") {
+			trimmed := strings.TrimPrefix(ref, "sha256:")
+			candidates = append(candidates,
+				filepath.Join(r.dir, trimmed),
+				filepath.Join(r.dir, trimmed+".json"),
+			)
+		}
+	}
+	if digest != "" {
+		trimmed := strings.TrimPrefix(digest, "sha256:")
+		candidates = append(candidates,
+			filepath.Join(r.dir, digest),
+			filepath.Join(r.dir, trimmed),
+			filepath.Join(r.dir, digest+".json"),
+			filepath.Join(r.dir, trimmed+".json"),
+		)
+	}
+
+	absDir, err := filepath.Abs(r.dir)
+	if err != nil {
+		absDir = r.dir
+	}
+
+	for _, cand := range candidates {
+		absCand, err := filepath.Abs(cand)
+		if err != nil {
+			continue
+		}
+		rel, err := filepath.Rel(absDir, absCand)
+		if err != nil || strings.HasPrefix(rel, "..") {
+			continue
+		}
+		data, err := os.ReadFile(absCand)
+		if err != nil {
+			continue
+		}
+		if digest != "" {
+			if protocol.DigestBytes(data) == digest {
+				return data, nil
+			}
+		} else {
+			return data, nil
+		}
+	}
+
+	if digest != "" {
+		var foundData []byte
+		_ = filepath.Walk(absDir, func(path string, info os.FileInfo, err error) error {
+			if err != nil || info == nil || info.IsDir() {
+				return nil
+			}
+			if info.Size() > 64*1024*1024 {
+				return nil
+			}
+			name := info.Name()
+			trimmed := strings.TrimPrefix(digest, "sha256:")
+			if name == digest || name == trimmed || name == digest+".json" || name == trimmed+".json" || name == ref || name == filepath.Base(ref) {
+				data, err := os.ReadFile(path)
+				if err == nil && protocol.DigestBytes(data) == digest {
+					foundData = data
+					return filepath.SkipAll
+				}
+			}
+			return nil
+		})
+		if len(foundData) > 0 {
+			return foundData, nil
+		}
+	}
+
+	return nil, errs.New(errs.CategoryNotFound, "artifact %q (%s) not found in %q", ref, digest, r.dir)
+}
+
+func loadOperatorVerifier(operatorDir, artifactsDir, homeDir string) (receipts.Verifier, error) {
+	var searchDirs []string
+	if operatorDir != "" {
+		searchDirs = append(searchDirs, operatorDir)
+	}
+	if env := os.Getenv("DEVCADENCE_OPERATOR_DIR"); env != "" {
+		searchDirs = append(searchDirs, env)
+	}
+	if artifactsDir != "" {
+		searchDirs = append(searchDirs, artifactsDir, filepath.Join(artifactsDir, "operator"))
+	}
+	if homeDir != "" {
+		searchDirs = append(searchDirs, filepath.Join(homeDir, "operator"))
+	}
+	searchDirs = append(searchDirs, "/etc/devcadence-operator", "/Library/Application Support/DevCadence/operator")
+
+	var anchors []receipts.TrustAnchor
+	var revocations *receipts.RevocationList
+
+	for _, dir := range searchDirs {
+		aPath := filepath.Join(dir, "anchors.json")
+		data, err := os.ReadFile(aPath)
+		if err != nil {
+			continue
+		}
+		var ad struct {
+			Version string                 `json:"version"`
+			Anchors []receipts.TrustAnchor `json:"anchors"`
+		}
+		if err := json.Unmarshal(data, &ad); err == nil && len(ad.Anchors) > 0 {
+			anchors = ad.Anchors
+			rPath := filepath.Join(dir, "revoked.json")
+			if rData, err := os.ReadFile(rPath); err == nil {
+				var rd struct {
+					Version    string   `json:"version"`
+					ReceiptIDs []string `json:"receipt_ids"`
+					AnchorIDs  []string `json:"anchor_ids"`
+				}
+				if err := json.Unmarshal(rData, &rd); err == nil && len(rd.ReceiptIDs) > 0 {
+					revMap := make(map[string]time.Time, len(rd.ReceiptIDs))
+					for _, id := range rd.ReceiptIDs {
+						revMap[id] = time.Now().UTC()
+					}
+					revocations = &receipts.RevocationList{
+						RevokedIDs: revMap,
+						RevokedAt:  time.Now().UTC(),
+					}
+				}
+			}
+			break
+		}
+	}
+
+	if len(anchors) == 0 {
+		fallbackAnchor := receipts.TrustAnchor{
+			AnchorID:     "unconfigured-operator",
+			HumanActorID: "none",
+			PublicKey:    make([]byte, ed25519.PublicKeySize),
+			NotAfter:     time.Unix(1, 0).UTC(),
+			Purposes:     []receipts.Purpose{receipts.PurposeEmpiricalCampaignAuthorize},
+		}
+		anchors = []receipts.TrustAnchor{fallbackAnchor}
+	}
+
+	var vOpts []receipts.VerifierOption
+	var rcpts []receipts.Receipt
+	var receiptDirs []string
+	if artifactsDir != "" {
+		receiptDirs = append(receiptDirs, filepath.Join(artifactsDir, "receipts"), artifactsDir)
+	}
+	if homeDir != "" {
+		receiptDirs = append(receiptDirs, filepath.Join(homeDir, "receipts"))
+	}
+
+	for _, rDir := range receiptDirs {
+		entries, err := os.ReadDir(rDir)
+		if err != nil {
+			continue
+		}
+		for _, entry := range entries {
+			if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
+				continue
+			}
+			data, err := os.ReadFile(filepath.Join(rDir, entry.Name()))
+			if err != nil || len(data) > 64*1024 {
+				continue
+			}
+			var r receipts.Receipt
+			if err := json.Unmarshal(data, &r); err == nil && r.Statement.ReceiptID != "" && r.Signature != "" {
+				rcpts = append(rcpts, r)
+			}
+		}
+	}
+
+	if len(rcpts) > 0 {
+		vOpts = append(vOpts, receipts.WithReceipts(rcpts...))
+	}
+	if artifactsDir != "" {
+		rcptSubdir := filepath.Join(artifactsDir, "receipts")
+		if info, err := os.Stat(rcptSubdir); err == nil && info.IsDir() {
+			vOpts = append(vOpts, receipts.WithReceiptsDir(rcptSubdir))
+		} else {
+			vOpts = append(vOpts, receipts.WithReceiptsDir(artifactsDir))
+		}
+	}
+	vOpts = append(vOpts, receipts.WithClock(clock.System()))
+	if revocations != nil {
+		vOpts = append(vOpts, receipts.WithRevocationList(revocations))
+	}
+
+	return receipts.NewVerifier(anchors, vOpts...)
+}
+
+func formatEmpiricalReport(rep *empirical.Report) (string, error) {
+	var sb strings.Builder
+	sb.WriteString("# Milestone M4 Empirical Campaign Evidence Report\n\n")
+	sb.WriteString(fmt.Sprintf("- **Campaign ID:** `%s`\n", rep.CampaignID))
+	sb.WriteString(fmt.Sprintf("- **Plan Digest:** `%s`\n", rep.PlanDigest))
+	sb.WriteString(fmt.Sprintf("- **Source Commit:** `%s`\n", rep.SourceCommit))
+	sb.WriteString(fmt.Sprintf("- **Evidence Provenance:** `%s`\n", rep.Provenance))
+	sb.WriteString(fmt.Sprintf("- **Empirical Conclusion:** %s\n", strings.ToUpper(rep.Conclusion)))
+
+	if len(rep.ConclusionReasons) > 0 {
+		sb.WriteString("\n## Conclusion Reasons\n\n")
+		for _, r := range rep.ConclusionReasons {
+			sb.WriteString(fmt.Sprintf("- %s\n", r))
+		}
+	}
+
+	sb.WriteString("\n## Admission Result\n\n")
+	sb.WriteString(fmt.Sprintf("- **Admitted:** %t\n", rep.Admission.Admitted))
+	if len(rep.Admission.ReasonCodes) > 0 {
+		sb.WriteString(fmt.Sprintf("- **Reason Codes:** %s\n", strings.Join(rep.Admission.ReasonCodes, ", ")))
+	}
+	if len(rep.Admission.Limitations) > 0 {
+		sb.WriteString("### Limitations\n\n")
+		for _, l := range rep.Admission.Limitations {
+			sb.WriteString(fmt.Sprintf("- %s\n", l))
+		}
+	}
+
+	if rep.RawGate != nil {
+		sb.WriteString("\n## Raw Gate Evaluation\n\n")
+		sb.WriteString(fmt.Sprintf("- **Gate Decision:** %s\n", rep.RawGate.Decision))
+		rawMD, err := gate.SynthesizeEvidenceReport(rep.RawGate)
+		if err == nil && rawMD != "" {
+			sb.WriteString("\n")
+			sb.WriteString(rawMD)
+		}
+	} else if rep.RawGateSkipped != "" {
+		sb.WriteString("\n## Raw Gate Evaluation Skipped\n\n")
+		sb.WriteString(fmt.Sprintf("- **Reason:** %s\n", rep.RawGateSkipped))
+	}
+
+	return sb.String(), nil
+}
+
+// runBenchmarkReplayEmpirical implements `devcadence benchmark replay-empirical` (WP-M5-R3 Part B).
+// Flags:
+//
+//	--manifest <path> (required)
+//	--plan <path> (required)
+//	--authorization <path> (required)
+//	--artifacts <dir> (required)
+//	--criteria <path> (required)
+//	--output <path> (optional, defaults to stdout)
+//	--json (optional boolean)
+//
+// Exit codes:
+//
+//	0: GATE_PASS (ConclusionGo)
+//	1: GATE_FAIL (ConclusionRevise)
+//	2: GATE_INDETERMINATE (ConclusionInconclusive)
+//	3: Refused admission
+func runBenchmarkReplayEmpirical(ctx context.Context, e *env, args []string) error {
+	fs := flag.NewFlagSet("benchmark replay-empirical", flag.ContinueOnError)
+	manifestPath := fs.String("manifest", "", "path to CampaignManifest JSON file (required)")
+	planPath := fs.String("plan", "", "path to CampaignPlan JSON file (required)")
+	authPath := fs.String("authorization", "", "path to CampaignAuthorization JSON file (required)")
+	artifactsDir := fs.String("artifacts", "", "directory containing digest-addressed artifacts (required)")
+	criteriaPath := fs.String("criteria", "", "path to GateCriteria JSON file (required)")
+	outputPath := fs.String("output", "", "path to write output report (optional, defaults to stdout)")
+	asJSON := fs.Bool("json", false, "emit evaluation report as JSON")
+	operatorDir := fs.String("operator-dir", "", "optional directory containing operator anchors.json")
+
+	if err := parseFlags(fs, e, args); err != nil {
+		return err
+	}
+
+	if strings.TrimSpace(*manifestPath) == "" {
+		return errs.New(errs.CategoryInvalidArgument, "--manifest is required")
+	}
+	if strings.TrimSpace(*planPath) == "" {
+		return errs.New(errs.CategoryInvalidArgument, "--plan is required")
+	}
+	if strings.TrimSpace(*authPath) == "" {
+		return errs.New(errs.CategoryInvalidArgument, "--authorization is required")
+	}
+	if strings.TrimSpace(*artifactsDir) == "" {
+		return errs.New(errs.CategoryInvalidArgument, "--artifacts is required")
+	}
+	if strings.TrimSpace(*criteriaPath) == "" {
+		return errs.New(errs.CategoryInvalidArgument, "--criteria is required")
+	}
+
+	// 1. Parse flags and load files.
+	manifestData, err := os.ReadFile(*manifestPath)
+	if err != nil {
+		return errs.Wrap(errs.CategoryNotFound, err, "failed to read manifest file %q", *manifestPath)
+	}
+	var manifest empirical.CampaignManifest
+	if err := json.Unmarshal(manifestData, &manifest); err != nil {
+		return errs.Wrap(errs.CategoryInvalidArgument, err, "malformed manifest JSON in %q", *manifestPath)
+	}
+
+	planData, err := os.ReadFile(*planPath)
+	if err != nil {
+		return errs.Wrap(errs.CategoryNotFound, err, "failed to read plan file %q", *planPath)
+	}
+	var plan empirical.CampaignPlan
+	if err := json.Unmarshal(planData, &plan); err != nil {
+		return errs.Wrap(errs.CategoryInvalidArgument, err, "malformed plan JSON in %q", *planPath)
+	}
+
+	authData, err := os.ReadFile(*authPath)
+	if err != nil {
+		return errs.Wrap(errs.CategoryNotFound, err, "failed to read authorization file %q", *authPath)
+	}
+	var authz empirical.CampaignAuthorization
+	if err := json.Unmarshal(authData, &authz); err != nil {
+		return errs.Wrap(errs.CategoryInvalidArgument, err, "malformed authorization JSON in %q", *authPath)
+	}
+
+	artInfo, err := os.Stat(*artifactsDir)
+	if err != nil {
+		return errs.Wrap(errs.CategoryNotFound, err, "artifacts directory %q not found", *artifactsDir)
+	}
+	if !artInfo.IsDir() {
+		return errs.New(errs.CategoryInvalidArgument, "artifacts path %q is not a directory", *artifactsDir)
+	}
+
+	criteriaData, err := os.ReadFile(*criteriaPath)
+	if err != nil {
+		return errs.Wrap(errs.CategoryNotFound, err, "failed to read criteria file %q", *criteriaPath)
+	}
+	var criteria gate.GateCriteria
+	if err := json.Unmarshal(criteriaData, &criteria); err != nil {
+		return errs.Wrap(errs.CategoryInvalidArgument, err, "malformed criteria JSON in %q", *criteriaPath)
+	}
+
+	// 2. Initialize receipt verifier (receipts.NewVerifier / operator store).
+	rcptVerifier, err := loadOperatorVerifier(*operatorDir, *artifactsDir, e.homeDir())
+	if err != nil {
+		return errs.Wrap(errs.CategoryInternal, err, "failed to initialize receipt verifier")
+	}
+
+	// 3. Instantiate verifier.NewCampaignAuthority(...).
+	campaignAuth, err := verifier.NewCampaignAuthority(rcptVerifier, "devcadence", clock.System())
+	if err != nil {
+		return errs.Wrap(errs.CategoryInternal, err, "failed to instantiate campaign authority")
+	}
+
+	// 4 & 5. Instantiate artifact resolver reading from --artifacts directory.
+	extra := map[string][]byte{
+		*planPath:                      planData,
+		manifest.PlanRef:               planData,
+		manifest.PlanDigest:            planData,
+		protocol.DigestBytes(planData): planData,
+		*authPath:                      authData,
+		manifest.AuthorizationRef:      authData,
+		manifest.AuthorizationDigest:   authData,
+		protocol.DigestBytes(authData): authData,
+	}
+	resolver := newDirectoryArtifactResolver(*artifactsDir, extra)
+
+	// 4. Instantiate verifier.New(...) (empirical.IndependentVerifier).
+	indepVerifier, err := newIndependentVerifier(ctx, e, resolver)
+	if err != nil {
+		return errs.Wrap(errs.CategoryInternal, err, "failed to instantiate independent verifier")
+	}
+
+	// 6. Instantiate empirical.NewAdmitter(...).
+	admitter, err := empirical.NewAdmitter(empirical.AdmitterOptions{
+		Authority: campaignAuth,
+		Verifier:  indepVerifier,
+		Resolver:  resolver,
+		Clock:     clock.System(),
+	})
+	if err != nil {
+		return errs.Wrap(errs.CategoryInternal, err, "failed to instantiate admitter")
+	}
+
+	// 7. Execute admitter.Admit(ctx, manifest).
+	admissionResult, err := admitter.Admit(ctx, manifest)
+	if err != nil {
+		fmt.Fprintf(e.stderr, "devcadence: empirical admission error: %v\n", err)
+		return &gateExitError{
+			code: 3,
+			msg:  fmt.Sprintf("empirical admission failed: %v", err),
+		}
+	}
+
+	// 8. If admission refused/invalid: report refusal reason and exit with code 3.
+	if !admissionResult.Admitted {
+		reasons := strings.Join(admissionResult.ReasonCodes, ", ")
+		if reasons == "" {
+			reasons = "admission refused without reason codes"
+		}
+		fmt.Fprintf(e.stderr, "devcadence: empirical admission refused: %s\n", reasons)
+		for _, code := range admissionResult.ReasonCodes {
+			fmt.Fprintf(e.stderr, " - reason: %s\n", code)
+		}
+		return &gateExitError{
+			code: 3,
+			msg:  fmt.Sprintf("empirical admission refused: %s", reasons),
+		}
+	}
+
+	// 9. If admitted: evaluate empirical.ReplayGate(criteria, admissionResult).
+	rep, err := empirical.ReplayGate(admissionResult, criteria)
+	if err != nil {
+		return err
+	}
+
+	// 10. Write gate report to --output (formatted or JSON).
+	var outputContent string
+	if *asJSON {
+		b, err := json.MarshalIndent(rep, "", "  ")
+		if err != nil {
+			return errs.Wrap(errs.CategoryInternal, err, "failed to marshal empirical report")
+		}
+		outputContent = string(b)
+	} else {
+		md, err := formatEmpiricalReport(rep)
+		if err != nil {
+			return errs.Wrap(errs.CategoryInternal, err, "failed to format empirical report")
+		}
+		outputContent = md
+	}
+
+	if *outputPath != "" && *outputPath != "-" {
+		if err := os.MkdirAll(filepath.Dir(*outputPath), 0o755); err != nil {
+			return errs.Wrap(errs.CategoryInternal, err, "failed to create output directory")
+		}
+		if err := os.WriteFile(*outputPath, []byte(outputContent), 0o644); err != nil {
+			return errs.Wrap(errs.CategoryInternal, err, "failed to write output file %q", *outputPath)
+		}
+	} else {
+		fmt.Fprintln(e.stdout, outputContent)
+	}
+
+	// 11. Exit code:
+	//     0: GATE_PASS
+	//     1: GATE_FAIL
+	//     2: GATE_INDETERMINATE
+	//     3: Refused admission (handled in step 8)
+	switch rep.Conclusion {
+	case empirical.ConclusionGo:
+		return nil
+	case empirical.ConclusionRevise:
+		return &gateExitError{code: 1, msg: fmt.Sprintf("empirical gate conclusion: %s", rep.Conclusion)}
+	case empirical.ConclusionInconclusive:
+		return &gateExitError{code: 2, msg: fmt.Sprintf("empirical gate conclusion: %s", rep.Conclusion)}
+	default:
+		return &gateExitError{code: 1, msg: fmt.Sprintf("unknown empirical conclusion %s", rep.Conclusion)}
+	}
 }
