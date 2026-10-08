@@ -1,6 +1,7 @@
 package state_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/olostan/DevCadence/internal/errs"
@@ -567,3 +568,96 @@ func TestReduceModuleCatalogRecorded(t *testing.T) {
 	}
 }
 
+func TestReviewInvocationStartedScenarioA6(t *testing.T) {
+	const (
+		taskID    = "tsk_00000000000000000000000001"
+		attemptID = "att_00000000000000000000000001"
+		wpID      = "wp_000000000000000000000001"
+		candidate = "cafebabe1234567"
+	)
+	builder := testsupport.NewScenario(t, "example").
+		AddAs(protocol.Actor{Kind: protocol.ActorHuman, ID: "operator"}, &events.ProjectInitialized{
+			Name:             "Example project",
+			VisionRef:        "docs/VISION.md",
+			MilestoneID:      "M1",
+			MilestoneTitle:   "Domain core and canonical state",
+			ActiveInvariants: []string{"DCI-053"},
+		}).
+		AddAs(protocol.Actor{Kind: protocol.ActorPrincipal, ID: "principal"}, &events.TaskCreated{
+			TaskID: taskID, Alias: "DC-001", Title: "Bounded journal reads",
+			MilestoneID: "M1", ChangeClass: protocol.ChangeSystemic,
+		}).
+		Add(&events.TaskScoutingStarted{TaskID: taskID, InvestigationID: "inv_0001"}).
+		AddAs(protocol.Actor{Kind: protocol.ActorPrincipal, ID: "principal"}, &events.TaskDesignStarted{
+			TaskID: taskID, Reason: "initial design",
+		}).
+		AddAs(protocol.Actor{Kind: protocol.ActorPrincipal, ID: "principal"}, &events.WorkPackageApproved{
+			TaskID: taskID, WorkPackageID: wpID, WorkPackageVersion: 1,
+			RecordDigest: "sha256:" + strings.Repeat("0", 64), ProjectStateRevision: "ps_000000004",
+			BaseCommit: "91acd8273f1", ChangeClass: protocol.ChangeSystemic,
+		}).
+		Add(&events.TaskDelegated{
+			TaskID: taskID, WorkPackageID: wpID, WorkerRole: "implementer",
+			WorkerProfile: "local-strong-coder", MaxAttempts: 3,
+		}).
+		Add(&events.AttemptStarted{
+			TaskID: taskID, AttemptID: attemptID, WorkPackageID: wpID, WorkPackageVersion: 1,
+			ProjectStateRevision: "ps_000000004", BaseCommit: "91acd8273f1",
+			WorkerRole: "implementer", WorkerProfile: "local-strong-coder",
+		}).
+		AddAs(protocol.Actor{Kind: protocol.ActorLocalAgent, ID: "implementer"}, &events.CandidateProduced{
+			TaskID: taskID, AttemptID: attemptID, CandidateCommit: candidate,
+			Summary: "Candidate produced", RepairIterations: 1,
+		})
+
+	baseStream := builder.Stream()
+	pBefore, err := state.Reduce(baseStream)
+	if err != nil {
+		t.Fatalf("reduce before: %v", err)
+	}
+
+	taskBefore, _ := pBefore.TaskByAlias("DC-001")
+
+	// Append valid ReviewInvocationStarted
+	builder.Add(&events.ReviewInvocationStarted{
+		TaskID:          taskID,
+		AttemptID:       attemptID,
+		WorkPackageID:   wpID,
+		ReviewID:        "rev-001",
+		InvocationID:    "inv-001",
+		Dimension:       protocol.DimensionCorrectness,
+		CandidateCommit: candidate,
+		RecordDigest:    "sha256:" + strings.Repeat("a", 64),
+	})
+
+	streamAfter := builder.Stream()
+	pAfter, err := state.Reduce(streamAfter)
+	if err != nil {
+		t.Fatalf("reduce after ReviewInvocationStarted: %v", err)
+	}
+
+	// High watermark advanced
+	if pAfter.HighWatermark != int64(len(streamAfter)) {
+		t.Fatalf("high watermark = %d, want %d", pAfter.HighWatermark, len(streamAfter))
+	}
+
+	// Task and attempt projection fields remain unchanged
+	taskAfter, _ := pAfter.TaskByAlias("DC-001")
+	if taskAfter.State != taskBefore.State {
+		t.Fatalf("task state changed: %s -> %s", taskBefore.State, taskAfter.State)
+	}
+	attemptsBefore := pBefore.AttemptsForTask(taskBefore.ID)
+	attemptsAfter := pAfter.AttemptsForTask(taskAfter.ID)
+	if len(attemptsAfter) != len(attemptsBefore) {
+		t.Fatalf("attempts count changed")
+	}
+	if attemptsAfter[0].CandidateCommit != attemptsBefore[0].CandidateCommit {
+		t.Fatalf("candidate commit changed: %s != %s", attemptsBefore[0].CandidateCommit, attemptsAfter[0].CandidateCommit)
+	}
+	if attemptsAfter[0].Status != attemptsBefore[0].Status {
+		t.Fatalf("attempt status changed: %s != %s", attemptsBefore[0].Status, attemptsAfter[0].Status)
+	}
+	if attemptsAfter[0].RepairIterations != attemptsBefore[0].RepairIterations {
+		t.Fatalf("repair iterations changed")
+	}
+}

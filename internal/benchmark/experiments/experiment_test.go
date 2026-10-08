@@ -45,10 +45,7 @@ func (s *mockSession) ExecuteTurn(_ context.Context, input drivers.TurnInput) (d
 	return drivers.TurnResult{
 		TurnID:  input.TurnID,
 		Content: "Mock execution successful",
-		Usage: drivers.TokenUsage{
-			InputTokens:  100,
-			OutputTokens: 20,
-		},
+		Usage:   drivers.KnownUsage(100, 0, 20),
 	}, nil
 }
 
@@ -267,10 +264,7 @@ func TestACC01_ExperimentRunner_BaselineVsReady(t *testing.T) {
 		return drivers.TurnResult{
 			TurnID:  input.TurnID,
 			Content: content,
-			Usage: drivers.TokenUsage{
-				InputTokens:  150,
-				OutputTokens: 30,
-			},
+			Usage:   drivers.KnownUsage(150, 0, 30),
 		}, nil
 	}
 
@@ -592,10 +586,7 @@ func TestExperimentRunner_DriverErrorNonCancellation(t *testing.T) {
 		return drivers.TurnResult{
 			TurnID:  input.TurnID,
 			Content: "ok",
-			Usage: drivers.TokenUsage{
-				InputTokens:  100,
-				OutputTokens: 20,
-			},
+			Usage:   drivers.KnownUsage(100, 0, 20),
 		}, nil
 	}
 

@@ -108,6 +108,8 @@ func (p *Projection) applyPayload(e *events.Event) error {
 		return p.applyAttemptFailed(e, payload)
 	case *events.ValidationCompleted:
 		return p.applyValidationCompleted(e, payload)
+	case *events.ReviewInvocationStarted:
+		return nil
 	case *events.ReviewCompleted:
 		return p.applyReviewCompleted(payload)
 	case *events.ChangeAccepted:

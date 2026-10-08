@@ -111,25 +111,151 @@ type ToolResult struct {
 	IsError    bool   `json:"is_error,omitempty"`
 }
 
-// TokenUsage captures the measured tokens for a turn or cumulative session.
-type TokenUsage struct {
-	InputTokens  int64 `json:"input_tokens"`
-	CachedTokens int64 `json:"cached_tokens"`
-	OutputTokens int64 `json:"output_tokens"`
+// TokenMeasurement represents an optionally known token quantity.
+// The zero value TokenMeasurement{} represents an UNKNOWN measurement (Known: false, Value: 0).
+type TokenMeasurement struct {
+	Known bool  `json:"known"`
+	Value int64 `json:"value"`
 }
 
-// Add returns the element-wise sum of two TokenUsages.
-func (u TokenUsage) Add(other TokenUsage) TokenUsage {
-	return TokenUsage{
-		InputTokens:  u.InputTokens + other.InputTokens,
-		CachedTokens: u.CachedTokens + other.CachedTokens,
-		OutputTokens: u.OutputTokens + other.OutputTokens,
+// KnownMeasurement constructs a known token measurement.
+// It requires value >= 0.
+func KnownMeasurement(value int64) TokenMeasurement {
+	if value < 0 {
+		panic("KnownMeasurement: value must be non-negative")
+	}
+	return TokenMeasurement{
+		Known: true,
+		Value: value,
 	}
 }
 
-// Total returns total input and output tokens.
-func (u TokenUsage) Total() int64 {
-	return u.InputTokens + u.OutputTokens
+// TokenUsage captures the measured tokens for a turn or cumulative session.
+// Cached is typically a subset of Input and is excluded from Total().
+type TokenUsage struct {
+	Input  TokenMeasurement
+	Cached TokenMeasurement
+	Output TokenMeasurement
+}
+
+// KnownUsage constructs a TokenUsage where all three measurements are known.
+func KnownUsage(input, cached, output int64) TokenUsage {
+	return TokenUsage{
+		Input:  KnownMeasurement(input),
+		Cached: KnownMeasurement(cached),
+		Output: KnownMeasurement(output),
+	}
+}
+
+// KnownZeroUsage returns the identity accumulator TokenUsage where Input,
+// Cached, and Output are all known zero measurements (KnownMeasurement(0)).
+func KnownZeroUsage() TokenUsage {
+	return TokenUsage{
+		Input:  KnownMeasurement(0),
+		Cached: KnownMeasurement(0),
+		Output: KnownMeasurement(0),
+	}
+}
+
+func addMeasurement(a, b TokenMeasurement) TokenMeasurement {
+	if a.Known && b.Known {
+		return TokenMeasurement{
+			Known: true,
+			Value: a.Value + b.Value,
+		}
+	}
+	return TokenMeasurement{}
+}
+
+// Add returns the element-wise sum of two TokenUsages.
+// Per field, the resulting measurement is Known iff both operands are Known,
+// and values are summed only when both are Known.
+func (u TokenUsage) Add(other TokenUsage) TokenUsage {
+	return TokenUsage{
+		Input:  addMeasurement(u.Input, other.Input),
+		Cached: addMeasurement(u.Cached, other.Cached),
+		Output: addMeasurement(u.Output, other.Output),
+	}
+}
+
+// Total returns the sum of Input and Output tokens, and whether the total is known.
+// The total is known iff both Input and Output are Known.
+// Cached is typically a subset of Input and is excluded from Total.
+func (u TokenUsage) Total() (int64, bool) {
+	if u.Input.Known && u.Output.Known {
+		return u.Input.Value + u.Output.Value, true
+	}
+	return 0, false
+}
+
+// Complete reports whether all three measurements (Input, Cached, Output) are known.
+func (u TokenUsage) Complete() bool {
+	return u.Input.Known && u.Cached.Known && u.Output.Known
+}
+
+type tokenUsageWire struct {
+	InputTokens  *int64 `json:"input_tokens,omitempty"`
+	CachedTokens *int64 `json:"cached_tokens,omitempty"`
+	OutputTokens *int64 `json:"output_tokens,omitempty"`
+}
+
+// MarshalJSON serializes TokenUsage into JSON.
+// Known fields serialize as non-negative integers; unknown fields are omitted.
+func (u TokenUsage) MarshalJSON() ([]byte, error) {
+	var wire tokenUsageWire
+	if u.Input.Known {
+		if u.Input.Value < 0 {
+			return nil, errs.New(errs.CategoryInvalidArgument, "input_tokens cannot be negative: %d", u.Input.Value)
+		}
+		v := u.Input.Value
+		wire.InputTokens = &v
+	}
+	if u.Cached.Known {
+		if u.Cached.Value < 0 {
+			return nil, errs.New(errs.CategoryInvalidArgument, "cached_tokens cannot be negative: %d", u.Cached.Value)
+		}
+		v := u.Cached.Value
+		wire.CachedTokens = &v
+	}
+	if u.Output.Known {
+		if u.Output.Value < 0 {
+			return nil, errs.New(errs.CategoryInvalidArgument, "output_tokens cannot be negative: %d", u.Output.Value)
+		}
+		v := u.Output.Value
+		wire.OutputTokens = &v
+	}
+	return json.Marshal(wire)
+}
+
+// UnmarshalJSON deserializes TokenUsage from JSON.
+// Non-negative integers decode to Known: true. Missing keys or null decode to Known: false.
+// Negative integers are rejected with errs.CategoryInvalidArgument.
+func (u *TokenUsage) UnmarshalJSON(data []byte) error {
+	var wire tokenUsageWire
+	if err := json.Unmarshal(data, &wire); err != nil {
+		return errs.Wrap(errs.CategoryInvalidArgument, err, "failed unmarshaling TokenUsage")
+	}
+	var res TokenUsage
+	if wire.InputTokens != nil {
+		if *wire.InputTokens < 0 {
+			return errs.New(errs.CategoryInvalidArgument, "input_tokens cannot be negative: %d", *wire.InputTokens)
+		}
+		res.Input = KnownMeasurement(*wire.InputTokens)
+	}
+	if wire.CachedTokens != nil {
+		if *wire.CachedTokens < 0 {
+			return errs.New(errs.CategoryInvalidArgument, "cached_tokens cannot be negative: %d", *wire.CachedTokens)
+		}
+		res.Cached = KnownMeasurement(*wire.CachedTokens)
+	}
+	if wire.OutputTokens != nil {
+		if *wire.OutputTokens < 0 {
+			return errs.New(errs.CategoryInvalidArgument, "output_tokens cannot be negative: %d", *wire.OutputTokens)
+		}
+		res.Output = KnownMeasurement(*wire.OutputTokens)
+	}
+	*u = res
+	return nil
 }
 
 // TurnInput is the input payload for an individual turn.
@@ -177,13 +303,14 @@ type DriverEvent struct {
 
 // SessionConfig configures the initialization or resumption of a session.
 type SessionConfig struct {
-	SessionID     string            `json:"session_id"`
-	ModelID       string            `json:"model_id"`
-	SystemPrompt  string            `json:"system_prompt,omitempty"`
-	Tools         []ToolDefinition  `json:"tools,omitempty"`
-	WorktreeScope *tools.Scope      `json:"worktree_scope,omitempty"`
-	Mediator      ToolMediator      `json:"-"`
-	Options       map[string]string `json:"options,omitempty"`
+	SessionID              string            `json:"session_id"`
+	ModelID                string            `json:"model_id"`
+	SystemPrompt           string            `json:"system_prompt,omitempty"`
+	Tools                  []ToolDefinition  `json:"tools,omitempty"`
+	WorktreeScope          *tools.Scope      `json:"worktree_scope,omitempty"`
+	Mediator               ToolMediator      `json:"-"`
+	Options                map[string]string `json:"options,omitempty"`
+	MaxOutputTokensPerCall int64             `json:"max_output_tokens_per_call,omitempty"`
 }
 
 // Validate checks the basic validity of a SessionConfig.
@@ -194,6 +321,9 @@ func (cfg SessionConfig) Validate() error {
 	}
 	if cfg.ModelID == "" {
 		return errs.New(errs.CategoryInvalidArgument, "%s: model_id cannot be empty", kind)
+	}
+	if cfg.MaxOutputTokensPerCall <= 0 {
+		return errs.New(errs.CategoryInvalidArgument, "%s: max_output_tokens_per_call must be > 0, got %d", kind, cfg.MaxOutputTokensPerCall)
 	}
 	return nil
 }

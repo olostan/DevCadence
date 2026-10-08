@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/olostan/DevCadence/schemas/receipt-consumption.schema.json",
+  "title": "DevCadence ReceiptConsumption",
+  "description": "Durable record of a single consumption or grant audit use of an operator ingress receipt.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "receipt_id",
+    "project_id",
+    "human_actor_id",
+    "purpose",
+    "subject_digest",
+    "input_digest",
+    "anchor_id",
+    "effect_kind",
+    "effect_id",
+    "consumed_at"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "receipt_id": {
+      "type": "string",
+      "pattern": "^rcpt_\\S+$"
+    },
+    "project_id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S"
+    },
+    "human_actor_id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S"
+    },
+    "purpose": {
+      "enum": [
+        "discovery.product_decision",
+        "discovery.requirement_confirm",
+        "discovery.ledger_resolution",
+        "discovery.reflection",
+        "discovery.accepted_risk",
+        "host.plan_apply",
+        "acceptance.policy_activate",
+        "execution.policy_activate",
+        "empirical.campaign_authorize"
+      ]
+    },
+    "subject_digest": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S"
+    },
+    "input_digest": {
+      "type": "string"
+    },
+    "anchor_id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S"
+    },
+    "effect_kind": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S"
+    },
+    "effect_id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S"
+    },
+    "consumed_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

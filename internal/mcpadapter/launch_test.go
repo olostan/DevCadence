@@ -73,10 +73,16 @@ func (l *launched) stop(t *testing.T) int {
 
 func startLaunch(t *testing.T, getenv func(string) string) *launched {
 	t.Helper()
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	serverTransport, clientTransport := mcp.NewInMemoryTransports()
 	l := &launched{done: make(chan int, 1), stderr: &bytes.Buffer{}, cancel: cancel}
-	go func() { l.done <- mcpadapter.Launch(ctx, nil, getenv, serverTransport, l.stderr) }()
+	go func() {
+		code := mcpadapter.Launch(ctx, nil, getenv, serverTransport, l.stderr)
+		l.done <- code
+		if code != mcpadapter.ExitOK {
+			cancel()
+		}
+	}()
 	client := mcp.NewClient(&mcp.Implementation{Name: "c", Version: "1"}, nil)
 	cs, err := client.Connect(ctx, clientTransport, nil)
 	if err != nil {

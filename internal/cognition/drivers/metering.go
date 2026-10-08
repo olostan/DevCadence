@@ -24,6 +24,7 @@ type MeterLimits struct {
 	MaxCumulativeCachedTokens int64              `json:"max_cumulative_cached_tokens,omitempty"`
 	MaxCumulativeOutputTokens int64              `json:"max_cumulative_output_tokens,omitempty"`
 	MaxCumulativeTotalTokens  int64              `json:"max_cumulative_total_tokens,omitempty"`
+	AllowUnknownUsage         bool               `json:"allow_unknown_usage,omitempty"`
 	MaxDurationPerOp          time.Duration      `json:"max_duration_per_op,omitempty"`
 	MaxCumulativeDuration     time.Duration      `json:"max_cumulative_duration,omitempty"`
 	MaxCumulativeToolCalls    int                `json:"max_cumulative_tool_calls,omitempty"`
@@ -35,6 +36,8 @@ type MeterSnapshot struct {
 	SessionID            string               `json:"session_id"`
 	TurnCount            int                  `json:"turn_count"`
 	CumulativeUsage      TokenUsage           `json:"cumulative_usage"`
+	UsageKnown           bool                 `json:"usage_known"`
+	UnprovableLimits     []string             `json:"unprovable_limits,omitempty"`
 	CumulativeDuration   time.Duration        `json:"cumulative_duration"`
 	LastOpDuration       time.Duration        `json:"last_op_duration"`
 	CumulativeToolCalls  int                  `json:"cumulative_tool_calls"`
@@ -81,6 +84,7 @@ func NewSilentMeter(sessionID string, limits MeterLimits) *SilentMeter {
 	return &SilentMeter{
 		sessionID:            sessionID,
 		limits:               limits,
+		cumulativeUsage:      KnownZeroUsage(),
 		status:               SessionStatusActive,
 		loopDetector:         NewSemanticLoopDetector(loopConfig),
 		recentToolCalls:      make(map[string]ToolCall),
@@ -204,21 +208,50 @@ func (m *SilentMeter) RecordOperationEnd(start time.Time, usage TokenUsage, tool
 	}
 
 	// Check token limits
-	if m.limits.MaxCumulativeInputTokens > 0 && m.cumulativeUsage.InputTokens > m.limits.MaxCumulativeInputTokens {
-		m.tripPause("max_cumulative_input_tokens", fmt.Sprintf("cumulative input tokens %d exceeded limit %d", m.cumulativeUsage.InputTokens, m.limits.MaxCumulativeInputTokens))
-		return true, m.snapshotLocked()
+	if m.limits.MaxCumulativeInputTokens > 0 {
+		if !m.cumulativeUsage.Input.Known {
+			if !m.limits.AllowUnknownUsage {
+				m.tripPause("usage_unknown", "cannot enforce max_cumulative_input_tokens: input tokens unknown")
+				return true, m.snapshotLocked()
+			}
+		} else if m.cumulativeUsage.Input.Value > m.limits.MaxCumulativeInputTokens {
+			m.tripPause("max_cumulative_input_tokens", fmt.Sprintf("cumulative input tokens %d exceeded limit %d", m.cumulativeUsage.Input.Value, m.limits.MaxCumulativeInputTokens))
+			return true, m.snapshotLocked()
+		}
 	}
-	if m.limits.MaxCumulativeCachedTokens > 0 && m.cumulativeUsage.CachedTokens > m.limits.MaxCumulativeCachedTokens {
-		m.tripPause("max_cumulative_cached_tokens", fmt.Sprintf("cumulative cached tokens %d exceeded limit %d", m.cumulativeUsage.CachedTokens, m.limits.MaxCumulativeCachedTokens))
-		return true, m.snapshotLocked()
+	if m.limits.MaxCumulativeCachedTokens > 0 {
+		if !m.cumulativeUsage.Cached.Known {
+			if !m.limits.AllowUnknownUsage {
+				m.tripPause("usage_unknown", "cannot enforce max_cumulative_cached_tokens: cached tokens unknown")
+				return true, m.snapshotLocked()
+			}
+		} else if m.cumulativeUsage.Cached.Value > m.limits.MaxCumulativeCachedTokens {
+			m.tripPause("max_cumulative_cached_tokens", fmt.Sprintf("cumulative cached tokens %d exceeded limit %d", m.cumulativeUsage.Cached.Value, m.limits.MaxCumulativeCachedTokens))
+			return true, m.snapshotLocked()
+		}
 	}
-	if m.limits.MaxCumulativeOutputTokens > 0 && m.cumulativeUsage.OutputTokens > m.limits.MaxCumulativeOutputTokens {
-		m.tripPause("max_cumulative_output_tokens", fmt.Sprintf("cumulative output tokens %d exceeded limit %d", m.cumulativeUsage.OutputTokens, m.limits.MaxCumulativeOutputTokens))
-		return true, m.snapshotLocked()
+	if m.limits.MaxCumulativeOutputTokens > 0 {
+		if !m.cumulativeUsage.Output.Known {
+			if !m.limits.AllowUnknownUsage {
+				m.tripPause("usage_unknown", "cannot enforce max_cumulative_output_tokens: output tokens unknown")
+				return true, m.snapshotLocked()
+			}
+		} else if m.cumulativeUsage.Output.Value > m.limits.MaxCumulativeOutputTokens {
+			m.tripPause("max_cumulative_output_tokens", fmt.Sprintf("cumulative output tokens %d exceeded limit %d", m.cumulativeUsage.Output.Value, m.limits.MaxCumulativeOutputTokens))
+			return true, m.snapshotLocked()
+		}
 	}
-	if m.limits.MaxCumulativeTotalTokens > 0 && m.cumulativeUsage.Total() > m.limits.MaxCumulativeTotalTokens {
-		m.tripPause("max_cumulative_total_tokens", fmt.Sprintf("cumulative total tokens %d exceeded limit %d", m.cumulativeUsage.Total(), m.limits.MaxCumulativeTotalTokens))
-		return true, m.snapshotLocked()
+	if m.limits.MaxCumulativeTotalTokens > 0 {
+		total, totalKnown := m.cumulativeUsage.Total()
+		if !totalKnown {
+			if !m.limits.AllowUnknownUsage {
+				m.tripPause("usage_unknown", "cannot enforce max_cumulative_total_tokens: total tokens unknown")
+				return true, m.snapshotLocked()
+			}
+		} else if total > m.limits.MaxCumulativeTotalTokens {
+			m.tripPause("max_cumulative_total_tokens", fmt.Sprintf("cumulative total tokens %d exceeded limit %d", total, m.limits.MaxCumulativeTotalTokens))
+			return true, m.snapshotLocked()
+		}
 	}
 
 	// Check tool call count limit
@@ -306,10 +339,30 @@ func (m *SilentMeter) snapshotLocked() MeterSnapshot {
 			return recentCalls[i].ID < recentCalls[j].ID
 		})
 	}
+	_, totalKnown := m.cumulativeUsage.Total()
+	var unprovableLimits []string
+	if m.limits.AllowUnknownUsage {
+		if m.limits.MaxCumulativeInputTokens > 0 && !m.cumulativeUsage.Input.Known {
+			unprovableLimits = append(unprovableLimits, "max_cumulative_input_tokens")
+		}
+		if m.limits.MaxCumulativeCachedTokens > 0 && !m.cumulativeUsage.Cached.Known {
+			unprovableLimits = append(unprovableLimits, "max_cumulative_cached_tokens")
+		}
+		if m.limits.MaxCumulativeOutputTokens > 0 && !m.cumulativeUsage.Output.Known {
+			unprovableLimits = append(unprovableLimits, "max_cumulative_output_tokens")
+		}
+		if m.limits.MaxCumulativeTotalTokens > 0 && !totalKnown {
+			unprovableLimits = append(unprovableLimits, "max_cumulative_total_tokens")
+		}
+		sort.Strings(unprovableLimits)
+	}
+
 	return MeterSnapshot{
 		SessionID:            m.sessionID,
 		TurnCount:            m.turnCount,
 		CumulativeUsage:      m.cumulativeUsage,
+		UsageKnown:           totalKnown,
+		UnprovableLimits:     unprovableLimits,
 		CumulativeDuration:   m.cumulativeDuration,
 		LastOpDuration:       m.lastOpDuration,
 		CumulativeToolCalls:  m.cumulativeToolCalls,
@@ -486,12 +539,17 @@ func (s *MeteredSession) StreamTurn(ctx context.Context, input TurnInput) (Event
 			defer cancelOp()
 		}
 
-		var cumulativeTurnUsage TokenUsage
+		turnAccumulator := KnownZeroUsage()
+		var sawUsage bool
 		var emittedToolCalls []ToolCall
 
 		// Guarantee RecordOperationEnd on ALL exit paths (EOF, cancellation, stream error, consumer early close)
 		defer func() {
-			paused, _ := s.meter.RecordOperationEnd(start, cumulativeTurnUsage, emittedToolCalls, input.ToolResults)
+			usageToRecord := TokenUsage{} // unknown if !sawUsage
+			if sawUsage {
+				usageToRecord = turnAccumulator
+			}
+			paused, _ := s.meter.RecordOperationEnd(start, usageToRecord, emittedToolCalls, input.ToolResults)
 			if paused {
 				outStream.Send(DriverEvent{
 					Kind:      EventSessionPaused,
@@ -515,7 +573,8 @@ func (s *MeteredSession) StreamTurn(ctx context.Context, input TurnInput) (Event
 			}
 
 			if ev.Usage != nil {
-				cumulativeTurnUsage = cumulativeTurnUsage.Add(*ev.Usage)
+				turnAccumulator = turnAccumulator.Add(*ev.Usage)
+				sawUsage = true
 			}
 			if ev.ToolCall != nil {
 				emittedToolCalls = append(emittedToolCalls, *ev.ToolCall)

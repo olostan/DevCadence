@@ -212,6 +212,7 @@ func TestFixturesRoundTripWithoutSemanticLoss(t *testing.T) {
 		{"portfolio-recommendation.valid.json", decodeInto[protocol.PortfolioRecommendation]},
 		{"portfolio-recommendation.planner.valid.json", decodeInto[protocol.PortfolioRecommendation]},
 		{"workflow-plan.valid.json", decodeInto[protocol.WorkflowPlan]},
+		{"receipt-consumption.valid.json", decodeInto[protocol.ReceiptConsumption]},
 	}
 	for _, tc := range cases {
 		t.Run(tc.file, func(t *testing.T) {
@@ -472,6 +473,8 @@ func recordKindFor(t *testing.T, file string) string {
 		return "FindingResolution"
 	case strings.HasPrefix(base, "resolution-verification."):
 		return "ResolutionVerification"
+	case strings.HasPrefix(base, "receipt-consumption."):
+		return "ReceiptConsumption"
 	}
 	t.Fatalf("no record kind is mapped for fixture %s", base)
 	return ""

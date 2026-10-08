@@ -237,11 +237,11 @@ func (s *fakeSession) ExecuteTurn(ctx context.Context, input TurnInput) (TurnRes
 		TurnID:    input.TurnID,
 		Content:   content,
 		ToolCalls: toolCalls,
-		Usage: TokenUsage{
-			InputTokens:  int64(len(input.Prompt)),
-			CachedTokens: 0,
-			OutputTokens: int64(len(content)),
-		},
+		Usage: KnownUsage(
+			int64(len(input.Prompt)),
+			0,
+			int64(len(content)),
+		),
 		Duration: delay,
 	}, nil
 }
@@ -290,14 +290,16 @@ func (s *fakeSession) StreamTurn(ctx context.Context, input TurnInput) (EventStr
 		}
 
 		// Emit usage event
+		usage := KnownUsage(
+			int64(len(input.Prompt)),
+			0,
+			int64(len(words)*5),
+		)
 		outStream.Send(DriverEvent{
 			Kind:      EventTurnCompleted,
 			SessionID: s.ID(),
 			TurnID:    input.TurnID,
-			Usage: &TokenUsage{
-				InputTokens:  int64(len(input.Prompt)),
-				OutputTokens: int64(len(words) * 5),
-			},
+			Usage:     &usage,
 			Timestamp: time.Now(),
 		})
 

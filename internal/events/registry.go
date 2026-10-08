@@ -119,6 +119,11 @@ func CorrelationFor(payload Payload) Correlation {
 		return Correlation{TaskID: p.TaskID, AttemptID: p.AttemptID}
 	case *ValidationCompleted:
 		return Correlation{TaskID: p.TaskID, AttemptID: p.AttemptID, ValidationID: p.ValidationID}
+	case *ReviewInvocationStarted:
+		return Correlation{
+			TaskID: p.TaskID, AttemptID: p.AttemptID,
+			WorkPackageID: p.WorkPackageID, ReviewID: p.ReviewID,
+		}
 	case *ReviewCompleted:
 		// The work package belongs here for the same reason the event now
 		// carries it: a review is defined against the blueprint the attempt

@@ -32,7 +32,7 @@ func protectedHome(t *testing.T) (home, configDir string) {
 	}
 	home = filepath.Join(root, "home")
 	configDir = filepath.Join(home, "config")
-	for _, dir := range []string{home, configDir, filepath.Join(home, "state")} {
+	for _, dir := range []string{root, home, configDir, filepath.Join(home, "state")} {
 		if err := os.MkdirAll(dir, 0o700); err != nil {
 			t.Fatal(err)
 		}

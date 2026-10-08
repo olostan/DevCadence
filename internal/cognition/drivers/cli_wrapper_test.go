@@ -98,6 +98,7 @@ func TestCLIWrapperDriverContract(t *testing.T) {
 			SystemPromptFlag: "--system",
 			ToolsFlag:        "--tools",
 			ToolResultsFlag:  "--tool-results",
+			MaxTokensFlag:    "--max-tokens",
 		})
 		return driver, func() {}
 	})
@@ -112,9 +113,10 @@ func TestCLIWrapperDriver_WorktreeDirBinding(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	driver := MustNewCLIWrapperDriver("cli-worktree-driver", runner, CLIWrapperOptions{
-		Binary:     "test-cli",
-		PromptFlag: "-p",
-		ModelFlag:  "--model",
+		Binary:        "test-cli",
+		PromptFlag:    "-p",
+		ModelFlag:     "--model",
+		MaxTokensFlag: "--max-tokens",
 	})
 
 	scope := &tools.Scope{
@@ -123,9 +125,10 @@ func TestCLIWrapperDriver_WorktreeDirBinding(t *testing.T) {
 	}
 
 	session, err := driver.StartSession(context.Background(), SessionConfig{
-		SessionID:     "sess-worktree-dir",
-		ModelID:       "test-model",
-		WorktreeScope: scope,
+		SessionID:              "sess-worktree-dir",
+		ModelID:                "test-model",
+		MaxOutputTokensPerCall: 4096,
+		WorktreeScope:          scope,
 	})
 	if err != nil {
 		t.Fatalf("StartSession failed: %v", err)
@@ -148,17 +151,19 @@ func TestCLIWrapperDriver_WorktreeDirBinding(t *testing.T) {
 func TestCLIWrapperDriver_CancellationKillsProcess(t *testing.T) {
 	runner := &mockCommandRunner{delay: 200 * time.Millisecond}
 	driver := MustNewCLIWrapperDriver("cli-cancel-driver", runner, CLIWrapperOptions{
-		Binary:     "test-cli",
-		PromptFlag: "-p",
-		ModelFlag:  "--model",
+		Binary:        "test-cli",
+		PromptFlag:    "-p",
+		ModelFlag:     "--model",
+		MaxTokensFlag: "--max-tokens",
 	})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
 	defer cancel()
 
 	session, err := driver.StartSession(context.Background(), SessionConfig{
-		SessionID: "sess-cancel-kill",
-		ModelID:   "test-model",
+		SessionID:              "sess-cancel-kill",
+		ModelID:                "test-model",
+		MaxOutputTokensPerCall: 4096,
 	})
 	if err != nil {
 		t.Fatalf("StartSession failed: %v", err)
@@ -177,14 +182,16 @@ func TestCLIWrapperDriver_CancellationKillsProcess(t *testing.T) {
 func TestCLIWrapperDriver_StreamEarlyCloseKillsProcess(t *testing.T) {
 	runner := &mockCommandRunner{delay: 3 * time.Second}
 	driver := MustNewCLIWrapperDriver("cli-early-close-driver", runner, CLIWrapperOptions{
-		Binary:     "test-cli",
-		PromptFlag: "-p",
-		ModelFlag:  "--model",
+		Binary:        "test-cli",
+		PromptFlag:    "-p",
+		ModelFlag:     "--model",
+		MaxTokensFlag: "--max-tokens",
 	})
 
 	session, err := driver.StartSession(context.Background(), SessionConfig{
-		SessionID: "sess-early-close",
-		ModelID:   "test-model",
+		SessionID:              "sess-early-close",
+		ModelID:                "test-model",
+		MaxOutputTokensPerCall: 4096,
 	})
 	if err != nil {
 		t.Fatalf("StartSession failed: %v", err)
@@ -231,15 +238,17 @@ func TestCLIWrapperDriver_StreamEarlyCloseKillsProcess(t *testing.T) {
 func TestCLIWrapperDriver_ResumeArguments(t *testing.T) {
 	runner := &mockCommandRunner{}
 	driver := MustNewCLIWrapperDriver("cli-resume-driver", runner, CLIWrapperOptions{
-		Binary:     "test-cli",
-		PromptFlag: "-p",
-		ModelFlag:  "--model",
-		ResumeFlag: "--resume-session",
+		Binary:        "test-cli",
+		PromptFlag:    "-p",
+		ModelFlag:     "--model",
+		ResumeFlag:    "--resume-session",
+		MaxTokensFlag: "--max-tokens",
 	})
 
 	session, err := driver.StartSession(context.Background(), SessionConfig{
-		SessionID: "sess-resume-123",
-		ModelID:   "test-model",
+		SessionID:              "sess-resume-123",
+		ModelID:                "test-model",
+		MaxOutputTokensPerCall: 4096,
 	})
 	if err != nil {
 		t.Fatalf("StartSession failed: %v", err)
@@ -303,14 +312,16 @@ func TestCLIWrapperDriver_SecretValidationAtCreation(t *testing.T) {
 func TestCLIWrapperDriver_SecretValidationAtExecution(t *testing.T) {
 	runner := &mockCommandRunner{}
 	driver := MustNewCLIWrapperDriver("cli-exec-secret", runner, CLIWrapperOptions{
-		Binary:     "test-cli",
-		PromptFlag: "-p",
-		ModelFlag:  "--model",
+		Binary:        "test-cli",
+		PromptFlag:    "-p",
+		ModelFlag:     "--model",
+		MaxTokensFlag: "--max-tokens",
 	})
 
 	session, err := driver.StartSession(context.Background(), SessionConfig{
-		SessionID: "sess-exec-secret",
-		ModelID:   "test-model",
+		SessionID:              "sess-exec-secret",
+		ModelID:                "test-model",
+		MaxOutputTokensPerCall: 4096,
 	})
 	if err != nil {
 		t.Fatalf("StartSession failed: %v", err)
@@ -342,8 +353,9 @@ func TestCLIWrapperDriver_UnsupportedFlagsFailClosed(t *testing.T) {
 
 	// ModelID without ModelFlag fails closed
 	_, err := driver.StartSession(ctx, SessionConfig{
-		SessionID: "sess-no-modelflag",
-		ModelID:   "custom-model",
+		SessionID:              "sess-no-modelflag",
+		ModelID:                "custom-model",
+		MaxOutputTokensPerCall: 4096,
 	})
 	if err == nil {
 		t.Errorf("expected error when model_id cannot be mapped, got nil")
@@ -354,14 +366,16 @@ func TestCLIWrapperDriver_UnsupportedFlagsFailClosed(t *testing.T) {
 
 	// Tool declaration without ToolsFlag fails closed
 	driverWithModel := MustNewCLIWrapperDriver("cli-with-model", runner, CLIWrapperOptions{
-		Binary:     "test-cli",
-		PromptFlag: "-p",
-		ModelFlag:  "--model",
+		Binary:        "test-cli",
+		PromptFlag:    "-p",
+		ModelFlag:     "--model",
+		MaxTokensFlag: "--max-tokens",
 	})
 	_, err = driverWithModel.StartSession(ctx, SessionConfig{
-		SessionID: "sess-no-toolsflag",
-		ModelID:   "custom-model",
-		Tools:     []ToolDefinition{{Name: "t1", Description: "d"}},
+		SessionID:              "sess-no-toolsflag",
+		ModelID:                "custom-model",
+		MaxOutputTokensPerCall: 4096,
+		Tools:                  []ToolDefinition{{Name: "t1", Description: "d"}},
 	})
 	if err == nil {
 		t.Errorf("expected error when tools cannot be mapped, got nil")
@@ -372,8 +386,9 @@ func TestCLIWrapperDriver_UnsupportedFlagsFailClosed(t *testing.T) {
 
 	// ToolResults without ToolResultsFlag fails closed
 	sess, err := driverWithModel.StartSession(ctx, SessionConfig{
-		SessionID: "sess-tool-res",
-		ModelID:   "custom-model",
+		SessionID:              "sess-tool-res",
+		ModelID:                "custom-model",
+		MaxOutputTokensPerCall: 4096,
 	})
 	if err != nil {
 		t.Fatalf("StartSession failed: %v", err)
@@ -395,10 +410,11 @@ func TestCLIWrapperDriver_UnsupportedFlagsFailClosed(t *testing.T) {
 func TestCLIWrapperDriver_OpaqueSessionResumeWithoutHandleRejection(t *testing.T) {
 	runner := &mockCommandRunner{}
 	driver := MustNewCLIWrapperDriver("cli-opaque-resume", runner, CLIWrapperOptions{
-		Binary:     "test-cli",
-		PromptFlag: "-p",
-		ModelFlag:  "--model",
-		ResumeFlag: "--resume",
+		Binary:        "test-cli",
+		PromptFlag:    "-p",
+		ModelFlag:     "--model",
+		ResumeFlag:    "--resume",
+		MaxTokensFlag: "--max-tokens",
 		// AllowLogicalSessionIDAsHandle is false by default
 	})
 
@@ -406,8 +422,9 @@ func TestCLIWrapperDriver_OpaqueSessionResumeWithoutHandleRejection(t *testing.T
 
 	// Resume without prior session or backend handle must fail closed with CategoryInvalidTransition
 	_, err := driver.ResumeSession(ctx, "non-existent-session", SessionConfig{
-		SessionID: "non-existent-session",
-		ModelID:   "test-model",
+		SessionID:              "non-existent-session",
+		ModelID:                "test-model",
+		MaxOutputTokensPerCall: 4096,
 	})
 	if err == nil {
 		t.Fatalf("expected error resuming opaque session without handle, got nil")
@@ -418,8 +435,9 @@ func TestCLIWrapperDriver_OpaqueSessionResumeWithoutHandleRejection(t *testing.T
 
 	// Providing backend handle in Options works
 	resumed, err := driver.ResumeSession(ctx, "resumed-sess", SessionConfig{
-		SessionID: "resumed-sess",
-		ModelID:   "test-model",
+		SessionID:              "resumed-sess",
+		ModelID:                "test-model",
+		MaxOutputTokensPerCall: 4096,
 		Options: map[string]string{
 			"backend_session_handle": "handle-abc-123",
 		},
@@ -489,14 +507,16 @@ func TestCLIWrapperDriver_LargeTokenOutput(t *testing.T) {
 		lineSize: 200 * 1024, // 200 KB line
 	}
 	driver := MustNewCLIWrapperDriver("cli-large-output", largeOutputRunner, CLIWrapperOptions{
-		Binary:     "test-cli",
-		PromptFlag: "-p",
-		ModelFlag:  "--model",
+		Binary:        "test-cli",
+		PromptFlag:    "-p",
+		ModelFlag:     "--model",
+		MaxTokensFlag: "--max-tokens",
 	})
 
 	session, err := driver.StartSession(context.Background(), SessionConfig{
-		SessionID: "sess-large-output",
-		ModelID:   "test-model",
+		SessionID:              "sess-large-output",
+		ModelID:                "test-model",
+		MaxOutputTokensPerCall: 4096,
 	})
 	if err != nil {
 		t.Fatalf("StartSession failed: %v", err)
@@ -566,16 +586,18 @@ func TestProcessRunner_Direct(t *testing.T) {
 func TestCLIWrapperDriver_StreamTurnCapturesBackendHandle(t *testing.T) {
 	runner := &mockCommandRunner{}
 	driver := MustNewCLIWrapperDriver("cli-stream-handle-driver", runner, CLIWrapperOptions{
-		Binary:     "test-cli",
-		PromptFlag: "-p",
-		ModelFlag:  "--model",
-		ResumeFlag: "--resume",
+		Binary:        "test-cli",
+		PromptFlag:    "-p",
+		ModelFlag:     "--model",
+		ResumeFlag:    "--resume",
+		MaxTokensFlag: "--max-tokens",
 	})
 
 	ctx := context.Background()
 	session, err := driver.StartSession(ctx, SessionConfig{
-		SessionID: "sess-stream-backend-test",
-		ModelID:   "test-model",
+		SessionID:              "sess-stream-backend-test",
+		ModelID:                "test-model",
+		MaxOutputTokensPerCall: 4096,
 	})
 	if err != nil {
 		t.Fatalf("StartSession failed: %v", err)
@@ -653,16 +675,18 @@ func TestCLIWrapperDriver_StreamTurnRejectsWhenStreamingUnsupported(t *testing.T
 	}
 
 	driver := MustNewCLIWrapperDriver("cli-no-stream-driver", runner, CLIWrapperOptions{
-		Binary:       "test-cli",
-		PromptFlag:   "-p",
-		ModelFlag:    "--model",
-		Capabilities: &noStreamCaps,
+		Binary:        "test-cli",
+		PromptFlag:    "-p",
+		ModelFlag:     "--model",
+		MaxTokensFlag: "--max-tokens",
+		Capabilities:  &noStreamCaps,
 	})
 
 	ctx := context.Background()
 	session, err := driver.StartSession(ctx, SessionConfig{
-		SessionID: "sess-no-stream-test",
-		ModelID:   "test-model",
+		SessionID:              "sess-no-stream-test",
+		ModelID:                "test-model",
+		MaxOutputTokensPerCall: 4096,
 	})
 	if err != nil {
 		t.Fatalf("StartSession failed: %v", err)
@@ -677,5 +701,113 @@ func TestCLIWrapperDriver_StreamTurnRejectsWhenStreamingUnsupported(t *testing.T
 	}
 	if errs.CategoryOf(err) != errs.CategoryUnsupported {
 		t.Errorf("expected CategoryUnsupported, got %v", err)
+	}
+}
+
+func TestCLIWrapperDriver_MaxOutputTokensEnforcement(t *testing.T) {
+	runner := &mockCommandRunner{}
+	ctx := context.Background()
+
+	// Case 1: Driver configured with MaxTokensFlag passes it in args
+	driverWithFlag := MustNewCLIWrapperDriver("cli-max-tokens-flag", runner, CLIWrapperOptions{
+		Binary:        "test-cli",
+		PromptFlag:    "-p",
+		ModelFlag:     "--model",
+		MaxTokensFlag: "--max-output-tokens",
+	})
+	sess1, err := driverWithFlag.StartSession(ctx, SessionConfig{
+		SessionID:              "sess-tokens-1",
+		ModelID:                "test-model",
+		MaxOutputTokensPerCall: 2048,
+	})
+	if err != nil {
+		t.Fatalf("StartSession failed: %v", err)
+	}
+	_, err = sess1.ExecuteTurn(ctx, TurnInput{TurnID: "t1", Prompt: "hi"})
+	if err != nil {
+		t.Fatalf("ExecuteTurn failed: %v", err)
+	}
+	runner.mu.Lock()
+	args1 := runner.lastArgs
+	runner.mu.Unlock()
+	foundFlag := false
+	for i, a := range args1 {
+		if a == "--max-output-tokens" && i+1 < len(args1) && args1[i+1] == "2048" {
+			foundFlag = true
+			break
+		}
+	}
+	if !foundFlag {
+		t.Errorf("expected '--max-output-tokens 2048' in args, got %v", args1)
+	}
+
+	// Case 2: Session options override/provide max_tokens_flag
+	driverNoFlag := MustNewCLIWrapperDriver("cli-no-flag", runner, CLIWrapperOptions{
+		Binary:     "test-cli",
+		PromptFlag: "-p",
+		ModelFlag:  "--model",
+	})
+	sess2, err := driverNoFlag.StartSession(ctx, SessionConfig{
+		SessionID:              "sess-tokens-2",
+		ModelID:                "test-model",
+		MaxOutputTokensPerCall: 1024,
+		Options: map[string]string{
+			"max_tokens_flag": "--session-max-toks",
+		},
+	})
+	if err != nil {
+		t.Fatalf("StartSession failed: %v", err)
+	}
+	_, err = sess2.ExecuteTurn(ctx, TurnInput{TurnID: "t2", Prompt: "hi"})
+	if err != nil {
+		t.Fatalf("ExecuteTurn with options flag failed: %v", err)
+	}
+	runner.mu.Lock()
+	args2 := runner.lastArgs
+	runner.mu.Unlock()
+	foundSessionFlag := false
+	for i, a := range args2 {
+		if a == "--session-max-toks" && i+1 < len(args2) && args2[i+1] == "1024" {
+			foundSessionFlag = true
+			break
+		}
+	}
+	if !foundSessionFlag {
+		t.Errorf("expected '--session-max-toks 1024' in args, got %v", args2)
+	}
+
+	// Case 3: Driver without MaxTokensFlag or options fails closed before dispatch
+	sess3, err := driverNoFlag.StartSession(ctx, SessionConfig{
+		SessionID:              "sess-tokens-3",
+		ModelID:                "test-model",
+		MaxOutputTokensPerCall: 4096,
+	})
+	if err != nil {
+		t.Fatalf("StartSession failed: %v", err)
+	}
+	_, err = sess3.ExecuteTurn(ctx, TurnInput{TurnID: "t3", Prompt: "hi"})
+	if err == nil {
+		t.Errorf("expected ExecuteTurn to fail when MaxTokensFlag cannot be enforced")
+	}
+	if errs.CategoryOf(err) != errs.CategoryUnsupported {
+		t.Errorf("expected CategoryUnsupported, got %v", err)
+	}
+
+	_, err = sess3.StreamTurn(ctx, TurnInput{TurnID: "t3-s", Prompt: "hi"})
+	if err == nil {
+		t.Errorf("expected StreamTurn to fail when MaxTokensFlag cannot be enforced")
+	}
+	if errs.CategoryOf(err) != errs.CategoryUnsupported {
+		t.Errorf("expected CategoryUnsupported, got %v", err)
+	}
+}
+
+func TestSafeBuffer(t *testing.T) {
+	buf := &safeBuffer{}
+	if _, err := buf.Write([]byte("hello")); err != nil {
+		t.Fatalf("Write failed: %v", err)
+	}
+	if got := buf.String(); got != "hello" {
+		t.Errorf("String() = %q, want %q", got, "hello")
 	}
 }

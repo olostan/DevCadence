@@ -177,6 +177,48 @@ func (p *ValidationCompleted) CheckReferencedRecord(document []byte) error {
 	return nil
 }
 
+// --- ReviewInvocationStarted -------------------------------------------
+
+// ReferencedRecord implements RecordReferencing.
+func (p *ReviewInvocationStarted) ReferencedRecord() RecordRef {
+	id := ""
+	if p.AttemptID != "" && p.Dimension != "" {
+		id = "intent:" + p.AttemptID + ":" + string(p.Dimension)
+	}
+	return RecordRef{Kind: "ReviewInvocationIntent", ID: id, Digest: p.RecordDigest}
+}
+
+// CheckReferencedRecord implements RecordReferencing.
+func (p *ReviewInvocationStarted) CheckReferencedRecord(document []byte) error {
+	var intent protocol.ReviewInvocationIntent
+	if err := protocol.Unmarshal(document, &intent); err != nil {
+		return err
+	}
+	const event = "ReviewInvocationStarted"
+	if intent.TaskID != p.TaskID {
+		return mismatch(event, "task_id", p.TaskID, intent.TaskID)
+	}
+	if intent.AttemptID != p.AttemptID {
+		return mismatch(event, "attempt_id", p.AttemptID, intent.AttemptID)
+	}
+	if intent.WorkPackageID != p.WorkPackageID {
+		return mismatch(event, "work_package_id", p.WorkPackageID, intent.WorkPackageID)
+	}
+	if intent.ReviewID != p.ReviewID {
+		return mismatch(event, "review_id", p.ReviewID, intent.ReviewID)
+	}
+	if intent.InvocationID != p.InvocationID {
+		return mismatch(event, "invocation_id", p.InvocationID, intent.InvocationID)
+	}
+	if intent.Dimension != p.Dimension {
+		return mismatch(event, "dimension", p.Dimension, intent.Dimension)
+	}
+	if intent.CandidateCommit != p.CandidateCommit {
+		return mismatch(event, "candidate_commit", p.CandidateCommit, intent.CandidateCommit)
+	}
+	return nil
+}
+
 // --- ReviewCompleted ---------------------------------------------------
 
 // ReferencedRecord implements RecordReferencing.

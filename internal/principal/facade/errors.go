@@ -9,20 +9,8 @@ import (
 	"github.com/olostan/DevCadence/internal/principal"
 )
 
-// codedError carries a semantic code chosen by the facade itself. Its text is
-// diagnostic only and is never sent to a caller: SemanticError messages are
-// fixed per code.
-type codedError struct {
-	code      string
-	retryable bool
-	refs      []string
-	detail    string
-}
-
-func (e *codedError) Error() string { return e.code + ": " + e.detail }
-
 func coded(code string, retryable bool, refs []string, detail string) error {
-	return &codedError{code: code, retryable: retryable, refs: refs, detail: detail}
+	return principal.NewCodedError(code, retryable, refs, detail)
 }
 
 // staleRepository reports that the repository changed outside DevCadence
@@ -39,10 +27,10 @@ func staleRepository(head, detail string) error {
 // semanticFor maps any error to a safe SemanticError. The raw error is never
 // copied: only its code is, so provider, SQL, shell and path text cannot leak.
 func semanticFor(err error) principal.SemanticError {
-	var ce *codedError
+	var ce *principal.CodedError
 	switch {
 	case errors.As(err, &ce):
-		return principal.NewSemanticError(ce.code, ce.refs, ce.retryable)
+		return principal.NewSemanticError(ce.Code(), ce.EvidenceRefs(), ce.Retryable())
 	case errors.Is(err, controlplane.ErrStaleProjectState):
 		return principal.NewSemanticError(principal.CodeStaleProjectState, nil, true)
 	case errors.Is(err, controlplane.ErrStaleWorkPackage):

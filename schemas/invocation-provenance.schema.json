@@ -1,0 +1,178 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/olostan/DevCadence/schemas/invocation-provenance.schema.json",
+  "title": "DevCadence InvocationProvenance",
+  "description": "Durable execution provenance binding an invocation to its endpoint basis, digests, role, and actor (WP-M5-R2 Part A).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "provenance_id",
+    "project_id",
+    "task_id",
+    "attempt_id",
+    "work_package_id",
+    "role",
+    "actor",
+    "basis",
+    "independence_basis",
+    "endpoint_binding_digest",
+    "context_manifest_digest",
+    "prompt_digest",
+    "started_at"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "provenance_id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S"
+    },
+    "project_id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S"
+    },
+    "task_id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S"
+    },
+    "attempt_id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S"
+    },
+    "work_package_id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S"
+    },
+    "role": {
+      "enum": [
+        "reviewer",
+        "implementer",
+        "verifier"
+      ]
+    },
+    "actor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "actor_id",
+        "invocation_id",
+        "role"
+      ],
+      "properties": {
+        "actor_id": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "invocation_id": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "role": {
+          "enum": [
+            "reviewer",
+            "implementer",
+            "verifier"
+          ]
+        },
+        "lineage_actor_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          },
+          "uniqueItems": true
+        },
+        "endpoint_ref": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "session_ref": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "model_ref": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "basis": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "endpoint_id": {
+          "type": "string"
+        },
+        "model_id": {
+          "type": "string"
+        },
+        "model_revision": {
+          "type": "string"
+        },
+        "provider": {
+          "type": "string"
+        },
+        "model_family": {
+          "type": "string"
+        },
+        "account_ref": {
+          "type": "string"
+        }
+      }
+    },
+    "independence_basis": {
+      "enum": [
+        "endpoint_model",
+        "model_family_account"
+      ]
+    },
+    "endpoint_binding_digest": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "context_manifest_digest": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "prompt_digest": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "candidate_commit": {
+      "type": "string"
+    },
+    "dimension": {
+      "enum": [
+        "correctness",
+        "architecture",
+        "invariants",
+        "security",
+        "test_adequacy",
+        "concurrency",
+        "performance",
+        "maintainability",
+        "other"
+      ]
+    },
+    "started_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

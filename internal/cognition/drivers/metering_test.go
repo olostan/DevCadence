@@ -22,8 +22,9 @@ func TestMetering_TokenBudgets(t *testing.T) {
 
 	ctx := context.Background()
 	session, err := meteredDriver.StartSession(ctx, SessionConfig{
-		SessionID: "sess-meter-tokens",
-		ModelID:   "test-model",
+		SessionID:              "sess-meter-tokens",
+		ModelID:                "test-model",
+		MaxOutputTokensPerCall: 4096,
 	})
 	if err != nil {
 		t.Fatalf("StartSession failed: %v", err)
@@ -83,8 +84,9 @@ func TestMetering_ResumePreservesMeterState(t *testing.T) {
 
 	ctx := context.Background()
 	cfg := SessionConfig{
-		SessionID: "sess-continuity-1",
-		ModelID:   "test-model",
+		SessionID:              "sess-continuity-1",
+		ModelID:                "test-model",
+		MaxOutputTokensPerCall: 4096,
 	}
 
 	session1, err := meteredDriver.StartSession(ctx, cfg)
@@ -99,8 +101,8 @@ func TestMetering_ResumePreservesMeterState(t *testing.T) {
 	}
 
 	snap1 := session1.(*MeteredSession).Meter().Checkpoint()
-	if snap1.CumulativeUsage.InputTokens != 30 {
-		t.Errorf("expected 30 input tokens, got %d", snap1.CumulativeUsage.InputTokens)
+	if !snap1.CumulativeUsage.Input.Known || snap1.CumulativeUsage.Input.Value != 30 {
+		t.Errorf("expected 30 known input tokens, got known=%v value=%d", snap1.CumulativeUsage.Input.Known, snap1.CumulativeUsage.Input.Value)
 	}
 
 	// Resume session
@@ -110,8 +112,8 @@ func TestMetering_ResumePreservesMeterState(t *testing.T) {
 	}
 
 	snap2 := session2.(*MeteredSession).Meter().Checkpoint()
-	if snap2.CumulativeUsage.InputTokens != 30 {
-		t.Errorf("expected resumed session to retain 30 cumulative input tokens, got %d", snap2.CumulativeUsage.InputTokens)
+	if !snap2.CumulativeUsage.Input.Known || snap2.CumulativeUsage.Input.Value != 30 {
+		t.Errorf("expected resumed session to retain 30 known cumulative input tokens, got known=%v value=%d", snap2.CumulativeUsage.Input.Known, snap2.CumulativeUsage.Input.Value)
 	}
 
 	// Turn 2: another 30 chars
@@ -121,8 +123,8 @@ func TestMetering_ResumePreservesMeterState(t *testing.T) {
 	}
 
 	snap3 := session2.(*MeteredSession).Meter().Checkpoint()
-	if snap3.CumulativeUsage.InputTokens != 60 {
-		t.Errorf("expected 60 cumulative input tokens after resumed turn, got %d", snap3.CumulativeUsage.InputTokens)
+	if !snap3.CumulativeUsage.Input.Known || snap3.CumulativeUsage.Input.Value != 60 {
+		t.Errorf("expected 60 known cumulative input tokens after resumed turn, got known=%v value=%d", snap3.CumulativeUsage.Input.Known, snap3.CumulativeUsage.Input.Value)
 	}
 }
 
@@ -138,8 +140,9 @@ func TestMetering_ActiveMaxDurationPerOpTimeout(t *testing.T) {
 
 	ctx := context.Background()
 	session, err := meteredDriver.StartSession(ctx, SessionConfig{
-		SessionID: "sess-op-timeout",
-		ModelID:   "test-model",
+		SessionID:              "sess-op-timeout",
+		ModelID:                "test-model",
+		MaxOutputTokensPerCall: 4096,
 	})
 	if err != nil {
 		t.Fatalf("StartSession failed: %v", err)
@@ -186,8 +189,9 @@ func TestMetering_OscillatingEditsViaMediator(t *testing.T) {
 	})
 
 	cfg := SessionConfig{
-		SessionID: "sess-oscillate-test",
-		ModelID:   "test-model",
+		SessionID:              "sess-oscillate-test",
+		ModelID:                "test-model",
+		MaxOutputTokensPerCall: 4096,
 		Tools: []ToolDefinition{
 			{Name: "write_file", Description: "write file", MutatesFiles: true},
 		},
@@ -247,8 +251,9 @@ func TestMetering_ClosedSessionStatus(t *testing.T) {
 	})
 
 	session, err := meteredDriver.StartSession(context.Background(), SessionConfig{
-		SessionID: "sess-close-check",
-		ModelID:   "test-model",
+		SessionID:              "sess-close-check",
+		ModelID:                "test-model",
+		MaxOutputTokensPerCall: 4096,
 	})
 	if err != nil {
 		t.Fatalf("StartSession failed: %v", err)
@@ -281,8 +286,9 @@ func TestMetering_ToolCallCeiling(t *testing.T) {
 
 	ctx := context.Background()
 	session, err := meteredDriver.StartSession(ctx, SessionConfig{
-		SessionID: "sess-meter-tool-calls",
-		ModelID:   "test-model",
+		SessionID:              "sess-meter-tool-calls",
+		ModelID:                "test-model",
+		MaxOutputTokensPerCall: 4096,
 	})
 	if err != nil {
 		t.Fatalf("StartSession failed: %v", err)
@@ -321,8 +327,9 @@ func TestMetering_LoopDetectionSuspension(t *testing.T) {
 
 	ctx := context.Background()
 	session, err := meteredDriver.StartSession(ctx, SessionConfig{
-		SessionID: "sess-meter-loop",
-		ModelID:   "test-model",
+		SessionID:              "sess-meter-loop",
+		ModelID:                "test-model",
+		MaxOutputTokensPerCall: 4096,
 	})
 	if err != nil {
 		t.Fatalf("StartSession failed: %v", err)
@@ -390,8 +397,9 @@ func TestMetering_NoPromptCountdownInjection(t *testing.T) {
 
 	ctx := context.Background()
 	session, err := meteredDriver.StartSession(ctx, SessionConfig{
-		SessionID: "sess-no-countdown",
-		ModelID:   "test-model",
+		SessionID:              "sess-no-countdown",
+		ModelID:                "test-model",
+		MaxOutputTokensPerCall: 4096,
 	})
 	if err != nil {
 		t.Fatalf("StartSession failed: %v", err)
@@ -485,8 +493,9 @@ func TestMetering_DriverInternalToolExecutionTracked(t *testing.T) {
 
 	ctx := context.Background()
 	session, err := meteredDriver.StartSession(ctx, SessionConfig{
-		SessionID: "sess-internal-tool-loop",
-		ModelID:   "direct-model-v1",
+		SessionID:              "sess-internal-tool-loop",
+		ModelID:                "direct-model-v1",
+		MaxOutputTokensPerCall: 4096,
 		Tools: []ToolDefinition{
 			{Name: "failing_tool", Description: "always fails"},
 		},
@@ -635,8 +644,9 @@ func TestMetering_ResumeDoesNotDuplicateListeners(t *testing.T) {
 
 	ctx := context.Background()
 	cfg := SessionConfig{
-		SessionID: "sess-resume-listener-test",
-		ModelID:   "test-model",
+		SessionID:              "sess-resume-listener-test",
+		ModelID:                "test-model",
+		MaxOutputTokensPerCall: 4096,
 		Tools: []ToolDefinition{
 			{Name: "failing_tool", Description: "always fails"},
 		},
@@ -838,5 +848,322 @@ func TestSilentMeter_DeterministicSnapshotOrdering(t *testing.T) {
 		snap.RecentToolCalls[1].ID != "m-call" ||
 		snap.RecentToolCalls[2].ID != "z-call" {
 		t.Errorf("expected RecentToolCalls to be sorted by ID [a-call, m-call, z-call], got %v", snap.RecentToolCalls)
+	}
+}
+
+func TestMetering_AllowUnknownUsage_False_SuspendsOnUnknown(t *testing.T) {
+	// P0-6: configured cached limit with cached unknown and AllowUnknownUsage=false
+	// -> suspends PAUSED_BUDGET_EXCEEDED, pause reason usage_unknown.
+	meter := NewSilentMeter("sess-unknown-usage", MeterLimits{
+		MaxCumulativeCachedTokens: 50,
+		AllowUnknownUsage:         false,
+	})
+
+	// Operation reports known input and output, but unknown cached
+	usage := TokenUsage{
+		Input:  KnownMeasurement(10),
+		Cached: TokenMeasurement{}, // unknown
+		Output: KnownMeasurement(5),
+	}
+
+	paused, snap := meter.RecordOperationEnd(time.Now(), usage, nil, nil)
+	if !paused {
+		t.Fatalf("expected meter to pause when configured limit metric is unknown and AllowUnknownUsage=false")
+	}
+	if snap.Status != SessionStatusPausedBudgetExceeded {
+		t.Errorf("expected status %q, got %q", SessionStatusPausedBudgetExceeded, snap.Status)
+	}
+	if snap.PausedReason != PauseReasonBudgetExceeded {
+		t.Errorf("expected PausedReason %q, got %q", PauseReasonBudgetExceeded, snap.PausedReason)
+	}
+	if snap.ExceededDimension != "usage_unknown" {
+		t.Errorf("expected ExceededDimension %q, got %q", "usage_unknown", snap.ExceededDimension)
+	}
+
+	// P0-6 continued: total-only configured limit with known input/output is still evaluated
+	// and does NOT trip on unknown cached.
+	meterTotal := NewSilentMeter("sess-total-only", MeterLimits{
+		MaxCumulativeTotalTokens: 100,
+		AllowUnknownUsage:        false,
+	})
+	pausedTotal, snapTotal := meterTotal.RecordOperationEnd(time.Now(), usage, nil, nil)
+	if pausedTotal {
+		t.Errorf("total-only limit with known input/output should evaluate without pausing, got paused")
+	}
+	if !snapTotal.UsageKnown {
+		t.Errorf("expected UsageKnown=true when input and output are known")
+	}
+
+	// If total limit is configured and output is unknown -> pauses with usage_unknown
+	meterTotalUnknown := NewSilentMeter("sess-total-unknown", MeterLimits{
+		MaxCumulativeTotalTokens: 100,
+		AllowUnknownUsage:        false,
+	})
+	usageOutUnknown := TokenUsage{
+		Input:  KnownMeasurement(10),
+		Cached: KnownMeasurement(5),
+		Output: TokenMeasurement{}, // unknown
+	}
+	pausedOutUnknown, snapOutUnknown := meterTotalUnknown.RecordOperationEnd(time.Now(), usageOutUnknown, nil, nil)
+	if !pausedOutUnknown {
+		t.Fatalf("expected total-only limit to pause when output is unknown and AllowUnknownUsage=false")
+	}
+	if snapOutUnknown.ExceededDimension != "usage_unknown" {
+		t.Errorf("expected ExceededDimension 'usage_unknown', got %q", snapOutUnknown.ExceededDimension)
+	}
+}
+
+func TestMetering_AllowUnknownUsage_True_UnprovableLimits(t *testing.T) {
+	// P0-7: AllowUnknownUsage=true, cached limit configured, cached unknown
+	// -> execution continues, UnprovableLimits == ["max_cumulative_cached_tokens"],
+	// turn/wall-time/tool-call bounds still trip.
+	meter := NewSilentMeter("sess-allow-unknown", MeterLimits{
+		MaxCumulativeCachedTokens: 50,
+		MaxCumulativeInputTokens:  100,
+		MaxCumulativeToolCalls:    2,
+		AllowUnknownUsage:         true,
+	})
+
+	usage := TokenUsage{
+		Input:  KnownMeasurement(20),
+		Cached: TokenMeasurement{}, // unknown
+		Output: KnownMeasurement(10),
+	}
+
+	// First op: within tool calls, cached unknown
+	paused, snap := meter.RecordOperationEnd(time.Now(), usage, []ToolCall{{ID: "tc-1"}}, nil)
+	if paused {
+		t.Fatalf("meter should not pause when AllowUnknownUsage=true and unknown metric is unprovable")
+	}
+	if snap.Status != SessionStatusActive {
+		t.Errorf("expected status active, got %s", snap.Status)
+	}
+	if len(snap.UnprovableLimits) != 1 || snap.UnprovableLimits[0] != "max_cumulative_cached_tokens" {
+		t.Errorf("expected UnprovableLimits == [max_cumulative_cached_tokens], got %v", snap.UnprovableLimits)
+	}
+	if !snap.UsageKnown {
+		t.Errorf("expected UsageKnown=true since input and output are known")
+	}
+
+	// Second op exceeds tool call bound -> trips max_cumulative_tool_calls
+	paused2, snap2 := meter.RecordOperationEnd(time.Now(), usage, []ToolCall{{ID: "tc-2"}, {ID: "tc-3"}}, nil)
+	if !paused2 {
+		t.Fatalf("expected tool call ceiling to still trip when AllowUnknownUsage=true")
+	}
+	if snap2.ExceededDimension != "max_cumulative_tool_calls" {
+		t.Errorf("expected ExceededDimension max_cumulative_tool_calls, got %q", snap2.ExceededDimension)
+	}
+	// UnprovableLimits should still record the unprovable limit
+	if len(snap2.UnprovableLimits) != 1 || snap2.UnprovableLimits[0] != "max_cumulative_cached_tokens" {
+		t.Errorf("expected UnprovableLimits to still contain max_cumulative_cached_tokens, got %v", snap2.UnprovableLimits)
+	}
+}
+
+func TestMetering_KnownUsage_LimitsEnforced(t *testing.T) {
+	// P0-8: known usage over a configured limit -> trips exactly as before;
+	// known usage under it -> no trip and UnprovableLimits empty.
+	meter := NewSilentMeter("sess-known-limits", MeterLimits{
+		MaxCumulativeInputTokens: 50,
+		AllowUnknownUsage:        true,
+	})
+
+	usageUnder := KnownUsage(30, 10, 10)
+	pausedUnder, snapUnder := meter.RecordOperationEnd(time.Now(), usageUnder, nil, nil)
+	if pausedUnder {
+		t.Errorf("usage under limit should not pause")
+	}
+	if len(snapUnder.UnprovableLimits) != 0 {
+		t.Errorf("expected UnprovableLimits to be empty for known usage under limit, got %v", snapUnder.UnprovableLimits)
+	}
+
+	usageOver := KnownUsage(30, 5, 5)
+	pausedOver, snapOver := meter.RecordOperationEnd(time.Now(), usageOver, nil, nil)
+	if !pausedOver {
+		t.Fatalf("expected known usage over limit to trip")
+	}
+	if snapOver.ExceededDimension != "max_cumulative_input_tokens" {
+		t.Errorf("expected ExceededDimension 'max_cumulative_input_tokens', got %q", snapOver.ExceededDimension)
+	}
+}
+
+type immediateErrSession struct {
+	Session
+	errToReturn error
+}
+
+func (s *immediateErrSession) StreamTurn(_ context.Context, _ TurnInput) (EventStream, error) {
+	return nil, s.errToReturn
+}
+
+func TestMetering_StreamTurn_ImmediateErrorRecordsUnknown(t *testing.T) {
+	// P0-9: a session whose StreamTurn is invoked and immediately returns an error
+	// with no usage evidence -> the operation records unknown usage;
+	// with AllowUnknownUsage=false and a configured token limit the meter suspends with usage_unknown.
+	fakeDriver := NewFakeDriver("fake-stream-err")
+	rawSession, err := fakeDriver.StartSession(context.Background(), SessionConfig{
+		SessionID:              "sess-imm-err",
+		ModelID:                "test-model",
+		MaxOutputTokensPerCall: 4096,
+	})
+	if err != nil {
+		t.Fatalf("StartSession failed: %v", err)
+	}
+
+	errSess := &immediateErrSession{
+		Session:     rawSession,
+		errToReturn: errs.New(errs.CategoryInternal, "immediate stream failure"),
+	}
+
+	meter := NewSilentMeter("sess-imm-err", MeterLimits{
+		MaxCumulativeInputTokens: 100,
+		AllowUnknownUsage:        false,
+	})
+	ms := NewMeteredSessionWithMeter(errSess, meter)
+
+	ctx := context.Background()
+	_, streamErr := ms.StreamTurn(ctx, TurnInput{TurnID: "turn-err", Prompt: "test prompt"})
+	if streamErr == nil {
+		t.Fatalf("expected immediate error, got nil")
+	}
+
+	snap := ms.Meter().Checkpoint()
+	if snap.Status != SessionStatusPausedBudgetExceeded {
+		t.Errorf("expected session to pause after immediate stream error with configured token limit and AllowUnknownUsage=false, got status %q", snap.Status)
+	}
+	if snap.ExceededDimension != "usage_unknown" {
+		t.Errorf("expected ExceededDimension 'usage_unknown', got %q", snap.ExceededDimension)
+	}
+
+	// Subsequent turn rejected due to pause
+	_, nextErr := ms.ExecuteTurn(ctx, TurnInput{TurnID: "turn-next", Prompt: "retry"})
+	if nextErr == nil {
+		t.Errorf("expected turn to be rejected while paused")
+	}
+}
+
+type noUsageEventSession struct {
+	Session
+}
+
+func (s *noUsageEventSession) StreamTurn(_ context.Context, input TurnInput) (EventStream, error) {
+	stream := NewChannelEventStream(4)
+	go func() {
+		stream.Send(DriverEvent{
+			Kind:      EventContentDelta,
+			SessionID: s.ID(),
+			TurnID:    input.TurnID,
+			Delta:     "hello world",
+			Timestamp: time.Now(),
+		})
+		stream.CloseWithError(nil)
+	}()
+	return stream, nil
+}
+
+func TestMetering_StreamTurn_StreamWithoutUsageRecordsUnknown(t *testing.T) {
+	// P0-10: a stream that emits events but none with Usage -> the operation reports
+	// unknown (not zero) and, with AllowUnknownUsage=false and a configured limit,
+	// suspends usage_unknown; a stream with usage events accumulates from KnownZeroUsage() and stays known.
+	fakeDriver := NewFakeDriver("fake-stream-nousage")
+	rawSession, err := fakeDriver.StartSession(context.Background(), SessionConfig{
+		SessionID:              "sess-no-usage-ev",
+		ModelID:                "test-model",
+		MaxOutputTokensPerCall: 4096,
+	})
+	if err != nil {
+		t.Fatalf("StartSession failed: %v", err)
+	}
+
+	noUsageSess := &noUsageEventSession{Session: rawSession}
+	meter := NewSilentMeter("sess-no-usage-ev", MeterLimits{
+		MaxCumulativeTotalTokens: 100,
+		AllowUnknownUsage:        false,
+	})
+	ms := NewMeteredSessionWithMeter(noUsageSess, meter)
+
+	ctx := context.Background()
+	stream, err := ms.StreamTurn(ctx, TurnInput{TurnID: "t-no-usage", Prompt: "hello"})
+	if err != nil {
+		t.Fatalf("StreamTurn failed: %v", err)
+	}
+
+	// Drain stream
+	for {
+		_, recvErr := stream.Recv()
+		if recvErr != nil {
+			break
+		}
+	}
+
+	// Give background defer a moment to finalize
+	time.Sleep(20 * time.Millisecond)
+
+	snap := ms.Meter().Checkpoint()
+	if snap.Status != SessionStatusPausedBudgetExceeded {
+		t.Errorf("expected session to pause when stream emitted no usage event and AllowUnknownUsage=false, got status %s", snap.Status)
+	}
+	if snap.ExceededDimension != "usage_unknown" {
+		t.Errorf("expected ExceededDimension 'usage_unknown', got %q", snap.ExceededDimension)
+	}
+}
+
+func TestMetering_UnprovableLimitsVocabularyAndShape(t *testing.T) {
+	// P0-11: UnprovableLimits vocabulary and shape: only the four closed names,
+	// only configured limits, sorted, deduplicated, never populated when AllowUnknownUsage=false
+	meter := NewSilentMeter("sess-vocab", MeterLimits{
+		MaxCumulativeTotalTokens:  100,
+		MaxCumulativeInputTokens:  100,
+		MaxCumulativeCachedTokens: 100,
+		MaxCumulativeOutputTokens: 100,
+		AllowUnknownUsage:         true,
+	})
+
+	// All unknown
+	_, snap := meter.RecordOperationEnd(time.Now(), TokenUsage{}, nil, nil)
+	expected := []string{
+		"max_cumulative_cached_tokens",
+		"max_cumulative_input_tokens",
+		"max_cumulative_output_tokens",
+		"max_cumulative_total_tokens",
+	}
+	if len(snap.UnprovableLimits) != 4 {
+		t.Fatalf("expected 4 unprovable limits, got %v", snap.UnprovableLimits)
+	}
+	for i, exp := range expected {
+		if snap.UnprovableLimits[i] != exp {
+			t.Errorf("at index %d: expected %q, got %q", i, exp, snap.UnprovableLimits[i])
+		}
+	}
+
+	// JSON serialization check: unprovable_limits present
+	marshaled, err := json.Marshal(snap)
+	if err != nil {
+		t.Fatalf("failed to marshal MeterSnapshot: %v", err)
+	}
+	if !strings.Contains(string(marshaled), `"unprovable_limits"`) {
+		t.Errorf("expected unprovable_limits in JSON, got %s", string(marshaled))
+	}
+
+	var roundTrip MeterSnapshot
+	if err := json.Unmarshal(marshaled, &roundTrip); err != nil {
+		t.Fatalf("failed to unmarshal MeterSnapshot: %v", err)
+	}
+	if len(roundTrip.UnprovableLimits) != 4 {
+		t.Errorf("round-trip UnprovableLimits mismatch: %v", roundTrip.UnprovableLimits)
+	}
+
+	// When AllowUnknownUsage=false, UnprovableLimits is never populated
+	meterFalse := NewSilentMeter("sess-vocab-false", MeterLimits{
+		MaxCumulativeInputTokens: 100,
+		AllowUnknownUsage:        false,
+	})
+	_, snapFalse := meterFalse.RecordOperationEnd(time.Now(), TokenUsage{}, nil, nil)
+	if len(snapFalse.UnprovableLimits) != 0 {
+		t.Errorf("expected UnprovableLimits empty when AllowUnknownUsage=false, got %v", snapFalse.UnprovableLimits)
+	}
+
+	marshaledFalse, _ := json.Marshal(snapFalse)
+	if strings.Contains(string(marshaledFalse), `"unprovable_limits"`) {
+		t.Errorf("unprovable_limits should be omitted when empty, got %s", string(marshaledFalse))
 	}
 }

@@ -1,0 +1,34 @@
+package taskexec
+
+import (
+	"context"
+	"sync"
+
+	"github.com/olostan/DevCadence/internal/principal/facade"
+)
+
+// Ensure Executor implements facade.TaskExecutor.
+var _ facade.TaskExecutor = (*Executor)(nil)
+
+// Executor coordinates bounded task execution and recovery.
+type Executor struct {
+	opts       Options
+	valMu      sync.Mutex
+	valIndices map[string]int
+}
+
+// New constructs and initializes a new Executor.
+// It validates required options and runs orphan recovery before returning.
+func New(opts Options) (*Executor, error) {
+	if err := opts.Validate(); err != nil {
+		return nil, err
+	}
+	e := &Executor{
+		opts:       opts,
+		valIndices: make(map[string]int),
+	}
+	if err := e.Recover(context.Background()); err != nil {
+		return nil, err
+	}
+	return e, nil
+}

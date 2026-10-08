@@ -84,6 +84,10 @@ These govern wire objects of the principal interface, **not durable records**: t
 
 The prose semantics are defined in [../docs/PROTOCOLS.md](../docs/PROTOCOLS.md), [../docs/adr/0018-adaptive-cognition-portfolio-and-workflow-synthesis.md](../docs/adr/0018-adaptive-cognition-portfolio-and-workflow-synthesis.md), and [../docs/adr/0019-non-conversational-cognition-and-adaptive-review.md](../docs/adr/0019-non-conversational-cognition-and-adaptive-review.md).
 
+### Operator ingress receipts (WP-M5-R4)
+
+- `receipt-consumption.schema.json`
+
 ## Rules
 
 1. Schemas use JSON Schema Draft 2020-12.

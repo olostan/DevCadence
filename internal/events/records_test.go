@@ -5,8 +5,10 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/olostan/DevCadence/internal/events"
+	"github.com/olostan/DevCadence/internal/protocol"
 )
 
 // TestEveryRecordDigestPayloadIsVerified is the drift guard behind the
@@ -94,4 +96,65 @@ func setRecordDigest(t *testing.T, payload events.Payload, digest string) events
 		t.Fatalf("set digest on %s: %v", payload.Type(), err)
 	}
 	return payload.(events.RecordReferencing)
+}
+
+func TestReviewInvocationStartedReferencedRecord(t *testing.T) {
+	now := time.Now().UTC()
+	intent := &protocol.ReviewInvocationIntent{
+		SchemaVersion:    protocol.SchemaVersion1,
+		ReviewID:         "rev-1",
+		ProjectID:        "proj-1",
+		TaskID:           "tsk-1",
+		AttemptID:        "att-1",
+		WorkPackageID:    "wp-1",
+		Dimension:        protocol.DimensionCorrectness,
+		InvocationID:     "inv-1",
+		CandidateCommit:  "c0ffee0000000000000000000000000000000000",
+		InvocationNumber: 1,
+		ReviewerBasis: protocol.ActorBasis{
+			EndpointID:    "ep-1",
+			ModelID:       "m-1",
+			ModelRevision: "r-1",
+		},
+		IndependenceBasis:     "endpoint_model",
+		EndpointBindingDigest: "sha256:" + strings.Repeat("a", 64),
+		StartedAt:             now,
+	}
+	doc, err := protocol.Marshal(intent)
+	if err != nil {
+		t.Fatalf("marshal intent: %v", err)
+	}
+
+	started := &events.ReviewInvocationStarted{
+		TaskID:          "tsk-1",
+		AttemptID:       "att-1",
+		WorkPackageID:   "wp-1",
+		ReviewID:        "rev-1",
+		InvocationID:    "inv-1",
+		Dimension:       protocol.DimensionCorrectness,
+		CandidateCommit: "c0ffee0000000000000000000000000000000000",
+		RecordDigest:    "sha256:" + strings.Repeat("b", 64),
+	}
+
+	if err := started.CheckReferencedRecord(doc); err != nil {
+		t.Fatalf("CheckReferencedRecord: %v", err)
+	}
+
+	ref := started.ReferencedRecord()
+	if ref.Kind != "ReviewInvocationIntent" {
+		t.Fatalf("ref.Kind = %s, want ReviewInvocationIntent", ref.Kind)
+	}
+	if ref.ID != "intent:att-1:correctness" {
+		t.Fatalf("ref.ID = %s, want intent:att-1:correctness", ref.ID)
+	}
+	if ref.Digest != started.RecordDigest {
+		t.Fatalf("ref.Digest = %s, want %s", ref.Digest, started.RecordDigest)
+	}
+
+	// Mismatch test
+	bad := *started
+	bad.CandidateCommit = "different-commit"
+	if err := bad.CheckReferencedRecord(doc); err == nil {
+		t.Fatal("candidate_commit mismatch was accepted")
+	}
 }

@@ -404,6 +404,13 @@ func (r *SpecificationReadiness) ProjectOf() string { return r.ProjectID }
 // (DCI-073). It is stored under the project that proposed it, and nothing
 // cross-checks a field it does not have.
 
+var customRecordConstructors = map[string]func() Record{}
+
+// RegisterCustomRecord allows packages to register or override record constructors.
+func RegisterCustomRecord(kind string, fn func() Record) {
+	customRecordConstructors[kind] = fn
+}
+
 // NewRecord allocates an empty record of the named kind.
 //
 // The mapping is an explicit switch rather than a reflective registry so that
@@ -412,6 +419,9 @@ func (r *SpecificationReadiness) ProjectOf() string { return r.ProjectID }
 // name — the CLI decoding a record supplied alongside an event — decode into
 // the right typed document instead of a map.
 func NewRecord(kind string) (Record, error) {
+	if fn, ok := customRecordConstructors[kind]; ok {
+		return fn(), nil
+	}
 	switch kind {
 	case "ProjectState":
 		return &ProjectState{}, nil
@@ -489,6 +499,14 @@ func NewRecord(kind string) (Record, error) {
 		return &FindingResolution{}, nil
 	case "ResolutionVerification":
 		return &ResolutionVerification{}, nil
+	case "InvocationProvenance":
+		return &InvocationProvenance{}, nil
+	case "ReviewInvocationIntent":
+		return &ReviewInvocationIntent{}, nil
+	case "ReviewInvocation":
+		return &ReviewInvocation{}, nil
+	case "ReceiptConsumption":
+		return &ReceiptConsumption{}, nil
 	}
 	return nil, errs.New(errs.CategoryInvalidArgument, "unknown record kind %q", kind)
 }

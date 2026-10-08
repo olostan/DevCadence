@@ -47,10 +47,7 @@ func (s *fakeSession) ExecuteTurn(_ context.Context, input drivers.TurnInput) (d
 	return drivers.TurnResult{
 		TurnID:  input.TurnID,
 		Content: fmt.Sprintf("Executed %s successfully. Task completed.", input.TurnID),
-		Usage: drivers.TokenUsage{
-			InputTokens:  100,
-			OutputTokens: 25,
-		},
+		Usage:   drivers.KnownUsage(100, 0, 25),
 	}, nil
 }
 
@@ -331,10 +328,7 @@ func TestRunner_TokenUnobservabilityAccounting(t *testing.T) {
 				TurnID:       "turn-1",
 				Content:      "Work done with telemetry. Task completed.",
 				PausedReason: "completed",
-				Usage: drivers.TokenUsage{
-					InputTokens:  150,
-					OutputTokens: 30,
-				},
+				Usage:        drivers.KnownUsage(150, 0, 30),
 			},
 		},
 	}
@@ -345,9 +339,9 @@ func TestRunner_TokenUnobservabilityAccounting(t *testing.T) {
 	if resPos.AccountingUncertain {
 		t.Fatal("expected AccountingUncertain=false when tokens are observable")
 	}
-	if resPos.TokenUsage.InputTokens != 150 || resPos.TokenUsage.OutputTokens != 30 {
+	if resPos.TokenUsage.Input.Value != 150 || resPos.TokenUsage.Output.Value != 30 {
 		t.Fatalf("token accounting mismatch: expected 150/30, got %d/%d",
-			resPos.TokenUsage.InputTokens, resPos.TokenUsage.OutputTokens)
+			resPos.TokenUsage.Input.Value, resPos.TokenUsage.Output.Value)
 	}
 }
 

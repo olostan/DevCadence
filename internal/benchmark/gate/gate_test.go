@@ -720,11 +720,7 @@ func (s *canonicalTestSession) ExecuteTurn(_ context.Context, input drivers.Turn
 		TurnID:       input.TurnID,
 		Content:      "Task completed successfully conforming to all contract requirements.",
 		PausedReason: "completed",
-		Usage: drivers.TokenUsage{
-			InputTokens:  promptTokens,
-			OutputTokens: 60,
-			CachedTokens: cachedTokens,
-		},
+		Usage:        drivers.KnownUsage(promptTokens, cachedTokens, 60),
 	}, nil
 }
 
