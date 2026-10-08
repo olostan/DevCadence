@@ -32,17 +32,17 @@ func (l ExecutionLimits) Validate(loc protocol.Locality) error {
 	if l.MaxRequestBytes <= 0 {
 		return errs.New(errs.CategoryInvalidArgument, "%s: max_request_bytes must be > 0, got %d", kind, l.MaxRequestBytes)
 	}
-	if l.MaxTurns < 0 {
-		return errs.New(errs.CategoryInvalidArgument, "%s: max_turns must be >= 0, got %d", kind, l.MaxTurns)
+	if l.MaxTurns <= 0 {
+		return errs.New(errs.CategoryInvalidArgument, "%s: max_turns must be > 0, got %d", kind, l.MaxTurns)
 	}
-	if l.MaxToolCalls < 0 {
-		return errs.New(errs.CategoryInvalidArgument, "%s: max_tool_calls must be >= 0, got %d", kind, l.MaxToolCalls)
+	if l.MaxToolCalls <= 0 {
+		return errs.New(errs.CategoryInvalidArgument, "%s: max_tool_calls must be > 0, got %d", kind, l.MaxToolCalls)
 	}
-	if l.MaxTotalTokens < 0 {
-		return errs.New(errs.CategoryInvalidArgument, "%s: max_total_tokens must be >= 0, got %d", kind, l.MaxTotalTokens)
+	if l.MaxTotalTokens <= 0 {
+		return errs.New(errs.CategoryInvalidArgument, "%s: max_total_tokens must be > 0, got %d", kind, l.MaxTotalTokens)
 	}
-	if l.MaxDurationSeconds < 0 {
-		return errs.New(errs.CategoryInvalidArgument, "%s: max_duration_seconds must be >= 0, got %d", kind, l.MaxDurationSeconds)
+	if l.MaxDurationSeconds <= 0 {
+		return errs.New(errs.CategoryInvalidArgument, "%s: max_duration_seconds must be > 0, got %d", kind, l.MaxDurationSeconds)
 	}
 	if l.MaxAPISpendMicroUSD < 0 {
 		return errs.New(errs.CategoryInvalidArgument, "%s: max_api_spend_micro_usd must be >= 0, got %d", kind, l.MaxAPISpendMicroUSD)

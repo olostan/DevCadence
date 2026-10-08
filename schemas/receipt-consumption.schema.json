@@ -11,6 +11,9 @@
     "project_id",
     "human_actor_id",
     "purpose",
+    "subject_digest",
+    "input_digest",
+    "anchor_id",
     "effect_kind",
     "effect_id",
     "consumed_at"
@@ -45,6 +48,19 @@
         "execution.policy_activate",
         "empirical.campaign_authorize"
       ]
+    },
+    "subject_digest": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S"
+    },
+    "input_digest": {
+      "type": "string"
+    },
+    "anchor_id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S"
     },
     "effect_kind": {
       "type": "string",

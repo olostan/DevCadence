@@ -538,7 +538,11 @@ func (e *Executor) reviewDimension(
 		Actor:                 protocol.Actor{Kind: protocol.ActorControlPlane, ID: "reviewexec"},
 		ExpectedStateRevision: ps.StateRevision,
 		Preconditions: []controlplane.BatchGuard{
-			intentAbsentGuard{intentID: intentID},
+			intentAbsentGuard{
+				taskID:          task.ID,
+				candidateCommit: candidate.Commit,
+				intentID:        intentID,
+			},
 		},
 		Commands: []controlplane.Command{
 			{
@@ -724,22 +728,22 @@ func (e *Executor) runReviewSession(
 		workPackageID = candidate.WorkPackage.ID
 	}
 
-	maxDurationSec := ep.Limits.MaxDurationSeconds
-	if maxDurationSec <= 0 {
-		maxDurationSec = 300
+	if ep.Limits.MaxTurns <= 0 ||
+		ep.Limits.MaxToolCalls <= 0 ||
+		ep.Limits.MaxTotalTokens <= 0 ||
+		ep.Limits.MaxDurationSeconds <= 0 ||
+		ep.Limits.MaxOutputTokensPerCall <= 0 ||
+		ep.Limits.MaxRequestBytes <= 0 {
+		return protocol.OutcomeDriverError, authorUnableToVerifyResult(e.opts.ProjectID, candidate.AttemptID, workPackageID, dim, reviewID, ep)
 	}
+
+	maxDurationSec := ep.Limits.MaxDurationSeconds
 	meterLimits := drivers.MeterLimits{
 		MaxCumulativeTotalTokens: ep.Limits.MaxTotalTokens,
 		MaxCumulativeToolCalls:   ep.Limits.MaxToolCalls,
 		MaxCumulativeDuration:    time.Duration(maxDurationSec) * time.Second,
 		AllowUnknownUsage:        ep.Limits.AllowUnknownUsage,
 		MaxDurationPerOp:         time.Duration(maxDurationSec) * time.Second,
-	}
-	if meterLimits.MaxCumulativeTotalTokens <= 0 {
-		meterLimits.MaxCumulativeTotalTokens = 100000
-	}
-	if meterLimits.MaxCumulativeToolCalls <= 0 {
-		meterLimits.MaxCumulativeToolCalls = 20
 	}
 
 	md := drivers.NewMeteredDriver(opened.Driver, meterLimits)
@@ -769,9 +773,6 @@ func (e *Executor) runReviewSession(
 	}()
 
 	maxTurns := ep.Limits.MaxTurns
-	if maxTurns <= 0 {
-		maxTurns = 5
-	}
 	userPrompt := compiled.Projection.UserPrompt
 	if userPrompt == "" {
 		userPrompt = fmt.Sprintf("Please review candidate commit %s for dimension %s.", candidate.Commit, dim)
@@ -787,6 +788,14 @@ func (e *Executor) runReviewSession(
 	for turn := 1; turn <= maxTurns; turn++ {
 		if ctx.Err() != nil {
 			return protocol.OutcomeCancelled, authorUnableToVerifyResult(e.opts.ProjectID, candidate.AttemptID, workPackageID, dim, reviewID, ep)
+		}
+
+		inputBytes := len(turnInput.Prompt)
+		for _, tr := range turnInput.ToolResults {
+			inputBytes += len(tr.Content)
+		}
+		if inputBytes > ep.Limits.MaxRequestBytes {
+			return protocol.OutcomeLimitReached, authorUnableToVerifyResult(e.opts.ProjectID, candidate.AttemptID, workPackageID, dim, reviewID, ep)
 		}
 
 		turnRes, err := session.ExecuteTurn(ctx, turnInput)

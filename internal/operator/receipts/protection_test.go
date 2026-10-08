@@ -272,6 +272,24 @@ func TestCheckPathProtection_AncestorWalk(t *testing.T) {
 			t.Errorf("expected CategoryPolicyDenied, got %v", err)
 		}
 	})
+
+	t.Run("sibling prefix root escape rejected", func(t *testing.T) {
+		siblingDir := baseDir + "_evil"
+		if err := os.Mkdir(siblingDir, 0o700); err != nil {
+			t.Fatalf("Mkdir siblingDir: %v", err)
+		}
+		siblingFile := filepath.Join(siblingDir, "anchors.json")
+		if err := os.WriteFile(siblingFile, []byte(`{"version":"1.0"}`), 0o600); err != nil {
+			t.Fatalf("WriteFile siblingFile: %v", err)
+		}
+		err := CheckPathProtection(siblingFile, opts)
+		if err == nil {
+			t.Fatal("expected failure on sibling directory escape")
+		}
+		if errs.CategoryOf(err) != errs.CategoryInvalidArgument {
+			t.Errorf("expected CategoryInvalidArgument, got %v", err)
+		}
+	})
 }
 
 func TestHostPlanApprovals_Adapter(t *testing.T) {
@@ -283,7 +301,9 @@ func TestHostPlanApprovals_Adapter(t *testing.T) {
 		AnchorID:     anchorID,
 		HumanActorID: actorID,
 		PublicKey:    pub,
+		NotBefore:    time.Now().UTC().Add(-1 * time.Hour),
 		NotAfter:     time.Now().UTC().Add(24 * time.Hour),
+		Purposes:     []Purpose{PurposeHostPlanApply},
 	}
 	v, err := NewVerifier([]TrustAnchor{anchor})
 	if err != nil {
@@ -315,7 +335,7 @@ func TestHostPlanApprovals_Adapter(t *testing.T) {
 		ProjectID:     "project-x",
 		Subject:       Subject{Kind: "host_plan", ID: receiptID, Version: 1},
 		SubjectDigest: scopeDigest,
-		InputDigest:   "none",
+		InputDigest:   "",
 		Text:          text,
 		TextDigest:    protocol.DigestBytes([]byte(text)),
 		HumanActorID:  actorID,
@@ -436,6 +456,7 @@ func TestHostPlanApprovals_Adapter(t *testing.T) {
 	t.Run("purpose mismatch rejected", func(t *testing.T) {
 		badStmt := stmt
 		badStmt.Purpose = PurposeDiscoveryProductDecision
+		badStmt.InputDigest = "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 		badReceipt, err := badStmt.Sign(priv)
 		if err != nil {
 			t.Fatal(err)
@@ -465,7 +486,9 @@ func TestHumanReceipts_Adapter(t *testing.T) {
 		AnchorID:     anchorID,
 		HumanActorID: actorID,
 		PublicKey:    pub,
+		NotBefore:    time.Now().UTC().Add(-1 * time.Hour),
 		NotAfter:     time.Now().UTC().Add(24 * time.Hour),
+		Purposes:     []Purpose{PurposeDiscoveryProductDecision},
 	}
 	v, err := NewVerifier([]TrustAnchor{anchor})
 	if err != nil {

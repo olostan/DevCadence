@@ -11,10 +11,27 @@ import (
 )
 
 type intentAbsentGuard struct {
-	intentID string
+	taskID          string
+	candidateCommit string
+	intentID        string
 }
 
 func (g intentAbsentGuard) Check(ctx context.Context, view controlplane.BatchReadView) error {
+	ps := view.ProjectState()
+	if ps == nil {
+		return errs.New(errs.CategoryInternal, "nil project state in guard")
+	}
+	running := false
+	for _, id := range ps.Tasks.Running {
+		if id == g.taskID || id == "tsk_"+g.taskID || g.taskID == "tsk_"+id {
+			running = true
+			break
+		}
+	}
+	if !running {
+		return errs.New(errs.CategoryConflict, "task %s is not running", g.taskID)
+	}
+
 	_, err := view.Record(ctx, "ReviewInvocationIntent", g.intentID, 1)
 	if err == nil {
 		return principal.NewCodedError(

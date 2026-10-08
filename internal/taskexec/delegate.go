@@ -438,6 +438,14 @@ func (e *Executor) runDelegate(
 			return e.handleCancel(taskID, attemptID, session, ctx.Err())
 		}
 
+		inputBytes := len(turnInput.Prompt)
+		for _, tr := range turnInput.ToolResults {
+			inputBytes += len(tr.Content)
+		}
+		if inputBytes > ep.Limits.MaxRequestBytes {
+			return e.failAttempt(taskID, attemptID, "reason=limit_reached effects=none", false, 0, nil, principal.CodePolicyDenied, fmt.Errorf("request bytes %d exceeds max_request_bytes %d", inputBytes, ep.Limits.MaxRequestBytes))
+		}
+
 		turnRes, err := session.ExecuteTurn(ctx, turnInput)
 		if err != nil {
 			if ctx.Err() != nil {

@@ -17,7 +17,7 @@ import (
 	"github.com/olostan/DevCadence/internal/protocol"
 )
 
-func testSetup(t *testing.T) (ed25519.PublicKey, ed25519.PrivateKey, *receipts.Verifier, string, string) {
+func testSetup(t *testing.T) (ed25519.PublicKey, ed25519.PrivateKey, *receipts.InMemoryVerifier, string, string) {
 	t.Helper()
 	pub, priv, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
@@ -28,7 +28,9 @@ func testSetup(t *testing.T) (ed25519.PublicKey, ed25519.PrivateKey, *receipts.V
 		AnchorID:     "anchor-test",
 		HumanActorID: "actor-test",
 		PublicKey:    pub,
+		NotBefore:    time.Now().UTC().Add(-1 * time.Hour),
 		NotAfter:     time.Now().UTC().Add(24 * time.Hour),
+		Purposes:     []receipts.Purpose{receipts.PurposeExecutionPolicyActivate},
 	}
 
 	v, err := receipts.NewVerifier([]receipts.TrustAnchor{anchor})
@@ -111,7 +113,7 @@ func signReceipt(t *testing.T, priv ed25519.PrivateKey, policy execpolicy.Execut
 		ProjectID:     "proj-test",
 		Subject:       receipts.Subject{Kind: "ExecutionPolicy", ID: policy.PolicyID, Version: policy.Revision},
 		SubjectDigest: canonDigest,
-		InputDigest:   "sha256:none",
+		InputDigest:   "",
 		Text:          text,
 		TextDigest:    protocol.DigestBytes([]byte(text)),
 		HumanActorID:  "actor-test",
@@ -154,7 +156,7 @@ func TestPolicyLoadAndCurrent_Success(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	src, err := execpolicy.Load(ctx, policyPath, receiptsDir, v)
+	src, err := execpolicy.Load(ctx, "proj-test", policyPath, receiptsDir, v)
 	if err != nil {
 		t.Fatalf("Load failed: %v", err)
 	}
@@ -200,7 +202,7 @@ func TestPolicyLoad_ByteDriftFailsClosed(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	src, err := execpolicy.Load(ctx, policyPath, receiptsDir, v)
+	src, err := execpolicy.Load(ctx, "proj-test", policyPath, receiptsDir, v)
 	if err != nil {
 		t.Fatalf("Load failed: %v", err)
 	}
@@ -245,7 +247,7 @@ func TestPolicyLoad_MissingReceiptFailsClosed(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	_, err = execpolicy.Load(ctx, policyPath, receiptsDir, v)
+	_, err = execpolicy.Load(ctx, "proj-test", policyPath, receiptsDir, v)
 	if err == nil {
 		t.Fatalf("Load succeeded unexpectedly with missing receipt")
 	}
@@ -280,7 +282,7 @@ func TestPolicyLoad_RevokedAndExpiredReceiptFailsClosed(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	src, err := execpolicy.Load(ctx, policyPath, receiptsDir, v)
+	src, err := execpolicy.Load(ctx, "proj-test", policyPath, receiptsDir, v)
 	if err != nil {
 		t.Fatalf("Load failed: %v", err)
 	}
@@ -321,7 +323,7 @@ func TestPolicyLoad_RevokedAndExpiredReceiptFailsClosed(t *testing.T) {
 			t.Fatalf("WriteFile: %v", err)
 		}
 
-		_, err := execpolicy.Load(ctx, expPolicyPath, receiptsDirExp, vExp)
+		_, err := execpolicy.Load(ctx, "proj-test", expPolicyPath, receiptsDirExp, vExp)
 		if err == nil {
 			t.Fatalf("Load succeeded unexpectedly with expired receipt")
 		}
@@ -339,6 +341,10 @@ func TestPolicyLoad_RevokedAndExpiredReceiptFailsClosed(t *testing.T) {
 func TestLimitsAndPolicyValidation(t *testing.T) {
 	t.Run("invalid limits: zero per-call output tokens", func(t *testing.T) {
 		limits := execpolicy.ExecutionLimits{
+			MaxTurns:               10,
+			MaxToolCalls:           20,
+			MaxTotalTokens:         100000,
+			MaxDurationSeconds:     300,
 			MaxOutputTokensPerCall: 0,
 			MaxRequestBytes:        1000,
 		}
@@ -349,6 +355,10 @@ func TestLimitsAndPolicyValidation(t *testing.T) {
 
 	t.Run("invalid limits: zero request bytes", func(t *testing.T) {
 		limits := execpolicy.ExecutionLimits{
+			MaxTurns:               10,
+			MaxToolCalls:           20,
+			MaxTotalTokens:         100000,
+			MaxDurationSeconds:     300,
 			MaxOutputTokensPerCall: 1000,
 			MaxRequestBytes:        0,
 		}
@@ -357,8 +367,68 @@ func TestLimitsAndPolicyValidation(t *testing.T) {
 		}
 	})
 
+	t.Run("invalid limits: zero max turns", func(t *testing.T) {
+		limits := execpolicy.ExecutionLimits{
+			MaxTurns:               0,
+			MaxToolCalls:           20,
+			MaxTotalTokens:         100000,
+			MaxDurationSeconds:     300,
+			MaxOutputTokensPerCall: 1000,
+			MaxRequestBytes:        1000,
+		}
+		if err := limits.Validate(protocol.LocalityLocal); err == nil {
+			t.Errorf("expected error for MaxTurns = 0")
+		}
+	})
+
+	t.Run("invalid limits: zero max tool calls", func(t *testing.T) {
+		limits := execpolicy.ExecutionLimits{
+			MaxTurns:               10,
+			MaxToolCalls:           0,
+			MaxTotalTokens:         100000,
+			MaxDurationSeconds:     300,
+			MaxOutputTokensPerCall: 1000,
+			MaxRequestBytes:        1000,
+		}
+		if err := limits.Validate(protocol.LocalityLocal); err == nil {
+			t.Errorf("expected error for MaxToolCalls = 0")
+		}
+	})
+
+	t.Run("invalid limits: zero max total tokens", func(t *testing.T) {
+		limits := execpolicy.ExecutionLimits{
+			MaxTurns:               10,
+			MaxToolCalls:           20,
+			MaxTotalTokens:         0,
+			MaxDurationSeconds:     300,
+			MaxOutputTokensPerCall: 1000,
+			MaxRequestBytes:        1000,
+		}
+		if err := limits.Validate(protocol.LocalityLocal); err == nil {
+			t.Errorf("expected error for MaxTotalTokens = 0")
+		}
+	})
+
+	t.Run("invalid limits: zero max duration seconds", func(t *testing.T) {
+		limits := execpolicy.ExecutionLimits{
+			MaxTurns:               10,
+			MaxToolCalls:           20,
+			MaxTotalTokens:         100000,
+			MaxDurationSeconds:     0,
+			MaxOutputTokensPerCall: 1000,
+			MaxRequestBytes:        1000,
+		}
+		if err := limits.Validate(protocol.LocalityLocal); err == nil {
+			t.Errorf("expected error for MaxDurationSeconds = 0")
+		}
+	})
+
 	t.Run("invalid limits: allow unknown usage on non-local grant", func(t *testing.T) {
 		limits := execpolicy.ExecutionLimits{
+			MaxTurns:               10,
+			MaxToolCalls:           20,
+			MaxTotalTokens:         100000,
+			MaxDurationSeconds:     300,
 			MaxOutputTokensPerCall: 1000,
 			MaxRequestBytes:        1000,
 			AllowUnknownUsage:      true,
@@ -376,6 +446,10 @@ func TestLimitsAndPolicyValidation(t *testing.T) {
 
 	t.Run("invalid limits: allow unknown usage with api spend micro usd > 0", func(t *testing.T) {
 		limits := execpolicy.ExecutionLimits{
+			MaxTurns:               10,
+			MaxToolCalls:           20,
+			MaxTotalTokens:         100000,
+			MaxDurationSeconds:     300,
 			MaxOutputTokensPerCall: 1000,
 			MaxRequestBytes:        1000,
 			AllowUnknownUsage:      true,
@@ -396,6 +470,10 @@ func TestLimitsAndPolicyValidation(t *testing.T) {
 			AllowedNetworkDomains: []string{"example.com"},
 			ChannelKind:           protocol.ChannelLocalDaemonSocket,
 			Limits: execpolicy.ExecutionLimits{
+				MaxTurns:               10,
+				MaxToolCalls:           20,
+				MaxTotalTokens:         100000,
+				MaxDurationSeconds:     300,
 				MaxOutputTokensPerCall: 100,
 				MaxRequestBytes:        100,
 			},

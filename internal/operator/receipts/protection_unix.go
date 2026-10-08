@@ -52,13 +52,9 @@ func CheckPathProtection(targetPath string, opts ProtectionOptions) error {
 	if opts.RootDir != "" {
 		root = filepath.Clean(opts.RootDir)
 	}
-	if !strings.HasPrefix(clean, root) {
-		return errs.New(errs.CategoryInvalidArgument, "target %q is not under root %q", clean, root)
-	}
-
 	rel, err := filepath.Rel(root, clean)
-	if err != nil {
-		return errs.Wrap(errs.CategoryInvalidArgument, err, "failed to compute relative path from root %q to %q", root, clean)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return errs.New(errs.CategoryInvalidArgument, "path %q escapes root %q", clean, root)
 	}
 
 	components := []string{root}

@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/olostan/DevCadence/internal/operator/receipts"
@@ -21,10 +20,11 @@ type PolicySource interface {
 }
 
 type filePolicySource struct {
+	projectID    string
 	path         string
 	pinnedBytes  []byte
 	pinnedDigest string
-	verifier     *receipts.Verifier
+	verifier     receipts.Verifier
 	receiptsDir  string
 }
 
@@ -34,7 +34,7 @@ func policyUnavailable(detail string) error {
 
 // Load strictly loads and parses the execution policy at path, pins its bytes and canonical digest,
 // and verifies its activation receipt against verifier.
-func Load(ctx context.Context, path string, receiptsDir string, verifier *receipts.Verifier) (PolicySource, error) {
+func Load(ctx context.Context, projectID string, path string, receiptsDir string, verifier receipts.Verifier) (PolicySource, error) {
 	rawBytes, err := os.ReadFile(path)
 	if err != nil {
 		return nil, policyUnavailable(fmt.Sprintf("read policy file: %v", err))
@@ -60,6 +60,7 @@ func Load(ctx context.Context, path string, receiptsDir string, verifier *receip
 	}
 
 	src := &filePolicySource{
+		projectID:    projectID,
 		path:         path,
 		pinnedBytes:  append([]byte(nil), rawBytes...),
 		pinnedDigest: canonicalDigest,
@@ -87,51 +88,17 @@ func (s *filePolicySource) verify(ctx context.Context, policy ExecutionPolicy, r
 		return policyUnavailable("receipts directory not configured")
 	}
 
-	entries, err := os.ReadDir(s.receiptsDir)
-	if err != nil {
-		return policyUnavailable(fmt.Sprintf("read receipts directory: %v", err))
-	}
-
-	var matchingReceipt *receipts.Receipt
-	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
-		}
-		filePath := filepath.Join(s.receiptsDir, entry.Name())
-		data, err := os.ReadFile(filePath)
-		if err != nil || len(data) > 64*1024 {
-			continue
-		}
-		var r receipts.Receipt
-		if err := json.Unmarshal(data, &r); err != nil {
-			continue
-		}
-		subj := r.Statement.Subject
-		if subj.Kind == "ExecutionPolicy" && subj.ID == policy.PolicyID && subj.Version == policy.Revision {
-			matchingReceipt = &r
-			if r.Statement.SubjectDigest == s.pinnedDigest {
-				break
-			}
-		}
-	}
-
-	if matchingReceipt == nil {
-		return policyUnavailable(fmt.Sprintf("receipt for execution policy (%s revision %d) not found", policy.PolicyID, policy.Revision))
-	}
-	if matchingReceipt.Statement.SubjectDigest != "" && matchingReceipt.Statement.SubjectDigest != s.pinnedDigest {
-		return policyUnavailable(fmt.Sprintf("receipt subject digest mismatch: receipt has %s, policy has %s", matchingReceipt.Statement.SubjectDigest, s.pinnedDigest))
-	}
-
 	req := receipts.Request{
-		Receipt:   *matchingReceipt,
-		Purpose:   receipts.PurposeExecutionPolicyActivate,
-		ProjectID: matchingReceipt.Statement.ProjectID,
+		ReceiptsDir: s.receiptsDir,
+		Purpose:     receipts.PurposeExecutionPolicyActivate,
+		ProjectID:   s.projectID,
 		Subject: receipts.Subject{
 			Kind:    "ExecutionPolicy",
 			ID:      policy.PolicyID,
 			Version: policy.Revision,
 		},
-		Time: time.Now().UTC(),
+		SubjectDigest: s.pinnedDigest,
+		Time:          time.Now().UTC(),
 	}
 
 	verified, err := s.verifier.Verify(ctx, req)

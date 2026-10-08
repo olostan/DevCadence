@@ -5,6 +5,8 @@ import (
 	"encoding/base64"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/olostan/DevCadence/internal/errs"
 	"github.com/olostan/DevCadence/internal/protocol"
@@ -40,6 +42,87 @@ func (p Purpose) Valid() bool {
 		return true
 	}
 	return false
+}
+
+type purposeSpec struct {
+	use                 Use
+	maxValidity         time.Duration
+	requiresInputDigest bool
+}
+
+var purposeTable = map[Purpose]purposeSpec{
+	PurposeDiscoveryProductDecision: {
+		use:                 UseOnce,
+		maxValidity:         time.Hour,
+		requiresInputDigest: true,
+	},
+	PurposeDiscoveryRequirementConfirm: {
+		use:                 UseOnce,
+		maxValidity:         time.Hour,
+		requiresInputDigest: true,
+	},
+	PurposeDiscoveryLedgerResolution: {
+		use:                 UseOnce,
+		maxValidity:         time.Hour,
+		requiresInputDigest: false,
+	},
+	PurposeDiscoveryReflection: {
+		use:                 UseOnce,
+		maxValidity:         time.Hour,
+		requiresInputDigest: true,
+	},
+	PurposeDiscoveryAcceptedRisk: {
+		use:                 UseOnce,
+		maxValidity:         time.Hour,
+		requiresInputDigest: true,
+	},
+	PurposeHostPlanApply: {
+		use:                 UseOnce,
+		maxValidity:         time.Hour,
+		requiresInputDigest: false,
+	},
+	PurposeAcceptancePolicyActivate: {
+		use:                 UseGrant,
+		maxValidity:         30 * 24 * time.Hour,
+		requiresInputDigest: false,
+	},
+	PurposeExecutionPolicyActivate: {
+		use:                 UseGrant,
+		maxValidity:         30 * 24 * time.Hour,
+		requiresInputDigest: false,
+	},
+	PurposeEmpiricalCampaignAuthorize: {
+		use:                 UseGrant,
+		maxValidity:         7 * 24 * time.Hour,
+		requiresInputDigest: false,
+	},
+}
+
+// ExpectedUseForPurpose returns the fixed Use policy for the given Purpose.
+func ExpectedUseForPurpose(p Purpose) (Use, error) {
+	spec, ok := purposeTable[p]
+	if !ok {
+		return "", errs.New(errs.CategoryInvalidArgument, "unknown purpose %q", p)
+	}
+	return spec.use, nil
+}
+
+// MaxValidityForPurpose returns the maximum validity duration for the given Purpose.
+func MaxValidityForPurpose(p Purpose) (time.Duration, error) {
+	spec, ok := purposeTable[p]
+	if !ok {
+		return 0, errs.New(errs.CategoryInvalidArgument, "unknown purpose %q", p)
+	}
+	return spec.maxValidity, nil
+}
+
+// RequiresInputDigest reports whether the purpose requires a non-empty InputDigest.
+func RequiresInputDigest(p Purpose) bool {
+	spec, ok := purposeTable[p]
+	if !ok {
+		return false
+	}
+	return spec.requiresInputDigest
 }
 
 // Use defines whether a receipt is consumed once or represents a reusable grant.
@@ -114,6 +197,13 @@ func (s Statement) Validate() error {
 	if !s.Use.Valid() {
 		return errs.New(errs.CategoryInvalidArgument, "%s: invalid use %q", kind, string(s.Use))
 	}
+	expectedUse, err := ExpectedUseForPurpose(s.Purpose)
+	if err != nil {
+		return errs.New(errs.CategoryInvalidArgument, "%s: %v", kind, err)
+	}
+	if s.Use != expectedUse {
+		return errs.New(errs.CategoryInvalidArgument, "%s: use %q mismatch for purpose %q (expected %q)", kind, s.Use, s.Purpose, expectedUse)
+	}
 	if strings.TrimSpace(s.ProjectID) == "" {
 		return errs.New(errs.CategoryInvalidArgument, "%s: project_id is required", kind)
 	}
@@ -123,11 +213,28 @@ func (s Statement) Validate() error {
 	if strings.TrimSpace(s.SubjectDigest) == "" {
 		return errs.New(errs.CategoryInvalidArgument, "%s: subject_digest is required", kind)
 	}
-	if strings.TrimSpace(s.InputDigest) == "" {
-		return errs.New(errs.CategoryInvalidArgument, "%s: input_digest is required", kind)
+	if RequiresInputDigest(s.Purpose) {
+		if strings.TrimSpace(s.InputDigest) == "" {
+			return errs.New(errs.CategoryInvalidArgument, "%s: input_digest is required for purpose %q", kind, s.Purpose)
+		}
+	} else {
+		if s.InputDigest != "" {
+			return errs.New(errs.CategoryInvalidArgument, "%s: input_digest must be empty for purpose %q, got %q", kind, s.Purpose, s.InputDigest)
+		}
 	}
 	if strings.TrimSpace(s.Text) == "" {
 		return errs.New(errs.CategoryInvalidArgument, "%s: text is required", kind)
+	}
+	if len(s.Text) > 4096 {
+		return errs.New(errs.CategoryInvalidArgument, "%s: text exceeds 4096 bytes (%d bytes)", kind, len(s.Text))
+	}
+	if !utf8.ValidString(s.Text) {
+		return errs.New(errs.CategoryInvalidArgument, "%s: text is not valid UTF-8", kind)
+	}
+	for _, r := range s.Text {
+		if unicode.IsControl(r) && r != '\n' && r != '\t' {
+			return errs.New(errs.CategoryInvalidArgument, "%s: text contains forbidden control character %U", kind, r)
+		}
 	}
 	if strings.TrimSpace(s.TextDigest) == "" {
 		return errs.New(errs.CategoryInvalidArgument, "%s: text_digest is required", kind)
@@ -149,6 +256,14 @@ func (s Statement) Validate() error {
 	}
 	if !s.NotAfter.After(s.IssuedAt) {
 		return errs.New(errs.CategoryInvalidArgument, "%s: not_after (%s) must be after issued_at (%s)", kind, s.NotAfter, s.IssuedAt)
+	}
+	maxValidity, _ := MaxValidityForPurpose(s.Purpose)
+	if s.NotAfter.Sub(s.IssuedAt) > maxValidity {
+		return errs.New(errs.CategoryInvalidArgument, "%s: validity period %s exceeds max %s for purpose %q", kind, s.NotAfter.Sub(s.IssuedAt), maxValidity, s.Purpose)
+	}
+	now := time.Now().UTC()
+	if s.IssuedAt.After(now.Add(5 * time.Minute)) {
+		return errs.New(errs.CategoryInvalidArgument, "%s: issued_at (%s) cannot be more than 5 minutes in the future", kind, s.IssuedAt)
 	}
 	return nil
 }
@@ -216,21 +331,21 @@ func (r Receipt) Validate() error {
 
 // Request bundles verification arguments.
 type Request struct {
-	Receipt     Receipt   `json:"receipt"`
-	Purpose     Purpose   `json:"purpose"`
-	ProjectID   string    `json:"project_id"`
-	Subject     Subject   `json:"subject"`
-	InputDigest string    `json:"input_digest"`
-	Text        string    `json:"text"`
-	Time        time.Time `json:"time"`
+	Receipt       Receipt   `json:"receipt"`
+	ReceiptID     string    `json:"receipt_id,omitempty"`
+	ReceiptsDir   string    `json:"receipts_dir,omitempty"`
+	Purpose       Purpose   `json:"purpose"`
+	ProjectID     string    `json:"project_id"`
+	Subject       Subject   `json:"subject"`
+	SubjectDigest string    `json:"subject_digest,omitempty"`
+	InputDigest   string    `json:"input_digest"`
+	Text          string    `json:"text"`
+	Time          time.Time `json:"time"`
 }
 
 // Validate checks request completeness.
 func (r Request) Validate() error {
 	const kind = "Request"
-	if err := r.Receipt.Validate(); err != nil {
-		return err
-	}
 	if !r.Purpose.Valid() {
 		return errs.New(errs.CategoryInvalidArgument, "%s: invalid purpose %q", kind, string(r.Purpose))
 	}
@@ -243,6 +358,14 @@ func (r Request) Validate() error {
 	if r.Time.IsZero() {
 		return errs.New(errs.CategoryInvalidArgument, "%s: time is required", kind)
 	}
+	if r.ReceiptID != "" && (!strings.HasPrefix(r.ReceiptID, "rcpt_") || len(strings.TrimSpace(r.ReceiptID)) <= 5) {
+		return errs.New(errs.CategoryInvalidArgument, "%s: receipt_id must start with rcpt_, got %q", kind, r.ReceiptID)
+	}
+	if r.ReceiptID == "" && r.Receipt.Statement.ReceiptID != "" {
+		if err := r.Receipt.Validate(); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -253,6 +376,9 @@ type Consumption struct {
 	ProjectID     string                 `json:"project_id"`
 	HumanActorID  string                 `json:"human_actor_id"`
 	Purpose       Purpose                `json:"purpose"`
+	SubjectDigest string                 `json:"subject_digest"`
+	InputDigest   string                 `json:"input_digest"`
+	AnchorID      string                 `json:"anchor_id"`
 	EffectKind    string                 `json:"effect_kind"`
 	EffectID      string                 `json:"effect_id"`
 	ConsumedAt    time.Time              `json:"consumed_at"`
@@ -287,6 +413,12 @@ func (c *Consumption) Validate() error {
 	}
 	if !c.Purpose.Valid() {
 		return errs.New(errs.CategoryInvalidArgument, "%s: invalid purpose %q", kind, string(c.Purpose))
+	}
+	if strings.TrimSpace(c.SubjectDigest) == "" {
+		return errs.New(errs.CategoryInvalidArgument, "%s: subject_digest is required", kind)
+	}
+	if strings.TrimSpace(c.AnchorID) == "" {
+		return errs.New(errs.CategoryInvalidArgument, "%s: anchor_id is required", kind)
 	}
 	if strings.TrimSpace(c.EffectKind) == "" {
 		return errs.New(errs.CategoryInvalidArgument, "%s: effect_kind is required", kind)

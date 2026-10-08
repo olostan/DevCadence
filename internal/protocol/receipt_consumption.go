@@ -14,6 +14,9 @@ type ReceiptConsumption struct {
 	ProjectID     string        `json:"project_id"`
 	HumanActorID  string        `json:"human_actor_id"`
 	Purpose       string        `json:"purpose"`
+	SubjectDigest string        `json:"subject_digest"`
+	InputDigest   string        `json:"input_digest"`
+	AnchorID      string        `json:"anchor_id"`
 	EffectKind    string        `json:"effect_kind"`
 	EffectID      string        `json:"effect_id"`
 	ConsumedAt    time.Time     `json:"consumed_at"`
@@ -48,6 +51,12 @@ func (r *ReceiptConsumption) Validate() error {
 	}
 	if strings.TrimSpace(r.Purpose) == "" {
 		return errs.New(errs.CategoryInvalidArgument, "%s: purpose is required", kind)
+	}
+	if strings.TrimSpace(r.SubjectDigest) == "" {
+		return errs.New(errs.CategoryInvalidArgument, "%s: subject_digest is required", kind)
+	}
+	if strings.TrimSpace(r.AnchorID) == "" {
+		return errs.New(errs.CategoryInvalidArgument, "%s: anchor_id is required", kind)
 	}
 	if strings.TrimSpace(r.EffectKind) == "" {
 		return errs.New(errs.CategoryInvalidArgument, "%s: effect_kind is required", kind)

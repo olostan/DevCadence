@@ -4,6 +4,9 @@
   "project_id": "devcadence-core",
   "human_actor_id": "operator-alice",
   "purpose": "host.plan_apply",
+  "subject_digest": "sha256:1111222233334444555566667777888899990000aaaabbbbccccddddeeeeffff",
+  "input_digest": "",
+  "anchor_id": "anchor_01",
   "effect_kind": "plan_apply",
   "effect_id": "plan-12345",
   "consumed_at": "2026-10-07T06:00:00Z"

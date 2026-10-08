@@ -14,6 +14,7 @@ import (
 	"github.com/olostan/DevCadence/internal/cognition/compiler"
 	"github.com/olostan/DevCadence/internal/cognition/drivers"
 	"github.com/olostan/DevCadence/internal/controlplane"
+	"github.com/olostan/DevCadence/internal/errs"
 	"github.com/olostan/DevCadence/internal/events"
 	"github.com/olostan/DevCadence/internal/execpolicy"
 	"github.com/olostan/DevCadence/internal/execrt"
@@ -1180,4 +1181,119 @@ func TestReview_CleanupWorktrees(t *testing.T) {
 			}
 		}
 	})
+}
+
+type fakeGuardView struct {
+	ps        *protocol.ProjectState
+	recordErr error
+}
+
+func (v fakeGuardView) ProjectState() *protocol.ProjectState { return v.ps }
+func (v fakeGuardView) Record(ctx context.Context, kind, id string, version int) (storage.StoredRecord, error) {
+	if v.recordErr != nil {
+		return storage.StoredRecord{}, v.recordErr
+	}
+	return storage.StoredRecord{Document: "{}"}, nil
+}
+
+func TestReview_IntentAbsentGuard_TaskNotRunning(t *testing.T) {
+	guard := reviewexec.NewIntentAbsentGuardForTesting(
+		"tsk_nonexistent",
+		"c123",
+		"intent_1",
+	)
+	ps := &protocol.ProjectState{
+		Tasks: protocol.TaskBuckets{
+			Running: []string{"task-running-1"},
+		},
+	}
+	err := guard.Check(context.Background(), fakeGuardView{
+		ps:        ps,
+		recordErr: errs.New(errs.CategoryNotFound, "not found"),
+	})
+	if err == nil {
+		t.Fatal("expected error for task not running, got nil")
+	}
+	if !strings.Contains(err.Error(), "task tsk_nonexistent is not running") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// nil ProjectState test
+	errNil := guard.Check(context.Background(), fakeGuardView{
+		ps:        nil,
+		recordErr: errs.New(errs.CategoryNotFound, "not found"),
+	})
+	if errNil == nil {
+		t.Fatal("expected error for nil project state, got nil")
+	}
+
+	// task running but intent already recorded
+	guardRunning := reviewexec.NewIntentAbsentGuardForTesting(
+		"task-running-1",
+		"c123",
+		"intent_1",
+	)
+	errExists := guardRunning.Check(context.Background(), fakeGuardView{
+		ps:        ps,
+		recordErr: nil, // found!
+	})
+	if errExists == nil {
+		t.Fatal("expected error for existing intent, got nil")
+	}
+	var coded *principal.CodedError
+	if !errors.As(errExists, &coded) || coded.Code() != principal.CodePolicyDenied {
+		t.Fatalf("expected CodePolicyDenied, got %v", errExists)
+	}
+}
+
+func TestReview_MaxRequestBytesExceeded(t *testing.T) {
+	f := setupFixture(t, "proj-reqbytes")
+	f.policy.Grants[0].Limits.MaxRequestBytes = 10
+
+	exec, err := reviewexec.New(f.opts)
+	if err != nil {
+		t.Fatalf("reviewexec.New: %v", err)
+	}
+
+	taskID, commit := driveTaskToReviewing(t, f, "T-reqbytes", "wp-reqbytes", "att-reqbytes", defaultWorkerBasis())
+	ctx := context.Background()
+	caller := principal.CallerContext{PrincipalID: "princ_1", ProjectID: f.projectID}
+	meta := principal.CallMeta{ProjectID: f.projectID}
+	cand := principal.CandidateRef{TaskID: taskID, AttemptID: "att-reqbytes", Commit: commit}
+
+	opRef, err := exec.Review(ctx, caller, meta, cand, []string{"correctness"})
+	if err != nil {
+		t.Fatalf("Review call failed: %v", err)
+	}
+
+	completedRef := f.registry.Wait(ctx, opRef, 5*time.Second)
+	if completedRef.Status != principal.StatusFailed {
+		t.Fatalf("expected review to fail, got %s", completedRef.Status)
+	}
+}
+
+func TestReview_InvalidExecutionLimits(t *testing.T) {
+	f := setupFixture(t, "proj-invlimits")
+	f.policy.Grants[0].Limits.MaxTurns = 0
+
+	exec, err := reviewexec.New(f.opts)
+	if err != nil {
+		t.Fatalf("reviewexec.New: %v", err)
+	}
+
+	taskID, commit := driveTaskToReviewing(t, f, "T-invlimits", "wp-invlimits", "att-invlimits", defaultWorkerBasis())
+	ctx := context.Background()
+	caller := principal.CallerContext{PrincipalID: "princ_1", ProjectID: f.projectID}
+	meta := principal.CallMeta{ProjectID: f.projectID}
+	cand := principal.CandidateRef{TaskID: taskID, AttemptID: "att-invlimits", Commit: commit}
+
+	opRef, err := exec.Review(ctx, caller, meta, cand, []string{"correctness"})
+	if err != nil {
+		t.Fatalf("Review call failed: %v", err)
+	}
+
+	completedRef := f.registry.Wait(ctx, opRef, 5*time.Second)
+	if completedRef.Status != principal.StatusFailed {
+		t.Fatalf("expected review to fail, got %s", completedRef.Status)
+	}
 }

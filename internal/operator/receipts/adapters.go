@@ -23,7 +23,7 @@ type HostPlanScope struct {
 
 // HostPlanApprovals wraps Verifier to implement principalhosts.ApprovalVerifier.
 type HostPlanApprovals struct {
-	Verifier    *Verifier
+	Verifier    Verifier
 	ReceiptsDir string
 	ReadReceipt func(ref string) (Receipt, error)
 	ProjectID   string
@@ -122,6 +122,8 @@ func (h *HostPlanApprovals) VerifyApproval(ctx context.Context, ref string, plan
 
 	req := Request{
 		Receipt:     receipt,
+		ReceiptID:   ref,
+		ReceiptsDir: h.ReceiptsDir,
 		Purpose:     PurposeHostPlanApply,
 		ProjectID:   projectID,
 		Subject:     stmt.Subject,
@@ -164,7 +166,7 @@ type HumanReceiptVerifier interface {
 
 // HumanReceipts implements HumanReceiptVerifier.
 type HumanReceipts struct {
-	Verifier    *Verifier
+	Verifier    Verifier
 	ReceiptsDir string
 	ReadReceipt func(ref string) (Receipt, error)
 	Clock       clock.Clock
@@ -236,6 +238,8 @@ func (h *HumanReceipts) Verify(ctx context.Context, caller principal.CallerConte
 
 	req := Request{
 		Receipt:     receipt,
+		ReceiptID:   receiptRef,
+		ReceiptsDir: h.ReceiptsDir,
 		Purpose:     p,
 		ProjectID:   caller.ProjectID,
 		Subject:     Subject{Kind: subject.Kind, ID: subject.ID, Version: subject.Version},

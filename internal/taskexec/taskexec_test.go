@@ -1232,3 +1232,51 @@ func TestValidate_WP9Stub(t *testing.T) {
 		t.Errorf("code = %q, want %s", codedErr.Code(), principal.CodeModelUnavailable)
 	}
 }
+
+func TestDelegate_MaxRequestBytesExceeded(t *testing.T) {
+	f := setupFixture(t, "proj-reqbytes")
+	f.policy.Grants[0].Limits.MaxRequestBytes = 10
+	taskID, wp, wpDigest := initProjectAndApproveWP(t, f, "DC-001", "wp-001", []string{"base.txt"})
+
+	exec, err := taskexec.New(f.opts)
+	if err != nil {
+		t.Fatalf("taskexec.New: %v", err)
+	}
+
+	authTask := facade.AuthorizedTask{
+		Caller: principal.CallerContext{ProjectID: f.projectID},
+		Meta:   principal.CallMeta{ProjectID: f.projectID},
+		TaskID: taskID,
+		WorkPackage: principal.WorkPackageRef{
+			ID:         wp.WorkPackageID,
+			Version:    wp.Version,
+			Digest:     wpDigest,
+			BaseCommit: wp.BaseCommit,
+		},
+	}
+
+	opRef, err := exec.Delegate(context.Background(), authTask)
+	if err != nil {
+		t.Fatalf("Delegate: %v", err)
+	}
+
+	completedRef := f.registry.Wait(context.Background(), opRef, 5*time.Second)
+	if completedRef.Status != principal.StatusFailed {
+		t.Errorf("status = %s, want failed", completedRef.Status)
+	}
+
+	detail, err := f.harness.Service.TaskDetail(context.Background(), f.projectID, "DC-001")
+	if err != nil {
+		t.Fatalf("TaskDetail: %v", err)
+	}
+	if len(detail.Attempts) == 0 {
+		t.Fatal("expected at least 1 attempt")
+	}
+	att := detail.Attempts[len(detail.Attempts)-1]
+	if att.FailureSummary != "reason=limit_reached effects=none" {
+		t.Errorf("summary = %q, want 'reason=limit_reached effects=none'", att.FailureSummary)
+	}
+	if !attemptFailedGrammar.MatchString(att.FailureSummary) {
+		t.Errorf("summary %q violates closed grammar", att.FailureSummary)
+	}
+}
