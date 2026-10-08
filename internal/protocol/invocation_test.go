@@ -336,3 +336,553 @@ func TestNewRecordAllocatesInvocationRecords(t *testing.T) {
 		}
 	}
 }
+
+func TestInvocationProvenance_TableDrivenValidation(t *testing.T) {
+	now := time.Now().UTC()
+	validProv := func() protocol.InvocationProvenance {
+		return protocol.InvocationProvenance{
+			SchemaVersion: protocol.SchemaVersion1,
+			ProvenanceID:  "rev-123",
+			ProjectID:     "proj-1",
+			TaskID:        "tsk-1",
+			AttemptID:     "att-1",
+			WorkPackageID: "wp-1",
+			Role:          protocol.ProvenanceRoleReviewer,
+			Actor: protocol.ActorProvenance{
+				ActorID:      "act-reviewer",
+				InvocationID: "inv-1",
+				Role:         protocol.ProvenanceRoleReviewer,
+			},
+			Basis:                 validBasis(),
+			IndependenceBasis:     "endpoint_model",
+			EndpointBindingDigest: "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+			ContextManifestDigest: "sha256:123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0",
+			PromptDigest:          "sha256:23456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef01",
+			CandidateCommit:       "c0ffee0000000000000000000000000000000000",
+			Dimension:             protocol.DimensionCorrectness,
+			StartedAt:             now,
+		}
+	}
+
+	tests := []struct {
+		name    string
+		modify  func(p *protocol.InvocationProvenance)
+		wantErr bool
+	}{
+		{
+			name:    "valid reviewer",
+			modify:  nil,
+			wantErr: false,
+		},
+		{
+			name: "valid with model_family_account independence basis",
+			modify: func(p *protocol.InvocationProvenance) {
+				p.IndependenceBasis = "model_family_account"
+			},
+			wantErr: false,
+		},
+		{
+			name: "invalid schema version",
+			modify: func(p *protocol.InvocationProvenance) {
+				p.SchemaVersion = "9.9"
+			},
+			wantErr: true,
+		},
+		{
+			name: "empty provenance_id",
+			modify: func(p *protocol.InvocationProvenance) {
+				p.ProvenanceID = "   "
+			},
+			wantErr: true,
+		},
+		{
+			name: "empty project_id",
+			modify: func(p *protocol.InvocationProvenance) {
+				p.ProjectID = ""
+			},
+			wantErr: true,
+		},
+		{
+			name: "empty task_id",
+			modify: func(p *protocol.InvocationProvenance) {
+				p.TaskID = "  "
+			},
+			wantErr: true,
+		},
+		{
+			name: "empty attempt_id",
+			modify: func(p *protocol.InvocationProvenance) {
+				p.AttemptID = ""
+			},
+			wantErr: true,
+		},
+		{
+			name: "empty work_package_id",
+			modify: func(p *protocol.InvocationProvenance) {
+				p.WorkPackageID = " "
+			},
+			wantErr: true,
+		},
+		{
+			name: "invalid role",
+			modify: func(p *protocol.InvocationProvenance) {
+				p.Role = "invalid_role"
+			},
+			wantErr: true,
+		},
+		{
+			name: "invalid actor validation",
+			modify: func(p *protocol.InvocationProvenance) {
+				p.Actor.ActorID = ""
+			},
+			wantErr: true,
+		},
+		{
+			name: "empty independence_basis",
+			modify: func(p *protocol.InvocationProvenance) {
+				p.IndependenceBasis = ""
+			},
+			wantErr: true,
+		},
+		{
+			name: "unsupported independence_basis",
+			modify: func(p *protocol.InvocationProvenance) {
+				p.IndependenceBasis = "unsupported_basis"
+			},
+			wantErr: true,
+		},
+		{
+			name: "invalid endpoint_binding_digest",
+			modify: func(p *protocol.InvocationProvenance) {
+				p.EndpointBindingDigest = "bad-digest"
+			},
+			wantErr: true,
+		},
+		{
+			name: "invalid context_manifest_digest",
+			modify: func(p *protocol.InvocationProvenance) {
+				p.ContextManifestDigest = "bad-digest"
+			},
+			wantErr: true,
+		},
+		{
+			name: "invalid prompt_digest",
+			modify: func(p *protocol.InvocationProvenance) {
+				p.PromptDigest = "bad-digest"
+			},
+			wantErr: true,
+		},
+		{
+			name: "zero started_at",
+			modify: func(p *protocol.InvocationProvenance) {
+				p.StartedAt = time.Time{}
+			},
+			wantErr: true,
+		},
+		{
+			name: "reviewer missing candidate_commit",
+			modify: func(p *protocol.InvocationProvenance) {
+				p.CandidateCommit = " "
+			},
+			wantErr: true,
+		},
+		{
+			name: "reviewer invalid dimension",
+			modify: func(p *protocol.InvocationProvenance) {
+				p.Dimension = "invalid_dim"
+			},
+			wantErr: true,
+		},
+		{
+			name: "verifier missing candidate_commit",
+			modify: func(p *protocol.InvocationProvenance) {
+				p.Role = protocol.ProvenanceRoleVerifier
+				p.Actor.Role = protocol.ProvenanceRoleVerifier
+				p.Dimension = ""
+				p.CandidateCommit = ""
+			},
+			wantErr: true,
+		},
+		{
+			name: "verifier with dimension",
+			modify: func(p *protocol.InvocationProvenance) {
+				p.Role = protocol.ProvenanceRoleVerifier
+				p.Actor.Role = protocol.ProvenanceRoleVerifier
+				p.Dimension = protocol.DimensionCorrectness
+			},
+			wantErr: true,
+		},
+		{
+			name: "implementer with dimension",
+			modify: func(p *protocol.InvocationProvenance) {
+				p.Role = protocol.ProvenanceRoleImplementer
+				p.Actor.Role = protocol.ProvenanceRoleImplementer
+				p.Dimension = protocol.DimensionCorrectness
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			p := validProv()
+			if tc.modify != nil {
+				tc.modify(&p)
+			}
+			err := p.Validate()
+			if tc.wantErr && err == nil {
+				t.Fatalf("expected error, got nil")
+			}
+			if !tc.wantErr && err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+		})
+	}
+}
+
+func TestReviewInvocationIntent_TableDrivenValidation(t *testing.T) {
+	now := time.Now().UTC()
+	validIntent := func() protocol.ReviewInvocationIntent {
+		return protocol.ReviewInvocationIntent{
+			SchemaVersion:         protocol.SchemaVersion1,
+			ReviewID:              "rev-1",
+			ProjectID:             "proj-1",
+			TaskID:                "tsk-1",
+			AttemptID:             "att-1",
+			WorkPackageID:         "wp-1",
+			Dimension:             protocol.DimensionCorrectness,
+			InvocationID:          "inv-1",
+			CandidateCommit:       "c0ffee0000000000000000000000000000000000",
+			InvocationNumber:      1,
+			ReviewerBasis:         validBasis(),
+			IndependenceBasis:     "endpoint_model",
+			EndpointBindingDigest: "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+			StartedAt:             now,
+		}
+	}
+
+	tests := []struct {
+		name    string
+		modify  func(i *protocol.ReviewInvocationIntent)
+		wantErr bool
+	}{
+		{
+			name:    "valid intent",
+			modify:  nil,
+			wantErr: false,
+		},
+		{
+			name: "valid with model_family_account",
+			modify: func(i *protocol.ReviewInvocationIntent) {
+				i.IndependenceBasis = "model_family_account"
+			},
+			wantErr: false,
+		},
+		{
+			name: "invalid schema version",
+			modify: func(i *protocol.ReviewInvocationIntent) {
+				i.SchemaVersion = "invalid_ver"
+			},
+			wantErr: true,
+		},
+		{
+			name: "empty review_id",
+			modify: func(i *protocol.ReviewInvocationIntent) {
+				i.ReviewID = "  "
+			},
+			wantErr: true,
+		},
+		{
+			name: "empty project_id",
+			modify: func(i *protocol.ReviewInvocationIntent) {
+				i.ProjectID = ""
+			},
+			wantErr: true,
+		},
+		{
+			name: "empty task_id",
+			modify: func(i *protocol.ReviewInvocationIntent) {
+				i.TaskID = " "
+			},
+			wantErr: true,
+		},
+		{
+			name: "empty attempt_id",
+			modify: func(i *protocol.ReviewInvocationIntent) {
+				i.AttemptID = ""
+			},
+			wantErr: true,
+		},
+		{
+			name: "attempt_id containing colon",
+			modify: func(i *protocol.ReviewInvocationIntent) {
+				i.AttemptID = "att:1"
+			},
+			wantErr: true,
+		},
+		{
+			name: "empty work_package_id",
+			modify: func(i *protocol.ReviewInvocationIntent) {
+				i.WorkPackageID = ""
+			},
+			wantErr: true,
+		},
+		{
+			name: "dimension containing colon",
+			modify: func(i *protocol.ReviewInvocationIntent) {
+				i.Dimension = "dim:bad"
+			},
+			wantErr: true,
+		},
+		{
+			name: "dimension invalid enum",
+			modify: func(i *protocol.ReviewInvocationIntent) {
+				i.Dimension = "invalid_dimension"
+			},
+			wantErr: true,
+		},
+		{
+			name: "empty invocation_id",
+			modify: func(i *protocol.ReviewInvocationIntent) {
+				i.InvocationID = "  "
+			},
+			wantErr: true,
+		},
+		{
+			name: "empty candidate_commit",
+			modify: func(i *protocol.ReviewInvocationIntent) {
+				i.CandidateCommit = ""
+			},
+			wantErr: true,
+		},
+		{
+			name: "invocation_number not 1",
+			modify: func(i *protocol.ReviewInvocationIntent) {
+				i.InvocationNumber = 2
+			},
+			wantErr: true,
+		},
+		{
+			name: "empty independence_basis",
+			modify: func(i *protocol.ReviewInvocationIntent) {
+				i.IndependenceBasis = ""
+			},
+			wantErr: true,
+		},
+		{
+			name: "invalid independence_basis enum",
+			modify: func(i *protocol.ReviewInvocationIntent) {
+				i.IndependenceBasis = "invalid_basis"
+			},
+			wantErr: true,
+		},
+		{
+			name: "invalid endpoint_binding_digest",
+			modify: func(i *protocol.ReviewInvocationIntent) {
+				i.EndpointBindingDigest = "not-a-digest"
+			},
+			wantErr: true,
+		},
+		{
+			name: "zero started_at",
+			modify: func(i *protocol.ReviewInvocationIntent) {
+				i.StartedAt = time.Time{}
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			intent := validIntent()
+			if tc.modify != nil {
+				tc.modify(&intent)
+			}
+			err := intent.Validate()
+			if tc.wantErr && err == nil {
+				t.Fatalf("expected error, got nil")
+			}
+			if !tc.wantErr && err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+		})
+	}
+}
+
+func TestReviewInvocation_TableDrivenValidation(t *testing.T) {
+	now := time.Now().UTC()
+	ended := now.Add(2 * time.Minute)
+	validInv := func() protocol.ReviewInvocation {
+		return protocol.ReviewInvocation{
+			SchemaVersion:       protocol.SchemaVersion1,
+			ReviewID:            "rev-1",
+			ProjectID:           "proj-1",
+			TaskID:              "tsk-1",
+			AttemptID:           "att-1",
+			WorkPackageID:       "wp-1",
+			Dimension:           protocol.DimensionCorrectness,
+			InvocationID:        "inv-1",
+			ProvenanceID:        "rev-1",
+			CandidateCommit:     "c0ffee0000000000000000000000000000000000",
+			InvocationNumber:    1,
+			Outcome:             protocol.OutcomeCompleted,
+			StartedAt:           now,
+			EndedAt:             ended,
+			UsageArtifactDigest: "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+		}
+	}
+
+	tests := []struct {
+		name    string
+		modify  func(r *protocol.ReviewInvocation)
+		wantErr bool
+	}{
+		{
+			name:    "valid review invocation",
+			modify:  nil,
+			wantErr: false,
+		},
+		{
+			name: "valid without usage artifact digest",
+			modify: func(r *protocol.ReviewInvocation) {
+				r.UsageArtifactDigest = ""
+			},
+			wantErr: false,
+		},
+		{
+			name: "invalid schema version",
+			modify: func(r *protocol.ReviewInvocation) {
+				r.SchemaVersion = "bad_ver"
+			},
+			wantErr: true,
+		},
+		{
+			name: "empty review_id",
+			modify: func(r *protocol.ReviewInvocation) {
+				r.ReviewID = " "
+			},
+			wantErr: true,
+		},
+		{
+			name: "empty project_id",
+			modify: func(r *protocol.ReviewInvocation) {
+				r.ProjectID = ""
+			},
+			wantErr: true,
+		},
+		{
+			name: "empty task_id",
+			modify: func(r *protocol.ReviewInvocation) {
+				r.TaskID = " "
+			},
+			wantErr: true,
+		},
+		{
+			name: "empty attempt_id",
+			modify: func(r *protocol.ReviewInvocation) {
+				r.AttemptID = ""
+			},
+			wantErr: true,
+		},
+		{
+			name: "empty work_package_id",
+			modify: func(r *protocol.ReviewInvocation) {
+				r.WorkPackageID = " "
+			},
+			wantErr: true,
+		},
+		{
+			name: "invalid dimension",
+			modify: func(r *protocol.ReviewInvocation) {
+				r.Dimension = "invalid_dim"
+			},
+			wantErr: true,
+		},
+		{
+			name: "empty invocation_id",
+			modify: func(r *protocol.ReviewInvocation) {
+				r.InvocationID = ""
+			},
+			wantErr: true,
+		},
+		{
+			name: "empty provenance_id",
+			modify: func(r *protocol.ReviewInvocation) {
+				r.ProvenanceID = " "
+			},
+			wantErr: true,
+		},
+		{
+			name: "provenance_id != review_id",
+			modify: func(r *protocol.ReviewInvocation) {
+				r.ProvenanceID = "diff-id"
+			},
+			wantErr: true,
+		},
+		{
+			name: "empty candidate_commit",
+			modify: func(r *protocol.ReviewInvocation) {
+				r.CandidateCommit = ""
+			},
+			wantErr: true,
+		},
+		{
+			name: "invocation_number != 1",
+			modify: func(r *protocol.ReviewInvocation) {
+				r.InvocationNumber = 0
+			},
+			wantErr: true,
+		},
+		{
+			name: "invalid outcome enum",
+			modify: func(r *protocol.ReviewInvocation) {
+				r.Outcome = "unknown_outcome"
+			},
+			wantErr: true,
+		},
+		{
+			name: "zero started_at",
+			modify: func(r *protocol.ReviewInvocation) {
+				r.StartedAt = time.Time{}
+			},
+			wantErr: true,
+		},
+		{
+			name: "zero ended_at",
+			modify: func(r *protocol.ReviewInvocation) {
+				r.EndedAt = time.Time{}
+			},
+			wantErr: true,
+		},
+		{
+			name: "ended_at before started_at",
+			modify: func(r *protocol.ReviewInvocation) {
+				r.EndedAt = now.Add(-1 * time.Second)
+			},
+			wantErr: true,
+		},
+		{
+			name: "invalid usage_artifact_digest",
+			modify: func(r *protocol.ReviewInvocation) {
+				r.UsageArtifactDigest = "bad-digest"
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			inv := validInv()
+			if tc.modify != nil {
+				tc.modify(&inv)
+			}
+			err := inv.Validate()
+			if tc.wantErr && err == nil {
+				t.Fatalf("expected error, got nil")
+			}
+			if !tc.wantErr && err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+		})
+	}
+}

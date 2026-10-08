@@ -1356,6 +1356,8 @@ func TestVerify_VerifierClockDeterminesValidity(t *testing.T) {
 	anchor := testAnchor(pub, anchorID, actorID)
 	// Base time T0
 	t0 := time.Date(2026, 10, 7, 12, 0, 0, 0, time.UTC)
+	anchor.NotBefore = t0.Add(-24 * time.Hour)
+	anchor.NotAfter = t0.Add(24 * time.Hour)
 	mockClock := clock.NewFake(t0, 0)
 
 	v, err := NewVerifier([]TrustAnchor{anchor}, WithClock(mockClock))

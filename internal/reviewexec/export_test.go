@@ -11,3 +11,8 @@ func NewIntentAbsentGuardForTesting(taskID, attemptID, candidateCommit, intentID
 		intentID:        intentID,
 	}
 }
+
+// StripFenceForTesting exports stripFence for testing.
+func StripFenceForTesting(text string) (string, bool) {
+	return stripFence(text)
+}

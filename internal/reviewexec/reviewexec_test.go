@@ -1506,3 +1506,91 @@ func TestReview_NonPositiveMaxOutputTokensPerCallRefusal(t *testing.T) {
 		t.Fatalf("expected review to fail, got %s", completedRef.Status)
 	}
 }
+
+func TestStripFence(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		wantBody string
+		wantOK   bool
+	}{
+		{
+			name:     "plain text without backticks",
+			input:    `{"decision": "pass"}`,
+			wantBody: `{"decision": "pass"}`,
+			wantOK:   true,
+		},
+		{
+			name:     "markdown code block with json language label",
+			input:    "```json\n{\"decision\": \"pass\"}\n```",
+			wantBody: "{\"decision\": \"pass\"}",
+			wantOK:   true,
+		},
+		{
+			name:     "markdown code block without language label",
+			input:    "```\n{\"decision\": \"pass\"}\n```",
+			wantBody: "{\"decision\": \"pass\"}",
+			wantOK:   true,
+		},
+		{
+			name:     "markdown code block with case-insensitive JSON label",
+			input:    "```JSON\n{\"decision\": \"pass\"}\n```",
+			wantBody: "{\"decision\": \"pass\"}",
+			wantOK:   true,
+		},
+		{
+			name:     "markdown code block with windows CRLF endings",
+			input:    "```json\r\n{\"decision\": \"pass\"}\r\n```",
+			wantBody: "{\"decision\": \"pass\"}\r",
+			wantOK:   true,
+		},
+		{
+			name:     "code fence with non-json language tag rejected",
+			input:    "```go\npackage main\n```",
+			wantBody: "",
+			wantOK:   false,
+		},
+		{
+			name:     "unclosed code fence missing newline",
+			input:    "```json",
+			wantBody: "",
+			wantOK:   false,
+		},
+		{
+			name:     "unclosed code fence missing trailing fence",
+			input:    "```json\n{\"decision\": \"pass\"}\n",
+			wantBody: "",
+			wantOK:   false,
+		},
+		{
+			name:     "trailing fence with extra characters rejected",
+			input:    "```json\n{\"decision\": \"pass\"}\n``` extra",
+			wantBody: "",
+			wantOK:   false,
+		},
+		{
+			name:     "multiple code fences preserves inner fence",
+			input:    "```json\n```json\n{\"nested\": true}\n```\n```",
+			wantBody: "```json\n{\"nested\": true}\n```",
+			wantOK:   true,
+		},
+		{
+			name:     "empty body inside code fence",
+			input:    "```json\n\n```",
+			wantBody: "",
+			wantOK:   true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			gotBody, gotOK := reviewexec.StripFenceForTesting(tc.input)
+			if gotOK != tc.wantOK {
+				t.Errorf("stripFence(%q) ok = %v, want %v", tc.input, gotOK, tc.wantOK)
+			}
+			if gotBody != tc.wantBody {
+				t.Errorf("stripFence(%q) body = %q, want %q", tc.input, gotBody, tc.wantBody)
+			}
+		})
+	}
+}
