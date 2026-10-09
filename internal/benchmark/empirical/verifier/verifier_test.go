@@ -444,6 +444,7 @@ func TestVerifier_BuildInfoChecks(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			v, err := verifier.New(verifier.Options{
+		PermitUnconfinedHostChecks: true,
 				Worktrees:    wtManager,
 				Repositories: repoProvider,
 				BuildInfo:    tc.bSource,
@@ -557,6 +558,7 @@ func TestVerifier_ActorIndependenceCheck(t *testing.T) {
 		evidence.VerifierReceiptDigest = protocol.DigestBytes(rcptBytes)
 
 		v, err := verifier.New(verifier.Options{
+		PermitUnconfinedHostChecks: true,
 			Worktrees:    wtManager,
 			Repositories: repoProvider,
 			BuildInfo:    bSource,
@@ -607,6 +609,7 @@ func TestVerifier_ActorIndependenceCheck(t *testing.T) {
 		evidence.VerifierReceiptDigest = protocol.DigestBytes(rcptBytes)
 
 		v, err := verifier.New(verifier.Options{
+		PermitUnconfinedHostChecks: true,
 			Worktrees:    wtManager,
 			Repositories: repoProvider,
 			BuildInfo:    bSource,
@@ -686,6 +689,7 @@ func TestVerifier_ReviewTaskExecution(t *testing.T) {
 		)
 
 		v, err := verifier.New(verifier.Options{
+		PermitUnconfinedHostChecks: true,
 			Worktrees:    wtManager,
 			Repositories: repoProvider,
 			BuildInfo:    bSource,
@@ -749,6 +753,7 @@ func TestVerifier_ReviewTaskExecution(t *testing.T) {
 		evidence.VerifierReceiptDigest = protocol.DigestBytes(rcptBytes)
 
 		v, err := verifier.New(verifier.Options{
+		PermitUnconfinedHostChecks: true,
 			Worktrees:    wtManager,
 			Repositories: repoProvider,
 			BuildInfo:    bSource,
@@ -793,6 +798,7 @@ func TestVerifier_ReviewTaskExecution(t *testing.T) {
 		evidence.Accepted = false
 
 		v, err := verifier.New(verifier.Options{
+		PermitUnconfinedHostChecks: true,
 			Worktrees:    wtManager,
 			Repositories: repoProvider,
 			BuildInfo:    bSource,
@@ -872,6 +878,7 @@ func TestVerifier_ImplementationTaskExecution(t *testing.T) {
 		)
 
 		v, err := verifier.New(verifier.Options{
+		PermitUnconfinedHostChecks: true,
 			Worktrees:    wtManager,
 			Repositories: repoProvider,
 			BuildInfo:    bSource,
@@ -907,6 +914,7 @@ func TestVerifier_ImplementationTaskExecution(t *testing.T) {
 		)
 
 		v, err := verifier.New(verifier.Options{
+		PermitUnconfinedHostChecks: true,
 			Worktrees:    wtManager,
 			Repositories: repoProvider,
 			BuildInfo:    bSource,
@@ -936,6 +944,7 @@ func TestVerifier_ImplementationTaskExecution(t *testing.T) {
 		)
 
 		v, err := verifier.New(verifier.Options{
+		PermitUnconfinedHostChecks: true,
 			Worktrees:    wtManager,
 			Repositories: repoProvider,
 			BuildInfo:    bSource,
@@ -959,17 +968,20 @@ func TestVerifier_ConstructorOptions(t *testing.T) {
 	_, _, _, _, wtManager, repoProvider, scratchDir := setupBaseTestDependencies(t)
 
 	// Worktrees nil
-	if _, err := verifier.New(verifier.Options{Repositories: repoProvider}); err == nil {
+	if _, err := verifier.New(verifier.Options{
+		PermitUnconfinedHostChecks: true,Repositories: repoProvider}); err == nil {
 		t.Errorf("expected error when Worktrees is nil")
 	}
 
 	// Repositories nil
-	if _, err := verifier.New(verifier.Options{Worktrees: wtManager}); err == nil {
+	if _, err := verifier.New(verifier.Options{
+		PermitUnconfinedHostChecks: true,Worktrees: wtManager}); err == nil {
 		t.Errorf("expected error when Repositories is nil")
 	}
 
 	// Defaults populated
 	v, err := verifier.New(verifier.Options{
+		PermitUnconfinedHostChecks: true,
 		Worktrees:    wtManager,
 		Repositories: repoProvider,
 		ScratchDir:   "",
@@ -988,6 +1000,7 @@ func TestVerifier_ConstructorOptions(t *testing.T) {
 	}
 	badScratch := filepath.Join(filePath, "child")
 	if _, err := verifier.New(verifier.Options{
+		PermitUnconfinedHostChecks: true,
 		Worktrees:    wtManager,
 		Repositories: repoProvider,
 		ScratchDir:   badScratch,
@@ -1144,6 +1157,7 @@ func TestVerifier_PreconditionErrors(t *testing.T) {
 	}
 	bSource := mockBuildInfoSource{rev: sourceCommit, modified: false, ok: true}
 	v, err := verifier.New(verifier.Options{
+		PermitUnconfinedHostChecks: true,
 		Worktrees:    wtManager,
 		Repositories: repoProvider,
 		BuildInfo:    bSource,
@@ -1210,6 +1224,7 @@ func TestVerifier_ArtifactResolutionAndValidationErrors(t *testing.T) {
 
 	// Resolver nil and v.opts.Resolver nil
 	vNoRes, _ := verifier.New(verifier.Options{
+		PermitUnconfinedHostChecks: true,
 		Worktrees:    wtManager,
 		Repositories: repoProvider,
 		BuildInfo:    bSource,
@@ -1222,6 +1237,7 @@ func TestVerifier_ArtifactResolutionAndValidationErrors(t *testing.T) {
 
 	// Resolver fallback to v.opts.Resolver
 	vWithRes, _ := verifier.New(verifier.Options{
+		PermitUnconfinedHostChecks: true,
 		Worktrees:    wtManager,
 		Repositories: repoProvider,
 		BuildInfo:    bSource,
@@ -1234,6 +1250,7 @@ func TestVerifier_ArtifactResolutionAndValidationErrors(t *testing.T) {
 	}
 
 	v, _ := verifier.New(verifier.Options{
+		PermitUnconfinedHostChecks: true,
 		Worktrees:    wtManager,
 		Repositories: repoProvider,
 		BuildInfo:    bSource,
@@ -1387,6 +1404,7 @@ func TestVerifier_ReceiptAndSessionCrossCheckErrors(t *testing.T) {
 	}
 	bSource := mockBuildInfoSource{rev: sourceCommit, modified: false, ok: true}
 	v, _ := verifier.New(verifier.Options{
+		PermitUnconfinedHostChecks: true,
 		Worktrees:    wtManager,
 		Repositories: repoProvider,
 		BuildInfo:    bSource,
@@ -1548,6 +1566,7 @@ func TestVerifier_ProfileResolutionFromResolver(t *testing.T) {
 	resolver[plan.VerificationProfileDigest] = profBytes
 
 	v, err := verifier.New(verifier.Options{
+		PermitUnconfinedHostChecks: true,
 		Worktrees:    wtManager,
 		Repositories: repoProvider,
 		BuildInfo:    bSource,
@@ -1597,6 +1616,7 @@ func TestVerifier_WorkerProvenanceAndTaskErrors(t *testing.T) {
 	}
 	bSource := mockBuildInfoSource{rev: sourceCommit, modified: false, ok: true}
 	v, _ := verifier.New(verifier.Options{
+		PermitUnconfinedHostChecks: true,
 		Worktrees:    wtManager,
 		Repositories: repoProvider,
 		BuildInfo:    bSource,
@@ -1694,6 +1714,7 @@ func TestVerifier_WorkerProvenanceAndTaskErrors(t *testing.T) {
 		emptyProfile := profile
 		emptyProfile.Tasks = nil
 		vEmpty, _ := verifier.New(verifier.Options{
+		PermitUnconfinedHostChecks: true,
 			Worktrees:    wtManager,
 			Repositories: repoProvider,
 			BuildInfo:    bSource,
@@ -1732,6 +1753,7 @@ func TestVerifier_ExecutionAndCheckFailures(t *testing.T) {
 			},
 		}
 		v, _ := verifier.New(verifier.Options{
+		PermitUnconfinedHostChecks: true,
 			Worktrees:    wtManager,
 			Repositories: repoProvider,
 			BuildInfo:    bSource,
@@ -1771,6 +1793,7 @@ func TestVerifier_ExecutionAndCheckFailures(t *testing.T) {
 			},
 		}
 		v, _ := verifier.New(verifier.Options{
+		PermitUnconfinedHostChecks: true,
 			Worktrees:    wtManager,
 			Repositories: repoProvider,
 			BuildInfo:    bSource,
@@ -1818,6 +1841,7 @@ func TestVerifier_ExecutionAndCheckFailures(t *testing.T) {
 			},
 		}
 		v, _ := verifier.New(verifier.Options{
+		PermitUnconfinedHostChecks: true,
 			Worktrees:    wtManager,
 			Repositories: repoProvider,
 			BuildInfo:    bSource,
@@ -1852,6 +1876,7 @@ func TestVerifier_ExecutionAndCheckFailures(t *testing.T) {
 			},
 		}
 		v, _ := verifier.New(verifier.Options{
+		PermitUnconfinedHostChecks: true,
 			Worktrees:    wtManager,
 			Repositories: repoProvider,
 			BuildInfo:    bSource,
@@ -1886,6 +1911,7 @@ func TestVerifier_ExecutionAndCheckFailures(t *testing.T) {
 			},
 		}
 		v, _ := verifier.New(verifier.Options{
+		PermitUnconfinedHostChecks: true,
 			Worktrees:    wtManager,
 			Repositories: repoProvider,
 			BuildInfo:    bSource,
@@ -1921,6 +1947,7 @@ func TestVerifier_ExecutionAndCheckFailures(t *testing.T) {
 		}
 		emptyRepoProvider := execrt.NewSingleRepositoryProvider(repo)
 		vNoRepo, _ := verifier.New(verifier.Options{
+		PermitUnconfinedHostChecks: true,
 			Worktrees:    wtManager,
 			Repositories: emptyRepoProvider,
 			BuildInfo:    bSource,
@@ -1965,6 +1992,7 @@ func TestVerifier_DeterministicRerunMismatches(t *testing.T) {
 	}
 	bSource := mockBuildInfoSource{rev: sourceCommit, modified: false, ok: true}
 	v, _ := verifier.New(verifier.Options{
+		PermitUnconfinedHostChecks: true,
 		Worktrees:    wtManager,
 		Repositories: repoProvider,
 		BuildInfo:    bSource,
@@ -2123,6 +2151,7 @@ func TestVerifier_WriteScopeMatching(t *testing.T) {
 	}
 
 	v, _ := verifier.New(verifier.Options{
+		PermitUnconfinedHostChecks: true,
 		Worktrees:    wtManager,
 		Repositories: repoProvider,
 		BuildInfo:    bSource,
@@ -2179,6 +2208,7 @@ func TestVerifier_GitDiffTreeFailClosed_Error(t *testing.T) {
 	}
 
 	v, err := verifier.New(verifier.Options{
+		PermitUnconfinedHostChecks: true,
 		Worktrees:    wtManager,
 		Repositories: repoProvider,
 		BuildInfo:    bSource,
@@ -2246,6 +2276,7 @@ func TestVerifier_GitDiffTreeFailClosed_NonZeroExit(t *testing.T) {
 	}
 
 	v, err := verifier.New(verifier.Options{
+		PermitUnconfinedHostChecks: true,
 		Worktrees:    wtManager,
 		Repositories: repoProvider,
 		BuildInfo:    bSource,
@@ -2303,6 +2334,7 @@ func TestVerifier_AbbreviatedBaseCommitResolution(t *testing.T) {
 	}
 
 	v, err := verifier.New(verifier.Options{
+		PermitUnconfinedHostChecks: true,
 		Worktrees:    wtManager,
 		Repositories: repoProvider,
 		BuildInfo:    bSource,
@@ -2352,6 +2384,7 @@ func TestVerifier_UnresolvableBaseCommitFailClosed(t *testing.T) {
 	}
 
 	v, err := verifier.New(verifier.Options{
+		PermitUnconfinedHostChecks: true,
 		Worktrees:    wtManager,
 		Repositories: repoProvider,
 		BuildInfo:    bSource,
@@ -2403,6 +2436,7 @@ func TestVerifier_CandidateCheckoutModificationDetectedAndRejected(t *testing.T)
 	}
 
 	v, err := verifier.New(verifier.Options{
+		PermitUnconfinedHostChecks: true,
 		Worktrees:    wtManager,
 		Repositories: repoProvider,
 		BuildInfo:    bSource,
@@ -2454,6 +2488,7 @@ func TestVerifier_ProfileTaskDigestMismatchRejected(t *testing.T) {
 	}
 
 	v, err := verifier.New(verifier.Options{
+		PermitUnconfinedHostChecks: true,
 		Worktrees:    wtManager,
 		Repositories: repoProvider,
 		BuildInfo:    bSource,
@@ -2531,6 +2566,7 @@ func TestVerifier_BaseCommitMismatchRejected(t *testing.T) {
 	}
 
 	v, err := verifier.New(verifier.Options{
+		PermitUnconfinedHostChecks: true,
 		Worktrees:    wtManager,
 		Repositories: repoProvider,
 		BuildInfo:    bSource,
@@ -2584,6 +2620,7 @@ func TestVerifier_WorkerRoleMismatchRejected(t *testing.T) {
 	}
 
 	v, err := verifier.New(verifier.Options{
+		PermitUnconfinedHostChecks: true,
 		Worktrees:    wtManager,
 		Repositories: repoProvider,
 		BuildInfo:    bSource,
@@ -2669,6 +2706,7 @@ func TestVerifier_AttemptIDMismatchRejected(t *testing.T) {
 	}
 
 	v, err := verifier.New(verifier.Options{
+		PermitUnconfinedHostChecks: true,
 		Worktrees:    wtManager,
 		Repositories: repoProvider,
 		BuildInfo:    bSource,
@@ -2753,6 +2791,7 @@ func TestVerifier_PathTraversalRejected(t *testing.T) {
 		}
 
 		v, err := verifier.New(verifier.Options{
+		PermitUnconfinedHostChecks: true,
 			Worktrees:    wtManager,
 			Repositories: repoProvider,
 			BuildInfo:    bSource,
@@ -2800,6 +2839,7 @@ func TestVerifier_PathTraversalRejected(t *testing.T) {
 		}
 
 		v, err := verifier.New(verifier.Options{
+		PermitUnconfinedHostChecks: true,
 			Worktrees:    wtManager,
 			Repositories: repoProvider,
 			BuildInfo:    bSource,
@@ -2847,6 +2887,7 @@ func TestVerifier_PathTraversalRejected(t *testing.T) {
 		}
 
 		v, err := verifier.New(verifier.Options{
+		PermitUnconfinedHostChecks: true,
 			Worktrees:    wtManager,
 			Repositories: repoProvider,
 			BuildInfo:    bSource,
@@ -2882,6 +2923,7 @@ func TestVerifier_RejectsSymlinkScratchRoot(t *testing.T) {
 		t.Skipf("symlink creation not supported: %v", err)
 	}
 	_, err := verifier.New(verifier.Options{
+		PermitUnconfinedHostChecks: true,
 		Worktrees:    wtManager,
 		Repositories: repoProvider,
 		ScratchDir:   linkedRoot,
@@ -2926,6 +2968,7 @@ func TestVerifier_RejectsPreplantedLogSymlink(t *testing.T) {
 		return process.NewRunner().Run(ctx, spec)
 	}}
 	v, err := verifier.New(verifier.Options{
+		PermitUnconfinedHostChecks: true,
 		Worktrees: wtManager, Repositories: repoProvider, ScratchDir: scratchDir,
 		Profile: &profile, Runner: runner,
 		BuildInfo: mockBuildInfoSource{rev: "commit-verifier-v1", ok: true},
@@ -2948,4 +2991,40 @@ func TestVerifier_RejectsPreplantedLogSymlink(t *testing.T) {
 	if _, err := os.Lstat(outside); !os.IsNotExist(err) {
 		t.Fatalf("verifier wrote outside scratch via symlink: %v", err)
 	}
+}
+
+func TestVerifier_UnconfinedHostExecutionRefusedByDefault(t *testing.T) {
+	ctx := context.Background()
+	_, baseCommit, candCommit, _, wtManager, repoProvider, scratchDir := setupBaseTestDependencies(t)
+	profile := verifier.VerificationProfile{
+		Version: "1.0", ProfileID: "prof-unconfined-denied", Executables: []string{"git"},
+		Tasks: []verifier.TaskVerification{{
+			TaskID: "task-01",
+			TaskDigest: "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+			Class: "implementation", BaseCommit: baseCommit, WriteScope: []string{"src/"},
+			Checks: []verifier.CheckSpec{{CheckID: "chk-1", Argv: []string{"git", "status"}, TimeoutSeconds: 10}},
+			AcceptanceCheckIDs: []string{"chk-1"},
+		}},
+	}
+	calls := 0
+	runner := mockCommandRunner{runFn: func(context.Context, process.Spec) (process.Result, error) {
+		calls++
+		return process.Result{}, errors.New("runner must never be called")
+	}}
+	v, err := verifier.New(verifier.Options{
+		// Production default: no PermitUnconfinedHostChecks.
+		Worktrees: wtManager, Repositories: repoProvider,
+		ScratchDir: scratchDir, Profile: &profile, Runner: runner,
+	})
+	if err != nil { t.Fatal(err) }
+	plan, run, evidence, resolver := helperMakeValidFixtures(
+		t, time.Date(2026, 10, 8, 12, 0, 0, 0, time.UTC),
+		baseCommit, candCommit, "commit-verifier-v1", profile,
+		"implementation", empirical.QualityAccepted, []byte("cand"))
+	_, err = v.Verify(ctx, plan, run, evidence, resolver)
+	if errs.CategoryOf(err) != errs.CategoryPolicyDenied ||
+		!strings.Contains(err.Error(), "VERIFIER_UNCONFINED_HOST_PROCESS") {
+		t.Fatalf("expected explicit unconfined host refusal, got %v", err)
+	}
+	if calls != 0 { t.Fatalf("unconfined runner was invoked %d times", calls) }
 }
