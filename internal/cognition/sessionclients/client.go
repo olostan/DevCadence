@@ -70,6 +70,9 @@ func validateLoopbackURL(rawURL string) error {
 	if u.User != nil {
 		return errs.New(errs.CategoryPolicyDenied, "credentials are forbidden in loopback URL %q", rawURL)
 	}
+	if (u.Path != "" && u.Path != "/") || u.RawQuery != "" || u.Fragment != "" || u.Opaque != "" {
+		return errs.New(errs.CategoryInvalidArgument, "loopback URL %q must be a bare origin without path, query or fragment", rawURL)
+	}
 	host := u.Hostname()
 	if host == "" {
 		return errs.New(errs.CategoryInvalidArgument, "loopback URL %q has empty host", rawURL)

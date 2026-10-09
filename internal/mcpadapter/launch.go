@@ -126,28 +126,36 @@ func run(ctx context.Context, getenv func(string) string, transport mcp.Transpor
 	if err != nil {
 		return err
 	}
-	defer ops.Close()
+	var closeTasks func() error
+	defer func() {
+		// Stop in-flight delegation before releasing the project lock.
+		ops.Close()
+		if closeTasks != nil {
+			_ = closeTasks()
+		}
+	}()
 	opts := facade.Options{
 		ControlPlane: cp, Policy: NewBindingPolicy(binding), Operations: ops, Repository: observer, Logger: logger,
 	}
 	// An optional host-supplied task executor (composition root lives outside
 	// this adapter so it keeps its dependency boundary).
 	if tasks != nil {
-		repoPath, err := registeredRepositoryPath(ctx, cp, project)
-		if err != nil {
-			return err
+		if repoPath, err := registeredRepositoryPath(ctx, cp, project); err != nil {
+			// Same degradation as the repository observer: warn, never abort launch.
+			logger.Warn("project repository registration cannot be read; task execution is unavailable")
+		} else {
+			exec, closeFn, err := tasks(ctx, TaskPortInput{
+				ProjectID: project, Home: home, RepoPath: repoPath, Getenv: getenv,
+				ControlPlane: cp, Operations: ops, Logger: logger,
+			})
+			if err != nil {
+				// Configured execution that cannot start is fatal (fail closed);
+				// restart the server after fixing the cause (e.g. `ollama serve`).
+				return err
+			}
+			closeTasks = closeFn
+			opts.Tasks = exec
 		}
-		exec, closeFn, err := tasks(ctx, TaskPortInput{
-			ProjectID: project, Home: home, RepoPath: repoPath, Getenv: getenv,
-			ControlPlane: cp, Operations: ops, Logger: logger,
-		})
-		if err != nil {
-			return err
-		}
-		if closeFn != nil {
-			defer func() { _ = closeFn() }()
-		}
-		opts.Tasks = exec
 	}
 	svc, err := facade.NewService(opts)
 	if err != nil {

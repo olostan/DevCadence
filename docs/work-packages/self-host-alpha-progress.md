@@ -26,10 +26,10 @@ Authoritative objective: [wp-m5-sh1-self-host-alpha-ewp.md](wp-m5-sh1-self-host-
 
 ## SH1-1 usage (owner-local, user-level only)
 
-Config (never read from the project repo): `$DEVCADENCE_HOME/config/selfhost.json`, with env overrides.
+Config (never read from the project repo): only the existence of `$DEVCADENCE_HOME/config/selfhost.json` enables the executor. `DEVCADENCE_OLLAMA_URL` / `DEVCADENCE_OLLAMA_MODEL` may only override fields of that file and can never enable self-host on their own. Assumption: `DEVCADENCE_HOME` is user-controlled and trusted.
 
-- `model` (required; `DEVCADENCE_OLLAMA_MODEL`; `:latest` is implied when no tag), `ollama_url` (loopback only, default `http://127.0.0.1:11434`; `DEVCADENCE_OLLAMA_URL`), `endpoint_id` (default `ollama-local`), `context_tokens` (default 32768).
-- Present config makes `devcadence-mcp` build the executor (`facade.Options.Tasks`); absent config leaves behavior unchanged. With config present, Ollama down or model missing fails launch with an actionable error (fail closed). Models are never pulled.
+- `model` (required in the file; env override `DEVCADENCE_OLLAMA_MODEL`; `:latest` is implied when no tag), `ollama_url` (loopback only, default `http://127.0.0.1:11434`; `DEVCADENCE_OLLAMA_URL`), `endpoint_id` (default `ollama-local`), `context_tokens` (default 32768).
+- Present config makes `devcadence-mcp` build the executor (`facade.Options.Tasks`); absent config leaves behavior unchanged. With config present, Ollama down or model missing fails launch with an actionable error: this fail-closed behavior is intentional, and the MCP server must be restarted after `ollama serve` / `ollama pull`. A registered-repository read error only warns and leaves execution unavailable (same degradation as the drift observer). Models are never pulled. The model digest is probed at launch only: a later `ollama pull` may change what the model name resolves to until the server is restarted. The Ollama URL must be a bare loopback origin (no path, query or fragment).
 - Policy: no operator receipt exists for a user-level setup, so `internal/selfhost/policy.go` supplies an explicit `owner_local_unsigned` PolicySource (one loopback local grant, implementer role, zero spend, unknown usage allowed, 3 attempts). `execpolicy.Load` receipt verification is unchanged and not used here; a warning is logged at launch.
 - Check: `devcadence selfhost check [-json]` prints Ollama version, selected model digest and installed models.
 - Live test (needs a running Ollama and an installed model): `DEVCADENCE_LIVE_OLLAMA=1 DEVCADENCE_OLLAMA_MODEL=<model> go test ./internal/selfhost -run TestLiveOllama -v -timeout 30m`.

@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/olostan/DevCadence/internal/cognition/sessionclients"
 	"github.com/olostan/DevCadence/internal/errs"
 	"github.com/olostan/DevCadence/internal/principal"
 	"github.com/olostan/DevCadence/internal/selfhost"
@@ -21,16 +22,35 @@ import (
 
 func env(m map[string]string) func(string) string { return func(k string) string { return m[k] } }
 
+func writeCfg(t *testing.T, home, body string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Join(home, "config"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(selfhost.ConfigPath(home), []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestLoadConfig(t *testing.T) {
-	home := t.TempDir()
-	t.Run("unconfigured is nil", func(t *testing.T) {
-		cfg, err := selfhost.LoadConfig(home, env(nil))
-		if err != nil || cfg != nil {
-			t.Fatalf("cfg=%v err=%v, want nil,nil", cfg, err)
+	t.Run("no file is nil, even with env set (env cannot enable)", func(t *testing.T) {
+		home := t.TempDir()
+		for _, e := range []map[string]string{
+			nil,
+			{selfhost.EnvOllamaModel: "qwen2.5-coder"},
+			{selfhost.EnvOllamaModel: "m:1", selfhost.EnvOllamaURL: "http://127.0.0.1:11434"},
+			{selfhost.EnvOllamaURL: "http://127.0.0.1:11434"},
+		} {
+			cfg, err := selfhost.LoadConfig(home, env(e))
+			if err != nil || cfg != nil {
+				t.Fatalf("env %v: cfg=%v err=%v, want nil,nil", e, cfg, err)
+			}
 		}
 	})
-	t.Run("env only, defaults applied", func(t *testing.T) {
-		cfg, err := selfhost.LoadConfig(home, env(map[string]string{selfhost.EnvOllamaModel: "qwen2.5-coder"}))
+	t.Run("file with defaults applied", func(t *testing.T) {
+		home := t.TempDir()
+		writeCfg(t, home, `{"model":"qwen2.5-coder"}`)
+		cfg, err := selfhost.LoadConfig(home, env(nil))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -39,39 +59,62 @@ func TestLoadConfig(t *testing.T) {
 			t.Fatalf("unexpected defaults: %+v", cfg)
 		}
 	})
-	t.Run("url without model is rejected", func(t *testing.T) {
-		_, err := selfhost.LoadConfig(home, env(map[string]string{selfhost.EnvOllamaURL: "http://127.0.0.1:1"}))
-		if !errors.Is(err, errs.ErrInvalidArgument) || !strings.Contains(err.Error(), selfhost.EnvOllamaModel) {
+	t.Run("file without model is rejected", func(t *testing.T) {
+		home := t.TempDir()
+		writeCfg(t, home, `{}`)
+		if _, err := selfhost.LoadConfig(home, env(nil)); !errors.Is(err, errs.ErrInvalidArgument) {
 			t.Fatalf("err = %v", err)
 		}
 	})
 	t.Run("non-loopback url is rejected", func(t *testing.T) {
-		_, err := selfhost.LoadConfig(home, env(map[string]string{
-			selfhost.EnvOllamaModel: "m:1", selfhost.EnvOllamaURL: "http://example.com:11434"}))
+		home := t.TempDir()
+		writeCfg(t, home, `{"model":"m:1"}`)
+		_, err := selfhost.LoadConfig(home, env(map[string]string{selfhost.EnvOllamaURL: "http://example.com:11434"}))
 		if !errors.Is(err, errs.ErrPolicyDenied) {
 			t.Fatalf("err = %v, want policy denied", err)
 		}
 	})
-	t.Run("file plus env override; unknown keys rejected", func(t *testing.T) {
+	t.Run("env overrides file fields; unknown keys rejected", func(t *testing.T) {
 		h := t.TempDir()
-		if err := os.MkdirAll(filepath.Join(h, "config"), 0o700); err != nil {
-			t.Fatal(err)
-		}
-		path := selfhost.ConfigPath(h)
-		if err := os.WriteFile(path, []byte(`{"model":"a:1","endpoint_id":"ep-x"}`), 0o600); err != nil {
-			t.Fatal(err)
-		}
+		writeCfg(t, h, `{"model":"a:1","endpoint_id":"ep-x"}`)
 		cfg, err := selfhost.LoadConfig(h, env(map[string]string{selfhost.EnvOllamaModel: "b:2"}))
 		if err != nil || cfg.Model != "b:2" || cfg.EndpointID != "ep-x" {
 			t.Fatalf("cfg=%+v err=%v", cfg, err)
 		}
-		if err := os.WriteFile(path, []byte(`{"model":"a:1","api_key":"x"}`), 0o600); err != nil {
-			t.Fatal(err)
-		}
+		writeCfg(t, h, `{"model":"a:1","api_key":"x"}`)
 		if _, err := selfhost.LoadConfig(h, env(nil)); !errors.Is(err, errs.ErrInvalidArgument) {
 			t.Fatalf("unknown key err = %v", err)
 		}
 	})
+}
+
+func TestLoopbackURLMustBeBareOrigin(t *testing.T) {
+	for _, u := range []string{"http://127.0.0.1:11434", "http://127.0.0.1:11434/", "http://localhost:1"} {
+		if err := sessionclients.ValidateLoopbackURL(u); err != nil {
+			t.Errorf("%s rejected: %v", u, err)
+		}
+	}
+	for _, u := range []string{"http://127.0.0.1:11434/v1", "http://127.0.0.1:1/?x=1", "http://127.0.0.1:1/#f", "http://127.0.0.1:1?x=1"} {
+		if err := sessionclients.ValidateLoopbackURL(u); err == nil {
+			t.Errorf("%s accepted", u)
+		}
+	}
+}
+
+func TestProbe_RefusesRedirect(t *testing.T) {
+	var hits int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/elsewhere" {
+			hits++
+			return
+		}
+		http.Redirect(w, r, "/elsewhere", http.StatusFound)
+	}))
+	defer srv.Close()
+	_, err := selfhost.Probe(context.Background(), selfhost.Config{OllamaURL: srv.URL, Model: testModel})
+	if !errors.Is(err, errs.ErrModelUnavailable) || hits != 0 {
+		t.Fatalf("err = %v, redirect followed %d times", err, hits)
+	}
 }
 
 func TestProbe(t *testing.T) {
@@ -251,9 +294,8 @@ func TestStubOllama_MidCallErrorIsUncertainAndNotRetried(t *testing.T) {
 	}
 }
 
-func TestStubOllama_NonLoopbackNeverDialed(t *testing.T) {
-	remote := httptest.NewServer(http.NotFoundHandler())
-	defer remote.Close()
+// A non-loopback URL is refused by validation before any connection is made.
+func TestProbe_NonLoopbackRefusedBeforeDialing(t *testing.T) {
 	cfg := selfhost.Config{OllamaURL: "http://example.com:11434", Model: testModel}
 	if _, err := selfhost.Probe(context.Background(), cfg); !errors.Is(err, errs.ErrPolicyDenied) {
 		t.Fatalf("err = %v, want policy denied", err)

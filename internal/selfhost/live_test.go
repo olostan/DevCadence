@@ -3,6 +3,7 @@ package selfhost_test
 import (
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -21,12 +22,15 @@ func TestLiveOllama(t *testing.T) {
 	if os.Getenv("DEVCADENCE_LIVE_OLLAMA") != "1" {
 		t.Skip("live Ollama test skipped: set DEVCADENCE_LIVE_OLLAMA=1 and DEVCADENCE_OLLAMA_MODEL=<installed model> to run it")
 	}
-	cfg, err := selfhost.LoadConfig(t.TempDir(), os.Getenv)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if cfg == nil {
+	model := os.Getenv(selfhost.EnvOllamaModel)
+	if model == "" {
 		t.Skip("live Ollama test skipped: DEVCADENCE_OLLAMA_MODEL is not set")
+	}
+	home := t.TempDir()
+	writeCfg(t, home, `{"model":`+strconv.Quote(model)+`}`) // env URL (if any) overrides
+	cfg, err := selfhost.LoadConfig(home, os.Getenv)
+	if err != nil || cfg == nil {
+		t.Fatalf("config: %v %v", cfg, err)
 	}
 	f := newFixture(t)
 	f.build(t, *cfg)

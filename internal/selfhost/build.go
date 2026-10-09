@@ -62,7 +62,7 @@ func Build(ctx context.Context, cfg Config, deps Deps) (*Built, error) {
 	if clk == nil {
 		clk = clock.System()
 	}
-	policy, err := newOwnerLocalPolicy(cfg, time.Now())
+	policy, err := newOwnerLocalPolicy(cfg, clk.Now())
 	if err != nil {
 		return nil, err
 	}

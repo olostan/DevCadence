@@ -5,6 +5,8 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -37,6 +39,14 @@ func TestSelfhostTasks(t *testing.T) {
 	home := t.TempDir()
 	srv := stubOllama(t)
 	env := map[string]string{}
+	writeSelfhostFile := func(body string) {
+		if err := os.MkdirAll(filepath.Join(home, "config"), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(home, "config", "selfhost.json"), []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
 	in := mcpadapter.TaskPortInput{
 		ProjectID: "example", Home: home, RepoPath: repo.Path, ControlPlane: h.Service, Operations: registry,
 		Logger: observability.NewLogger(observability.Options{}),
@@ -48,7 +58,12 @@ func TestSelfhostTasks(t *testing.T) {
 		t.Fatalf("unconfigured: %v %v %v", exec, closeFn != nil, err)
 	}
 
+	// Environment variables alone never enable the executor.
 	env["DEVCADENCE_OLLAMA_MODEL"], env["DEVCADENCE_OLLAMA_URL"] = "stub:1b", srv.URL
+	if exec, closeFn, err := selfhostTasks(context.Background(), in); exec != nil || closeFn != nil || err != nil {
+		t.Fatalf("env-only: %v %v %v", exec, closeFn != nil, err)
+	}
+	writeSelfhostFile(`{"model":"stub:1b"}`)
 	exec, closeFn, err := selfhostTasks(context.Background(), in)
 	if err != nil || exec == nil || closeFn == nil {
 		t.Fatalf("configured: exec=%v err=%v", exec, err)

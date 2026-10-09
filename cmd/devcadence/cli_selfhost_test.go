@@ -5,6 +5,8 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -23,9 +25,16 @@ func stubOllamaForCheck(t *testing.T) *httptest.Server {
 
 func TestSelfhostCheck(t *testing.T) {
 	srv := stubOllamaForCheck(t)
-	t.Setenv("DEVCADENCE_HOME", t.TempDir())
+	home := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(home, "config"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(home, "config", "selfhost.json"), []byte(`{"model":"stub:7b"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("DEVCADENCE_HOME", home)
 	t.Setenv("DEVCADENCE_OLLAMA_URL", srv.URL)
-	t.Setenv("DEVCADENCE_OLLAMA_MODEL", "stub:7b")
+	t.Setenv("DEVCADENCE_OLLAMA_MODEL", "")
 	c := newCLI(t)
 
 	out := c.mustRun("selfhost", "check")
@@ -52,8 +61,9 @@ func TestSelfhostCheck(t *testing.T) {
 
 func TestSelfhostCheckUnconfigured(t *testing.T) {
 	t.Setenv("DEVCADENCE_HOME", t.TempDir())
-	t.Setenv("DEVCADENCE_OLLAMA_URL", "")
-	t.Setenv("DEVCADENCE_OLLAMA_MODEL", "")
+	// Env alone must not enable self-host.
+	t.Setenv("DEVCADENCE_OLLAMA_URL", "http://127.0.0.1:11434")
+	t.Setenv("DEVCADENCE_OLLAMA_MODEL", "m:1")
 	if _, _, err := newCLI(t).run("selfhost", "check"); err == nil || !strings.Contains(err.Error(), "not configured") {
 		t.Errorf("err = %v", err)
 	}

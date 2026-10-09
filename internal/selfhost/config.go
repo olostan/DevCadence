@@ -1,9 +1,13 @@
 // Package selfhost composes the existing native task executor with a real
 // loopback Ollama provider for the Self-Host Alpha (SH1-1).
 //
-// Configuration is user-level only: a JSON file under the DevCadence home
-// directory and/or environment variables. It is never read from the project
-// repository, so a repository cannot grant itself an execution endpoint.
+// Configuration is user-level only. Only the existence of
+// $DEVCADENCE_HOME/config/selfhost.json enables the executor; the environment
+// variables DEVCADENCE_OLLAMA_URL / DEVCADENCE_OLLAMA_MODEL may only override
+// fields of a file-declared configuration and can never enable it. It is never
+// read from the project repository, so a repository cannot grant itself an
+// execution endpoint. Assumption: DEVCADENCE_HOME is user-controlled and trusted
+// (whoever can write that directory can already write the principal binding).
 package selfhost
 
 import (
@@ -51,21 +55,19 @@ func ConfigPath(home string) string {
 	return filepath.Join(home, "config", configFileName)
 }
 
-// LoadConfig reads <home>/config/selfhost.json (if present) and applies the
-// environment overrides. It returns (nil, nil) when self-host is not
-// configured at all (no file and no DEVCADENCE_OLLAMA_MODEL), so callers keep
-// their existing behavior. Any partial or invalid configuration is an error.
+// LoadConfig reads <home>/config/selfhost.json and applies the environment
+// overrides. It returns (nil, nil) when that file does not exist: environment
+// variables alone never enable self-host, so keeping callers' existing behavior
+// requires no action. An existing but partial or invalid configuration is an error.
 func LoadConfig(home string, getenv func(string) string) (*Config, error) {
 	if home == "" || !filepath.IsAbs(home) {
 		return nil, errs.New(errs.CategoryInvalidArgument, "selfhost: DevCadence home must be an absolute path")
 	}
 	var cfg Config
-	present := false
 	path := ConfigPath(home)
 	raw, err := os.ReadFile(path)
 	switch {
 	case err == nil:
-		present = true
 		dec := json.NewDecoder(bytes.NewReader(raw))
 		dec.DisallowUnknownFields()
 		if err := dec.Decode(&cfg); err != nil {
@@ -76,23 +78,15 @@ func LoadConfig(home string, getenv func(string) string) (*Config, error) {
 			return nil, errs.New(errs.CategoryInvalidArgument, "selfhost: %s has trailing content", path)
 		}
 	case errors.Is(err, fs.ErrNotExist):
-		// Not configured by file.
+		return nil, nil
 	default:
 		return nil, errs.Wrap(errs.CategoryInvalidArgument, err, "selfhost: cannot read %s", path)
 	}
 	if v := strings.TrimSpace(getenv(EnvOllamaModel)); v != "" {
 		cfg.Model = v
-		present = true
 	}
 	if v := strings.TrimSpace(getenv(EnvOllamaURL)); v != "" {
 		cfg.OllamaURL = v
-		if !present {
-			return nil, errs.New(errs.CategoryInvalidArgument,
-				"selfhost: %s is set but no model is configured; set %s (or \"model\" in %s)", EnvOllamaURL, EnvOllamaModel, path)
-		}
-	}
-	if !present {
-		return nil, nil
 	}
 	if err := cfg.normalize(); err != nil {
 		return nil, err
@@ -105,7 +99,7 @@ func (c *Config) normalize() error {
 	c.Model = strings.TrimSpace(c.Model)
 	if c.Model == "" {
 		return errs.New(errs.CategoryInvalidArgument,
-			"selfhost: model is required; set %s or \"model\" in the selfhost config (then run `ollama pull <model>`)", EnvOllamaModel)
+			"selfhost: model is required; set \"model\" in the selfhost config or %s (then run `ollama pull <model>`)", EnvOllamaModel)
 	}
 	if strings.ContainsAny(c.Model, " \t\r\n") {
 		return errs.New(errs.CategoryInvalidArgument, "selfhost: model name %q contains whitespace", c.Model)
