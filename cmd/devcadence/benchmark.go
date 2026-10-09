@@ -278,7 +278,11 @@ var defaultNewIndependentVerifier = func(ctx context.Context, e *env, resolver e
 	if repoDir == "" {
 		repoDir = "."
 	}
-	repo, err := repository.Register(ctx, "devcadence", repoDir, repository.Options{})
+	absRepoDir, err := filepath.Abs(repoDir)
+	if err != nil {
+		return nil, errs.Wrap(errs.CategoryInvalidArgument, err, "cannot resolve verifier repository root %q", repoDir)
+	}
+	repo, err := repository.Register(ctx, "devcadence", absRepoDir, repository.Options{})
 	if err != nil {
 		return nil, errs.Wrap(errs.CategoryInvalidArgument, err, "invalid verifier repository root %q", repoDir)
 	}
