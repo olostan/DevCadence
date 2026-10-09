@@ -21,6 +21,21 @@ The independent verifier's `process.Runner` is **not** an OS sandbox. Worktree s
 
 Consequently, Part B's receipt/profile/identity/admission composition is implemented, but **a live untrusted empirical campaign cannot successfully replay through the production verifier** until an OS-confined check runner and corresponding adversarial tests are added. Do not interpret synthetic/mock success-path tests as evidence of a successful protected end-to-end production run. This boundary is a deliberate fail-closed limitation, not completion of sandboxing.
 
+### Per-project YOLO option for local experiments
+
+A project can opt into unconfined verifier checks by creating `.devcadence/benchmark.json` at its Git repository root:
+
+```json
+{
+  "execution_mode": "yolo",
+  "allow_unconfined_verifier": true
+}
+```
+
+The configuration applies to `devcadence benchmark replay-empirical --repo /absolute/path/to/project` (or the current Git repository) without repeated flags. `--execution-mode strict` always disables this option for an invocation. To override strict configuration with a CLI-only YOLO decision, pass both `--execution-mode yolo --allow-unconfined-verifier`. No configuration and no flags means strict (fail-closed). A malformed configuration fails closed.
+
+This is a **local-project execution preference**, not a protected trust root. Do not use a project-supplied YOLO configuration when evaluating untrusted repositories. It does not bypass protected operator receipts, artifact digests, cost caps, or provenance checks. The report records `execution_mode` and admission continues to report `unconfined_host_process`; YOLO results must never be presented as sandboxed.
+
 ## Objective
 
 Supply what WP-M5-5 explicitly left to a follow-on: the production `IndependentVerifier` (receipt re-execution on an immutable candidate with a pinned profile), the production operator authority (campaign-grant receipts through R4), the missing evidence bindings (session evidence, verifier source and profile pinned in the plan), a CLI that replays the unchanged gate only through admission, and the minimal provider composition so a granted endpoint can actually run a session. Nothing here runs a campaign or spends anything; it makes admission *able to succeed* for genuine evidence and *unable to succeed* for anything else.
