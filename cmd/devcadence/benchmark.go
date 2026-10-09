@@ -267,26 +267,22 @@ func provenanceKind(p *gate.EvidenceProvenance) string {
 	return p.Kind
 }
 
-var activeRepoRoot = "."
-
 // defaultNewIndependentVerifier constructs the production independent verifier (WP-M5-R3 Part B).
-var defaultNewIndependentVerifier = func(ctx context.Context, e *env, resolver empirical.ArtifactResolver) (empirical.IndependentVerifier, error) {
+var defaultNewIndependentVerifier = func(ctx context.Context, e *env, resolver empirical.ArtifactResolver, repoDir string) (empirical.IndependentVerifier, error) {
 	worktreeRoot := filepath.Join(e.homeDir(), "worktrees")
 	wtMgr, err := worktrees.NewManager(worktreeRoot, process.NewRunner())
 	if err != nil {
 		return nil, errs.Wrap(errs.CategoryInternal, err, "failed to create worktree manager")
 	}
 
-	repoDir := activeRepoRoot
 	if repoDir == "" {
 		repoDir = "."
 	}
-	var repoProvider execrt.RepositoryProvider
-	if repo, err := repository.Register(ctx, "devcadence", repoDir, repository.Options{}); err == nil {
-		repoProvider = execrt.NewSingleRepositoryProvider(repo)
-	} else {
-		repoProvider = execrt.NewMapRepositoryProvider(map[string]*repository.Repository{})
+	repo, err := repository.Register(ctx, "devcadence", repoDir, repository.Options{})
+	if err != nil {
+		return nil, errs.Wrap(errs.CategoryInvalidArgument, err, "invalid verifier repository root %q", repoDir)
 	}
+	repoProvider := execrt.NewSingleRepositoryProvider(repo)
 
 	opts := verifier.Options{
 		Resolver:     resolver,
@@ -582,6 +578,7 @@ func runBenchmarkReplayEmpirical(ctx context.Context, e *env, args []string) err
 		}
 	}
 
+	validatedRepoRoot := "."
 	if strings.TrimSpace(*repoPath) != "" {
 		absRepo, err := filepath.Abs(*repoPath)
 		if err != nil {
@@ -590,7 +587,7 @@ func runBenchmarkReplayEmpirical(ctx context.Context, e *env, args []string) err
 		if _, err := repository.Register(ctx, "devcadence", absRepo, repository.Options{}); err != nil {
 			return errs.Wrap(errs.CategoryInvalidArgument, err, "invalid repository root %q", absRepo)
 		}
-		activeRepoRoot = absRepo
+		validatedRepoRoot = absRepo
 	}
 
 	// 2. Initialize receipt verifier (receipts.NewVerifier / operator store).
@@ -619,7 +616,7 @@ func runBenchmarkReplayEmpirical(ctx context.Context, e *env, args []string) err
 	resolver := newDirectoryArtifactResolver(*artifactsDir, extra)
 
 	// 4. Instantiate verifier.New(...) (empirical.IndependentVerifier).
-	indepVerifier, err := newIndependentVerifier(ctx, e, resolver)
+	indepVerifier, err := newIndependentVerifier(ctx, e, resolver, validatedRepoRoot)
 	if err != nil {
 		return errs.Wrap(errs.CategoryInternal, err, "failed to instantiate independent verifier")
 	}
