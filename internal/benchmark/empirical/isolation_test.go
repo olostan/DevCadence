@@ -36,7 +36,7 @@ func TestNonCanonicalPlanBytesRejected(t *testing.T) {
 	f.store["plan"] = b
 	m.PlanDigest = bytesDigest(b)
 	v := &countingVerifier{}
-	res, err := validateAdmission(context.Background(), m, f.store, v, allowAuthority{})
+	res, err := validateAdmission(context.Background(), m, f.store, v, allowAuthority{}, testClock)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -69,7 +69,7 @@ func TestAuthorizationCapIsolation(t *testing.T) {
 		"max total calls above plan":    {func(f *fixture) { f.plan.Limits.MaxTotalCalls = 100 }, above},
 		"max run seconds above plan":    {func(f *fixture) { f.plan.Limits.MaxRunSeconds = 900 }, above},
 		"max campaign secs above plan":  {func(f *fixture) { f.plan.Limits.MaxCampaignSeconds = 3600 }, above},
-		"max api spend above plan":      {func(f *fixture) { f.auth.MaxAPISpendUSD = 5 }, above},
+		"max api spend above plan":      {func(f *fixture) { f.auth.MaxAPISpendMicroUSD = 5000000 }, above},
 		"max subscription above plan":   {func(f *fixture) { f.plan.Limits.MaxSubscriptionCalls = 100 }, above},
 		"max local compute above plan":  {func(f *fixture) { f.auth.MaxLocalComputeSeconds = 10 }, above},
 		"allow metered above plan":      {func(f *fixture) { f.auth.AllowMetered = true }, above},
@@ -99,23 +99,23 @@ func TestAuthorizationCapIsolation(t *testing.T) {
 // the positive spend cap alone.
 func TestMeteredGrantHalvesIsolated(t *testing.T) {
 	const frag = "needs an explicit metered grant with a positive spend cap"
-	setup := func(f *fixture, allow bool, spend float64) {
+	setup := func(f *fixture, allow bool, spend int64) {
 		for i := range f.plan.Runs {
 			f.plan.Runs[i].Endpoint.CapabilityClass = "frontier_api"
 			f.runs[i].Endpoint.CapabilityClass = "frontier_api"
 		}
 		f.plan.RequestedTiers = []string{"frontier_api"}
 		f.plan.Limits.AllowMetered = true
-		f.plan.Limits.MaxAPISpendUSD = 10
+		f.plan.Limits.MaxAPISpendMicroUSD = 10000000
 		f.auth.AllowedEndpointBindings[0].CapabilityClass = "frontier_api"
 		f.auth.AllowMetered = allow
-		f.auth.MaxAPISpendUSD = spend
+		f.auth.MaxAPISpendMicroUSD = spend
 	}
 	for name, c := range map[string]struct {
 		allow bool
-		spend float64
+		spend int64
 	}{
-		"positive spend without grant": {false, 10},
+		"positive spend without grant": {false, 10000000},
 		"grant with zero spend cap":    {true, 0},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -129,7 +129,7 @@ func TestMeteredGrantHalvesIsolated(t *testing.T) {
 	}
 	t.Run("full grant has no metered refusal", func(t *testing.T) {
 		f := newFixture()
-		setup(f, true, 10)
+		setup(f, true, 10000000)
 		res := admitWith(t, f, &countingVerifier{})
 		if hasLimit(res, frag) {
 			t.Fatalf("limits=%v", res.Limitations)

@@ -93,6 +93,7 @@ var wireOnlySchemas = map[schema.Name]string{
 	schema.NamePrincipalCandidateRef:   "internal/principal.CandidateRef",
 	schema.NamePrincipalSemanticError:  "internal/principal.SemanticError",
 	schema.NamePrincipalOperationRef:   "internal/principal.OperationRef",
+	schema.NameEmpiricalSession:        "internal/benchmark/empirical.SessionEvidence",
 }
 
 func init() {

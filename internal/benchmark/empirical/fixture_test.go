@@ -5,10 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/olostan/DevCadence/internal/benchmark/experiments"
 	"github.com/olostan/DevCadence/internal/benchmark/gate"
 	"github.com/olostan/DevCadence/internal/benchmark/telemetry"
+	"github.com/olostan/DevCadence/internal/clock"
 	"github.com/olostan/DevCadence/internal/protocol"
 )
 
@@ -25,9 +27,24 @@ func (s memStore) ReadVerified(_ context.Context, ref, _ string) ([]byte, error)
 	return b, nil
 }
 
-type allowAuthority struct{}
+type allowAuthority struct {
+	custom bool
+	window AuthorityWindow
+	err    error
+}
 
-func (allowAuthority) VerifyAuthorization(context.Context, string, string, []byte) error { return nil }
+func (a allowAuthority) VerifyAuthorization(context.Context, string, string, []byte) (AuthorityWindow, error) {
+	if a.err != nil {
+		return AuthorityWindow{}, a.err
+	}
+	if a.custom {
+		return a.window, nil
+	}
+	return AuthorityWindow{
+		IssuedAt: time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
+		NotAfter: time.Date(2030, 1, 1, 0, 0, 0, 0, time.UTC),
+	}, nil
+}
 
 type countingVerifier struct {
 	calls int
@@ -42,9 +59,9 @@ func (v *countingVerifier) Verify(_ context.Context, plan CampaignPlan, _ Planne
 	}
 	pd, _ := PlanDigest(plan)
 	o := VerifiedOutcome{
-		RunID: ev.RunID, PlanDigest: pd, SessionDigest: dg("session" + ev.RunID),
+		RunID: ev.RunID, PlanDigest: pd, SessionDigest: ev.SessionEvidenceDigest,
 		CandidateDigest: ev.CandidateArtifactDigest, SnapshotDigest: ev.SnapshotDigest, ReceiptDigest: ev.VerifierReceiptDigest,
-		VerifierSourceCommit: "verifiersrc", VerificationProfileDigest: dg("profile"),
+		VerifierSourceCommit: plan.VerifierSourceCommit, VerificationProfileDigest: plan.VerificationProfileDigest,
 		Worker:         protocol.ActorProvenance{ActorID: ev.InvocationProducerID, InvocationID: "inv-w-" + ev.RunID, Role: protocol.ProvenanceRoleImplementer},
 		Verifier:       protocol.ActorProvenance{ActorID: ev.VerifierProducerID, InvocationID: "inv-v-" + ev.RunID, Role: protocol.ProvenanceRoleVerifier},
 		QualityVerdict: QualityAccepted, SeededDefectTotal: 1, SeededDefectsCaught: 1,
@@ -55,6 +72,8 @@ func (v *countingVerifier) Verify(_ context.Context, plan CampaignPlan, _ Planne
 	}
 	return o, nil
 }
+
+var testClock = clock.NewFake(time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC), 0)
 
 func dg(s string) string {
 	b, _ := protocol.CanonicalJSON(s)
@@ -100,6 +119,7 @@ func newFixture() *fixture {
 	crit, _ := protocol.Digest(gate.DefaultM4GateCriteria())
 	f.plan = CampaignPlan{SchemaVersion: SchemaVersion, CampaignID: "camp", SourceCommit: "src", CorpusDigest: dg("corpus"),
 		CriteriaDigest: crit, RequestedTiers: []string{"subscription_cli"},
+		VerifierSourceCommit: "verifiersrc", VerificationProfileDigest: dg("profile"),
 		Limits: RunLimits{MaxTotalRuns: 120, MaxCallsPerRun: 4, MaxTotalCalls: 480, MaxRunSeconds: 1800, MaxCampaignSeconds: 21600,
 			MaxSubscriptionCalls: 480, AllowUnknownSubscriptionQuota: true},
 		AllowedSourceClasses: []string{"public"}, AllowedNetworkDomains: []string{}, CredentialRefs: []string{"cred/ref"}}
@@ -166,6 +186,28 @@ func (f *fixture) manifest() CampaignManifest {
 		if r.Status == StatusCompleted {
 			r.CandidateArtifactDigest = bytesDigest(f.putRaw(r.CandidateArtifactRef, "cand:"+r.RunID))
 			r.VerifierReceiptDigest = bytesDigest(f.putRaw(r.VerifierReceiptRef, "rcpt:"+r.RunID))
+			sess := SessionEvidence{
+				SchemaVersion:              SchemaVersion,
+				RunID:                      r.RunID,
+				CampaignID:                 f.plan.CampaignID,
+				AttemptID:                  "att-" + r.RunID,
+				TaskDigest:                 r.TaskDigest,
+				Endpoint:                   r.Endpoint,
+				PromptDigest:               r.PromptDigest,
+				ContextManifestDigest:      dg("manifest"),
+				InvocationProvenanceDigest: dg("provenance"),
+				ExecutionPolicyDigest:      dg("policy"),
+				AuthorizationDigest:        ad,
+				StartedAt:                  time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC),
+				FinishedAt:                 time.Date(2026, 1, 1, 10, 5, 0, 0, time.UTC),
+				DriverOutcome:              StatusCompleted,
+				Turns:                      1,
+				Usage:                      r.Measurements,
+			}
+			r.SessionEvidenceDigest = f.put(r.SessionEvidenceRef, sess)
+		} else {
+			r.SessionEvidenceRef = ""
+			r.SessionEvidenceDigest = ""
 		}
 	}
 	return CampaignManifest{SchemaVersion: SchemaVersion, CampaignID: f.plan.CampaignID, PlanRef: "plan", PlanDigest: pd,
@@ -181,7 +223,7 @@ func (f *fixture) putRaw(ref, s string) []byte {
 // admit runs the internal path with a test authority that grants nothing real.
 func (f *fixture) admit(t *testing.T, v IndependentVerifier) AdmissionResult {
 	t.Helper()
-	res, err := validateAdmission(context.Background(), f.manifest(), f.store, v, allowAuthority{})
+	res, err := validateAdmission(context.Background(), f.manifest(), f.store, v, allowAuthority{}, testClock)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -8,6 +8,7 @@ package empirical
 
 import (
 	"context"
+	"time"
 
 	"github.com/olostan/DevCadence/internal/protocol"
 )
@@ -96,6 +97,7 @@ type RunEvidence struct {
 	SnapshotRef             string                 `json:"snapshot_ref"`
 	SnapshotDigest          string                 `json:"snapshot_digest"`
 	SessionEvidenceRef      string                 `json:"session_evidence_ref"`
+	SessionEvidenceDigest   string                 `json:"session_evidence_digest"`
 	PromptDigest            string                 `json:"prompt_digest"`
 	CandidateCommit         string                 `json:"candidate_commit"`
 	CandidateArtifactRef    string                 `json:"candidate_artifact_ref"`
@@ -144,7 +146,7 @@ type RunLimits struct {
 	MaxTotalCalls                 int     `json:"max_total_calls"`
 	MaxRunSeconds                 int     `json:"max_run_seconds"`
 	MaxCampaignSeconds            int     `json:"max_campaign_seconds"`
-	MaxAPISpendUSD                float64 `json:"max_api_spend_usd"`
+	MaxAPISpendMicroUSD           int64   `json:"max_api_spend_micro_usd"`
 	MaxSubscriptionCalls          int     `json:"max_subscription_calls"`
 	MaxLocalComputeSeconds        float64 `json:"max_local_compute_seconds"`
 	AllowMetered                  bool    `json:"allow_metered"`
@@ -154,18 +156,20 @@ type RunLimits struct {
 // CampaignPlan is the sole pre-run authorized content. It carries no digest,
 // authorization, result, session, receipt or timestamp field (acyclic identity).
 type CampaignPlan struct {
-	SchemaVersion         string           `json:"schema_version"`
-	CampaignID            string           `json:"campaign_id"`
-	SourceCommit          string           `json:"source_commit"`
-	CorpusDigest          string           `json:"corpus_digest"`
-	CriteriaDigest        string           `json:"criteria_digest"`
-	RequestedTiers        []string         `json:"requested_tiers"`
-	MissingTiers          []TierLimitation `json:"missing_tiers"`
-	Runs                  []PlannedRun     `json:"runs"`
-	Limits                RunLimits        `json:"limits"`
-	AllowedSourceClasses  []string         `json:"allowed_source_classes"`
-	AllowedNetworkDomains []string         `json:"allowed_network_domains"`
-	CredentialRefs        []string         `json:"credential_refs"`
+	SchemaVersion             string           `json:"schema_version"`
+	CampaignID                string           `json:"campaign_id"`
+	SourceCommit              string           `json:"source_commit"`
+	CorpusDigest              string           `json:"corpus_digest"`
+	CriteriaDigest            string           `json:"criteria_digest"`
+	VerifierSourceCommit      string           `json:"verifier_source_commit"`
+	VerificationProfileDigest string           `json:"verification_profile_digest"`
+	RequestedTiers            []string         `json:"requested_tiers"`
+	MissingTiers              []TierLimitation `json:"missing_tiers"`
+	Runs                      []PlannedRun     `json:"runs"`
+	Limits                    RunLimits        `json:"limits"`
+	AllowedSourceClasses      []string         `json:"allowed_source_classes"`
+	AllowedNetworkDomains     []string         `json:"allowed_network_domains"`
+	CredentialRefs            []string         `json:"credential_refs"`
 }
 
 // CampaignManifest is the independent immutable post-run content.
@@ -199,7 +203,7 @@ type CampaignAuthorization struct {
 	MaxTotalCalls                 int               `json:"max_total_calls"`
 	MaxRunSeconds                 int               `json:"max_run_seconds"`
 	MaxCampaignSeconds            int               `json:"max_campaign_seconds"`
-	MaxAPISpendUSD                float64           `json:"max_api_spend_usd"`
+	MaxAPISpendMicroUSD           int64             `json:"max_api_spend_micro_usd"`
 	MaxSubscriptionCalls          int               `json:"max_subscription_calls"`
 	MaxLocalComputeSeconds        float64           `json:"max_local_compute_seconds"`
 	AllowMetered                  bool              `json:"allow_metered"`
@@ -238,11 +242,17 @@ type IndependentVerifier interface {
 	Verify(ctx context.Context, plan CampaignPlan, run PlannedRun, evidence RunEvidence, resolver ArtifactResolver) (VerifiedOutcome, error)
 }
 
-// operatorAuthority verifies that the authorization artifact was issued through
-// protected operator authority (M5-R4). It is deliberately unexported and the
-// only production value is denyAuthority: no live authorization exists yet.
-type operatorAuthority interface {
-	VerifyAuthorization(ctx context.Context, planDigest, authorizationDigest string, authorization []byte) error
+// AuthorityWindow defines the validity window of a verified authorization grant
+// (WP-M5-R3 Amendment 3). Times are UTC; NotAfter is already min(authorization.Expiry, receipt NotAfter).
+type AuthorityWindow struct {
+	IssuedAt time.Time
+	NotAfter time.Time
+}
+
+// OperatorAuthority verifies that the authorization artifact was issued through
+// protected operator authority (WP-M5-R3 Amendment 3, WP-M5-R4).
+type OperatorAuthority interface {
+	VerifyAuthorization(ctx context.Context, planDigest, authorizationDigest string, authorization []byte) (AuthorityWindow, error)
 }
 
 // RunCounts keeps attempted, completed, accepted, failed, blocked, cancelled

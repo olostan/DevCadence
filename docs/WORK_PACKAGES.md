@@ -73,6 +73,25 @@ An EWP has two layers:
 
 Every EWP declares a **Context Manifest** with role/task, revision-pinned contract reference, read-authority envelope distinct from write scope, domains/risk tags, exact normative references, initial evidence handles, deferred references, assumptions, expansion/re-resolution triggers and the endpoint profile/budget. Deterministic mappings complete declared requirements; the Principal validates completeness. A pointer becomes mandatory context only after its exact clause is resolved and admitted. An implementer need not read the milestone ADR set wholesale.
 
+### 2B. Prohibited Conveniences and Negative Security Invariants
+
+To eliminate implementation drift and prevent subtle security, authority, or measurement compromises introduced for developer convenience, every delegated Execution Contract and runtime component MUST adhere to five mandatory negative guardrails:
+
+1. **Zero Ambient Trust:**
+   Implementations MUST NOT discover, infer, or load trust roots, keys, receipts, or verification anchors from caller-provided parameters, untrusted environment variables, or mutable artifact directories. Trust roots and authority verifiers MUST exclusively use protected, pre-configured file paths validated through a protected `FileVerifier` structurally isolated outside caller-controlled and model-reachable write boundaries.
+
+2. **Mathematical Proof of Compliance:**
+   When verifying numerical limits, spending caps, token budgets, or rate boundaries, implementations MUST NOT treat missing, unmeasured, or unknown values as zero or compliant. In the absence of an explicit, verifiable measurement, the state is non-compliant (`unknown ≠ zero` / `unknown ≠ compliant`). A budget or limit is only satisfied by positive mathematical proof of measured values under the cap.
+
+3. **4-Point Cryptographic Identity Binding:**
+   When resolving, admitting, or binding tasks, attempts, or cognitive sessions, implementations MUST NOT rely on an identifier alone (such as `TaskID` or `RunID`). Implementations MUST verify the complete 4-point cryptographic identity tuple: `(ID, TaskDigest, BaseCommit, ProducerActorID)`. Disagreement across any component of the tuple invalidates the binding and MUST fail closed.
+
+4. **Pinned Identity Immutability:**
+   Endpoint, model, and provider identities pre-bound during policy resolution and authority checks MUST remain strictly immutable throughout the execution lifecycle. Per-request overrides, client-side options, or runtime parameters MUST NOT diverge from, replace, or loosen the pre-bound endpoint or model identity.
+
+5. **Sandboxing vs Process Runner:**
+   Controlled process execution (e.g. `process.Runner` with fixed argv arrays and environment filtering) provides execution control, NOT OS-level sandboxing or kernel-level security isolation. Implementations MUST NOT claim sandboxed isolation without real OS-level containment (e.g. Linux namespaces/seccomp, macOS sandbox-exec/Seatbelt). Unconfined host process execution MUST be explicitly disclosed and reported as a typed limitation (e.g. `LimitationUnconfinedHostProcess = "unconfined_host_process"`).
+
 ### Implementation Readiness / Contract Completeness Gate
 
 A substantial EWP MUST be reviewed for implementation readiness before code is delegated. The Principal owns semantic closure.

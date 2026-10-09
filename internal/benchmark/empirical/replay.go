@@ -31,6 +31,7 @@ type VerifierIdentity struct {
 // pure data; writing m5-m4-empirical-report files belongs to the live campaign.
 type Report struct {
 	Provenance        string                     `json:"provenance"`
+	ExecutionMode     string                     `json:"execution_mode,omitempty"`
 	CampaignID        string                     `json:"campaign_id"`
 	PlanDigest        string                     `json:"plan_digest"`
 	SourceCommit      string                     `json:"source_commit"`

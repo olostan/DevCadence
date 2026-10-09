@@ -1,0 +1,255 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/olostan/DevCadence/schemas/empirical-session.schema.json",
+  "title": "DevCadence EmpiricalSession",
+  "description": "Durable session evidence recording live endpoint, configuration, digests, timestamps, driver outcome, turns, usage, and unprovable limits for an empirical campaign run (WP-M5-R3 Part B).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "run_id",
+    "campaign_id",
+    "attempt_id",
+    "task_digest",
+    "endpoint",
+    "prompt_digest",
+    "context_manifest_digest",
+    "invocation_provenance_digest",
+    "execution_policy_digest",
+    "authorization_digest",
+    "started_at",
+    "finished_at",
+    "driver_outcome",
+    "turns",
+    "usage"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S"
+    },
+    "campaign_id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S"
+    },
+    "attempt_id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S"
+    },
+    "task_digest": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "endpoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "endpoint_id",
+        "driver_id",
+        "model_id",
+        "model_revision",
+        "channel_id",
+        "capability_class",
+        "runtime_version",
+        "context_profile_digest",
+        "policy_digest",
+        "subscription_quota_unit"
+      ],
+      "properties": {
+        "endpoint_id": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "driver_id": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "model_id": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "model_revision": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "channel_id": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "capability_class": {
+          "enum": [
+            "frontier_api",
+            "subscription_cli",
+            "local_small"
+          ]
+        },
+        "runtime_version": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "context_profile_digest": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        },
+        "policy_digest": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        },
+        "subscription_quota_unit": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        }
+      }
+    },
+    "prompt_digest": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "context_manifest_digest": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "invocation_provenance_digest": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "execution_policy_digest": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "authorization_digest": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "started_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "finished_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "driver_outcome": {
+      "enum": [
+        "completed",
+        "error",
+        "cancelled",
+        "limit_reached"
+      ]
+    },
+    "turns": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "usage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "cumulative_input_tokens",
+        "cached_input_tokens",
+        "output_tokens",
+        "resident_peak_tokens",
+        "api_spend_usd",
+        "subscription_quota",
+        "local_compute_seconds",
+        "wall_seconds",
+        "repair_rounds",
+        "principal_reentries"
+      ],
+      "properties": {
+        "cumulative_input_tokens": {
+          "$ref": "#/$defs/measurement"
+        },
+        "cached_input_tokens": {
+          "$ref": "#/$defs/measurement"
+        },
+        "output_tokens": {
+          "$ref": "#/$defs/measurement"
+        },
+        "resident_peak_tokens": {
+          "$ref": "#/$defs/measurement"
+        },
+        "api_spend_usd": {
+          "$ref": "#/$defs/measurement"
+        },
+        "subscription_quota": {
+          "$ref": "#/$defs/measurement"
+        },
+        "local_compute_seconds": {
+          "$ref": "#/$defs/measurement"
+        },
+        "wall_seconds": {
+          "$ref": "#/$defs/measurement"
+        },
+        "repair_rounds": {
+          "$ref": "#/$defs/measurement"
+        },
+        "principal_reentries": {
+          "$ref": "#/$defs/measurement"
+        }
+      }
+    },
+    "unprovable_limits": {
+      "type": "array",
+      "items": {
+        "enum": [
+          "max_cumulative_input_tokens",
+          "max_cumulative_cached_tokens",
+          "max_cumulative_output_tokens",
+          "max_cumulative_total_tokens"
+        ]
+      },
+      "uniqueItems": true
+    }
+  },
+  "$defs": {
+    "measurement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "known",
+        "unit",
+        "provenance",
+        "evidence_ref"
+      ],
+      "properties": {
+        "known": {
+          "type": "boolean"
+        },
+        "value": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "unit": {
+          "type": "string",
+          "minLength": 1
+        },
+        "provenance": {
+          "enum": [
+            "measured",
+            "unknown"
+          ]
+        },
+        "evidence_ref": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}

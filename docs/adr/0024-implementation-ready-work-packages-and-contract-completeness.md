@@ -58,6 +58,16 @@ Each material requirement must be closed through four layers:
 
 A requirement with no unambiguous representation is a design defect, not an implementer problem.
 
+#### Anti-Convenience & Identity Audit Checklist
+
+During the Implementation Readiness Review, every contract MUST be audited against five negative security guardrails to ensure implementations do not substitute architectural invariants with developer conveniences:
+
+- [ ] **1. Zero Ambient Trust:** Trust roots, operator receipts, and verification anchors MUST NOT be discovered from caller-provided parameters, untrusted environment variables, or mutable artifact directories. Implementations MUST exclusively use protected `FileVerifier` roots structurally isolated from caller/worker write access.
+- [ ] **2. Mathematical Proof of Compliance:** When verifying numerical caps (spend, tokens, rate limits, timeouts), missing or unmeasured quantities MUST NOT be treated as zero or compliant. Unknown measurements are strictly non-compliant (`unknown ≠ compliant`); limits require positive mathematical proof of measured values under the cap.
+- [ ] **3. 4-Point Cryptographic Identity Binding:** When resolving, admitting, or binding tasks, attempts, or sessions, implementations MUST verify the complete 4-point cryptographic identity tuple: `(ID, TaskDigest, BaseCommit, ProducerActorID)`. Identity resolution by identifier alone is forbidden.
+- [ ] **4. Pinned Identity Immutability:** Endpoint, model, and provider identities pre-bound during policy resolution and authority checks MUST remain strictly immutable; per-request overrides or client calls MUST NOT diverge from the pre-bound endpoint/model identity.
+- [ ] **5. Sandboxing vs Process Runner:** Controlled process execution (e.g. `process.Runner` with fixed argv arrays) MUST NOT be claimed as container/sandbox isolation without real OS-level containment; unconfined host execution MUST be explicitly reported as a typed limitation (e.g. `LimitationUnconfinedHostProcess = "unconfined_host_process"`).
+
 ### 4. Mandatory contract sections
 
 For substantial EWPs the authoritative Execution Contract includes, as applicable:
