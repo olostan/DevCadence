@@ -57,6 +57,12 @@ func New(opts Options) (*Verifier, error) {
 	if err := os.MkdirAll(opts.ScratchDir, 0700); err != nil {
 		return nil, errs.Wrap(errs.CategoryInternal, err, "verifier: create scratch directory")
 	}
+	// The final scratch directory itself must not be a symlink: verifier
+	// artifacts must not be redirected through a caller-created leaf link.
+	info, err := os.Lstat(opts.ScratchDir)
+	if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+		return nil, errs.New(errs.CategoryPolicyDenied, "verifier: scratch root must be a real directory: %v", err)
+	}
 	return &Verifier{opts: opts}, nil
 }
 
@@ -347,9 +353,11 @@ func (v *Verifier) Verify(
 	var worktreeDir string
 	var revResult *protocol.ReviewResult
 
-	runScratch := filepath.Join(v.opts.ScratchDir, run.RunID)
-	if err := os.MkdirAll(runScratch, 0700); err != nil {
-		return empirical.VerifiedOutcome{}, errs.New(errs.CategoryInternal, "VERIFIER_INFRASTRUCTURE: %v", err)
+	// Use a fresh, privately created directory for each verification.
+	// A predictable reused run_id path could contain attacker-planted log symlinks.
+	runScratch, err := os.MkdirTemp(v.opts.ScratchDir, run.RunID+"-verify-")
+	if err != nil {
+		return empirical.VerifiedOutcome{}, errs.New(errs.CategoryInternal, "VERIFIER_INFRASTRUCTURE: create scratch directory: %v", err)
 	}
 
 	if task.Class == "review" {
@@ -622,7 +630,10 @@ func (v *Verifier) Verify(
 		logBuf.Write(res.Stdout)
 		logBuf.WriteString("\n--- stderr ---\n")
 		logBuf.Write(res.Stderr)
-		_ = os.WriteFile(logPath, logBuf.Bytes(), 0600)
+		if err := writeVerifierArtifact(logPath, logBuf.Bytes()); err != nil {
+			return empirical.VerifiedOutcome{}, errs.New(errs.CategoryInternal,
+				"VERIFIER_INFRASTRUCTURE: cannot write check %q artifact: %v", check.CheckID, err)
+		}
 		verifiedArtifactRefs = append(verifiedArtifactRefs, logPath)
 
 		checkPassed[check.CheckID] = passed
@@ -631,7 +642,10 @@ func (v *Verifier) Verify(
 
 	if task.Class == "review" {
 		revLogPath := filepath.Join(runScratch, "review-verification.log")
-		_ = os.WriteFile(revLogPath, []byte(fmt.Sprintf("review validation verdict: %s\n", qualityVerdict)), 0600)
+		if err := writeVerifierArtifact(revLogPath, []byte(fmt.Sprintf("review validation verdict: %s\n", qualityVerdict))); err != nil {
+			return empirical.VerifiedOutcome{}, errs.New(errs.CategoryInternal,
+				"VERIFIER_INFRASTRUCTURE: cannot write review artifact: %v", err)
+		}
 		verifiedArtifactRefs = append(verifiedArtifactRefs, revLogPath)
 	}
 
@@ -799,4 +813,23 @@ func matchesWriteScope(p string, scopes []string) bool {
 		}
 	}
 	return false
+}
+
+// writeVerifierArtifact fails closed on pre-existing files, including symlinks
+// planted by a subprocess using the verifier's scratch directory.
+func writeVerifierArtifact(path string, content []byte) error {
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+	if err != nil {
+		return err
+	}
+	if _, err := f.Write(content); err != nil {
+		_ = f.Close()
+		_ = os.Remove(path)
+		return err
+	}
+	if err := f.Close(); err != nil {
+		_ = os.Remove(path)
+		return err
+	}
+	return nil
 }
