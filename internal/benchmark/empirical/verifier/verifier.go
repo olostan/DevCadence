@@ -276,6 +276,28 @@ func (v *Verifier) Verify(
 			"profile task base commit %q does not match planned run base commit %q", task.BaseCommit, run.EWP.BaseCommit)
 	}
 
+	// Original verifier receipts are claims. Bind the exact command vector to the
+	// pinned profile before executing any check: matching exit codes alone does
+	// not prove that the original producer ran the approved commands.
+	if len(receipt.CommandArgvArrays) != len(task.Checks) {
+		return empirical.VerifiedOutcome{}, errs.New(errs.CategoryIntegrity,
+			"INCONSISTENT_VERIFICATION: receipt command argv count %d differs from pinned profile %d",
+			len(receipt.CommandArgvArrays), len(task.Checks))
+	}
+	for i, check := range task.Checks {
+		claimed := receipt.CommandArgvArrays[i]
+		if len(claimed) != len(check.Argv) {
+			return empirical.VerifiedOutcome{}, errs.New(errs.CategoryIntegrity,
+				"INCONSISTENT_VERIFICATION: receipt command argv length differs from pinned check %q", check.CheckID)
+		}
+		for j, arg := range check.Argv {
+			if claimed[j] != arg {
+				return empirical.VerifiedOutcome{}, errs.New(errs.CategoryIntegrity,
+					"INCONSISTENT_VERIFICATION: receipt command argv differs from pinned check %q at argument %d", check.CheckID, j)
+			}
+		}
+	}
+
 	expectedRole := protocol.ProvenanceRoleImplementer
 	if task.Class == "review" {
 		expectedRole = protocol.ProvenanceRoleReviewer
