@@ -78,6 +78,15 @@ func (v *Verifier) Verify(
 		return empirical.VerifiedOutcome{}, err
 	}
 
+	// A separate worktree and sanitized environment do not confine arbitrary
+	// candidate process code. Refuse before any profile check is executed unless
+	// the embedding caller explicitly opts into trusted host process execution.
+	// The production replay CLI never opts in.
+	if !v.opts.PermitUnconfinedHostChecks {
+		return empirical.VerifiedOutcome{}, errs.New(errs.CategoryPolicyDenied,
+			"VERIFIER_UNCONFINED_HOST_PROCESS: no OS-isolated check runner is configured; refusing candidate check execution")
+	}
+
 	// 1. Preconditions.
 	if evidence.Status != empirical.StatusCompleted {
 		return empirical.VerifiedOutcome{}, errs.New(errs.CategoryInvalidArgument,
