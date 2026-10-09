@@ -95,6 +95,10 @@ type CommandRunner interface {
 
 // Options configures the IndependentVerifier.
 type Options struct {
+	// PermitUnconfinedHostChecks is only for explicitly trusted/test-owned
+	// candidates. The default denies execution because process.Runner is not
+	// an OS-level filesystem/network sandbox.
+	PermitUnconfinedHostChecks bool
 	Resolver     empirical.ArtifactResolver
 	Worktrees    *worktrees.Manager
 	Repositories execrt.RepositoryProvider
