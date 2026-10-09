@@ -1842,3 +1842,47 @@ func TestCLIReplayEmpirical_YoloConsentIsInvocationScoped(t *testing.T) {
 		t.Fatalf("unsafe consent leaked across invocations: %v", decisions)
 	}
 }
+
+
+func TestCLIReplayEmpirical_ProjectYOLOConfiguration(t *testing.T) {
+	c := newCLI(t)
+	f := newEmpiricalFixture()
+	mPath, pPath, aPath, artDir, cPath := setupEmpiricalFiles(t, f)
+	repoDir := t.TempDir()
+	if err := exec.Command("git", "init", repoDir).Run(); err != nil {
+		t.Fatal(err)
+	}
+	configDir := filepath.Join(repoDir, ".devcadence")
+	if err := os.MkdirAll(configDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	configFile := filepath.Join(configDir, "benchmark.json")
+	if err := os.WriteFile(configFile, []byte(`{"execution_mode":"yolo","allow_unconfined_verifier":true}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	original := newIndependentVerifier
+	defer func() { newIndependentVerifier = original }()
+	var consent []bool
+	newIndependentVerifier = func(ctx context.Context, e *env, resolver empirical.ArtifactResolver, root string) (empirical.IndependentVerifier, error) {
+		consent = append(consent, ctx.Value(verifierExecutionConsentKey{}) == true)
+		return &testCountingVerifier{}, nil
+	}
+	base := []string{"benchmark", "replay-empirical", "--repo", repoDir,
+		"--manifest", mPath, "--plan", pPath, "--authorization", aPath,
+		"--artifacts", artDir, "--criteria", cPath}
+	for _, flags := range [][]string{nil, {"--execution-mode", "strict"}} {
+		_, _, err := c.run(append(append([]string{}, base...), flags...)...)
+		if err != nil {
+			t.Fatalf("configured replay flags %v: %v", flags, err)
+		}
+	}
+	if len(consent) != 2 || !consent[0] || consent[1] {
+		t.Fatalf("project yolo should be enabled and explicit strict override should disable it: %v", consent)
+	}
+	if err := os.WriteFile(configFile, []byte(`{"execution_mode":"yolo","allow_unconfined_verifier":false}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := c.run(base...); err == nil {
+		t.Fatal("project yolo without explicit consent must be refused")
+	}
+}
