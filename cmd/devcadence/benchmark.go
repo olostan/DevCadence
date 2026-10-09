@@ -696,6 +696,7 @@ func runBenchmarkReplayEmpirical(ctx context.Context, e *env, args []string) err
 	if err != nil {
 		return err
 	}
+	rep.ExecutionMode = *executionMode
 
 	// 10. Write gate report to --output (formatted or JSON).
 	var outputContent string
