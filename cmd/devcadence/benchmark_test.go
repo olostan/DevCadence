@@ -882,7 +882,7 @@ func TestCLIBenchmarkReplayEmpirical_AdmissionRefused_Expired_Exit3(t *testing.T
 
 	// Save and restore newIndependentVerifier seam
 	origVerifier := newIndependentVerifier
-	newIndependentVerifier = func(ctx context.Context, e *env, resolver empirical.ArtifactResolver) (empirical.IndependentVerifier, error) {
+	newIndependentVerifier = func(ctx context.Context, e *env, resolver empirical.ArtifactResolver, repoDir string) (empirical.IndependentVerifier, error) {
 		return &testCountingVerifier{}, nil
 	}
 	defer func() { newIndependentVerifier = origVerifier }()
@@ -911,7 +911,7 @@ func TestCLIBenchmarkReplayEmpirical_Pass_Exit0(t *testing.T) {
 
 	origVerifier := newIndependentVerifier
 	cv := &testCountingVerifier{}
-	newIndependentVerifier = func(ctx context.Context, e *env, resolver empirical.ArtifactResolver) (empirical.IndependentVerifier, error) {
+	newIndependentVerifier = func(ctx context.Context, e *env, resolver empirical.ArtifactResolver, repoDir string) (empirical.IndependentVerifier, error) {
 		return cv, nil
 	}
 	defer func() { newIndependentVerifier = origVerifier }()
@@ -998,7 +998,7 @@ func TestCLIBenchmarkReplayEmpirical_Fail_Exit1(t *testing.T) {
 	mPath, pPath, aPath, artDir, cPath := setupEmpiricalFiles(t, f)
 
 	origVerifier := newIndependentVerifier
-	newIndependentVerifier = func(ctx context.Context, e *env, resolver empirical.ArtifactResolver) (empirical.IndependentVerifier, error) {
+	newIndependentVerifier = func(ctx context.Context, e *env, resolver empirical.ArtifactResolver, repoDir string) (empirical.IndependentVerifier, error) {
 		return &testCountingVerifier{}, nil
 	}
 	defer func() { newIndependentVerifier = origVerifier }()
@@ -1028,7 +1028,7 @@ func TestCLIBenchmarkReplayEmpirical_Indeterminate_Exit2(t *testing.T) {
 	mPath, pPath, aPath, artDir, cPath := setupEmpiricalFiles(t, f)
 
 	origVerifier := newIndependentVerifier
-	newIndependentVerifier = func(ctx context.Context, e *env, resolver empirical.ArtifactResolver) (empirical.IndependentVerifier, error) {
+	newIndependentVerifier = func(ctx context.Context, e *env, resolver empirical.ArtifactResolver, repoDir string) (empirical.IndependentVerifier, error) {
 		return &testCountingVerifier{}, nil
 	}
 	defer func() { newIndependentVerifier = origVerifier }()
@@ -1352,7 +1352,7 @@ func TestCLIBenchmarkReplayEmpirical_MoreCases(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	origVerifier := newIndependentVerifier
-	newIndependentVerifier = func(ctx context.Context, e *env, resolver empirical.ArtifactResolver) (empirical.IndependentVerifier, error) {
+	newIndependentVerifier = func(ctx context.Context, e *env, resolver empirical.ArtifactResolver, repoDir string) (empirical.IndependentVerifier, error) {
 		return &testCountingVerifier{}, nil
 	}
 	defer func() { newIndependentVerifier = origVerifier }()
@@ -1539,7 +1539,7 @@ func TestCLIBenchmarkReplayEmpirical_MoreCases(t *testing.T) {
 	}
 
 	// 12. newIndependentVerifier returns error
-	newIndependentVerifier = func(ctx context.Context, e *env, resolver empirical.ArtifactResolver) (empirical.IndependentVerifier, error) {
+	newIndependentVerifier = func(ctx context.Context, e *env, resolver empirical.ArtifactResolver, repoDir string) (empirical.IndependentVerifier, error) {
 		return nil, errors.New("simulated verifier creation error")
 	}
 	_, _, err = c.run("benchmark", "replay-empirical",
@@ -1551,7 +1551,7 @@ func TestCLIBenchmarkReplayEmpirical_MoreCases(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error when independent verifier fails to instantiate")
 	}
-	newIndependentVerifier = func(ctx context.Context, e *env, resolver empirical.ArtifactResolver) (empirical.IndependentVerifier, error) {
+	newIndependentVerifier = func(ctx context.Context, e *env, resolver empirical.ArtifactResolver, repoDir string) (empirical.IndependentVerifier, error) {
 		return &testCountingVerifier{}, nil
 	}
 
@@ -1679,7 +1679,9 @@ func TestCLIReplayEmpirical_ValidRepoRootAccepted(t *testing.T) {
 	}
 
 	origVerifier := newIndependentVerifier
-	newIndependentVerifier = func(ctx context.Context, e *env, resolver empirical.ArtifactResolver) (empirical.IndependentVerifier, error) {
+	var repoRootsSeen []string
+	newIndependentVerifier = func(ctx context.Context, e *env, resolver empirical.ArtifactResolver, repoDir string) (empirical.IndependentVerifier, error) {
+		repoRootsSeen = append(repoRootsSeen, repoDir)
 		return &testCountingVerifier{}, nil
 	}
 	defer func() { newIndependentVerifier = origVerifier }()
@@ -1696,6 +1698,24 @@ func TestCLIReplayEmpirical_ValidRepoRootAccepted(t *testing.T) {
 	}
 	if !strings.Contains(stdout, "**Empirical Conclusion:** GO") {
 		t.Errorf("expected GO conclusion in stdout, got: %s", stdout)
+	}
+
+	if len(repoRootsSeen) != 1 || repoRootsSeen[0] != repoDir {
+		t.Fatalf("expected explicit repository %q, observed %v", repoDir, repoRootsSeen)
+	}
+
+	// An independent replay must not inherit --repo from an earlier invocation.
+	_, stderr, err = c.run("benchmark", "replay-empirical",
+		"--manifest", mPath,
+		"--plan", pPath,
+		"--authorization", aPath,
+		"--artifacts", artDir,
+		"--criteria", cPath)
+	if err != nil {
+		t.Fatalf("expected independent replay to work: %v, stderr: %s", err, stderr)
+	}
+	if len(repoRootsSeen) != 2 || repoRootsSeen[1] != "." {
+		t.Fatalf("repository selection leaked across replays: %v", repoRootsSeen)
 	}
 }
 
@@ -1762,7 +1782,7 @@ func TestLoadOperatorVerifier_RevocationHonored(t *testing.T) {
 }
 
 func TestDefaultNewIndependentVerifier(t *testing.T) {
-	v, err := defaultNewIndependentVerifier(context.Background(), &env{}, nil)
+	v, err := defaultNewIndependentVerifier(context.Background(), &env{}, nil, ".")
 	if err != nil {
 		t.Fatalf("unexpected error creating independent verifier: %v", err)
 	}
