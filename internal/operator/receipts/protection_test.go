@@ -133,7 +133,22 @@ func TestCheckPathProtection_EUIDZero(t *testing.T) {
 	}
 }
 
+// requireNonRoot skips tests that assert the production refusal to run as
+// root. Under CI the test fails instead of skipping, so the security checks
+// can never be silently disabled in the supported (non-root) environment.
+func requireNonRoot(t *testing.T) {
+	t.Helper()
+	if os.Geteuid() != 0 {
+		return
+	}
+	if os.Getenv("CI") != "" {
+		t.Fatal("receipt protection tests must run as a non-root user in CI")
+	}
+	t.Skip("requires non-root execution: receipts refuse protected path checks as root")
+}
+
 func TestCheckPathProtection_AncestorWalk(t *testing.T) {
+	requireNonRoot(t)
 	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
 		t.Skip("skipping POSIX protection tests on non-POSIX")
 	}
