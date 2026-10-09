@@ -6,6 +6,16 @@ This roadmap turns the architecture into a sequence of falsifiable milestones. E
 
 The project should not proceed merely because code exists. Each milestone proves a capability needed by the next.
 
+## Immediate priority: SELF_HOST_ALPHA before optimization (2026-10-09)
+
+The next actionable product gate is **DevCadence implementing a bounded change to DevCadence itself**, through an actual model, its native executor, validation/review and Antigravity semantic host. See [WP-M5-SH1](work-packages/wp-m5-sh1-self-host-alpha-ewp.md). This gate supersedes the *implementation order* implied by the linear milestone chart, but does not retroactively claim M4 or M5 complete.
+
+**Required before first dogfood:** SH1-1 provider/executor runtime composition; SH1-2 real bounded code editing; SH1-3 deterministic validation, truthful review and manual acceptance hand-off; SH1-4 disposable project proof followed by one bounded DevCadence self-change. A single trusted local Ollama endpoint and one Antigravity host are enough. Use an explicit project-scoped YOLO option if the owner accepts unconfined local execution; do not require a general-purpose sandbox for this alpha gate. Maintain separate spending, provenance, repository-integrity and human-integration controls.
+
+**Deferred beyond SELF_HOST_ALPHA, not deleted:** R3-C empirical campaign runner, R3-D corpus, the real multi-tier M4 re-evaluation, extensive endpoint benchmarking, broad M6 capability-pack/project-adoption coverage, M7 multi-review automation, M8 health analytics, M9 learning and M10 autonomy. These remain mandatory when claiming their corresponding broader milestone or empirical validation, but cannot block the first working coding loop unless a demonstrated alpha acceptance scenario requires them.
+
+Milestone names should be interpreted as **two independent gates**: `SELF_HOST_ALPHA` (functional working loop; may be explicitly unsafe and manually integrated) and `EMPIRICAL_VALIDATED` (measured quality/resource superiority across actual endpoints). Neither synthetic evidence nor a YOLO alpha run alone proves the latter. Any future design expansion proposed before SELF_HOST_ALPHA must identify the exact failing alpha acceptance scenario that justifies delaying dogfood.
+
 ## Milestone map
 
 ```mermaid
@@ -718,7 +728,7 @@ dependency.
 - Day-0 persistence operations for product decisions, requirements and
   readiness.
 
-- **M4 real-evidence re-evaluation** (carried over from M4 closure): run a bounded real-endpoint campaign through the M4 gate with provenance `empirical_campaign` and revise policy per the M4 status section if it does not hold.
+- **M4 real-evidence re-evaluation** (carried over from M4 closure; **post-SELF_HOST_ALPHA**, still required for the full M5 / empirical-validation gate): run a bounded real-endpoint campaign through the M4 gate with provenance `empirical_campaign` and revise policy per the M4 status section if it does not hold.
   - *Status:* only the pure offline admission contract (`internal/benchmark/empirical`, [WP-M5-5 implementation record](work-packages/wp-m5-5-empirical-campaign-ewp.md#implementation-record)) exists; it cannot admit evidence in production until protected operator receipts and an independent verifier exist. No real campaign has run, and **M5 is not complete** until the follow-on runtime window (M5-R1..R4) is accepted and the live re-evaluation is run.
 
 ### Verification

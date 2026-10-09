@@ -7,6 +7,20 @@
 - Status: **IN PROGRESS / RECONCILED**. Delivered in PR #85: R4-A, R1-A/B/C, R2-A/B, R3-0. Delivered in PR #86: R3-A (loopback provider composition) and R3-B (independent empirical verifier, authority adapter, admission wiring, CLI replay). R2-C remains pending OWNER INPUT-3, and R4-B remains pending OWNER INPUT-1. R3-C and R3-D remain the open scope of R3.
 - Source of scope: the "Required follow-on window" of [window F](window-2026-10-f-overview.md#required-follow-on-window-explicit-scope-cards-not-implementation-authority) and the blocked items in the Implementation records of [WP-M5-3](wp-m5-3-discovery-ewp.md), [WP-M5-4](wp-m5-4-host-integration-ewp.md) and [WP-M5-5](wp-m5-5-empirical-campaign-ewp.md). M4's synthetic caveat and the mandatory real re-evaluation remain binding ([IMPLEMENTATION_PLAN M5](../IMPLEMENTATION_PLAN.md#m5--semantic-principal-integration-and-host-portability)).
 
+## Priority overlay — SELF_HOST_ALPHA (owner decision 2026-10-09)
+
+This original window remains the dependency/contract reference for M5-R1..R4, **not** a requirement to finish all of empirical M5 before DevCadence can code. The execution priority is now [WP-M5-SH1](wp-m5-sh1-self-host-alpha-ewp.md): one real Ollama-backed coding loop, bounded edits, local validation, truthful reviewer or manual-review fallback, Antigravity host path, then one DevCadence self-change. This is an additive owner-approved **sequencing revision**, not retroactive completion of this window's draft/freeze gates.
+
+| Priority | Work | Alpha gate |
+| --- | --- | --- |
+| P0 | R1 executor and bounded editing (R1-D) + R3-A loopback composition | real model creates commit |
+| P0 | R2 independent review/repair or explicit manual-only limitation; R4 local approval hand-off | candidate tested and awaits human integration |
+| P0 | Antigravity semantic MCP dogfood on fixture then DevCadence | SELF_HOST_ALPHA evidence |
+| P1 (post-alpha) | R3-B empirical verifier hardening, R3-C runner, R3-D profiles/corpus, real M4 benchmark rerun | EMPIRICAL_VALIDATED, not alpha |
+| P2 | broader host portability, automated integration, M6 capability-pack breadth, advanced reviews/analytics | product maturity |
+
+Experimental project-level YOLO may explicitly permit unconfined local subprocesses without a sandbox, **only with a visible unsafe label and without bypassing spend, model identity, artifact integrity or manual merge**. Default strict policies remain unchanged. Never interpret this as a production security guarantee.
+
 ## Objective and decomposition
 
 Window F delivered the semantic boundary with every runtime absent by design. This window specifies the runtime that fills it, without delegating unresolved architecture: a native task executor, an independent review executor with an enforceable acceptance gate, an empirical verifier with provider composition, and the protected operator ingress that three merged-but-denied features wait on.
