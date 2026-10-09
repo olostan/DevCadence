@@ -4,8 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"flag"
-	"io"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -271,8 +271,8 @@ func provenanceKind(p *gate.EvidenceProvenance) string {
 // Project benchmark preferences are local, explicit and never grant operator
 // authority or relax evidence/identity/spending requirements.
 type projectBenchmarkPreferences struct {
-	ExecutionMode string `json:"execution_mode"`
-	AllowUnconfinedVerifier bool `json:"allow_unconfined_verifier"`
+	ExecutionMode           string `json:"execution_mode"`
+	AllowUnconfinedVerifier bool   `json:"allow_unconfined_verifier"`
 }
 
 func loadProjectBenchmarkPreferences(root string) (projectBenchmarkPreferences, error) {
@@ -340,14 +340,14 @@ var defaultNewIndependentVerifier = func(ctx context.Context, e *env, resolver e
 	repoProvider := execrt.NewSingleRepositoryProvider(repo)
 
 	opts := verifier.Options{
-		Resolver:     resolver,
-		Worktrees:    wtMgr,
-		Repositories: repoProvider,
-		Runner:       process.NewRunner(),
-		BuildInfo:    verifier.DefaultBuildInfoSource(),
-		Clock:        clock.System(),
-		IDs:          ids.NewULIDSource(),
-		ScratchDir:   filepath.Join(e.homeDir(), "verifier-scratch"),
+		Resolver:                   resolver,
+		Worktrees:                  wtMgr,
+		Repositories:               repoProvider,
+		Runner:                     process.NewRunner(),
+		BuildInfo:                  verifier.DefaultBuildInfoSource(),
+		Clock:                      clock.System(),
+		IDs:                        ids.NewULIDSource(),
+		ScratchDir:                 filepath.Join(e.homeDir(), "verifier-scratch"),
 		PermitUnconfinedHostChecks: ctx.Value(verifierExecutionConsentKey{}) == true,
 	}
 	return verifier.New(opts)

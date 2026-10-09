@@ -1791,7 +1791,6 @@ func TestDefaultNewIndependentVerifier(t *testing.T) {
 	}
 }
 
-
 func TestCLIReplayEmpirical_YoloRequiresExplicitConsent(t *testing.T) {
 	c := newCLI(t)
 	f := newEmpiricalFixture()
@@ -1800,7 +1799,7 @@ func TestCLIReplayEmpirical_YoloRequiresExplicitConsent(t *testing.T) {
 		"--manifest", mPath, "--plan", pPath, "--authorization", aPath,
 		"--artifacts", artDir, "--criteria", cPath}
 	for _, tc := range []struct {
-		name string
+		name  string
 		extra []string
 	}{
 		{name: "yolo without consent", extra: []string{"--execution-mode", "yolo"}},
@@ -1842,7 +1841,6 @@ func TestCLIReplayEmpirical_YoloConsentIsInvocationScoped(t *testing.T) {
 		t.Fatalf("unsafe consent leaked across invocations: %v", decisions)
 	}
 }
-
 
 func TestCLIReplayEmpirical_ProjectYOLOConfiguration(t *testing.T) {
 	c := newCLI(t)

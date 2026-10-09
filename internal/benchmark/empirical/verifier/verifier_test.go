@@ -444,12 +444,12 @@ func TestVerifier_BuildInfoChecks(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			v, err := verifier.New(verifier.Options{
-		PermitUnconfinedHostChecks: true,
-				Worktrees:    wtManager,
-				Repositories: repoProvider,
-				BuildInfo:    tc.bSource,
-				ScratchDir:   scratchDir,
-				Profile:      &profile,
+				PermitUnconfinedHostChecks: true,
+				Worktrees:                  wtManager,
+				Repositories:               repoProvider,
+				BuildInfo:                  tc.bSource,
+				ScratchDir:                 scratchDir,
+				Profile:                    &profile,
 			})
 			if err != nil {
 				t.Fatalf("New failed: %v", err)
@@ -558,12 +558,12 @@ func TestVerifier_ActorIndependenceCheck(t *testing.T) {
 		evidence.VerifierReceiptDigest = protocol.DigestBytes(rcptBytes)
 
 		v, err := verifier.New(verifier.Options{
-		PermitUnconfinedHostChecks: true,
-			Worktrees:    wtManager,
-			Repositories: repoProvider,
-			BuildInfo:    bSource,
-			ScratchDir:   scratchDir,
-			Profile:      &profile,
+			PermitUnconfinedHostChecks: true,
+			Worktrees:                  wtManager,
+			Repositories:               repoProvider,
+			BuildInfo:                  bSource,
+			ScratchDir:                 scratchDir,
+			Profile:                    &profile,
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -609,12 +609,12 @@ func TestVerifier_ActorIndependenceCheck(t *testing.T) {
 		evidence.VerifierReceiptDigest = protocol.DigestBytes(rcptBytes)
 
 		v, err := verifier.New(verifier.Options{
-		PermitUnconfinedHostChecks: true,
-			Worktrees:    wtManager,
-			Repositories: repoProvider,
-			BuildInfo:    bSource,
-			ScratchDir:   scratchDir,
-			Profile:      &profile,
+			PermitUnconfinedHostChecks: true,
+			Worktrees:                  wtManager,
+			Repositories:               repoProvider,
+			BuildInfo:                  bSource,
+			ScratchDir:                 scratchDir,
+			Profile:                    &profile,
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -689,14 +689,14 @@ func TestVerifier_ReviewTaskExecution(t *testing.T) {
 		)
 
 		v, err := verifier.New(verifier.Options{
-		PermitUnconfinedHostChecks: true,
-			Worktrees:    wtManager,
-			Repositories: repoProvider,
-			BuildInfo:    bSource,
-			ScratchDir:   scratchDir,
-			Profile:      &profile,
-			Clock:        clk,
-			IDs:          idGen,
+			PermitUnconfinedHostChecks: true,
+			Worktrees:                  wtManager,
+			Repositories:               repoProvider,
+			BuildInfo:                  bSource,
+			ScratchDir:                 scratchDir,
+			Profile:                    &profile,
+			Clock:                      clk,
+			IDs:                        idGen,
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -753,14 +753,14 @@ func TestVerifier_ReviewTaskExecution(t *testing.T) {
 		evidence.VerifierReceiptDigest = protocol.DigestBytes(rcptBytes)
 
 		v, err := verifier.New(verifier.Options{
-		PermitUnconfinedHostChecks: true,
-			Worktrees:    wtManager,
-			Repositories: repoProvider,
-			BuildInfo:    bSource,
-			ScratchDir:   scratchDir,
-			Profile:      &profile,
-			Clock:        clk,
-			IDs:          idGen,
+			PermitUnconfinedHostChecks: true,
+			Worktrees:                  wtManager,
+			Repositories:               repoProvider,
+			BuildInfo:                  bSource,
+			ScratchDir:                 scratchDir,
+			Profile:                    &profile,
+			Clock:                      clk,
+			IDs:                        idGen,
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -798,14 +798,14 @@ func TestVerifier_ReviewTaskExecution(t *testing.T) {
 		evidence.Accepted = false
 
 		v, err := verifier.New(verifier.Options{
-		PermitUnconfinedHostChecks: true,
-			Worktrees:    wtManager,
-			Repositories: repoProvider,
-			BuildInfo:    bSource,
-			ScratchDir:   scratchDir,
-			Profile:      &profile,
-			Clock:        clk,
-			IDs:          idGen,
+			PermitUnconfinedHostChecks: true,
+			Worktrees:                  wtManager,
+			Repositories:               repoProvider,
+			BuildInfo:                  bSource,
+			ScratchDir:                 scratchDir,
+			Profile:                    &profile,
+			Clock:                      clk,
+			IDs:                        idGen,
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -878,14 +878,14 @@ func TestVerifier_ImplementationTaskExecution(t *testing.T) {
 		)
 
 		v, err := verifier.New(verifier.Options{
-		PermitUnconfinedHostChecks: true,
-			Worktrees:    wtManager,
-			Repositories: repoProvider,
-			BuildInfo:    bSource,
-			ScratchDir:   scratchDir,
-			Profile:      &profile,
-			Clock:        clk,
-			IDs:          idGen,
+			PermitUnconfinedHostChecks: true,
+			Worktrees:                  wtManager,
+			Repositories:               repoProvider,
+			BuildInfo:                  bSource,
+			ScratchDir:                 scratchDir,
+			Profile:                    &profile,
+			Clock:                      clk,
+			IDs:                        idGen,
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -914,14 +914,14 @@ func TestVerifier_ImplementationTaskExecution(t *testing.T) {
 		)
 
 		v, err := verifier.New(verifier.Options{
-		PermitUnconfinedHostChecks: true,
-			Worktrees:    wtManager,
-			Repositories: repoProvider,
-			BuildInfo:    bSource,
-			ScratchDir:   scratchDir,
-			Profile:      &profile,
-			Clock:        clk,
-			IDs:          idGen,
+			PermitUnconfinedHostChecks: true,
+			Worktrees:                  wtManager,
+			Repositories:               repoProvider,
+			BuildInfo:                  bSource,
+			ScratchDir:                 scratchDir,
+			Profile:                    &profile,
+			Clock:                      clk,
+			IDs:                        idGen,
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -944,14 +944,14 @@ func TestVerifier_ImplementationTaskExecution(t *testing.T) {
 		)
 
 		v, err := verifier.New(verifier.Options{
-		PermitUnconfinedHostChecks: true,
-			Worktrees:    wtManager,
-			Repositories: repoProvider,
-			BuildInfo:    bSource,
-			ScratchDir:   scratchDir,
-			Profile:      &profile,
-			Clock:        clk,
-			IDs:          idGen,
+			PermitUnconfinedHostChecks: true,
+			Worktrees:                  wtManager,
+			Repositories:               repoProvider,
+			BuildInfo:                  bSource,
+			ScratchDir:                 scratchDir,
+			Profile:                    &profile,
+			Clock:                      clk,
+			IDs:                        idGen,
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -969,22 +969,22 @@ func TestVerifier_ConstructorOptions(t *testing.T) {
 
 	// Worktrees nil
 	if _, err := verifier.New(verifier.Options{
-		PermitUnconfinedHostChecks: true,Repositories: repoProvider}); err == nil {
+		PermitUnconfinedHostChecks: true, Repositories: repoProvider}); err == nil {
 		t.Errorf("expected error when Worktrees is nil")
 	}
 
 	// Repositories nil
 	if _, err := verifier.New(verifier.Options{
-		PermitUnconfinedHostChecks: true,Worktrees: wtManager}); err == nil {
+		PermitUnconfinedHostChecks: true, Worktrees: wtManager}); err == nil {
 		t.Errorf("expected error when Repositories is nil")
 	}
 
 	// Defaults populated
 	v, err := verifier.New(verifier.Options{
 		PermitUnconfinedHostChecks: true,
-		Worktrees:    wtManager,
-		Repositories: repoProvider,
-		ScratchDir:   "",
+		Worktrees:                  wtManager,
+		Repositories:               repoProvider,
+		ScratchDir:                 "",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error with default options: %v", err)
@@ -1001,9 +1001,9 @@ func TestVerifier_ConstructorOptions(t *testing.T) {
 	badScratch := filepath.Join(filePath, "child")
 	if _, err := verifier.New(verifier.Options{
 		PermitUnconfinedHostChecks: true,
-		Worktrees:    wtManager,
-		Repositories: repoProvider,
-		ScratchDir:   badScratch,
+		Worktrees:                  wtManager,
+		Repositories:               repoProvider,
+		ScratchDir:                 badScratch,
 	}); err == nil {
 		t.Errorf("expected error when ScratchDir cannot be created")
 	}
@@ -1158,11 +1158,11 @@ func TestVerifier_PreconditionErrors(t *testing.T) {
 	bSource := mockBuildInfoSource{rev: sourceCommit, modified: false, ok: true}
 	v, err := verifier.New(verifier.Options{
 		PermitUnconfinedHostChecks: true,
-		Worktrees:    wtManager,
-		Repositories: repoProvider,
-		BuildInfo:    bSource,
-		ScratchDir:   scratchDir,
-		Profile:      &profile,
+		Worktrees:                  wtManager,
+		Repositories:               repoProvider,
+		BuildInfo:                  bSource,
+		ScratchDir:                 scratchDir,
+		Profile:                    &profile,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -1225,11 +1225,11 @@ func TestVerifier_ArtifactResolutionAndValidationErrors(t *testing.T) {
 	// Resolver nil and v.opts.Resolver nil
 	vNoRes, _ := verifier.New(verifier.Options{
 		PermitUnconfinedHostChecks: true,
-		Worktrees:    wtManager,
-		Repositories: repoProvider,
-		BuildInfo:    bSource,
-		ScratchDir:   scratchDir,
-		Profile:      &profile,
+		Worktrees:                  wtManager,
+		Repositories:               repoProvider,
+		BuildInfo:                  bSource,
+		ScratchDir:                 scratchDir,
+		Profile:                    &profile,
 	})
 	if _, err := vNoRes.Verify(ctx, plan, run, evidence, nil); err == nil {
 		t.Errorf("expected error when no resolver provided")
@@ -1238,12 +1238,12 @@ func TestVerifier_ArtifactResolutionAndValidationErrors(t *testing.T) {
 	// Resolver fallback to v.opts.Resolver
 	vWithRes, _ := verifier.New(verifier.Options{
 		PermitUnconfinedHostChecks: true,
-		Worktrees:    wtManager,
-		Repositories: repoProvider,
-		BuildInfo:    bSource,
-		ScratchDir:   scratchDir,
-		Profile:      &profile,
-		Resolver:     resolver,
+		Worktrees:                  wtManager,
+		Repositories:               repoProvider,
+		BuildInfo:                  bSource,
+		ScratchDir:                 scratchDir,
+		Profile:                    &profile,
+		Resolver:                   resolver,
 	})
 	if _, err := vWithRes.Verify(ctx, plan, run, evidence, nil); err != nil {
 		t.Errorf("unexpected error with opts.Resolver fallback: %v", err)
@@ -1251,11 +1251,11 @@ func TestVerifier_ArtifactResolutionAndValidationErrors(t *testing.T) {
 
 	v, _ := verifier.New(verifier.Options{
 		PermitUnconfinedHostChecks: true,
-		Worktrees:    wtManager,
-		Repositories: repoProvider,
-		BuildInfo:    bSource,
-		ScratchDir:   scratchDir,
-		Profile:      &profile,
+		Worktrees:                  wtManager,
+		Repositories:               repoProvider,
+		BuildInfo:                  bSource,
+		ScratchDir:                 scratchDir,
+		Profile:                    &profile,
 	})
 
 	// Missing receipt
@@ -1405,11 +1405,11 @@ func TestVerifier_ReceiptAndSessionCrossCheckErrors(t *testing.T) {
 	bSource := mockBuildInfoSource{rev: sourceCommit, modified: false, ok: true}
 	v, _ := verifier.New(verifier.Options{
 		PermitUnconfinedHostChecks: true,
-		Worktrees:    wtManager,
-		Repositories: repoProvider,
-		BuildInfo:    bSource,
-		ScratchDir:   scratchDir,
-		Profile:      &profile,
+		Worktrees:                  wtManager,
+		Repositories:               repoProvider,
+		BuildInfo:                  bSource,
+		ScratchDir:                 scratchDir,
+		Profile:                    &profile,
 	})
 
 	mutateReceipt := func(mutate func(r *verifier.VerifierReceipt)) (empirical.CampaignPlan, empirical.PlannedRun, empirical.RunEvidence, testArtifactResolver) {
@@ -1567,11 +1567,11 @@ func TestVerifier_ProfileResolutionFromResolver(t *testing.T) {
 
 	v, err := verifier.New(verifier.Options{
 		PermitUnconfinedHostChecks: true,
-		Worktrees:    wtManager,
-		Repositories: repoProvider,
-		BuildInfo:    bSource,
-		ScratchDir:   scratchDir,
-		Profile:      nil, // nil profile triggers artifact fetch
+		Worktrees:                  wtManager,
+		Repositories:               repoProvider,
+		BuildInfo:                  bSource,
+		ScratchDir:                 scratchDir,
+		Profile:                    nil, // nil profile triggers artifact fetch
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -1617,11 +1617,11 @@ func TestVerifier_WorkerProvenanceAndTaskErrors(t *testing.T) {
 	bSource := mockBuildInfoSource{rev: sourceCommit, modified: false, ok: true}
 	v, _ := verifier.New(verifier.Options{
 		PermitUnconfinedHostChecks: true,
-		Worktrees:    wtManager,
-		Repositories: repoProvider,
-		BuildInfo:    bSource,
-		ScratchDir:   scratchDir,
-		Profile:      &profile,
+		Worktrees:                  wtManager,
+		Repositories:               repoProvider,
+		BuildInfo:                  bSource,
+		ScratchDir:                 scratchDir,
+		Profile:                    &profile,
 	})
 
 	mutateProv := func(mutate func(p *protocol.InvocationProvenance)) (empirical.CampaignPlan, empirical.PlannedRun, empirical.RunEvidence, testArtifactResolver) {
@@ -1714,12 +1714,12 @@ func TestVerifier_WorkerProvenanceAndTaskErrors(t *testing.T) {
 		emptyProfile := profile
 		emptyProfile.Tasks = nil
 		vEmpty, _ := verifier.New(verifier.Options{
-		PermitUnconfinedHostChecks: true,
-			Worktrees:    wtManager,
-			Repositories: repoProvider,
-			BuildInfo:    bSource,
-			ScratchDir:   scratchDir,
-			Profile:      &emptyProfile,
+			PermitUnconfinedHostChecks: true,
+			Worktrees:                  wtManager,
+			Repositories:               repoProvider,
+			BuildInfo:                  bSource,
+			ScratchDir:                 scratchDir,
+			Profile:                    &emptyProfile,
 		})
 		if _, err := vEmpty.Verify(ctx, plan, run, evidence, res); err == nil {
 			t.Errorf("expected error when task not found in profile")
@@ -1753,12 +1753,12 @@ func TestVerifier_ExecutionAndCheckFailures(t *testing.T) {
 			},
 		}
 		v, _ := verifier.New(verifier.Options{
-		PermitUnconfinedHostChecks: true,
-			Worktrees:    wtManager,
-			Repositories: repoProvider,
-			BuildInfo:    bSource,
-			ScratchDir:   scratchDir,
-			Profile:      &profile,
+			PermitUnconfinedHostChecks: true,
+			Worktrees:                  wtManager,
+			Repositories:               repoProvider,
+			BuildInfo:                  bSource,
+			ScratchDir:                 scratchDir,
+			Profile:                    &profile,
 		})
 		plan, run, evidence, resolver := helperMakeValidFixtures(
 			t, now, baseCommit, candGoodCommit, sourceCommit, profile, "implementation", empirical.QualityAccepted, []byte("cand"),
@@ -1793,12 +1793,12 @@ func TestVerifier_ExecutionAndCheckFailures(t *testing.T) {
 			},
 		}
 		v, _ := verifier.New(verifier.Options{
-		PermitUnconfinedHostChecks: true,
-			Worktrees:    wtManager,
-			Repositories: repoProvider,
-			BuildInfo:    bSource,
-			ScratchDir:   scratchDir,
-			Profile:      &profile,
+			PermitUnconfinedHostChecks: true,
+			Worktrees:                  wtManager,
+			Repositories:               repoProvider,
+			BuildInfo:                  bSource,
+			ScratchDir:                 scratchDir,
+			Profile:                    &profile,
 		})
 		plan, run, evidence, resolver := helperMakeValidFixtures(
 			t, now, baseCommit, candGoodCommit, sourceCommit, profile, "implementation", empirical.QualityRejected, []byte("cand"),
@@ -1841,12 +1841,12 @@ func TestVerifier_ExecutionAndCheckFailures(t *testing.T) {
 			},
 		}
 		v, _ := verifier.New(verifier.Options{
-		PermitUnconfinedHostChecks: true,
-			Worktrees:    wtManager,
-			Repositories: repoProvider,
-			BuildInfo:    bSource,
-			ScratchDir:   scratchDir,
-			Profile:      &profile,
+			PermitUnconfinedHostChecks: true,
+			Worktrees:                  wtManager,
+			Repositories:               repoProvider,
+			BuildInfo:                  bSource,
+			ScratchDir:                 scratchDir,
+			Profile:                    &profile,
 		})
 		plan, run, evidence, resolver := helperMakeValidFixtures(
 			t, now, baseCommit, candGoodCommit, sourceCommit, profile, "implementation", empirical.QualityAccepted, []byte("cand"),
@@ -1876,12 +1876,12 @@ func TestVerifier_ExecutionAndCheckFailures(t *testing.T) {
 			},
 		}
 		v, _ := verifier.New(verifier.Options{
-		PermitUnconfinedHostChecks: true,
-			Worktrees:    wtManager,
-			Repositories: repoProvider,
-			BuildInfo:    bSource,
-			ScratchDir:   scratchDir,
-			Profile:      &profile,
+			PermitUnconfinedHostChecks: true,
+			Worktrees:                  wtManager,
+			Repositories:               repoProvider,
+			BuildInfo:                  bSource,
+			ScratchDir:                 scratchDir,
+			Profile:                    &profile,
 		})
 		plan, run, evidence, resolver := helperMakeValidFixtures(
 			t, now, baseCommit, candGoodCommit, sourceCommit, profile, "implementation", empirical.QualityAccepted, []byte("cand"),
@@ -1911,12 +1911,12 @@ func TestVerifier_ExecutionAndCheckFailures(t *testing.T) {
 			},
 		}
 		v, _ := verifier.New(verifier.Options{
-		PermitUnconfinedHostChecks: true,
-			Worktrees:    wtManager,
-			Repositories: repoProvider,
-			BuildInfo:    bSource,
-			ScratchDir:   scratchDir,
-			Profile:      &profile,
+			PermitUnconfinedHostChecks: true,
+			Worktrees:                  wtManager,
+			Repositories:               repoProvider,
+			BuildInfo:                  bSource,
+			ScratchDir:                 scratchDir,
+			Profile:                    &profile,
 		})
 		plan, run, evidence, resolver := helperMakeValidFixtures(
 			t, now, baseCommit, "0123456789abcdef0123456789abcdef01234567", sourceCommit, profile, "implementation", empirical.QualityAccepted, []byte("cand"),
@@ -1947,13 +1947,13 @@ func TestVerifier_ExecutionAndCheckFailures(t *testing.T) {
 		}
 		emptyRepoProvider := execrt.NewSingleRepositoryProvider(repo)
 		vNoRepo, _ := verifier.New(verifier.Options{
-		PermitUnconfinedHostChecks: true,
-			Worktrees:    wtManager,
-			Repositories: emptyRepoProvider,
-			BuildInfo:    bSource,
-			ScratchDir:   scratchDir,
-			Profile:      &profile,
-			ProjectID:    "nonexistent-project",
+			PermitUnconfinedHostChecks: true,
+			Worktrees:                  wtManager,
+			Repositories:               emptyRepoProvider,
+			BuildInfo:                  bSource,
+			ScratchDir:                 scratchDir,
+			Profile:                    &profile,
+			ProjectID:                  "nonexistent-project",
 		})
 		plan, run, evidence, resolver := helperMakeValidFixtures(
 			t, now, baseCommit, candGoodCommit, sourceCommit, profile, "implementation", empirical.QualityAccepted, []byte("cand"),
@@ -1993,11 +1993,11 @@ func TestVerifier_DeterministicRerunMismatches(t *testing.T) {
 	bSource := mockBuildInfoSource{rev: sourceCommit, modified: false, ok: true}
 	v, _ := verifier.New(verifier.Options{
 		PermitUnconfinedHostChecks: true,
-		Worktrees:    wtManager,
-		Repositories: repoProvider,
-		BuildInfo:    bSource,
-		ScratchDir:   scratchDir,
-		Profile:      &profile,
+		Worktrees:                  wtManager,
+		Repositories:               repoProvider,
+		BuildInfo:                  bSource,
+		ScratchDir:                 scratchDir,
+		Profile:                    &profile,
 	})
 
 	mutateRcpt := func(mutate func(r *verifier.VerifierReceipt)) (empirical.CampaignPlan, empirical.PlannedRun, empirical.RunEvidence, testArtifactResolver) {
@@ -2152,11 +2152,11 @@ func TestVerifier_WriteScopeMatching(t *testing.T) {
 
 	v, _ := verifier.New(verifier.Options{
 		PermitUnconfinedHostChecks: true,
-		Worktrees:    wtManager,
-		Repositories: repoProvider,
-		BuildInfo:    bSource,
-		ScratchDir:   scratchDir,
-		Profile:      &profile,
+		Worktrees:                  wtManager,
+		Repositories:               repoProvider,
+		BuildInfo:                  bSource,
+		ScratchDir:                 scratchDir,
+		Profile:                    &profile,
 	})
 
 	plan, run, evidence, resolver := helperMakeValidFixtures(
@@ -2209,12 +2209,12 @@ func TestVerifier_GitDiffTreeFailClosed_Error(t *testing.T) {
 
 	v, err := verifier.New(verifier.Options{
 		PermitUnconfinedHostChecks: true,
-		Worktrees:    wtManager,
-		Repositories: repoProvider,
-		BuildInfo:    bSource,
-		ScratchDir:   scratchDir,
-		Profile:      &profile,
-		Runner:       failingRunner,
+		Worktrees:                  wtManager,
+		Repositories:               repoProvider,
+		BuildInfo:                  bSource,
+		ScratchDir:                 scratchDir,
+		Profile:                    &profile,
+		Runner:                     failingRunner,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -2277,12 +2277,12 @@ func TestVerifier_GitDiffTreeFailClosed_NonZeroExit(t *testing.T) {
 
 	v, err := verifier.New(verifier.Options{
 		PermitUnconfinedHostChecks: true,
-		Worktrees:    wtManager,
-		Repositories: repoProvider,
-		BuildInfo:    bSource,
-		ScratchDir:   scratchDir,
-		Profile:      &profile,
-		Runner:       failingRunner,
+		Worktrees:                  wtManager,
+		Repositories:               repoProvider,
+		BuildInfo:                  bSource,
+		ScratchDir:                 scratchDir,
+		Profile:                    &profile,
+		Runner:                     failingRunner,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -2335,11 +2335,11 @@ func TestVerifier_AbbreviatedBaseCommitResolution(t *testing.T) {
 
 	v, err := verifier.New(verifier.Options{
 		PermitUnconfinedHostChecks: true,
-		Worktrees:    wtManager,
-		Repositories: repoProvider,
-		BuildInfo:    bSource,
-		ScratchDir:   scratchDir,
-		Profile:      &profile,
+		Worktrees:                  wtManager,
+		Repositories:               repoProvider,
+		BuildInfo:                  bSource,
+		ScratchDir:                 scratchDir,
+		Profile:                    &profile,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -2385,11 +2385,11 @@ func TestVerifier_UnresolvableBaseCommitFailClosed(t *testing.T) {
 
 	v, err := verifier.New(verifier.Options{
 		PermitUnconfinedHostChecks: true,
-		Worktrees:    wtManager,
-		Repositories: repoProvider,
-		BuildInfo:    bSource,
-		ScratchDir:   scratchDir,
-		Profile:      &profile,
+		Worktrees:                  wtManager,
+		Repositories:               repoProvider,
+		BuildInfo:                  bSource,
+		ScratchDir:                 scratchDir,
+		Profile:                    &profile,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -2437,11 +2437,11 @@ func TestVerifier_CandidateCheckoutModificationDetectedAndRejected(t *testing.T)
 
 	v, err := verifier.New(verifier.Options{
 		PermitUnconfinedHostChecks: true,
-		Worktrees:    wtManager,
-		Repositories: repoProvider,
-		BuildInfo:    bSource,
-		ScratchDir:   scratchDir,
-		Profile:      &profile,
+		Worktrees:                  wtManager,
+		Repositories:               repoProvider,
+		BuildInfo:                  bSource,
+		ScratchDir:                 scratchDir,
+		Profile:                    &profile,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -2489,11 +2489,11 @@ func TestVerifier_ProfileTaskDigestMismatchRejected(t *testing.T) {
 
 	v, err := verifier.New(verifier.Options{
 		PermitUnconfinedHostChecks: true,
-		Worktrees:    wtManager,
-		Repositories: repoProvider,
-		BuildInfo:    bSource,
-		ScratchDir:   scratchDir,
-		Profile:      &profile,
+		Worktrees:                  wtManager,
+		Repositories:               repoProvider,
+		BuildInfo:                  bSource,
+		ScratchDir:                 scratchDir,
+		Profile:                    &profile,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -2567,11 +2567,11 @@ func TestVerifier_BaseCommitMismatchRejected(t *testing.T) {
 
 	v, err := verifier.New(verifier.Options{
 		PermitUnconfinedHostChecks: true,
-		Worktrees:    wtManager,
-		Repositories: repoProvider,
-		BuildInfo:    bSource,
-		ScratchDir:   scratchDir,
-		Profile:      &profile,
+		Worktrees:                  wtManager,
+		Repositories:               repoProvider,
+		BuildInfo:                  bSource,
+		ScratchDir:                 scratchDir,
+		Profile:                    &profile,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -2621,11 +2621,11 @@ func TestVerifier_WorkerRoleMismatchRejected(t *testing.T) {
 
 	v, err := verifier.New(verifier.Options{
 		PermitUnconfinedHostChecks: true,
-		Worktrees:    wtManager,
-		Repositories: repoProvider,
-		BuildInfo:    bSource,
-		ScratchDir:   scratchDir,
-		Profile:      &profile,
+		Worktrees:                  wtManager,
+		Repositories:               repoProvider,
+		BuildInfo:                  bSource,
+		ScratchDir:                 scratchDir,
+		Profile:                    &profile,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -2707,11 +2707,11 @@ func TestVerifier_AttemptIDMismatchRejected(t *testing.T) {
 
 	v, err := verifier.New(verifier.Options{
 		PermitUnconfinedHostChecks: true,
-		Worktrees:    wtManager,
-		Repositories: repoProvider,
-		BuildInfo:    bSource,
-		ScratchDir:   scratchDir,
-		Profile:      &profile,
+		Worktrees:                  wtManager,
+		Repositories:               repoProvider,
+		BuildInfo:                  bSource,
+		ScratchDir:                 scratchDir,
+		Profile:                    &profile,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -2791,12 +2791,12 @@ func TestVerifier_PathTraversalRejected(t *testing.T) {
 		}
 
 		v, err := verifier.New(verifier.Options{
-		PermitUnconfinedHostChecks: true,
-			Worktrees:    wtManager,
-			Repositories: repoProvider,
-			BuildInfo:    bSource,
-			ScratchDir:   scratchDir,
-			Profile:      &profile,
+			PermitUnconfinedHostChecks: true,
+			Worktrees:                  wtManager,
+			Repositories:               repoProvider,
+			BuildInfo:                  bSource,
+			ScratchDir:                 scratchDir,
+			Profile:                    &profile,
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -2839,12 +2839,12 @@ func TestVerifier_PathTraversalRejected(t *testing.T) {
 		}
 
 		v, err := verifier.New(verifier.Options{
-		PermitUnconfinedHostChecks: true,
-			Worktrees:    wtManager,
-			Repositories: repoProvider,
-			BuildInfo:    bSource,
-			ScratchDir:   scratchDir,
-			Profile:      &profile,
+			PermitUnconfinedHostChecks: true,
+			Worktrees:                  wtManager,
+			Repositories:               repoProvider,
+			BuildInfo:                  bSource,
+			ScratchDir:                 scratchDir,
+			Profile:                    &profile,
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -2887,12 +2887,12 @@ func TestVerifier_PathTraversalRejected(t *testing.T) {
 		}
 
 		v, err := verifier.New(verifier.Options{
-		PermitUnconfinedHostChecks: true,
-			Worktrees:    wtManager,
-			Repositories: repoProvider,
-			BuildInfo:    bSource,
-			ScratchDir:   scratchDir,
-			Profile:      &profile,
+			PermitUnconfinedHostChecks: true,
+			Worktrees:                  wtManager,
+			Repositories:               repoProvider,
+			BuildInfo:                  bSource,
+			ScratchDir:                 scratchDir,
+			Profile:                    &profile,
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -2924,9 +2924,9 @@ func TestVerifier_RejectsSymlinkScratchRoot(t *testing.T) {
 	}
 	_, err := verifier.New(verifier.Options{
 		PermitUnconfinedHostChecks: true,
-		Worktrees:    wtManager,
-		Repositories: repoProvider,
-		ScratchDir:   linkedRoot,
+		Worktrees:                  wtManager,
+		Repositories:               repoProvider,
+		ScratchDir:                 linkedRoot,
 	})
 	if errs.CategoryOf(err) != errs.CategoryPolicyDenied {
 		t.Fatalf("expected policy denial for symlink scratch root, got %v", err)
@@ -2969,7 +2969,7 @@ func TestVerifier_RejectsPreplantedLogSymlink(t *testing.T) {
 	}}
 	v, err := verifier.New(verifier.Options{
 		PermitUnconfinedHostChecks: true,
-		Worktrees: wtManager, Repositories: repoProvider, ScratchDir: scratchDir,
+		Worktrees:                  wtManager, Repositories: repoProvider, ScratchDir: scratchDir,
 		Profile: &profile, Runner: runner,
 		BuildInfo: mockBuildInfoSource{rev: "commit-verifier-v1", ok: true},
 	})
@@ -2999,10 +2999,10 @@ func TestVerifier_UnconfinedHostExecutionRefusedByDefault(t *testing.T) {
 	profile := verifier.VerificationProfile{
 		Version: "1.0", ProfileID: "prof-unconfined-denied", Executables: []string{"git"},
 		Tasks: []verifier.TaskVerification{{
-			TaskID: "task-01",
+			TaskID:     "task-01",
 			TaskDigest: "sha256:1111111111111111111111111111111111111111111111111111111111111111",
-			Class: "implementation", BaseCommit: baseCommit, WriteScope: []string{"src/"},
-			Checks: []verifier.CheckSpec{{CheckID: "chk-1", Argv: []string{"git", "status"}, TimeoutSeconds: 10}},
+			Class:      "implementation", BaseCommit: baseCommit, WriteScope: []string{"src/"},
+			Checks:             []verifier.CheckSpec{{CheckID: "chk-1", Argv: []string{"git", "status"}, TimeoutSeconds: 10}},
 			AcceptanceCheckIDs: []string{"chk-1"},
 		}},
 	}
@@ -3016,7 +3016,9 @@ func TestVerifier_UnconfinedHostExecutionRefusedByDefault(t *testing.T) {
 		Worktrees: wtManager, Repositories: repoProvider,
 		ScratchDir: scratchDir, Profile: &profile, Runner: runner,
 	})
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	plan, run, evidence, resolver := helperMakeValidFixtures(
 		t, time.Date(2026, 10, 8, 12, 0, 0, 0, time.UTC),
 		baseCommit, candCommit, "commit-verifier-v1", profile,
@@ -3026,5 +3028,7 @@ func TestVerifier_UnconfinedHostExecutionRefusedByDefault(t *testing.T) {
 		!strings.Contains(err.Error(), "VERIFIER_UNCONFINED_HOST_PROCESS") {
 		t.Fatalf("expected explicit unconfined host refusal, got %v", err)
 	}
-	if calls != 0 { t.Fatalf("unconfined runner was invoked %d times", calls) }
+	if calls != 0 {
+		t.Fatalf("unconfined runner was invoked %d times", calls)
+	}
 }

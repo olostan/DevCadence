@@ -99,16 +99,16 @@ type Options struct {
 	// candidates. The default denies execution because process.Runner is not
 	// an OS-level filesystem/network sandbox.
 	PermitUnconfinedHostChecks bool
-	Resolver     empirical.ArtifactResolver
-	Worktrees    *worktrees.Manager
-	Repositories execrt.RepositoryProvider
-	Runner       CommandRunner
-	BuildInfo    BuildInfoSource
-	Clock        clock.Clock
-	IDs          ids.Source
-	ScratchDir   string
-	Profile      *VerificationProfile
-	ProjectID    string
+	Resolver                   empirical.ArtifactResolver
+	Worktrees                  *worktrees.Manager
+	Repositories               execrt.RepositoryProvider
+	Runner                     CommandRunner
+	BuildInfo                  BuildInfoSource
+	Clock                      clock.Clock
+	IDs                        ids.Source
+	ScratchDir                 string
+	Profile                    *VerificationProfile
+	ProjectID                  string
 }
 
 // VerifierOptions is an alias for Options for ergonomics.
