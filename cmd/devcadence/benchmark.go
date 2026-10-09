@@ -267,6 +267,9 @@ func provenanceKind(p *gate.EvidenceProvenance) string {
 	return p.Kind
 }
 
+// verifierExecutionConsentKey scopes the explicit unsafe opt-in to one CLI invocation.
+type verifierExecutionConsentKey struct{}
+
 // defaultNewIndependentVerifier constructs the production independent verifier (WP-M5-R3 Part B).
 var defaultNewIndependentVerifier = func(ctx context.Context, e *env, resolver empirical.ArtifactResolver, repoDir string) (empirical.IndependentVerifier, error) {
 	worktreeRoot := filepath.Join(e.homeDir(), "worktrees")
@@ -281,6 +284,19 @@ var defaultNewIndependentVerifier = func(ctx context.Context, e *env, resolver e
 	absRepoDir, err := filepath.Abs(repoDir)
 	if err != nil {
 		return nil, errs.Wrap(errs.CategoryInvalidArgument, err, "cannot resolve verifier repository root %q", repoDir)
+	}
+	// Only the implicit cwd default may walk up to the enclosing Git root.
+	// An explicit --repo must designate the actual repository root.
+	if repoDir == "." {
+		for candidate := absRepoDir; ; candidate = filepath.Dir(candidate) {
+			if _, statErr := os.Lstat(filepath.Join(candidate, ".git")); statErr == nil {
+				absRepoDir = candidate
+				break
+			}
+			if parent := filepath.Dir(candidate); parent == candidate {
+				break
+			}
+		}
 	}
 	repo, err := repository.Register(ctx, "devcadence", absRepoDir, repository.Options{})
 	if err != nil {
@@ -297,6 +313,7 @@ var defaultNewIndependentVerifier = func(ctx context.Context, e *env, resolver e
 		Clock:        clock.System(),
 		IDs:          ids.NewULIDSource(),
 		ScratchDir:   filepath.Join(e.homeDir(), "verifier-scratch"),
+		PermitUnconfinedHostChecks: ctx.Value(verifierExecutionConsentKey{}) == true,
 	}
 	return verifier.New(opts)
 }
@@ -508,9 +525,21 @@ func runBenchmarkReplayEmpirical(ctx context.Context, e *env, args []string) err
 	asJSON := fs.Bool("json", false, "emit evaluation report as JSON")
 	operatorDir := fs.String("operator-dir", "", "optional directory containing operator anchors.json")
 	repoPath := fs.String("repo", "", "path to git repository root (optional, defaults to current working directory)")
+	executionMode := fs.String("execution-mode", "strict", "verifier process containment: strict or yolo")
+	allowUnconfined := fs.Bool("allow-unconfined-verifier", false, "explicitly consent to unconfined host execution in yolo mode")
 
 	if err := parseFlags(fs, e, args); err != nil {
 		return err
+	}
+	if *executionMode != "strict" && *executionMode != "yolo" {
+		return errs.New(errs.CategoryInvalidArgument, "invalid --execution-mode %q: use strict or yolo", *executionMode)
+	}
+	if (*executionMode == "yolo") != *allowUnconfined {
+		return errs.New(errs.CategoryPolicyDenied, "yolo execution requires both --execution-mode yolo and --allow-unconfined-verifier; strict rejects unsafe consent")
+	}
+	if *executionMode == "yolo" {
+		ctx = context.WithValue(ctx, verifierExecutionConsentKey{}, true)
+		fmt.Fprintln(e.stderr, "WARNING: YOLO verifier mode runs pinned checks as unconfined host processes; do not use with untrusted candidate code or secrets")
 	}
 
 	if strings.TrimSpace(*manifestPath) == "" {
