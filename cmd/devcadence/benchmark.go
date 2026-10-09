@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"flag"
+	"io"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -267,6 +268,40 @@ func provenanceKind(p *gate.EvidenceProvenance) string {
 	return p.Kind
 }
 
+// Project benchmark preferences are local, explicit and never grant operator
+// authority or relax evidence/identity/spending requirements.
+type projectBenchmarkPreferences struct {
+	ExecutionMode string `json:"execution_mode"`
+	AllowUnconfinedVerifier bool `json:"allow_unconfined_verifier"`
+}
+
+func loadProjectBenchmarkPreferences(root string) (projectBenchmarkPreferences, error) {
+	var p projectBenchmarkPreferences
+	path := filepath.Join(root, ".devcadence", "benchmark.json")
+	data, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return p, nil
+	}
+	if err != nil {
+		return p, errs.Wrap(errs.CategoryInvalidArgument, err, "cannot read project benchmark configuration")
+	}
+	dec := json.NewDecoder(strings.NewReader(string(data)))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&p); err != nil {
+		return p, errs.Wrap(errs.CategoryInvalidArgument, err, "invalid project benchmark configuration")
+	}
+	if err := dec.Decode(new(any)); err != io.EOF {
+		return p, errs.New(errs.CategoryInvalidArgument, "project benchmark configuration has trailing JSON values")
+	}
+	if p.ExecutionMode != "" && p.ExecutionMode != "strict" && p.ExecutionMode != "yolo" {
+		return p, errs.New(errs.CategoryInvalidArgument, "invalid project execution_mode %q", p.ExecutionMode)
+	}
+	if p.AllowUnconfinedVerifier && p.ExecutionMode != "yolo" {
+		return p, errs.New(errs.CategoryPolicyDenied, "project allow_unconfined_verifier requires execution_mode yolo")
+	}
+	return p, nil
+}
+
 // verifierExecutionConsentKey scopes the explicit unsafe opt-in to one CLI invocation.
 type verifierExecutionConsentKey struct{}
 
@@ -525,21 +560,14 @@ func runBenchmarkReplayEmpirical(ctx context.Context, e *env, args []string) err
 	asJSON := fs.Bool("json", false, "emit evaluation report as JSON")
 	operatorDir := fs.String("operator-dir", "", "optional directory containing operator anchors.json")
 	repoPath := fs.String("repo", "", "path to git repository root (optional, defaults to current working directory)")
-	executionMode := fs.String("execution-mode", "strict", "verifier process containment: strict or yolo")
+	executionMode := fs.String("execution-mode", "", "override project verifier execution mode: strict or yolo")
 	allowUnconfined := fs.Bool("allow-unconfined-verifier", false, "explicitly consent to unconfined host execution in yolo mode")
 
 	if err := parseFlags(fs, e, args); err != nil {
 		return err
 	}
-	if *executionMode != "strict" && *executionMode != "yolo" {
+	if *executionMode != "" && *executionMode != "strict" && *executionMode != "yolo" {
 		return errs.New(errs.CategoryInvalidArgument, "invalid --execution-mode %q: use strict or yolo", *executionMode)
-	}
-	if (*executionMode == "yolo") != *allowUnconfined {
-		return errs.New(errs.CategoryPolicyDenied, "yolo execution requires both --execution-mode yolo and --allow-unconfined-verifier; strict rejects unsafe consent")
-	}
-	if *executionMode == "yolo" {
-		ctx = context.WithValue(ctx, verifierExecutionConsentKey{}, true)
-		fmt.Fprintln(e.stderr, "WARNING: YOLO verifier mode runs pinned checks as unconfined host processes; do not use with untrusted candidate code or secrets")
 	}
 
 	if strings.TrimSpace(*manifestPath) == "" {
@@ -623,6 +651,49 @@ func runBenchmarkReplayEmpirical(ctx context.Context, e *env, args []string) err
 		validatedRepoRoot = absRepo
 	}
 
+	// The explicit CLI mode overrides project configuration; a command-line YOLO
+	// override still requires a deliberate CLI consent flag. With no CLI mode,
+	// a locally configured project can authorize unconfined execution once.
+	projectConfigRoot := validatedRepoRoot
+	if validatedRepoRoot == "." {
+		cwd, err := os.Getwd()
+		if err != nil {
+			return errs.Wrap(errs.CategoryInvalidArgument, err, "cannot resolve project configuration directory")
+		}
+		for dir := cwd; ; dir = filepath.Dir(dir) {
+			if _, err := os.Lstat(filepath.Join(dir, ".git")); err == nil {
+				projectConfigRoot = dir
+				break
+			}
+			if filepath.Dir(dir) == dir {
+				projectConfigRoot = cwd
+				break
+			}
+		}
+	}
+	preferences, err := loadProjectBenchmarkPreferences(projectConfigRoot)
+	if err != nil {
+		return err
+	}
+	selectedMode := preferences.ExecutionMode
+	if selectedMode == "" {
+		selectedMode = "strict"
+	}
+	if *executionMode != "" {
+		selectedMode = *executionMode
+	}
+	consented := selectedMode == "yolo" && ((*executionMode == "" && preferences.AllowUnconfinedVerifier) || (*executionMode == "yolo" && *allowUnconfined))
+	if *allowUnconfined && *executionMode != "yolo" {
+		return errs.New(errs.CategoryPolicyDenied, "--allow-unconfined-verifier requires explicit --execution-mode yolo")
+	}
+	if selectedMode == "yolo" && !consented {
+		return errs.New(errs.CategoryPolicyDenied, "yolo requires project benchmark.json consent or both --execution-mode yolo and --allow-unconfined-verifier")
+	}
+	if consented {
+		ctx = context.WithValue(ctx, verifierExecutionConsentKey{}, true)
+		fmt.Fprintln(e.stderr, "WARNING: YOLO verifier mode runs pinned checks as unconfined host processes; do not use with untrusted candidate code or secrets")
+	}
+
 	// 2. Initialize receipt verifier (receipts.NewVerifier / operator store).
 	rcptVerifier, err := loadOperatorVerifier(*operatorDir, *artifactsDir, e.homeDir())
 	if err != nil {
@@ -696,7 +767,7 @@ func runBenchmarkReplayEmpirical(ctx context.Context, e *env, args []string) err
 	if err != nil {
 		return err
 	}
-	rep.ExecutionMode = *executionMode
+	rep.ExecutionMode = selectedMode
 
 	// 10. Write gate report to --output (formatted or JSON).
 	var outputContent string
