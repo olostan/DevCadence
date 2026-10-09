@@ -2890,3 +2890,62 @@ func TestVerifier_RejectsSymlinkScratchRoot(t *testing.T) {
 		t.Fatalf("expected policy denial for symlink scratch root, got %v", err)
 	}
 }
+
+func TestVerifier_RejectsPreplantedLogSymlink(t *testing.T) {
+	ctx := context.Background()
+	_, baseCommit, candCommit, _, wtManager, repoProvider, scratchDir := setupBaseTestDependencies(t)
+	profile := verifier.VerificationProfile{
+		Version:     "1.0",
+		ProfileID:   "prof-log-symlink",
+		Executables: []string{"git"},
+		Tasks: []verifier.TaskVerification{{
+			TaskID:             "task-01",
+			TaskDigest:         "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+			Class:              "implementation",
+			BaseCommit:         baseCommit,
+			WriteScope:         []string{"src/"},
+			Checks:             []verifier.CheckSpec{{CheckID: "chk-log", Argv: []string{"git", "status"}, TimeoutSeconds: 10}},
+			AcceptanceCheckIDs: []string{"chk-log"},
+		}},
+	}
+	outside := filepath.Join(t.TempDir(), "outside.log")
+	intercepted := false
+	runner := mockCommandRunner{runFn: func(ctx context.Context, spec process.Spec) (process.Result, error) {
+		if spec.Executable == "git" && len(spec.Args) == 1 && spec.Args[0] == "status" {
+			for _, env := range spec.Env {
+				if strings.HasPrefix(env, "HOME=") {
+					logPath := filepath.Join(strings.TrimPrefix(env, "HOME="), "check-chk-log.log")
+					if err := os.Symlink(outside, logPath); err != nil {
+						t.Fatalf("plant verifier log symlink: %v", err)
+					}
+					intercepted = true
+					break
+				}
+			}
+		}
+		return process.NewRunner().Run(ctx, spec)
+	}}
+	v, err := verifier.New(verifier.Options{
+		Worktrees: wtManager, Repositories: repoProvider, ScratchDir: scratchDir,
+		Profile: &profile, Runner: runner,
+		BuildInfo: mockBuildInfoSource{rev: "commit-verifier-v1", ok: true},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan, run, evidence, resolver := helperMakeValidFixtures(
+		t, time.Date(2026, 10, 8, 12, 0, 0, 0, time.UTC),
+		baseCommit, candCommit, "commit-verifier-v1", profile,
+		"implementation", empirical.QualityAccepted, []byte("cand"),
+	)
+	_, err = v.Verify(ctx, plan, run, evidence, resolver)
+	if !intercepted {
+		t.Fatal("the profile check did not execute")
+	}
+	if err == nil || !strings.Contains(err.Error(), "cannot write check") {
+		t.Fatalf("expected fail-closed verifier log symlink rejection, got: %v", err)
+	}
+	if _, err := os.Lstat(outside); !os.IsNotExist(err) {
+		t.Fatalf("verifier wrote outside scratch via symlink: %v", err)
+	}
+}
