@@ -15,6 +15,12 @@
   - **Part C**: Campaign runner (protocol steps 1–8 of WP-M5-5; remaining OPEN SCOPE of R3, not frozen, no implementation authority).
   - **Part D**: Live empirical corpus verification profiles and fixture repositories (10 corpus tasks; remaining OPEN SCOPE of R3, not frozen).
 
+## Security limitation and production execution gate (PR #86 follow-up)
+
+The independent verifier's `process.Runner` is **not** an OS sandbox. Worktree status probes and an offline-oriented environment do not prevent candidate code from accessing the network or ambient host files. Production construction therefore defaults to `PermitUnconfinedHostChecks=false`, and `Verifier.Verify` refuses with `VERIFIER_UNCONFINED_HOST_PROCESS` *before* invoking any candidate checks. Unit tests may explicitly enable this capability only for test-controlled check programs. Production replay does **not** enable it.
+
+Consequently, Part B's receipt/profile/identity/admission composition is implemented, but **a live untrusted empirical campaign cannot successfully replay through the production verifier** until an OS-confined check runner and corresponding adversarial tests are added. Do not interpret synthetic/mock success-path tests as evidence of a successful protected end-to-end production run. This boundary is a deliberate fail-closed limitation, not completion of sandboxing.
+
 ## Objective
 
 Supply what WP-M5-5 explicitly left to a follow-on: the production `IndependentVerifier` (receipt re-execution on an immutable candidate with a pinned profile), the production operator authority (campaign-grant receipts through R4), the missing evidence bindings (session evidence, verifier source and profile pinned in the plan), a CLI that replays the unchanged gate only through admission, and the minimal provider composition so a granted endpoint can actually run a session. Nothing here runs a campaign or spends anything; it makes admission *able to succeed* for genuine evidence and *unable to succeed* for anything else.
