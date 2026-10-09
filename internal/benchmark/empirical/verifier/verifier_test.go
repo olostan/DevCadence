@@ -1985,6 +1985,26 @@ func TestVerifier_DeterministicRerunMismatches(t *testing.T) {
 		return plan, run, evidence, res
 	}
 
+	// A receipt with correct exit codes but a different command must fail before
+	// the claimed results are compared or candidate commands execute.
+	for _, tc := range []struct {
+		name string
+		argv [][]string
+	}{
+		{name: "missing command", argv: [][]string{}},
+		{name: "different command", argv: [][]string{{"git", "log"}}},
+		{name: "extra argument", argv: [][]string{{"git", "status", "--porcelain"}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			plan, run, evidence, res := mutateRcpt(func(r *verifier.VerifierReceipt) {
+				r.CommandArgvArrays = tc.argv
+			})
+			if _, err := v.Verify(ctx, plan, run, evidence, res); err == nil || !strings.Contains(err.Error(), "receipt command argv") {
+				t.Fatalf("expected receipt command argv mismatch, got %v", err)
+			}
+		})
+	}
+
 	// 1. passed acceptance IDs count mismatch
 	{
 		plan, run, evidence, res := mutateRcpt(func(r *verifier.VerifierReceipt) {
