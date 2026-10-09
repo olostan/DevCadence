@@ -2873,3 +2873,20 @@ func TestVerifier_PathTraversalRejected(t *testing.T) {
 		}
 	})
 }
+
+func TestVerifier_RejectsSymlinkScratchRoot(t *testing.T) {
+	_, _, _, _, wtManager, repoProvider, scratchDir := setupBaseTestDependencies(t)
+	target := t.TempDir()
+	linkedRoot := filepath.Join(scratchDir, "redirected-scratch")
+	if err := os.Symlink(target, linkedRoot); err != nil {
+		t.Skipf("symlink creation not supported: %v", err)
+	}
+	_, err := verifier.New(verifier.Options{
+		Worktrees:    wtManager,
+		Repositories: repoProvider,
+		ScratchDir:   linkedRoot,
+	})
+	if errs.CategoryOf(err) != errs.CategoryPolicyDenied {
+		t.Fatalf("expected policy denial for symlink scratch root, got %v", err)
+	}
+}
