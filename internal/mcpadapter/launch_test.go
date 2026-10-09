@@ -18,7 +18,9 @@ import (
 
 	"github.com/olostan/DevCadence/internal/clock"
 	"github.com/olostan/DevCadence/internal/controlplane"
+	"github.com/olostan/DevCadence/internal/errs"
 	"github.com/olostan/DevCadence/internal/mcpadapter"
+	"github.com/olostan/DevCadence/internal/principal/facade"
 	"github.com/olostan/DevCadence/internal/storage"
 	"github.com/olostan/DevCadence/internal/testsupport"
 )
@@ -73,11 +75,16 @@ func (l *launched) stop(t *testing.T) int {
 
 func startLaunch(t *testing.T, getenv func(string) string) *launched {
 	t.Helper()
+	return startLaunchWith(t, getenv, nil)
+}
+
+func startLaunchWith(t *testing.T, getenv func(string) string, tasks mcpadapter.TaskPortFactory) *launched {
+	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	serverTransport, clientTransport := mcp.NewInMemoryTransports()
 	l := &launched{done: make(chan int, 1), stderr: &bytes.Buffer{}, cancel: cancel}
 	go func() {
-		code := mcpadapter.Launch(ctx, nil, getenv, serverTransport, l.stderr)
+		code := mcpadapter.LaunchWith(ctx, nil, getenv, serverTransport, l.stderr, tasks)
 		l.done <- code
 		if code != mcpadapter.ExitOK {
 			cancel()
@@ -353,5 +360,38 @@ func TestRepositoryObserverSelection(t *testing.T) {
 	}
 	if _, err := obs.Drift(ctx, "abc1234", nil); err == nil {
 		t.Fatal("the fallback observer did not refuse")
+	}
+}
+
+// The composition root may supply a task executor; its errors fail the launch
+// and its closer runs at shutdown. A nil result leaves launch unchanged.
+func TestLaunchWithTaskPortFactory(t *testing.T) {
+	repo := testsupport.NewGitRepo(t)
+	_, getenv := launchHome(t, goodBinding, repo)
+
+	var got mcpadapter.TaskPortInput
+	closed := false
+	l := startLaunchWith(t, getenv, func(_ context.Context, in mcpadapter.TaskPortInput) (facade.TaskExecutor, func() error, error) {
+		got = in
+		return nil, func() error { closed = true; return nil }, nil
+	})
+	if res, _ := projectState(t, l.cs); res.IsError {
+		t.Fatalf("project_state refused; stderr %s", l.stderr.String())
+	}
+	if code := l.stop(t); code != mcpadapter.ExitOK {
+		t.Fatalf("exit %d (stderr %s)", code, l.stderr.String())
+	}
+	if got.ProjectID != "example" || got.RepoPath != repo.Path || got.ControlPlane == nil || got.Operations == nil || !closed {
+		t.Errorf("factory input = %+v closed=%v", got, closed)
+	}
+
+	var out bytes.Buffer
+	transport, _ := mcp.NewInMemoryTransports()
+	code := mcpadapter.LaunchWith(context.Background(), nil, getenv, transport, &out,
+		func(context.Context, mcpadapter.TaskPortInput) (facade.TaskExecutor, func() error, error) {
+			return nil, nil, errs.New(errs.CategoryModelUnavailable, "start it with `ollama serve`")
+		})
+	if code != mcpadapter.ExitFailed || !strings.Contains(out.String(), "ollama serve") {
+		t.Fatalf("exit %d, stderr %q", code, out.String())
 	}
 }

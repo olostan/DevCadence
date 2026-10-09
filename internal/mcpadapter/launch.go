@@ -40,12 +40,34 @@ const (
 // directory, so the source repository need not be the process cwd (I5).
 // Nothing is written to stdout except protocol frames: diagnostics go to stderr.
 func Launch(ctx context.Context, args []string, getenv func(string) string, transport mcp.Transport, stderr io.Writer) int {
+	return LaunchWith(ctx, args, getenv, transport, stderr, nil)
+}
+
+// TaskPortInput is what a host needs to compose a task executor at launch.
+type TaskPortInput struct {
+	ProjectID    string
+	Home         string
+	RepoPath     string // registered repository path; "" when the project has none
+	Getenv       func(string) string
+	ControlPlane *controlplane.Service
+	Operations   *facade.OperationRegistry
+	Logger       *slog.Logger
+}
+
+// TaskPortFactory optionally supplies the facade's TaskExecutor. It returns a
+// nil executor (and no error) when the host is not configured for execution,
+// leaving behavior unchanged. The returned closer, if any, runs at shutdown.
+type TaskPortFactory func(ctx context.Context, in TaskPortInput) (facade.TaskExecutor, func() error, error)
+
+// LaunchWith is Launch with an optional task-executor factory supplied by the
+// composition root (cmd/devcadence-mcp).
+func LaunchWith(ctx context.Context, args []string, getenv func(string) string, transport mcp.Transport, stderr io.Writer, tasks TaskPortFactory) int {
 	if len(args) != 0 {
 		fmt.Fprintln(stderr, "usage: devcadence-mcp (takes no arguments; set DEVCADENCE_PROJECT_ID and DEVCADENCE_HOME)")
 		return ExitUsage
 	}
 	logger := slog.New(slog.NewTextHandler(stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
-	if err := run(ctx, getenv, transport, logger); err != nil && !errors.Is(err, context.Canceled) {
+	if err := run(ctx, getenv, transport, logger, tasks); err != nil && !errors.Is(err, context.Canceled) {
 		fmt.Fprintln(stderr, "devcadence-mcp:", safeMessage(err))
 		return ExitFailed
 	}
@@ -62,7 +84,7 @@ func safeMessage(err error) string {
 	return "launch failed"
 }
 
-func run(ctx context.Context, getenv func(string) string, transport mcp.Transport, logger *slog.Logger) error {
+func run(ctx context.Context, getenv func(string) string, transport mcp.Transport, logger *slog.Logger, tasks TaskPortFactory) error {
 	project := getenv(EnvProjectID)
 	if project == "" {
 		return errs.New(errs.CategoryInvalidArgument, "%s is required", EnvProjectID)
@@ -104,10 +126,38 @@ func run(ctx context.Context, getenv func(string) string, transport mcp.Transpor
 	if err != nil {
 		return err
 	}
-	defer ops.Close()
-	svc, err := facade.NewService(facade.Options{
+	var closeTasks func() error
+	defer func() {
+		// Stop in-flight delegation before releasing the project lock.
+		ops.Close()
+		if closeTasks != nil {
+			_ = closeTasks()
+		}
+	}()
+	opts := facade.Options{
 		ControlPlane: cp, Policy: NewBindingPolicy(binding), Operations: ops, Repository: observer, Logger: logger,
-	})
+	}
+	// An optional host-supplied task executor (composition root lives outside
+	// this adapter so it keeps its dependency boundary).
+	if tasks != nil {
+		if repoPath, err := registeredRepositoryPath(ctx, cp, project); err != nil {
+			// Same degradation as the repository observer: warn, never abort launch.
+			logger.Warn("project repository registration cannot be read; task execution is unavailable")
+		} else {
+			exec, closeFn, err := tasks(ctx, TaskPortInput{
+				ProjectID: project, Home: home, RepoPath: repoPath, Getenv: getenv,
+				ControlPlane: cp, Operations: ops, Logger: logger,
+			})
+			if err != nil {
+				// Configured execution that cannot start is fatal (fail closed);
+				// restart the server after fixing the cause (e.g. `ollama serve`).
+				return err
+			}
+			closeTasks = closeFn
+			opts.Tasks = exec
+		}
+	}
+	svc, err := facade.NewService(opts)
 	if err != nil {
 		return err
 	}
@@ -124,22 +174,16 @@ func run(ctx context.Context, getenv func(string) string, transport mcp.Transpor
 // no longer be opened yields an observer that refuses every check, so staleness
 // can never be silently skipped while connectivity still works.
 func repositoryObserver(ctx context.Context, cp *controlplane.Service, project string, logger *slog.Logger) facade.RepositoryObserver {
-	list, err := cp.Events(ctx, storage.EventQuery{
-		ProjectID: project, Types: []events.Type{events.TypeProjectInitialized}, Limit: 1,
-	})
+	path, err := registeredRepositoryPath(ctx, cp, project)
 	if err != nil {
 		// Unknown whether a repository is registered: never skip drift detection.
 		logger.Warn("project repository registration cannot be read; repository-dependent calls will be refused")
 		return refusingObserver{err: err}
 	}
-	if len(list) == 0 {
+	if path == "" {
 		return nil
 	}
-	init, ok := list[0].Payload.(*events.ProjectInitialized)
-	if !ok || init.RepositoryPath == "" {
-		return nil
-	}
-	repo, err := repository.Register(ctx, project, init.RepositoryPath, repository.Options{})
+	repo, err := repository.Register(ctx, project, path, repository.Options{})
 	if err != nil {
 		logger.Warn("registered repository cannot be opened; repository-dependent calls will be refused")
 		return refusingObserver{err: err}
@@ -149,6 +193,25 @@ func repositoryObserver(ctx context.Context, cp *controlplane.Service, project s
 		return refusingObserver{err: err}
 	}
 	return observer
+}
+
+// registeredRepositoryPath returns the repository path recorded at project
+// initialization, or "" when the project has none (Day-0).
+func registeredRepositoryPath(ctx context.Context, cp *controlplane.Service, project string) (string, error) {
+	list, err := cp.Events(ctx, storage.EventQuery{
+		ProjectID: project, Types: []events.Type{events.TypeProjectInitialized}, Limit: 1,
+	})
+	if err != nil {
+		return "", err
+	}
+	if len(list) == 0 {
+		return "", nil
+	}
+	init, ok := list[0].Payload.(*events.ProjectInitialized)
+	if !ok {
+		return "", nil
+	}
+	return init.RepositoryPath, nil
 }
 
 type refusingObserver struct{ err error }
