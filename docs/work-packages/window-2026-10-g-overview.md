@@ -7,6 +7,20 @@
 - Status: **DRAFT — NOT_READY / NOT FROZEN**. Review round 1 was repaired in r2; the owner's review of r2 (comment 6006619681) was repaired in r3; an independent review of r3 found a small set of second-order contract gaps which were repaired in r4; the owner's independent review of r4 (head `fc03164`) returned NEEDS_TARGETED_REPAIR (B1, I1-I5), whose findings were repaired in r5; verification of r5 found two final implementability/accounting tightenings now captured in r6 (registered event reducer handling and failed-driver-turn unknown usage); the r6 text has **not** yet been independently re-verified; no Part has an approving verdict (see Review and the traceability table). A documentation PR is not permission to execute.
 - Source of scope: the "Required follow-on window" of [window F](window-2026-10-f-overview.md#required-follow-on-window-explicit-scope-cards-not-implementation-authority) and the blocked items in the Implementation records of [WP-M5-3](wp-m5-3-discovery-ewp.md), [WP-M5-4](wp-m5-4-host-integration-ewp.md) and [WP-M5-5](wp-m5-5-empirical-campaign-ewp.md). M4's synthetic caveat and the mandatory real re-evaluation remain binding ([IMPLEMENTATION_PLAN M5](../IMPLEMENTATION_PLAN.md#m5--semantic-principal-integration-and-host-portability)).
 
+## Priority overlay — SELF_HOST_ALPHA (owner decision 2026-10-09)
+
+This original window remains the dependency/contract reference for M5-R1..R4, **not** a requirement to finish all of empirical M5 before DevCadence can code. The execution priority is now [WP-M5-SH1](wp-m5-sh1-self-host-alpha-ewp.md): one real Ollama-backed coding loop, bounded edits, local validation, truthful reviewer or manual-review fallback, Antigravity host path, then one DevCadence self-change. This is an additive owner-approved **sequencing revision**, not retroactive completion of this window's draft/freeze gates.
+
+| Priority | Work | Alpha gate |
+| --- | --- | --- |
+| P0 | R1 executor and bounded editing (R1-D) + R3-A loopback composition | real model creates commit |
+| P0 | R2 independent review/repair or explicit manual-only limitation; R4 local approval hand-off | candidate tested and awaits human integration |
+| P0 | Antigravity semantic MCP dogfood on fixture then DevCadence | SELF_HOST_ALPHA evidence |
+| P1 (post-alpha) | R3-B empirical verifier hardening, R3-C runner, R3-D profiles/corpus, real M4 benchmark rerun | EMPIRICAL_VALIDATED, not alpha |
+| P2 | broader host portability, automated integration, M6 capability-pack breadth, advanced reviews/analytics | product maturity |
+
+Experimental project-level YOLO may explicitly permit unconfined local subprocesses without a sandbox, **only with a visible unsafe label and without bypassing spend, model identity, artifact integrity or manual merge**. Default strict policies remain unchanged. Never interpret this as a production security guarantee.
+
 ## Objective and decomposition
 
 Window F delivered the semantic boundary with every runtime absent by design. This window specifies the runtime that fills it, without delegating unresolved architecture: a native task executor, an independent review executor with an enforceable acceptance gate, an empirical verifier with provider composition, and the protected operator ingress that three merged-but-denied features wait on.
