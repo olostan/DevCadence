@@ -1790,3 +1790,55 @@ func TestDefaultNewIndependentVerifier(t *testing.T) {
 		t.Fatal("expected non-nil verifier")
 	}
 }
+
+
+func TestCLIReplayEmpirical_YoloRequiresExplicitConsent(t *testing.T) {
+	c := newCLI(t)
+	f := newEmpiricalFixture()
+	mPath, pPath, aPath, artDir, cPath := setupEmpiricalFiles(t, f)
+	base := []string{"benchmark", "replay-empirical",
+		"--manifest", mPath, "--plan", pPath, "--authorization", aPath,
+		"--artifacts", artDir, "--criteria", cPath}
+	for _, tc := range []struct {
+		name string
+		extra []string
+	}{
+		{name: "yolo without consent", extra: []string{"--execution-mode", "yolo"}},
+		{name: "consent in strict mode", extra: []string{"--allow-unconfined-verifier"}},
+		{name: "unknown mode", extra: []string{"--execution-mode", "anything"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, _, err := c.run(append(append([]string(nil), base...), tc.extra...)...)
+			if err == nil {
+				t.Fatal("expected unsafe flag combination to fail closed")
+			}
+		})
+	}
+}
+
+func TestCLIReplayEmpirical_YoloConsentIsInvocationScoped(t *testing.T) {
+	c := newCLI(t)
+	f := newEmpiricalFixture()
+	mPath, pPath, aPath, artDir, cPath := setupEmpiricalFiles(t, f)
+	original := newIndependentVerifier
+	defer func() { newIndependentVerifier = original }()
+	var decisions []bool
+	newIndependentVerifier = func(ctx context.Context, e *env, resolver empirical.ArtifactResolver, root string) (empirical.IndependentVerifier, error) {
+		decisions = append(decisions, ctx.Value(verifierExecutionConsentKey{}) == true)
+		return &testCountingVerifier{}, nil
+	}
+	args := []string{"benchmark", "replay-empirical", "--manifest", mPath,
+		"--plan", pPath, "--authorization", aPath, "--artifacts", artDir,
+		"--criteria", cPath}
+	for _, flags := range [][]string{
+		{"--execution-mode", "yolo", "--allow-unconfined-verifier"},
+		nil,
+	} {
+		if _, _, err := c.run(append(append([]string(nil), args...), flags...)...); err != nil {
+			t.Fatalf("replay with flags %v failed: %v", flags, err)
+		}
+	}
+	if len(decisions) != 2 || !decisions[0] || decisions[1] {
+		t.Fatalf("unsafe consent leaked across invocations: %v", decisions)
+	}
+}
