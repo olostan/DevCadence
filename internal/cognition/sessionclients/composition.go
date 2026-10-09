@@ -105,7 +105,20 @@ func (c *Composition) Open(ctx context.Context, ep execpolicy.ResolvedEndpoint) 
 		return execpolicy.OpenedEndpoint{}, err
 	}
 
-	driver, err := drivers.NewDirectAPIDriver(driverID, client)
+	caps := drivers.DriverCapabilities{
+		Kind:                  protocol.ChannelDirectHTTPAPI,
+		SessionMode:           protocol.SessionStatelessPerCall,
+		ContextControl:        protocol.ContextControlExactStateless,
+		PrefixCache:           protocol.PrefixCacheExplicit,
+		SupportsStreaming:     false,
+		SupportsTools:         true,
+		NativeWorktreeAccess:  false,
+		MaxConcurrentRequests: 4,
+	}
+
+	driver, err := drivers.NewDirectAPIDriver(driverID, client, drivers.DirectAPIOptions{
+		Capabilities: &caps,
+	})
 	if err != nil {
 		return execpolicy.OpenedEndpoint{}, err
 	}

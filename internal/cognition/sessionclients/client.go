@@ -195,6 +195,11 @@ func (c *LoopbackClient) Complete(ctx context.Context, req drivers.DirectAPIRequ
 		defer cancel()
 	}
 
+	if req.ModelID != "" && c.modelID != "" && req.ModelID != c.modelID {
+		return drivers.DirectAPIResponse{}, errs.New(errs.CategoryInvalidArgument,
+			"requested model %q diverges from bound model %q", req.ModelID, c.modelID)
+	}
+
 	model := req.ModelID
 	if model == "" {
 		model = c.modelID

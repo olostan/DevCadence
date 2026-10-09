@@ -27,6 +27,9 @@ var measurementUnits = map[string]string{
 	"principal_reentries":     "count",
 }
 
+// LimitationUnconfinedHostProcess declares that independent verifier checks execute as host processes without an OS sandbox boundary.
+const LimitationUnconfinedHostProcess = "unconfined_host_process"
+
 // integralMeasurements must be whole nonnegative numbers.
 var integralMeasurements = map[string]bool{
 	"cumulative_input_tokens": true, "cached_input_tokens": true, "output_tokens": true,
@@ -288,13 +291,19 @@ func validateAdmission(ctx context.Context, m CampaignManifest, r ArtifactResolv
 			c.code(ReasonRunMismatch, "run %q session evidence identity differs from plan/run/authorization", run.RunID)
 			continue
 		}
+		if run.Status == StatusCompleted && sess.DriverOutcome != StatusCompleted {
+			c.code(ReasonRunMismatch, "run %q claims completed status but session driver outcome is %q", run.RunID, sess.DriverOutcome)
+		}
 		if sess.StartedAt.Before(authWindow.IssuedAt) || sess.StartedAt.After(authWindow.NotAfter) {
 			c.code(ReasonAuthorizationBad, "run %q session started outside authority window", run.RunID)
 		}
 		if sess.StartedAt.After(now) {
 			c.code(ReasonRunInvalid, "run %q session started in the future", run.RunID)
 		}
-		if ms, ok := sess.Usage["api_spend_usd"]; ok && ms.Known && ms.Value != nil {
+		ms, hasSpend := sess.Usage["api_spend_usd"]
+		if authz.MaxAPISpendMicroUSD > 0 && (!hasSpend || !ms.Known || ms.Value == nil) {
+			c.code(ReasonAuthorizationBad, "run %q has unknown API spend with positive authorized cap (%d micro-USD)", run.RunID, authz.MaxAPISpendMicroUSD)
+		} else if hasSpend && ms.Known && ms.Value != nil {
 			spend, err := USDToMicroUSD(*ms.Value)
 			if err != nil {
 				c.code(ReasonMeasurementInvalid, "run %q api spend invalid: %v", run.RunID, err)
@@ -360,6 +369,9 @@ func validateAdmission(ctx context.Context, m CampaignManifest, r ArtifactResolv
 	}
 	if len(c.codes) > 0 {
 		return finish()
+	}
+	if len(verified) > 0 {
+		c.lims = append(c.lims, LimitationUnconfinedHostProcess)
 	}
 
 	// 6. Pairing: both strategies of identical task/seed/repetition/endpoint.

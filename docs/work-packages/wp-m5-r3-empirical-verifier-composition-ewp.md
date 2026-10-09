@@ -2,13 +2,18 @@
 
 ## Identity
 
-- Revision: 6 (final accounting tightening after verification of r5: an immediate `StreamTurn` error remains usage-unknown unless the driver proves no generation request occurred; prior r5 knownness and driver-id repairs retained; freeze decision pending clean re-review); task: task-m5-r3-empirical-verifier-composition; window: [2026-10-G](window-2026-10-g-overview.md).
-- Base: `71bdaec6d6d81c1b6e52d8b30f0f8485f928925a` (`main` `cebb4f0` plus the PR #83 reconcile merge, 2026-10-05).
+- Revision: 7 (reconciliation after delivery of Part A and Part B in PR #86: Loopback provider composition, independent empirical verifier with candidate checkout immutability, protected operator file verifier authority, integer micro-spend admission, and replay CLI implemented and verified; Parts C and D remain the open scope of R3); task: task-m5-r3-empirical-verifier-composition; window: [2026-10-G](window-2026-10-g-overview.md).
+- Base: `71bdaec6d6d81c1b6e52d8b30f0f8485f928925a` (`main` `cebb4f0` plus the PR #83 reconcile merge, 2026-10-05). Delivered on branch `feat/m5-r3-provider-composition` (PR #86).
 - Contract digest: reviewed immutable Git blob. No fictitious runtime state revision; record the actual accepted dependency commits at execution.
 - Endpoint: competent Go implementer with Git, deterministic-test and HTTP-client skill; complete admission is mandatory. Each Part is sized for one endpoint session.
-- Status: **DRAFT / NOT_READY / NOT FROZEN. No implementation authority; no endpoint call, credential, spend or live campaign is authorized.** This EWP **amends** the draft [WP-M5-5](wp-m5-5-empirical-campaign-ewp.md) contract at the points listed under "Explicit amendments"; the amendments need window-level review before Part B freezes.
-- Dependencies: **Part 0** none (it amends the merged `internal/cognition/drivers`); [M5-R1](wp-m5-r1-native-task-executor-ewp.md) Part A types (`ResolvedEndpoint`, `EndpointObservation`, `OpenedEndpoint`, `DriverFactory`, `Bind`) and Part 0 for Part A; the leaf `internal/execrt` (frozen with R1-B: `RepositoryProvider`) and `internal/worktrees` for Part B; [M5-R2](wp-m5-r2-independent-review-acceptance-ewp.md) Part A (`DeriveActorID`, `InvocationProvenance`); [M5-R4](wp-m5-r4-protected-operator-ingress-ewp.md) Part A (`receipts.Verifier` with subject lookup, `Verified.IsValid`) for the production authority; merged WP-M5-5 admission package.
-- Parts (separately freezable): **0** driver usage-knownness amendment (shared driver evidence contract; freezes before R1-B and R3-A). **A** provider composition (`DriverFactory` implementations, first slice loopback local only). **B** independent verifier, authority adapter, admission wiring and CLI replay.
+- Status: **PART A & PART B IMPLEMENTED / VERIFIED in PR #86.** Part 0, Part A, and Part B delivered. Delivered contracts: Loopback provider composition (`internal/cognition/sessionclients`), independent empirical verifier with candidate checkout immutability (`internal/benchmark/empirical/verifier`), protected operator file verifier authority adapter (`CampaignAuthority`), integer micro-spend admission (`internal/benchmark/empirical`), and replay CLI (`cmd/devcadence` `benchmark replay-empirical`). Part C (Campaign runner) and Part D (live empirical corpus profiles) remain the open scope of R3 (OPEN SCOPE / NOT FROZEN; no live execution, credential, spend, or campaign authority).
+- Dependencies: **Part 0** none (merged in `internal/cognition/drivers` via PR #85); [M5-R1](wp-m5-r1-native-task-executor-ewp.md) Part A types (`ResolvedEndpoint`, `EndpointObservation`, `OpenedEndpoint`, `DriverFactory`, `Bind`) and Part 0 for Part A; the leaf `internal/execrt` (frozen with R1-B: `RepositoryProvider`) and `internal/worktrees` for Part B; [M5-R2](wp-m5-r2-independent-review-acceptance-ewp.md) Part A (`DeriveActorID`, `InvocationProvenance`); [M5-R4](wp-m5-r4-protected-operator-ingress-ewp.md) Part A (`receipts.Verifier` with subject lookup, `Verified.IsValid`) for the production authority; merged WP-M5-5 admission package.
+- Parts:
+  - **Part 0**: Driver usage-knownness amendment (shared driver evidence contract; IMPLEMENTED / VERIFIED in PR #85).
+  - **Part A**: Provider composition (`DriverFactory` implementations, first slice loopback local only; IMPLEMENTED / VERIFIED in PR #86).
+  - **Part B**: Independent verifier with candidate checkout immutability, protected operator file verifier authority adapter, integer micro-spend admission wiring and replay CLI (IMPLEMENTED / VERIFIED in PR #86).
+  - **Part C**: Campaign runner (protocol steps 1–8 of WP-M5-5; remaining OPEN SCOPE of R3, not frozen, no implementation authority).
+  - **Part D**: Live empirical corpus verification profiles and fixture repositories (10 corpus tasks; remaining OPEN SCOPE of R3, not frozen).
 
 ## Objective
 
@@ -240,12 +245,12 @@ Profile load validates: strict decode, unique ids, each `CheckSpec` argv non-emp
 
 `devcadence benchmark replay-empirical` (exit codes **3** refused admission and **4** legacy refusal are **subcommand-local** to the `benchmark` subcommands and deliberately do not use the global `ExitCodeNotFound`(3)/`ExitCodeDrift`(4) meanings of `cmd/devcadence/main.go`; the report and help text state this) `--manifest <file> --plan <file> --authorization <file> --artifacts <dir> --criteria <file> --output <report.md> [--json <report.json>]`: build resolver over the digest-addressed `--artifacts` directory (no network), compose the production authority (`CampaignAuthority`), verifier and `empirical.NewAdmitter`, `Admit`; on refusal print the closed reason codes and exit `3`; otherwise `ReplayGate(admission, criteria)` with the pinned criteria and write the report (`Admission`, `RawGate`, `Conclusion` kept separate). Exit `0/1/2` is the raw Go/Revise/Inconclusive conclusion of the combined report. `evaluate-gate --evidence-kind empirical_campaign` exits **`4`** with a message naming `replay-empirical` (so the legacy refusal is distinguishable from Inconclusive `2` and refused admission `3`); other evidence kinds are unchanged. No flag accepts a precomputed aggregate, a summary or a boolean "verified".
 
-## Cards not authored in this window (explicit, no implementation authority)
+## Remaining open scope of R3 (Part C and Part D, explicit, no implementation authority)
 
-- **R3-C campaign runner.** Per-run protocol steps 1–8 of WP-M5-5, per-call cap enforcement before each endpoint call, no-replay of uncertain calls (A7, A8, A11), manifest/receipt production. Depends on R1, R2-A, R3 Parts A/B and R4 and on OWNER INPUT-2. Needed only for the live re-evaluation.
-- **R3-D corpus verification profiles and fixture repositories.** Authoring the `VerificationProfile` content and pinned fixture sources for the ten corpus tasks (resolves G-5 and U1). Profiles are the "tests" of the experiment and must be reviewed by someone other than the campaign author and frozen before any observation.
+- **Part C: R3-C campaign runner.** Remaining open scope of R3. Per-run protocol steps 1–8 of WP-M5-5, per-call cap enforcement before each endpoint call, no-replay of uncertain calls (A7, A8, A11), manifest/receipt production. Depends on R1, R2-A, R3 Parts A/B and R4 and on OWNER INPUT-2. Needed only for the live re-evaluation.
+- **Part D: R3-D live empirical corpus verification profiles and fixture repositories.** Remaining open scope of R3. Authoring the `VerificationProfile` content and pinned fixture sources for the ten corpus tasks (resolves G-5 and U1). Profiles are the "tests" of the experiment and must be reviewed by someone other than the campaign author and frozen before any observation.
 
-Until both exist, M5 cannot close and A9 cannot run.
+Until both Part C and Part D exist and freeze, M5 cannot close and A9 cannot run.
 
 ## Authority matrix
 
@@ -340,17 +345,23 @@ Escalate on: gate criteria, corpus or snapshot schema changes; a verifier needin
 Implementation Readiness Report:
 
 ~~~text
-author tally after repair round r5 (a self-count, not evidence; independent re-verification PENDING):
+delivery tally after PR #86 (Parts A & B implemented and verified):
 requirements represented: 10 (R1-R10; R2/R3/R7/R9 tightened in r2)
 acceptance scenarios mapped: 20 (A1-A16 plus A9b, A10b, A10c; Part 0 P0-1..P0-11 under A16)
-unresolved architecture choices: 2 (G-5 profile content; U1 target repository), both owned by card R3-D; the loopback protocol is closed (Ollama native) with other protocols an INPUT-2 amendment
-readiness: Part 0 NOT_READY pending independent review of the driver amendment; Part A NOT_READY pending Part 0 and R1-A freezes, step-0 check that `/api/tags` reports a digest and `/api/version` a version (empirical verification on the owner's runtime), and OWNER INPUT-2 for anything beyond loopback; Part B NOT_READY pending the amendments' review, R2-A and R4-A freezes
+delivered contracts: Loopback provider composition (internal/cognition/sessionclients), independent empirical verifier with candidate checkout immutability (internal/benchmark/empirical/verifier), protected operator file verifier authority adapter (CampaignAuthority), integer micro-spend admission (internal/benchmark/empirical), and replay CLI (cmd/devcadence benchmark replay-empirical)
+readiness / status:
+- Part 0: IMPLEMENTED / VERIFIED in PR #85
+- Part A: IMPLEMENTED / VERIFIED in PR #86
+- Part B: IMPLEMENTED / VERIFIED in PR #86
+- Part C: OPEN SCOPE / NOT FROZEN (campaign runner)
+- Part D: OPEN SCOPE / NOT FROZEN (live empirical corpus verification profiles)
 ~~~
 
 Weaker-implementer check: author expectation only, to be re-tested by the independent Implementability reviewer (Part B verifier algorithm; profile content explicitly out of scope).
 
 ## Changelog
 
+- r7: reconciled EWP status with PR #86 delivery: Part A and Part B marked IMPLEMENTED / VERIFIED in PR #86; clarified delivered contracts (Loopback provider composition, independent empirical verifier with candidate checkout immutability, protected operator file verifier authority adapter, integer micro-spend admission, and replay CLI); marked Part C (Campaign runner) and Part D (live empirical corpus profiles) as the remaining open scope of R3.
 - r6: final accounting tightening after inspecting the current `MeteredSession.StreamTurn` path: an error returned **after invoking** the driver is not proof of zero generation/usage, so it remains unknown and fails closed under configured token limits; `KnownZeroUsage()` is reserved for paths that prove no driver generation request occurred.
 - r5: owner review of head `fc03164` (comment 6030903787), I3: Part 0 names the `RecordOperationEnd` call sites and requires `KnownZeroUsage()` for the no-generation stream-open-failure path and `sawUsage` tracking for streams; `MeterSnapshot.UsageKnown` and `UnprovableLimits []string` (closed vocabulary) defined with their path into usage artifacts and `SessionEvidence` (no schema/golden consequence); scenarios restructured into the P0-1..P0-11 scenario-to-mutant table. I2 wording in Part A `Open`.
 - r4: focused repair after review of `0da5013`: usage algebra now has an explicit `KnownZeroUsage` accumulator identity, per-limit knownness and partial-known Ollama accounting (cached unknown no longer poisons total); `Open` binds `Observed.DriverID = Driver.ID()` and `Bind` includes it in the endpoint binding digest/source chain.

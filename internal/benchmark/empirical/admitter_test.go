@@ -2,6 +2,7 @@ package empirical
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"go/parser"
 	"go/token"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"github.com/olostan/DevCadence/internal/clock"
+	"github.com/olostan/DevCadence/internal/protocol"
 )
 
 func TestNewAdmitterValidation(t *testing.T) {
@@ -271,6 +273,112 @@ func TestAdmitterVerifierCommitmentChecks(t *testing.T) {
 				t.Fatalf("admitted=%v, codes=%v, want %s", res.Admitted, res.ReasonCodes, tc.code)
 			}
 		})
+	}
+}
+
+func TestAdmitterUnknownAPISpendWithPositiveCapDenied(t *testing.T) {
+	// Authorized cap is 10,000,000 micro-USD (> 0), but one run has unknown spend.
+	f, m := setupMeteredFixture(10000000, 10000000, 0.50)
+	var sess SessionEvidence
+	sessBytes := f.store[m.Runs[0].SessionEvidenceRef]
+	if err := json.Unmarshal(sessBytes, &sess); err != nil {
+		t.Fatal(err)
+	}
+	sess.Usage["api_spend_usd"] = Measurement{
+		Known: false, Unit: "USD", Provenance: ProvenanceUnknown, EvidenceRef: "ev/unknown",
+	}
+	m.Runs[0].Measurements["api_spend_usd"] = sess.Usage["api_spend_usd"]
+	newSessBytes, err := protocol.CanonicalJSON(sess)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.Runs[0].SessionEvidenceDigest = bytesDigest(newSessBytes)
+	f.store[m.Runs[0].SessionEvidenceRef] = newSessBytes
+
+	v := &countingVerifier{}
+	adm, err := NewAdmitter(AdmitterOptions{
+		Authority: allowAuthority{},
+		Verifier:  v,
+		Resolver:  f.store,
+		Clock:     testClock,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := adm.Admit(context.Background(), m)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Admitted || !hasCode(res, ReasonAuthorizationBad) {
+		t.Fatalf("expected ReasonAuthorizationBad, got admitted=%v codes=%v", res.Admitted, res.ReasonCodes)
+	}
+}
+
+func TestAdmitterDriverOutcomeMismatchDenied(t *testing.T) {
+	f := newFixture()
+	m := f.manifest()
+
+	var sess SessionEvidence
+	sessBytes := f.store[m.Runs[0].SessionEvidenceRef]
+	if err := json.Unmarshal(sessBytes, &sess); err != nil {
+		t.Fatal(err)
+	}
+	sess.DriverOutcome = "error"
+	newSessBytes, err := protocol.CanonicalJSON(sess)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.Runs[0].SessionEvidenceDigest = bytesDigest(newSessBytes)
+	f.store[m.Runs[0].SessionEvidenceRef] = newSessBytes
+
+	v := &countingVerifier{}
+	adm, err := NewAdmitter(AdmitterOptions{
+		Authority: allowAuthority{},
+		Verifier:  v,
+		Resolver:  f.store,
+		Clock:     testClock,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := adm.Admit(context.Background(), m)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Admitted || !hasCode(res, ReasonRunMismatch) {
+		t.Fatalf("expected ReasonRunMismatch, got admitted=%v codes=%v", res.Admitted, res.ReasonCodes)
+	}
+}
+
+func TestAdmitterUnconfinedHostProcessLimitationDeclared(t *testing.T) {
+	f := newFixture()
+	m := f.manifest()
+	v := &countingVerifier{}
+	adm, err := NewAdmitter(AdmitterOptions{
+		Authority: allowAuthority{},
+		Verifier:  v,
+		Resolver:  f.store,
+		Clock:     testClock,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := adm.Admit(context.Background(), m)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Admitted {
+		t.Fatalf("expected admitted, got codes=%v", res.ReasonCodes)
+	}
+	found := false
+	for _, l := range res.Limitations {
+		if l == LimitationUnconfinedHostProcess {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected LimitationUnconfinedHostProcess in limitations, got: %v", res.Limitations)
 	}
 }
 

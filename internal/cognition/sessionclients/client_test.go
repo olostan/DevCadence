@@ -726,3 +726,67 @@ func TestLoopbackClient_Complete_Errors(t *testing.T) {
 func ptrInt64(v int64) *int64 {
 	return &v
 }
+
+func TestLoopbackClient_Complete_ModelDivergenceRejected(t *testing.T) {
+	httpCalls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		httpCalls++
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"model": "bound-model",
+			"message": map[string]any{
+				"role":    "assistant",
+				"content": "ok",
+			},
+			"done": true,
+		})
+	}))
+	defer server.Close()
+
+	client, err := sessionclients.NewLoopbackClient(server.URL, "bound-model", sampleLimits(), nil)
+	if err != nil {
+		t.Fatalf("NewLoopbackClient error: %v", err)
+	}
+
+	// 1. Divergent ModelID rejected before HTTP send.
+	_, err = client.Complete(context.Background(), drivers.DirectAPIRequest{
+		ModelID: "attacker-divergent-model",
+		Prompt:  "test prompt",
+	})
+	if err == nil {
+		t.Fatal("expected error for divergent model ID, got nil")
+	}
+	if !errors.Is(err, errs.ErrInvalidArgument) {
+		t.Errorf("expected ErrInvalidArgument, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "diverges from bound model") {
+		t.Errorf("expected error message mentioning divergence, got %v", err)
+	}
+	if httpCalls != 0 {
+		t.Errorf("expected 0 HTTP requests before error, but server received %d calls", httpCalls)
+	}
+
+	// 2. Matching ModelID accepted.
+	_, err = client.Complete(context.Background(), drivers.DirectAPIRequest{
+		ModelID: "bound-model",
+		Prompt:  "test prompt",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error for matching model ID: %v", err)
+	}
+	if httpCalls != 1 {
+		t.Errorf("expected 1 HTTP request for matching model, got %d", httpCalls)
+	}
+
+	// 3. Empty ModelID inherits bound model.
+	_, err = client.Complete(context.Background(), drivers.DirectAPIRequest{
+		ModelID: "",
+		Prompt:  "test prompt",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error for empty model ID: %v", err)
+	}
+	if httpCalls != 2 {
+		t.Errorf("expected 2 HTTP requests total, got %d", httpCalls)
+	}
+}

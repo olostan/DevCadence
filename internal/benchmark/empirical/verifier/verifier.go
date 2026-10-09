@@ -84,6 +84,19 @@ func (v *Verifier) Verify(
 			"run %q identity or endpoint binding mismatch between plan and evidence", run.RunID)
 	}
 
+	// Audit and sanitize run.RunID (I4).
+	if strings.Contains(run.RunID, "..") || strings.Contains(run.RunID, "/") || strings.Contains(run.RunID, "\\") {
+		return empirical.VerifiedOutcome{}, errs.New(errs.CategoryInvalidArgument,
+			"invalid run_id %q: path traversal characters rejected", run.RunID)
+	}
+	cleanScratchRoot := filepath.Clean(v.opts.ScratchDir)
+	cleanRunScratch := filepath.Clean(filepath.Join(cleanScratchRoot, run.RunID))
+	relScratch, err := filepath.Rel(cleanScratchRoot, cleanRunScratch)
+	if err != nil || relScratch == "." || relScratch == ".." || strings.HasPrefix(relScratch, ".."+string(filepath.Separator)) {
+		return empirical.VerifiedOutcome{}, errs.New(errs.CategoryInvalidArgument,
+			"invalid run_id %q: path traversal beyond scratch dir", run.RunID)
+	}
+
 	// 2. Resolve and digest-check artifacts.
 	res := resolver
 	if res == nil {
@@ -242,9 +255,34 @@ func (v *Verifier) Verify(
 		return empirical.VerifiedOutcome{}, errs.Wrap(errs.CategoryInternal, err, "verifier provenance invalid")
 	}
 
-	if prov.Role != protocol.ProvenanceRoleImplementer && prov.Role != protocol.ProvenanceRoleReviewer {
+	// 5. Look up task in verification profile and verify candidate binding (B3).
+	var task *TaskVerification
+	for i := range profile.Tasks {
+		if profile.Tasks[i].TaskID == run.TaskID {
+			task = &profile.Tasks[i]
+			break
+		}
+	}
+	if task == nil {
+		return empirical.VerifiedOutcome{}, errs.New(errs.CategoryInternal,
+			"VERIFIER_INFRASTRUCTURE: task %q not found in verification profile", run.TaskID)
+	}
+	if task.TaskDigest != run.TaskDigest {
+		return empirical.VerifiedOutcome{}, errs.New(errs.CategoryIntegrity,
+			"profile task digest %q does not match planned run task digest %q", task.TaskDigest, run.TaskDigest)
+	}
+	if task.BaseCommit != run.EWP.BaseCommit {
+		return empirical.VerifiedOutcome{}, errs.New(errs.CategoryIntegrity,
+			"profile task base commit %q does not match planned run base commit %q", task.BaseCommit, run.EWP.BaseCommit)
+	}
+
+	expectedRole := protocol.ProvenanceRoleImplementer
+	if task.Class == "review" {
+		expectedRole = protocol.ProvenanceRoleReviewer
+	}
+	if prov.Role != expectedRole {
 		return empirical.VerifiedOutcome{}, errs.New(errs.CategoryInvalidArgument,
-			"worker provenance role %q must be implementer or reviewer", prov.Role)
+			"worker provenance role %q must be %s", prov.Role, expectedRole)
 	}
 	if prov.TaskID != run.TaskID {
 		return empirical.VerifiedOutcome{}, errs.New(errs.CategoryInvalidArgument,
@@ -254,9 +292,9 @@ func (v *Verifier) Verify(
 		return empirical.VerifiedOutcome{}, errs.New(errs.CategoryIntegrity,
 			"worker provenance work_package_id mismatch: %s != %s", prov.WorkPackageID, run.EWP.ID)
 	}
-	if prov.AttemptID != sess.AttemptID && prov.AttemptID != run.RunID {
+	if prov.AttemptID != sess.AttemptID {
 		return empirical.VerifiedOutcome{}, errs.New(errs.CategoryInvalidArgument,
-			"worker provenance attempt_id %q mismatch", prov.AttemptID)
+			"worker provenance attempt_id %q mismatch with session attempt_id %q", prov.AttemptID, sess.AttemptID)
 	}
 	if prov.Basis.EndpointID != sess.Endpoint.EndpointID || prov.Basis.ModelID != sess.Endpoint.ModelID ||
 		prov.Basis.ModelRevision != sess.Endpoint.ModelRevision {
@@ -281,19 +319,6 @@ func (v *Verifier) Verify(
 		return empirical.VerifiedOutcome{}, errs.New(errs.CategoryPolicyDenied,
 			"VERIFIER_NOT_INDEPENDENT: verifier actor %q is not independent of worker actor %q",
 			verifierProv.ActorID, workerProv.ActorID)
-	}
-
-	// 5. Look up task in verification profile and verify candidate.
-	var task *TaskVerification
-	for i := range profile.Tasks {
-		if profile.Tasks[i].TaskID == run.TaskID {
-			task = &profile.Tasks[i]
-			break
-		}
-	}
-	if task == nil {
-		return empirical.VerifiedOutcome{}, errs.New(errs.CategoryInternal,
-			"VERIFIER_INFRASTRUCTURE: task %q not found in verification profile", run.TaskID)
 	}
 
 	qualityVerdict := empirical.QualityAccepted
@@ -458,8 +483,46 @@ func (v *Verifier) Verify(
 		"GOFLAGS=-mod=readonly",
 		"GOPROXY=off",
 		"GOTOOLCHAIN=local",
+		"HTTP_PROXY=",
+		"HTTPS_PROXY=",
+		"ALL_PROXY=",
+		"NO_PROXY=",
+		"http_proxy=",
+		"https_proxy=",
+		"all_proxy=",
+		"no_proxy=",
 		"LANG=C.UTF-8",
 		"LC_ALL=C.UTF-8",
+	}
+
+	checkCleanGitStatus := func(phase string) error {
+		if task.Class != "implementation" || worktreeDir == "" {
+			return nil
+		}
+		statusRes, err := v.opts.Runner.Run(ctx, process.Spec{
+			Executable: "git",
+			Args:       []string{"-C", worktreeDir, "status", "--porcelain"},
+			Dir:        worktreeDir,
+			Env:        cleanEnv,
+			Timeout:    30 * time.Second,
+		})
+		if err != nil || !statusRes.Success() {
+			return errs.New(errs.CategoryInternal,
+				"VERIFIER_INFRASTRUCTURE: git status check failed (%s): %v", phase, err)
+		}
+		if strings.TrimSpace(string(statusRes.Stdout)) != "" {
+			return errs.New(errs.CategoryPolicyDenied,
+				"CHECKOUT_MODIFICATION: candidate checkout modified (%s): %s", phase, strings.TrimSpace(string(statusRes.Stdout)))
+		}
+		return nil
+	}
+
+	if err := checkCleanGitStatus("initial worktree"); err != nil {
+		if errs.CategoryOf(err) == errs.CategoryPolicyDenied {
+			qualityVerdict = empirical.QualityRejected
+		} else {
+			return empirical.VerifiedOutcome{}, err
+		}
 	}
 
 	var verifiedArtifactRefs []string
@@ -467,9 +530,29 @@ func (v *Verifier) Verify(
 	var orderedExitCodes []int
 
 	for _, check := range task.Checks {
+		// Audit and sanitize check.CheckID (I4).
+		if strings.Contains(check.CheckID, "..") || strings.Contains(check.CheckID, "/") || strings.Contains(check.CheckID, "\\") {
+			return empirical.VerifiedOutcome{}, errs.New(errs.CategoryInvalidArgument,
+				"invalid check_id %q: path traversal characters rejected", check.CheckID)
+		}
+		logPath := filepath.Clean(filepath.Join(runScratch, fmt.Sprintf("check-%s.log", check.CheckID)))
+		relLog, err := filepath.Rel(runScratch, logPath)
+		if err != nil || relLog == "." || relLog == ".." || strings.HasPrefix(relLog, ".."+string(filepath.Separator)) {
+			return empirical.VerifiedOutcome{}, errs.New(errs.CategoryInvalidArgument,
+				"invalid check_id %q: log path traversal beyond run scratch dir", check.CheckID)
+		}
+
 		checkDir := worktreeDir
 		if check.Dir != "" && check.Dir != "." {
 			checkDir = filepath.Join(worktreeDir, check.Dir)
+		}
+
+		if err := checkCleanGitStatus(fmt.Sprintf("before check %s", check.CheckID)); err != nil {
+			if errs.CategoryOf(err) == errs.CategoryPolicyDenied {
+				qualityVerdict = empirical.QualityRejected
+			} else {
+				return empirical.VerifiedOutcome{}, err
+			}
 		}
 
 		runSpec := process.Spec{
@@ -502,7 +585,16 @@ func (v *Verifier) Verify(
 				"VERIFIER_INFRASTRUCTURE: check %q output cap exceeded", check.CheckID)
 		}
 
-		logPath := filepath.Join(runScratch, fmt.Sprintf("check-%s.log", check.CheckID))
+		passed := (res.ExitCode == check.ExpectExitCode)
+		if err := checkCleanGitStatus(fmt.Sprintf("after check %s", check.CheckID)); err != nil {
+			if errs.CategoryOf(err) == errs.CategoryPolicyDenied {
+				qualityVerdict = empirical.QualityRejected
+				passed = false
+			} else {
+				return empirical.VerifiedOutcome{}, err
+			}
+		}
+
 		var logBuf bytes.Buffer
 		logBuf.WriteString(fmt.Sprintf("=== check: %s ===\nexit: %d\n--- stdout ---\n", check.CheckID, res.ExitCode))
 		logBuf.Write(res.Stdout)
@@ -511,7 +603,7 @@ func (v *Verifier) Verify(
 		_ = os.WriteFile(logPath, logBuf.Bytes(), 0600)
 		verifiedArtifactRefs = append(verifiedArtifactRefs, logPath)
 
-		checkPassed[check.CheckID] = (res.ExitCode == check.ExpectExitCode)
+		checkPassed[check.CheckID] = passed
 		orderedExitCodes = append(orderedExitCodes, res.ExitCode)
 	}
 

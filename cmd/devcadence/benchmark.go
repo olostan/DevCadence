@@ -2,14 +2,12 @@ package main
 
 import (
 	"context"
-	"crypto/ed25519"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/olostan/DevCadence/internal/benchmark/campaign"
 	"github.com/olostan/DevCadence/internal/benchmark/empirical"
@@ -269,17 +267,22 @@ func provenanceKind(p *gate.EvidenceProvenance) string {
 	return p.Kind
 }
 
-// newIndependentVerifier constructs the production independent verifier (WP-M5-R3 Part B).
-// Package tests may override this seam to inject test verification runners.
-var newIndependentVerifier = func(ctx context.Context, e *env, resolver empirical.ArtifactResolver) (empirical.IndependentVerifier, error) {
+var activeRepoRoot = "."
+
+// defaultNewIndependentVerifier constructs the production independent verifier (WP-M5-R3 Part B).
+var defaultNewIndependentVerifier = func(ctx context.Context, e *env, resolver empirical.ArtifactResolver) (empirical.IndependentVerifier, error) {
 	worktreeRoot := filepath.Join(e.homeDir(), "worktrees")
 	wtMgr, err := worktrees.NewManager(worktreeRoot, process.NewRunner())
 	if err != nil {
 		return nil, errs.Wrap(errs.CategoryInternal, err, "failed to create worktree manager")
 	}
 
+	repoDir := activeRepoRoot
+	if repoDir == "" {
+		repoDir = "."
+	}
 	var repoProvider execrt.RepositoryProvider
-	if repo, err := repository.Register(ctx, "devcadence", ".", repository.Options{}); err == nil {
+	if repo, err := repository.Register(ctx, "devcadence", repoDir, repository.Options{}); err == nil {
 		repoProvider = execrt.NewSingleRepositoryProvider(repo)
 	} else {
 		repoProvider = execrt.NewMapRepositoryProvider(map[string]*repository.Repository{})
@@ -297,6 +300,9 @@ var newIndependentVerifier = func(ctx context.Context, e *env, resolver empirica
 	}
 	return verifier.New(opts)
 }
+
+// newIndependentVerifier seam may be overridden by tests to inject test verification runners.
+var newIndependentVerifier = defaultNewIndependentVerifier
 
 // directoryArtifactResolver implements empirical.ArtifactResolver over a local digest-addressed directory.
 type directoryArtifactResolver struct {
@@ -412,117 +418,22 @@ func (r *directoryArtifactResolver) ReadVerified(ctx context.Context, ref, diges
 	return nil, errs.New(errs.CategoryNotFound, "artifact %q (%s) not found in %q", ref, digest, r.dir)
 }
 
-func loadOperatorVerifier(operatorDir, artifactsDir, homeDir string) (receipts.Verifier, error) {
-	var searchDirs []string
-	if operatorDir != "" {
-		searchDirs = append(searchDirs, operatorDir)
-	}
-	if env := os.Getenv("DEVCADENCE_OPERATOR_DIR"); env != "" {
-		searchDirs = append(searchDirs, env)
-	}
-	if artifactsDir != "" {
-		searchDirs = append(searchDirs, artifactsDir, filepath.Join(artifactsDir, "operator"))
+// loadOperatorVerifier loads the operator receipt verifier with strict filesystem protection checks (B1).
+// It does NOT load anchors from artifactsDir.
+// Package tests may override this seam to inject in-memory verifiers for testing.
+var loadOperatorVerifier = defaultLoadOperatorVerifier
+
+func defaultLoadOperatorVerifier(operatorDir, artifactsDir, homeDir string) (receipts.Verifier, error) {
+	opts := receipts.FileOptions{
+		OperatorDir:      operatorDir,
+		TrustedOwnerUIDs: []uint32{0},
+		OperatorUID:      0,
+		Clock:            clock.System(),
 	}
 	if homeDir != "" {
-		searchDirs = append(searchDirs, filepath.Join(homeDir, "operator"))
+		opts.ReceiptsDir = filepath.Join(homeDir, "receipts")
 	}
-	searchDirs = append(searchDirs, "/etc/devcadence-operator", "/Library/Application Support/DevCadence/operator")
-
-	var anchors []receipts.TrustAnchor
-	var revocations *receipts.RevocationList
-
-	for _, dir := range searchDirs {
-		aPath := filepath.Join(dir, "anchors.json")
-		data, err := os.ReadFile(aPath)
-		if err != nil {
-			continue
-		}
-		var ad struct {
-			Version string                 `json:"version"`
-			Anchors []receipts.TrustAnchor `json:"anchors"`
-		}
-		if err := json.Unmarshal(data, &ad); err == nil && len(ad.Anchors) > 0 {
-			anchors = ad.Anchors
-			rPath := filepath.Join(dir, "revoked.json")
-			if rData, err := os.ReadFile(rPath); err == nil {
-				var rd struct {
-					Version    string   `json:"version"`
-					ReceiptIDs []string `json:"receipt_ids"`
-					AnchorIDs  []string `json:"anchor_ids"`
-				}
-				if err := json.Unmarshal(rData, &rd); err == nil && len(rd.ReceiptIDs) > 0 {
-					revMap := make(map[string]time.Time, len(rd.ReceiptIDs))
-					for _, id := range rd.ReceiptIDs {
-						revMap[id] = time.Now().UTC()
-					}
-					revocations = &receipts.RevocationList{
-						RevokedIDs: revMap,
-						RevokedAt:  time.Now().UTC(),
-					}
-				}
-			}
-			break
-		}
-	}
-
-	if len(anchors) == 0 {
-		fallbackAnchor := receipts.TrustAnchor{
-			AnchorID:     "unconfigured-operator",
-			HumanActorID: "none",
-			PublicKey:    make([]byte, ed25519.PublicKeySize),
-			NotAfter:     time.Unix(1, 0).UTC(),
-			Purposes:     []receipts.Purpose{receipts.PurposeEmpiricalCampaignAuthorize},
-		}
-		anchors = []receipts.TrustAnchor{fallbackAnchor}
-	}
-
-	var vOpts []receipts.VerifierOption
-	var rcpts []receipts.Receipt
-	var receiptDirs []string
-	if artifactsDir != "" {
-		receiptDirs = append(receiptDirs, filepath.Join(artifactsDir, "receipts"), artifactsDir)
-	}
-	if homeDir != "" {
-		receiptDirs = append(receiptDirs, filepath.Join(homeDir, "receipts"))
-	}
-
-	for _, rDir := range receiptDirs {
-		entries, err := os.ReadDir(rDir)
-		if err != nil {
-			continue
-		}
-		for _, entry := range entries {
-			if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
-				continue
-			}
-			data, err := os.ReadFile(filepath.Join(rDir, entry.Name()))
-			if err != nil || len(data) > 64*1024 {
-				continue
-			}
-			var r receipts.Receipt
-			if err := json.Unmarshal(data, &r); err == nil && r.Statement.ReceiptID != "" && r.Signature != "" {
-				rcpts = append(rcpts, r)
-			}
-		}
-	}
-
-	if len(rcpts) > 0 {
-		vOpts = append(vOpts, receipts.WithReceipts(rcpts...))
-	}
-	if artifactsDir != "" {
-		rcptSubdir := filepath.Join(artifactsDir, "receipts")
-		if info, err := os.Stat(rcptSubdir); err == nil && info.IsDir() {
-			vOpts = append(vOpts, receipts.WithReceiptsDir(rcptSubdir))
-		} else {
-			vOpts = append(vOpts, receipts.WithReceiptsDir(artifactsDir))
-		}
-	}
-	vOpts = append(vOpts, receipts.WithClock(clock.System()))
-	if revocations != nil {
-		vOpts = append(vOpts, receipts.WithRevocationList(revocations))
-	}
-
-	return receipts.NewVerifier(anchors, vOpts...)
+	return receipts.NewFileVerifier(opts)
 }
 
 func formatEmpiricalReport(rep *empirical.Report) (string, error) {
@@ -596,6 +507,7 @@ func runBenchmarkReplayEmpirical(ctx context.Context, e *env, args []string) err
 	outputPath := fs.String("output", "", "path to write output report (optional, defaults to stdout)")
 	asJSON := fs.Bool("json", false, "emit evaluation report as JSON")
 	operatorDir := fs.String("operator-dir", "", "optional directory containing operator anchors.json")
+	repoPath := fs.String("repo", "", "path to git repository root (optional, defaults to current working directory)")
 
 	if err := parseFlags(fs, e, args); err != nil {
 		return err
@@ -660,6 +572,25 @@ func runBenchmarkReplayEmpirical(ctx context.Context, e *env, args []string) err
 	var criteria gate.GateCriteria
 	if err := json.Unmarshal(criteriaData, &criteria); err != nil {
 		return errs.Wrap(errs.CategoryInvalidArgument, err, "malformed criteria JSON in %q", *criteriaPath)
+	}
+
+	if err := ctx.Err(); err != nil {
+		fmt.Fprintf(e.stderr, "devcadence: empirical admission error: %v\n", err)
+		return &gateExitError{
+			code: 3,
+			msg:  fmt.Sprintf("empirical admission error: %v", err),
+		}
+	}
+
+	if strings.TrimSpace(*repoPath) != "" {
+		absRepo, err := filepath.Abs(*repoPath)
+		if err != nil {
+			return errs.Wrap(errs.CategoryInvalidArgument, err, "failed to resolve --repo %q", *repoPath)
+		}
+		if _, err := repository.Register(ctx, "devcadence", absRepo, repository.Options{}); err != nil {
+			return errs.Wrap(errs.CategoryInvalidArgument, err, "invalid repository root %q", absRepo)
+		}
+		activeRepoRoot = absRepo
 	}
 
 	// 2. Initialize receipt verifier (receipts.NewVerifier / operator store).

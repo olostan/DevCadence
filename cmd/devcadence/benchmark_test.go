@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -17,9 +18,12 @@ import (
 	"github.com/olostan/DevCadence/internal/benchmark"
 	"github.com/olostan/DevCadence/internal/benchmark/campaign"
 	"github.com/olostan/DevCadence/internal/benchmark/empirical"
+	"github.com/olostan/DevCadence/internal/benchmark/empirical/verifier"
 	"github.com/olostan/DevCadence/internal/benchmark/experiments"
 	"github.com/olostan/DevCadence/internal/benchmark/gate"
 	"github.com/olostan/DevCadence/internal/benchmark/telemetry"
+	"github.com/olostan/DevCadence/internal/clock"
+	"github.com/olostan/DevCadence/internal/errs"
 	"github.com/olostan/DevCadence/internal/operator/receipts"
 	"github.com/olostan/DevCadence/internal/protocol"
 )
@@ -697,6 +701,45 @@ func setupEmpiricalFiles(t *testing.T, f *empiricalFixture) (manifestPath, planP
 		t.Fatalf("write receipt: %v", err)
 	}
 
+	origLoadOpVerifier := loadOperatorVerifier
+	t.Cleanup(func() { loadOperatorVerifier = origLoadOpVerifier })
+	inMemVerifier, err := receipts.NewVerifierWithReceipts(
+		[]receipts.TrustAnchor{f.anchor},
+		[]receipts.Receipt{rcpt},
+		receipts.WithClock(clock.System()),
+	)
+	if err != nil {
+		t.Fatalf("NewVerifierWithReceipts: %v", err)
+	}
+	loadOperatorVerifier = func(operatorDir, artifactsDir, homeDir string) (receipts.Verifier, error) {
+		if operatorDir != "" {
+			var revList *receipts.RevocationList
+			revPath := filepath.Join(operatorDir, "revoked.json")
+			if revBytes, err := os.ReadFile(revPath); err == nil {
+				var rd struct {
+					ReceiptIDs []string `json:"receipt_ids"`
+				}
+				if json.Unmarshal(revBytes, &rd) == nil && len(rd.ReceiptIDs) > 0 {
+					revMap := make(map[string]time.Time, len(rd.ReceiptIDs))
+					for _, rid := range rd.ReceiptIDs {
+						revMap[rid] = now
+					}
+					revList = &receipts.RevocationList{
+						RevokedIDs: revMap,
+						RevokedAt:  now,
+					}
+				}
+			}
+			return receipts.NewVerifierWithReceipts(
+				[]receipts.TrustAnchor{f.anchor},
+				[]receipts.Receipt{rcpt},
+				receipts.WithRevocationList(revList),
+				receipts.WithClock(clock.System()),
+			)
+		}
+		return inMemVerifier, nil
+	}
+
 	return manifestPath, planPath, authPath, artifactsDir, criteriaPath
 }
 
@@ -1130,6 +1173,18 @@ func TestFormatEmpiricalReport(t *testing.T) {
 	if !strings.Contains(out, "eval skipped for testing") {
 		t.Errorf("missing raw gate skipped in output: %s", out)
 	}
+
+	repWithRawGate := &empirical.Report{
+		CampaignID: "camp-2",
+		Conclusion: empirical.ConclusionGo,
+		RawGate: &gate.GateEvaluationResult{
+			Decision: gate.DecisionGo,
+		},
+	}
+	out2, err := formatEmpiricalReport(repWithRawGate)
+	if err != nil || !strings.Contains(out2, "**Gate Decision:** go") {
+		t.Errorf("expected RawGate formatted in output: %v, %s", err, out2)
+	}
 }
 
 func TestLoadAggregatedReport(t *testing.T) {
@@ -1468,6 +1523,21 @@ func TestCLIBenchmarkReplayEmpirical_MoreCases(t *testing.T) {
 		t.Fatal("expected error on output write failure when path is directory")
 	}
 
+	// 11b. Output to stdout using "-"
+	stdout, _, err := c.run("benchmark", "replay-empirical",
+		"--manifest", mPath,
+		"--plan", pPath,
+		"--authorization", aPath,
+		"--artifacts", artDir,
+		"--criteria", cPath,
+		"--output", "-")
+	if err != nil {
+		t.Fatalf("expected success with --output -, got: %v", err)
+	}
+	if !strings.Contains(stdout, "**Empirical Conclusion:** GO") {
+		t.Errorf("expected GO conclusion in stdout, got: %s", stdout)
+	}
+
 	// 12. newIndependentVerifier returns error
 	newIndependentVerifier = func(ctx context.Context, e *env, resolver empirical.ArtifactResolver) (empirical.IndependentVerifier, error) {
 		return nil, errors.New("simulated verifier creation error")
@@ -1505,20 +1575,30 @@ func TestCLIBenchmarkReplayEmpirical_MoreCases(t *testing.T) {
 	}
 }
 
-func TestLoadOperatorVerifier(t *testing.T) {
-	// 1. Fallback anchor when no directories provided or found
-	v, err := loadOperatorVerifier("", "", "")
-	if err != nil {
-		t.Fatalf("unexpected error with empty dirs: %v", err)
+func TestLoadOperatorVerifier_UnprotectedOrAbsentDirRejected(t *testing.T) {
+	// Calling defaultLoadOperatorVerifier with a user-owned temp dir fails because
+	// receipts.NewFileVerifier enforces that operator dir must not be owned by verifier euid.
+	tmpDir := t.TempDir()
+	_, err := defaultLoadOperatorVerifier(tmpDir, "", "")
+	if err == nil {
+		t.Fatal("expected error for unprotected operator dir")
 	}
-	if v == nil {
-		t.Fatal("expected non-nil verifier with fallback anchor")
+	if cat := errs.CategoryOf(err); cat != errs.CategoryPolicyDenied {
+		t.Errorf("expected CategoryPolicyDenied, got %v: %v", cat, err)
 	}
 
-	// 2. Full directory structure with anchors, revocations, and receipts
+	// Calling with non-existent dir also fails
+	_, err = defaultLoadOperatorVerifier(filepath.Join(tmpDir, "nonexistent"), "", "")
+	if err == nil {
+		t.Fatal("expected error for non-existent operator dir")
+	}
+}
+
+func TestLoadOperatorVerifier_ForgedAnchorInArtifactsRejected(t *testing.T) {
+	// A forged anchor placed in artifactsDir must NOT be used as a trust root (B1).
 	tmpDir := t.TempDir()
-	opDir := filepath.Join(tmpDir, "op")
-	_ = os.MkdirAll(opDir, 0o755)
+	artDir := filepath.Join(tmpDir, "artifacts")
+	_ = os.MkdirAll(artDir, 0o755)
 
 	f := newEmpiricalFixture()
 	ad := struct {
@@ -1529,87 +1609,162 @@ func TestLoadOperatorVerifier(t *testing.T) {
 		Anchors: []receipts.TrustAnchor{f.anchor},
 	}
 	adBytes, _ := json.Marshal(ad)
-	_ = os.WriteFile(filepath.Join(opDir, "anchors.json"), adBytes, 0o644)
+	_ = os.WriteFile(filepath.Join(artDir, "anchors.json"), adBytes, 0o644)
+	_ = os.WriteFile(filepath.Join(artDir, "revoked.json"), []byte(`{"version":"1.0","receipt_ids":[],"anchor_ids":[]}`), 0o644)
 
-	rd := struct {
-		Version    string   `json:"version"`
-		ReceiptIDs []string `json:"receipt_ids"`
-	}{
-		Version:    "1.0",
-		ReceiptIDs: []string{"rcpt_00000000000000000000000001"},
+	// Calling defaultLoadOperatorVerifier with empty operatorDir and forged artifactsDir
+	// must not load anchors from artDir; it fails because the system operator root is absent/unprotected.
+	_, err := defaultLoadOperatorVerifier("", artDir, "")
+	if err == nil {
+		t.Fatal("expected defaultLoadOperatorVerifier to reject and not load forged anchor from artifactsDir")
 	}
-	rdBytes, _ := json.Marshal(rd)
-	_ = os.WriteFile(filepath.Join(opDir, "revoked.json"), rdBytes, 0o644)
+}
 
-	artDir := filepath.Join(tmpDir, "art")
-	rcptDir := filepath.Join(artDir, "receipts")
-	_ = os.MkdirAll(rcptDir, 0o755)
+func TestCLIReplayEmpirical_ForgedAnchorInArtifactsRejected(t *testing.T) {
+	c := newCLI(t)
+	f := newEmpiricalFixture()
+	mPath, pPath, aPath, artDir, cPath := setupEmpiricalFiles(t, f)
 
-	// Add entries in rcptDir:
-	_ = os.MkdirAll(filepath.Join(rcptDir, "subdir"), 0o755)
-	_ = os.WriteFile(filepath.Join(rcptDir, "notes.txt"), []byte("text"), 0o644)
-	hugeData := make([]byte, 70*1024)
-	_ = os.WriteFile(filepath.Join(rcptDir, "huge.json"), hugeData, 0o644)
-	_ = os.WriteFile(filepath.Join(rcptDir, "invalid.json"), []byte("{invalid"), 0o644)
+	// Reset loadOperatorVerifier to defaultLoadOperatorVerifier to test real protection
+	loadOperatorVerifier = defaultLoadOperatorVerifier
 
-	text := "auth rcpt"
+	// With real verifier, forged anchor in artDir is not trusted -> operator verification fails
+	_, stderr, err := c.run("benchmark", "replay-empirical",
+		"--manifest", mPath,
+		"--plan", pPath,
+		"--authorization", aPath,
+		"--artifacts", artDir,
+		"--criteria", cPath)
+	if err == nil {
+		t.Fatal("expected failure when operator trust root is missing or forged in --artifacts")
+	}
+	errStr := err.Error() + " " + stderr
+	if !strings.Contains(errStr, "failed to initialize receipt verifier") && !strings.Contains(errStr, "OPERATOR_AUTHORITY") {
+		t.Fatalf("unexpected error/stderr: %s", errStr)
+	}
+}
+
+func TestCLIReplayEmpirical_InvalidRepoRootRejected(t *testing.T) {
+	c := newCLI(t)
+	f := newEmpiricalFixture()
+	mPath, pPath, aPath, artDir, cPath := setupEmpiricalFiles(t, f)
+
+	// Pass a nonexistent directory to --repo (I3)
+	_, stderr, err := c.run("benchmark", "replay-empirical",
+		"--manifest", mPath,
+		"--plan", pPath,
+		"--authorization", aPath,
+		"--artifacts", artDir,
+		"--criteria", cPath,
+		"--repo", filepath.Join(t.TempDir(), "nonexistent-repo"))
+	if err == nil {
+		t.Fatal("expected error for invalid --repo")
+	}
+	errStr := err.Error() + " " + stderr
+	if !strings.Contains(errStr, "invalid repository root") {
+		t.Fatalf("expected 'invalid repository root' error, got: %s", errStr)
+	}
+}
+
+func TestCLIReplayEmpirical_ValidRepoRootAccepted(t *testing.T) {
+	c := newCLI(t)
+	f := newEmpiricalFixture()
+	mPath, pPath, aPath, artDir, cPath := setupEmpiricalFiles(t, f)
+
+	// Initialize a minimal git repository in temp directory
+	repoDir := t.TempDir()
+	cmd := exec.Command("git", "init", repoDir)
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("failed to init git repo: %v", err)
+	}
+
+	origVerifier := newIndependentVerifier
+	newIndependentVerifier = func(ctx context.Context, e *env, resolver empirical.ArtifactResolver) (empirical.IndependentVerifier, error) {
+		return &testCountingVerifier{}, nil
+	}
+	defer func() { newIndependentVerifier = origVerifier }()
+
+	stdout, stderr, err := c.run("benchmark", "replay-empirical",
+		"--manifest", mPath,
+		"--plan", pPath,
+		"--authorization", aPath,
+		"--artifacts", artDir,
+		"--criteria", cPath,
+		"--repo", repoDir)
+	if err != nil {
+		t.Fatalf("expected success with valid --repo, got: %v\nstderr: %s\nstdout: %s", err, stderr, stdout)
+	}
+	if !strings.Contains(stdout, "**Empirical Conclusion:** GO") {
+		t.Errorf("expected GO conclusion in stdout, got: %s", stdout)
+	}
+}
+
+func TestLoadOperatorVerifier_RevocationHonored(t *testing.T) {
+	f := newEmpiricalFixture()
+	manifest, _, authBytes, pd, ad := f.manifest()
+
+	now := time.Now().UTC()
+	text := "authorization receipt"
 	stmt := receipts.Statement{
 		Version:      "1.0",
 		ReceiptID:    "rcpt_00000000000000000000000001",
 		AnchorID:     f.anchor.AnchorID,
 		HumanActorID: f.anchor.HumanActorID,
-		IssuedAt:     time.Now().UTC().Add(-time.Hour),
-		NotAfter:     time.Now().UTC().Add(time.Hour),
+		IssuedAt:     now.Add(-2 * time.Hour),
+		NotAfter:     now.Add(48 * time.Hour),
 		Purpose:      receipts.PurposeEmpiricalCampaignAuthorize,
 		Use:          receipts.UseGrant,
 		ProjectID:    "devcadence",
 		Subject: receipts.Subject{
 			Kind:    "CampaignAuthorization",
-			ID:      "auth-1",
+			ID:      pd,
 			Version: 1,
 		},
-		SubjectDigest: protocol.DigestBytes([]byte("auth-1")),
+		SubjectDigest: ad,
 		Text:          text,
 		TextDigest:    protocol.DigestBytes([]byte(text)),
 	}
-	rcpt, err := stmt.Sign(f.privKey)
+	signedRcpt, err := stmt.Sign(f.privKey)
 	if err != nil {
-		t.Fatalf("sign receipt: %v", err)
-	}
-	rcptBytes, _ := json.Marshal(rcpt)
-	_ = os.WriteFile(filepath.Join(rcptDir, "valid.json"), rcptBytes, 0o644)
-
-	homeDir := filepath.Join(tmpDir, "home")
-	_ = os.MkdirAll(filepath.Join(homeDir, "operator"), 0o755)
-	_ = os.MkdirAll(filepath.Join(homeDir, "receipts"), 0o755)
-
-	v, err = loadOperatorVerifier(opDir, artDir, homeDir)
-	if err != nil {
-		t.Fatalf("loadOperatorVerifier error: %v", err)
-	}
-	if v == nil {
-		t.Fatal("expected non-nil verifier")
+		t.Fatal(err)
 	}
 
-	// 3. artifactsDir without "receipts" subdirectory
-	artDir2 := filepath.Join(tmpDir, "art2")
-	_ = os.MkdirAll(artDir2, 0o755)
-	v, err = loadOperatorVerifier("", artDir2, "")
-	if err != nil {
-		t.Fatalf("loadOperatorVerifier with plain artDir error: %v", err)
+	revMap := map[string]time.Time{
+		"rcpt_00000000000000000000000001": now,
 	}
-	if v == nil {
-		t.Fatal("expected non-nil verifier")
+	revList := &receipts.RevocationList{
+		RevokedIDs: revMap,
+		RevokedAt:  now,
 	}
 
-	// 4. DEVCADENCE_OPERATOR_DIR env var
-	envDir := filepath.Join(tmpDir, "env_op")
-	_ = os.MkdirAll(envDir, 0o755)
-	_ = os.WriteFile(filepath.Join(envDir, "anchors.json"), adBytes, 0o644)
-	t.Setenv("DEVCADENCE_OPERATOR_DIR", envDir)
-	v, err = loadOperatorVerifier("", "", "")
+	inMemVerifier, err := receipts.NewVerifierWithReceipts(
+		[]receipts.TrustAnchor{f.anchor},
+		[]receipts.Receipt{signedRcpt},
+		receipts.WithRevocationList(revList),
+		receipts.WithClock(clock.System()),
+	)
 	if err != nil {
-		t.Fatalf("loadOperatorVerifier with DEVCADENCE_OPERATOR_DIR error: %v", err)
+		t.Fatal(err)
+	}
+
+	ca, err := verifier.NewCampaignAuthority(inMemVerifier, "devcadence", clock.System())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = ca.VerifyAuthorization(context.Background(), manifest.PlanDigest, manifest.AuthorizationDigest, authBytes)
+	if err == nil {
+		t.Fatal("expected error for revoked receipt")
+	}
+	if cat := errs.CategoryOf(err); cat != errs.CategoryPolicyDenied {
+		t.Errorf("expected CategoryPolicyDenied, got %v: %v", cat, err)
+	}
+}
+
+func TestDefaultNewIndependentVerifier(t *testing.T) {
+	v, err := defaultNewIndependentVerifier(context.Background(), &env{}, nil)
+	if err != nil {
+		t.Fatalf("unexpected error creating independent verifier: %v", err)
 	}
 	if v == nil {
 		t.Fatal("expected non-nil verifier")

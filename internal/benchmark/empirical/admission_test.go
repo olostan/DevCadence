@@ -133,6 +133,11 @@ func TestStructuralRefusalsMakeZeroVerifierCalls(t *testing.T) {
 			f.plan.RequestedTiers = []string{"frontier_api"}
 			f.auth.AllowedEndpointBindings[0].CapabilityClass = "frontier_api"
 		}, ReasonAuthorizationBad}, // A7/A8: unknown API cost never launches
+		"unknown spend with positive cap": {func(f *fixture) {
+			f.plan.Limits.MaxAPISpendMicroUSD = 10000000
+			f.auth.MaxAPISpendMicroUSD = 10000000
+			f.runs[0].Measurements["api_spend_usd"] = Measurement{Known: false, Unit: "USD", Provenance: ProvenanceUnknown, EvidenceRef: "e"}
+		}, ReasonAuthorizationBad},
 		"bad expiry":            {func(f *fixture) { f.auth.Expiry = "tomorrow" }, ReasonAuthorizationBad},
 		"completed w/o receipt": {func(f *fixture) { f.runs[0].VerifierReceiptRef = "" }, ReasonRunInvalid}, // A5
 		"self verification":     {func(f *fixture) { f.runs[0].VerifierProducerID = f.runs[0].InvocationProducerID }, ReasonNotIndependent},

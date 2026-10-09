@@ -2309,7 +2309,7 @@ func TestVerifier_AbbreviatedBaseCommitResolution(t *testing.T) {
 
 func TestVerifier_UnresolvableBaseCommitFailClosed(t *testing.T) {
 	ctx := context.Background()
-	_, baseCommit, candGoodCommit, _, wtManager, repoProvider, scratchDir := setupBaseTestDependencies(t)
+	_, _, candGoodCommit, _, wtManager, repoProvider, scratchDir := setupBaseTestDependencies(t)
 	now := time.Date(2026, 10, 8, 12, 0, 0, 0, time.UTC)
 	sourceCommit := "commit-verifier-v1"
 	bSource := mockBuildInfoSource{rev: sourceCommit, modified: false, ok: true}
@@ -2343,7 +2343,7 @@ func TestVerifier_UnresolvableBaseCommitFailClosed(t *testing.T) {
 	}
 
 	plan, run, evidence, resolver := helperMakeValidFixtures(
-		t, now, baseCommit, candGoodCommit, sourceCommit, profile, "implementation", empirical.QualityAccepted, []byte("cand"),
+		t, now, "deadbeefdeadbeef", candGoodCommit, sourceCommit, profile, "implementation", empirical.QualityAccepted, []byte("cand"),
 	)
 
 	_, err = v.Verify(ctx, plan, run, evidence, resolver)
@@ -2356,4 +2356,500 @@ func TestVerifier_UnresolvableBaseCommitFailClosed(t *testing.T) {
 	if !strings.Contains(err.Error(), "VERIFIER_INFRASTRUCTURE: task base commit") {
 		t.Errorf("expected VERIFIER_INFRASTRUCTURE message, got: %v", err)
 	}
+}
+
+func TestVerifier_CandidateCheckoutModificationDetectedAndRejected(t *testing.T) {
+	ctx := context.Background()
+	_, baseCommit, candGoodCommit, _, wtManager, repoProvider, scratchDir := setupBaseTestDependencies(t)
+	now := time.Date(2026, 10, 8, 12, 0, 0, 0, time.UTC)
+	sourceCommit := "commit-verifier-v1"
+	bSource := mockBuildInfoSource{rev: sourceCommit, modified: false, ok: true}
+
+	profile := verifier.VerificationProfile{
+		Version:     "1.0",
+		ProfileID:   "prof-dirty-cand",
+		Executables: []string{"git", "touch"},
+		Tasks: []verifier.TaskVerification{
+			{
+				TaskID:             "task-01",
+				TaskDigest:         "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+				Class:              "implementation",
+				BaseCommit:         baseCommit,
+				WriteScope:         []string{"src/"},
+				Checks:             []verifier.CheckSpec{{CheckID: "chk-dirty", Argv: []string{"touch", "dirty_file.txt"}, TimeoutSeconds: 10, ExpectExitCode: 0}},
+				AcceptanceCheckIDs: []string{"chk-dirty"},
+			},
+		},
+	}
+
+	v, err := verifier.New(verifier.Options{
+		Worktrees:    wtManager,
+		Repositories: repoProvider,
+		BuildInfo:    bSource,
+		ScratchDir:   scratchDir,
+		Profile:      &profile,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	plan, run, evidence, resolver := helperMakeValidFixtures(
+		t, now, baseCommit, candGoodCommit, sourceCommit, profile, "implementation", empirical.QualityAccepted, []byte("cand"),
+	)
+
+	_, err = v.Verify(ctx, plan, run, evidence, resolver)
+	if err == nil {
+		t.Fatal("expected error when candidate checkout is modified during check")
+	}
+	if cat := errs.CategoryOf(err); cat != errs.CategoryIntegrity {
+		t.Errorf("expected CategoryIntegrity, got %v: %v", cat, err)
+	}
+	if !strings.Contains(err.Error(), "INCONSISTENT_VERIFICATION:") {
+		t.Errorf("expected INCONSISTENT_VERIFICATION error, got: %v", err)
+	}
+}
+
+func TestVerifier_ProfileTaskDigestMismatchRejected(t *testing.T) {
+	ctx := context.Background()
+	_, baseCommit, candGoodCommit, _, wtManager, repoProvider, scratchDir := setupBaseTestDependencies(t)
+	now := time.Date(2026, 10, 8, 12, 0, 0, 0, time.UTC)
+	sourceCommit := "commit-verifier-v1"
+	bSource := mockBuildInfoSource{rev: sourceCommit, modified: false, ok: true}
+
+	profile := verifier.VerificationProfile{
+		Version:     "1.0",
+		ProfileID:   "prof-digest-mismatch",
+		Executables: []string{"git"},
+		Tasks: []verifier.TaskVerification{
+			{
+				TaskID:             "task-01",
+				TaskDigest:         "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+				Class:              "implementation",
+				BaseCommit:         baseCommit,
+				WriteScope:         []string{"src/"},
+				Checks:             []verifier.CheckSpec{{CheckID: "chk-1", Argv: []string{"git", "status"}, TimeoutSeconds: 10}},
+				AcceptanceCheckIDs: []string{"chk-1"},
+			},
+		},
+	}
+
+	v, err := verifier.New(verifier.Options{
+		Worktrees:    wtManager,
+		Repositories: repoProvider,
+		BuildInfo:    bSource,
+		ScratchDir:   scratchDir,
+		Profile:      &profile,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	plan, run, evidence, resolver := helperMakeValidFixtures(
+		t, now, baseCommit, candGoodCommit, sourceCommit, profile, "implementation", empirical.QualityAccepted, []byte("cand"),
+	)
+
+	run.TaskDigest = "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+	evidence.TaskDigest = run.TaskDigest
+
+	sessBytes := resolver[evidence.SessionEvidenceRef]
+	var sess empirical.SessionEvidence
+	if err := json.Unmarshal(sessBytes, &sess); err != nil {
+		t.Fatal(err)
+	}
+	sess.TaskDigest = run.TaskDigest
+	newSessBytes, _ := protocol.CanonicalJSON(sess)
+	newSessDigest := protocol.DigestBytes(newSessBytes)
+	resolver[evidence.SessionEvidenceRef] = newSessBytes
+	evidence.SessionEvidenceDigest = newSessDigest
+
+	rcptBytes := resolver[evidence.VerifierReceiptRef]
+	var rcpt verifier.VerifierReceipt
+	if err := json.Unmarshal(rcptBytes, &rcpt); err != nil {
+		t.Fatal(err)
+	}
+	rcpt.TaskDigest = run.TaskDigest
+	rcpt.SessionEvidenceDigest = newSessDigest
+	newRcptBytes, _ := protocol.CanonicalJSON(rcpt)
+	newRcptDigest := protocol.DigestBytes(newRcptBytes)
+	resolver[evidence.VerifierReceiptRef] = newRcptBytes
+	evidence.VerifierReceiptDigest = newRcptDigest
+
+	_, err = v.Verify(ctx, plan, run, evidence, resolver)
+	if err == nil {
+		t.Fatal("expected error for profile task digest mismatch")
+	}
+	if cat := errs.CategoryOf(err); cat != errs.CategoryIntegrity {
+		t.Errorf("expected CategoryIntegrity, got %v", cat)
+	}
+	if !strings.Contains(err.Error(), "does not match planned run task digest") {
+		t.Errorf("unexpected error message: %v", err)
+	}
+}
+
+func TestVerifier_BaseCommitMismatchRejected(t *testing.T) {
+	ctx := context.Background()
+	_, baseCommit, candGoodCommit, _, wtManager, repoProvider, scratchDir := setupBaseTestDependencies(t)
+	now := time.Date(2026, 10, 8, 12, 0, 0, 0, time.UTC)
+	sourceCommit := "commit-verifier-v1"
+	bSource := mockBuildInfoSource{rev: sourceCommit, modified: false, ok: true}
+
+	profile := verifier.VerificationProfile{
+		Version:     "1.0",
+		ProfileID:   "prof-base-mismatch",
+		Executables: []string{"git"},
+		Tasks: []verifier.TaskVerification{
+			{
+				TaskID:             "task-01",
+				TaskDigest:         "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+				Class:              "implementation",
+				BaseCommit:         baseCommit,
+				WriteScope:         []string{"src/"},
+				Checks:             []verifier.CheckSpec{{CheckID: "chk-1", Argv: []string{"git", "status"}, TimeoutSeconds: 10}},
+				AcceptanceCheckIDs: []string{"chk-1"},
+			},
+		},
+	}
+
+	v, err := verifier.New(verifier.Options{
+		Worktrees:    wtManager,
+		Repositories: repoProvider,
+		BuildInfo:    bSource,
+		ScratchDir:   scratchDir,
+		Profile:      &profile,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	plan, run, evidence, resolver := helperMakeValidFixtures(
+		t, now, baseCommit, candGoodCommit, sourceCommit, profile, "implementation", empirical.QualityAccepted, []byte("cand"),
+	)
+
+	run.EWP.BaseCommit = "otherbasecommit"
+
+	_, err = v.Verify(ctx, plan, run, evidence, resolver)
+	if err == nil {
+		t.Fatal("expected error for base commit mismatch")
+	}
+	if cat := errs.CategoryOf(err); cat != errs.CategoryIntegrity {
+		t.Errorf("expected CategoryIntegrity, got %v", cat)
+	}
+	if !strings.Contains(err.Error(), "does not match planned run base commit") {
+		t.Errorf("unexpected error message: %v", err)
+	}
+}
+
+func TestVerifier_WorkerRoleMismatchRejected(t *testing.T) {
+	ctx := context.Background()
+	_, baseCommit, candGoodCommit, _, wtManager, repoProvider, scratchDir := setupBaseTestDependencies(t)
+	now := time.Date(2026, 10, 8, 12, 0, 0, 0, time.UTC)
+	sourceCommit := "commit-verifier-v1"
+	bSource := mockBuildInfoSource{rev: sourceCommit, modified: false, ok: true}
+
+	profile := verifier.VerificationProfile{
+		Version:     "1.0",
+		ProfileID:   "prof-role-mismatch",
+		Executables: []string{"git"},
+		Tasks: []verifier.TaskVerification{
+			{
+				TaskID:             "task-01",
+				TaskDigest:         "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+				Class:              "implementation",
+				BaseCommit:         baseCommit,
+				WriteScope:         []string{"src/"},
+				Checks:             []verifier.CheckSpec{{CheckID: "chk-1", Argv: []string{"git", "status"}, TimeoutSeconds: 10}},
+				AcceptanceCheckIDs: []string{"chk-1"},
+			},
+		},
+	}
+
+	v, err := verifier.New(verifier.Options{
+		Worktrees:    wtManager,
+		Repositories: repoProvider,
+		BuildInfo:    bSource,
+		ScratchDir:   scratchDir,
+		Profile:      &profile,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	plan, run, evidence, resolver := helperMakeValidFixtures(
+		t, now, baseCommit, candGoodCommit, sourceCommit, profile, "implementation", empirical.QualityAccepted, []byte("cand"),
+	)
+
+	sessBytes := resolver[evidence.SessionEvidenceRef]
+	var sess empirical.SessionEvidence
+	if err := json.Unmarshal(sessBytes, &sess); err != nil {
+		t.Fatal(err)
+	}
+	provBytes := resolver[sess.InvocationProvenanceDigest]
+	var prov protocol.InvocationProvenance
+	if err := json.Unmarshal(provBytes, &prov); err != nil {
+		t.Fatal(err)
+	}
+	prov.Role = protocol.ProvenanceRoleReviewer
+	prov.Actor.Role = protocol.ProvenanceRoleReviewer
+	prov.Dimension = protocol.DimensionCorrectness
+	newProvBytes, _ := protocol.CanonicalJSON(prov)
+	newProvDigest := protocol.DigestBytes(newProvBytes)
+	resolver[newProvDigest] = newProvBytes
+
+	sess.InvocationProvenanceDigest = newProvDigest
+	newSessBytes, _ := protocol.CanonicalJSON(sess)
+	newSessDigest := protocol.DigestBytes(newSessBytes)
+	resolver[evidence.SessionEvidenceRef] = newSessBytes
+	evidence.SessionEvidenceDigest = newSessDigest
+
+	rcptBytes := resolver[evidence.VerifierReceiptRef]
+	var rcpt verifier.VerifierReceipt
+	if err := json.Unmarshal(rcptBytes, &rcpt); err != nil {
+		t.Fatal(err)
+	}
+	rcpt.SessionEvidenceDigest = newSessDigest
+	newRcptBytes, _ := protocol.CanonicalJSON(rcpt)
+	newRcptDigest := protocol.DigestBytes(newRcptBytes)
+	resolver[evidence.VerifierReceiptRef] = newRcptBytes
+	evidence.VerifierReceiptDigest = newRcptDigest
+
+	_, err = v.Verify(ctx, plan, run, evidence, resolver)
+	if err == nil {
+		t.Fatal("expected error for worker role mismatch")
+	}
+	if cat := errs.CategoryOf(err); cat != errs.CategoryInvalidArgument {
+		t.Errorf("expected CategoryInvalidArgument, got %v: %v", cat, err)
+	}
+	if !strings.Contains(err.Error(), "worker provenance role \"reviewer\" must be implementer") {
+		t.Errorf("unexpected error message: %v", err)
+	}
+}
+
+func TestVerifier_AttemptIDMismatchRejected(t *testing.T) {
+	ctx := context.Background()
+	_, baseCommit, candGoodCommit, _, wtManager, repoProvider, scratchDir := setupBaseTestDependencies(t)
+	now := time.Date(2026, 10, 8, 12, 0, 0, 0, time.UTC)
+	sourceCommit := "commit-verifier-v1"
+	bSource := mockBuildInfoSource{rev: sourceCommit, modified: false, ok: true}
+
+	profile := verifier.VerificationProfile{
+		Version:     "1.0",
+		ProfileID:   "prof-attempt-mismatch",
+		Executables: []string{"git"},
+		Tasks: []verifier.TaskVerification{
+			{
+				TaskID:             "task-01",
+				TaskDigest:         "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+				Class:              "implementation",
+				BaseCommit:         baseCommit,
+				WriteScope:         []string{"src/"},
+				Checks:             []verifier.CheckSpec{{CheckID: "chk-1", Argv: []string{"git", "status"}, TimeoutSeconds: 10}},
+				AcceptanceCheckIDs: []string{"chk-1"},
+			},
+		},
+	}
+
+	v, err := verifier.New(verifier.Options{
+		Worktrees:    wtManager,
+		Repositories: repoProvider,
+		BuildInfo:    bSource,
+		ScratchDir:   scratchDir,
+		Profile:      &profile,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	plan, run, evidence, resolver := helperMakeValidFixtures(
+		t, now, baseCommit, candGoodCommit, sourceCommit, profile, "implementation", empirical.QualityAccepted, []byte("cand"),
+	)
+
+	sessBytes := resolver[evidence.SessionEvidenceRef]
+	var sess empirical.SessionEvidence
+	if err := json.Unmarshal(sessBytes, &sess); err != nil {
+		t.Fatal(err)
+	}
+	provBytes := resolver[sess.InvocationProvenanceDigest]
+	var prov protocol.InvocationProvenance
+	if err := json.Unmarshal(provBytes, &prov); err != nil {
+		t.Fatal(err)
+	}
+	prov.AttemptID = "different-attempt-99"
+	newProvBytes, _ := protocol.CanonicalJSON(prov)
+	newProvDigest := protocol.DigestBytes(newProvBytes)
+	resolver[newProvDigest] = newProvBytes
+
+	sess.InvocationProvenanceDigest = newProvDigest
+	newSessBytes, _ := protocol.CanonicalJSON(sess)
+	newSessDigest := protocol.DigestBytes(newSessBytes)
+	resolver[evidence.SessionEvidenceRef] = newSessBytes
+	evidence.SessionEvidenceDigest = newSessDigest
+
+	rcptBytes := resolver[evidence.VerifierReceiptRef]
+	var rcpt verifier.VerifierReceipt
+	if err := json.Unmarshal(rcptBytes, &rcpt); err != nil {
+		t.Fatal(err)
+	}
+	rcpt.SessionEvidenceDigest = newSessDigest
+	newRcptBytes, _ := protocol.CanonicalJSON(rcpt)
+	newRcptDigest := protocol.DigestBytes(newRcptBytes)
+	resolver[evidence.VerifierReceiptRef] = newRcptBytes
+	evidence.VerifierReceiptDigest = newRcptDigest
+
+	_, err = v.Verify(ctx, plan, run, evidence, resolver)
+	if err == nil {
+		t.Fatal("expected error for attempt_id mismatch")
+	}
+	if cat := errs.CategoryOf(err); cat != errs.CategoryInvalidArgument {
+		t.Errorf("expected CategoryInvalidArgument, got %v: %v", cat, err)
+	}
+	if !strings.Contains(err.Error(), "worker provenance attempt_id") {
+		t.Errorf("unexpected error message: %v", err)
+	}
+}
+
+func TestVerifier_PathTraversalRejected(t *testing.T) {
+	ctx := context.Background()
+	_, baseCommit, candGoodCommit, _, wtManager, repoProvider, scratchDir := setupBaseTestDependencies(t)
+	now := time.Date(2026, 10, 8, 12, 0, 0, 0, time.UTC)
+	sourceCommit := "commit-verifier-v1"
+	bSource := mockBuildInfoSource{rev: sourceCommit, modified: false, ok: true}
+
+	t.Run("traversal in RunID", func(t *testing.T) {
+		profile := verifier.VerificationProfile{
+			Version:     "1.0",
+			ProfileID:   "prof-traversal-run",
+			Executables: []string{"git"},
+			Tasks: []verifier.TaskVerification{
+				{
+					TaskID:             "task-01",
+					TaskDigest:         "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+					Class:              "implementation",
+					BaseCommit:         baseCommit,
+					WriteScope:         []string{"src/"},
+					Checks:             []verifier.CheckSpec{{CheckID: "chk-1", Argv: []string{"git", "status"}, TimeoutSeconds: 10}},
+					AcceptanceCheckIDs: []string{"chk-1"},
+				},
+			},
+		}
+
+		v, err := verifier.New(verifier.Options{
+			Worktrees:    wtManager,
+			Repositories: repoProvider,
+			BuildInfo:    bSource,
+			ScratchDir:   scratchDir,
+			Profile:      &profile,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		plan, run, evidence, resolver := helperMakeValidFixtures(
+			t, now, baseCommit, candGoodCommit, sourceCommit, profile, "implementation", empirical.QualityAccepted, []byte("cand"),
+		)
+		run.RunID = "../escape"
+		evidence.RunID = "../escape"
+
+		_, err = v.Verify(ctx, plan, run, evidence, resolver)
+		if err == nil {
+			t.Fatal("expected error for path traversal in RunID")
+		}
+		if cat := errs.CategoryOf(err); cat != errs.CategoryInvalidArgument {
+			t.Errorf("expected CategoryInvalidArgument, got %v: %v", cat, err)
+		}
+		if !strings.Contains(err.Error(), "invalid run_id") {
+			t.Errorf("unexpected error message: %v", err)
+		}
+	})
+
+	t.Run("dot in RunID", func(t *testing.T) {
+		profile := verifier.VerificationProfile{
+			Version:     "1.0",
+			ProfileID:   "prof-traversal-dot",
+			Executables: []string{"git"},
+			Tasks: []verifier.TaskVerification{
+				{
+					TaskID:             "task-01",
+					TaskDigest:         "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+					Class:              "implementation",
+					BaseCommit:         baseCommit,
+					WriteScope:         []string{"src/"},
+					Checks:             []verifier.CheckSpec{{CheckID: "chk-01", Argv: []string{"git", "status"}, TimeoutSeconds: 10}},
+					AcceptanceCheckIDs: []string{"chk-01"},
+				},
+			},
+		}
+
+		v, err := verifier.New(verifier.Options{
+			Worktrees:    wtManager,
+			Repositories: repoProvider,
+			BuildInfo:    bSource,
+			ScratchDir:   scratchDir,
+			Profile:      &profile,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		plan, run, evidence, resolver := helperMakeValidFixtures(
+			t, now, baseCommit, candGoodCommit, sourceCommit, profile, "implementation", empirical.QualityAccepted, []byte("cand"),
+		)
+		run.RunID = "."
+		evidence.RunID = "."
+
+		_, err = v.Verify(ctx, plan, run, evidence, resolver)
+		if err == nil {
+			t.Fatal("expected error for dot in RunID")
+		}
+		if cat := errs.CategoryOf(err); cat != errs.CategoryInvalidArgument {
+			t.Errorf("expected CategoryInvalidArgument, got %v: %v", cat, err)
+		}
+		if !strings.Contains(err.Error(), "invalid run_id") {
+			t.Errorf("unexpected error message: %v", err)
+		}
+	})
+
+	t.Run("traversal in CheckID", func(t *testing.T) {
+		profile := verifier.VerificationProfile{
+			Version:     "1.0",
+			ProfileID:   "prof-traversal-check",
+			Executables: []string{"git"},
+			Tasks: []verifier.TaskVerification{
+				{
+					TaskID:             "task-01",
+					TaskDigest:         "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+					Class:              "implementation",
+					BaseCommit:         baseCommit,
+					WriteScope:         []string{"src/"},
+					Checks:             []verifier.CheckSpec{{CheckID: "../chk-escape", Argv: []string{"git", "status"}, TimeoutSeconds: 10}},
+					AcceptanceCheckIDs: []string{"../chk-escape"},
+				},
+			},
+		}
+
+		v, err := verifier.New(verifier.Options{
+			Worktrees:    wtManager,
+			Repositories: repoProvider,
+			BuildInfo:    bSource,
+			ScratchDir:   scratchDir,
+			Profile:      &profile,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		plan, run, evidence, resolver := helperMakeValidFixtures(
+			t, now, baseCommit, candGoodCommit, sourceCommit, profile, "implementation", empirical.QualityAccepted, []byte("cand"),
+		)
+
+		_, err = v.Verify(ctx, plan, run, evidence, resolver)
+		if err == nil {
+			t.Fatal("expected error for path traversal in CheckID")
+		}
+		if cat := errs.CategoryOf(err); cat != errs.CategoryInvalidArgument {
+			t.Errorf("expected CategoryInvalidArgument, got %v: %v", cat, err)
+		}
+		if !strings.Contains(err.Error(), "invalid check_id") {
+			t.Errorf("unexpected error message: %v", err)
+		}
+	})
 }

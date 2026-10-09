@@ -112,3 +112,6 @@ type VerifierOptions = Options
 
 // RunVerification is an alias for empirical.VerifiedOutcome for ergonomics.
 type RunVerification = empirical.VerifiedOutcome
+
+// LimitationUnconfinedHostProcess declares that independent verifier checks execute as host processes without an OS sandbox boundary.
+const LimitationUnconfinedHostProcess = "unconfined_host_process"

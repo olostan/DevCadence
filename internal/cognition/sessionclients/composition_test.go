@@ -968,3 +968,70 @@ func TestComposition_Open_ProbeTimeout_MaxDurationSeconds(t *testing.T) {
 		}
 	})
 }
+
+func TestComposition_SupportsStreamingFalse(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/version":
+			_ = json.NewEncoder(w).Encode(map[string]any{"version": "0.1.32"})
+		case "/api/tags":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"models": []map[string]any{
+					{
+						"name":   "llama3:latest",
+						"digest": "365c0bd3c000a45d28dd41f479a500350203b80f010317355113d8ac5bc15084",
+					},
+				},
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	ep := sampleResolvedEndpoint(protocol.EndpointLocalRuntime)
+	comp, err := sessionclients.New(sessionclients.Options{
+		LoopbackBaseURLs: map[string]string{
+			ep.EndpointID: server.URL,
+		},
+	})
+	if err != nil {
+		t.Fatalf("unexpected New error: %v", err)
+	}
+
+	opened, err := comp.Open(context.Background(), ep)
+	if err != nil {
+		t.Fatalf("unexpected Open error: %v", err)
+	}
+
+	// Verify driver capabilities has SupportsStreaming = false (I2)
+	directDriver, ok := opened.Driver.(*drivers.DirectAPIDriver)
+	if !ok {
+		t.Fatalf("expected *drivers.DirectAPIDriver, got %T", opened.Driver)
+	}
+	caps := directDriver.Capabilities()
+	if caps.SupportsStreaming {
+		t.Errorf("expected SupportsStreaming = false, got true")
+	}
+
+	session, err := opened.Driver.StartSession(context.Background(), drivers.SessionConfig{
+		SessionID:              "sess-stream-test",
+		ModelID:                ep.ModelID,
+		MaxOutputTokensPerCall: 2048,
+	})
+	if err != nil {
+		t.Fatalf("unexpected StartSession error: %v", err)
+	}
+	defer session.Close(context.Background())
+
+	_, err = session.StreamTurn(context.Background(), drivers.TurnInput{
+		TurnID: "t-1",
+		Prompt: "stream prompt",
+	})
+	if err == nil {
+		t.Fatal("expected error on StreamTurn when streaming is unsupported, got nil")
+	}
+	if !errors.Is(err, errs.ErrUnsupported) {
+		t.Errorf("expected ErrUnsupported, got %v", err)
+	}
+}
