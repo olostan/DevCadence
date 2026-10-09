@@ -18,7 +18,7 @@ import (
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	code := mcpadapter.Launch(ctx, os.Args[1:], os.Getenv, &mcp.StdioTransport{}, os.Stderr)
+	code := mcpadapter.LaunchWith(ctx, os.Args[1:], os.Getenv, &mcp.StdioTransport{}, os.Stderr, selfhostTasks)
 	stop()
 	os.Exit(code)
 }

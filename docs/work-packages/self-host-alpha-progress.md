@@ -5,7 +5,8 @@ Authoritative objective: [wp-m5-sh1-self-host-alpha-ewp.md](wp-m5-sh1-self-host-
 ## Status (2026-10-09)
 
 - PR #86 (M5-R3): gofmt fixed on `feat/m5-r3-provider-composition` (f7f2de8). Local hooks bypassed with owner authorization because the sandbox runs as root and `internal/operator/receipts` tests refuse root (`protection_unix.go:18`, `verifier.go:325`; they fail identically on `origin/main`). CI is authoritative.
-- SH1-1..SH1-4: not started. No Ollama in the cloud sandbox: live acceptance must run where Ollama is installed.
+- SH1-1: implemented on branch `ccr-30e3bc5f-qjnr6g` (draft PR): `internal/selfhost` + composition root in `cmd/devcadence-mcp` (via `mcpadapter.LaunchWith` task-port factory, keeping the adapter's dependency boundary) + `devcadence selfhost check`. Verified with a stub-Ollama deterministic test only; the live test (`TestLiveOllama`) has NOT been run (no Ollama in the sandbox).
+- SH1-2..SH1-4: not started. No Ollama in the cloud sandbox: live acceptance must run where Ollama is installed.
 
 ## Implementation Surface Map (verified by scout, not yet by tests)
 
@@ -23,6 +24,17 @@ Authoritative objective: [wp-m5-sh1-self-host-alpha-ewp.md](wp-m5-sh1-self-host-
 3. SH1-3 `ProfileSource` over `validation.LoadProfiles`; reviewexec wiring; `review_unavailable`; minimal Accept hand-off; uncertain-retry refusal.
 4. SH1-4 dogfood scripts/records.
 
+## SH1-1 usage (owner-local, user-level only)
+
+Config (never read from the project repo): `$DEVCADENCE_HOME/config/selfhost.json`, with env overrides.
+
+- `model` (required; `DEVCADENCE_OLLAMA_MODEL`; `:latest` is implied when no tag), `ollama_url` (loopback only, default `http://127.0.0.1:11434`; `DEVCADENCE_OLLAMA_URL`), `endpoint_id` (default `ollama-local`), `context_tokens` (default 32768).
+- Present config makes `devcadence-mcp` build the executor (`facade.Options.Tasks`); absent config leaves behavior unchanged. With config present, Ollama down or model missing fails launch with an actionable error (fail closed). Models are never pulled.
+- Policy: no operator receipt exists for a user-level setup, so `internal/selfhost/policy.go` supplies an explicit `owner_local_unsigned` PolicySource (one loopback local grant, implementer role, zero spend, unknown usage allowed, 3 attempts). `execpolicy.Load` receipt verification is unchanged and not used here; a warning is logged at launch.
+- Check: `devcadence selfhost check [-json]` prints Ollama version, selected model digest and installed models.
+- Live test (needs a running Ollama and an installed model): `DEVCADENCE_LIVE_OLLAMA=1 DEVCADENCE_OLLAMA_MODEL=<model> go test ./internal/selfhost -run TestLiveOllama -v -timeout 30m`.
+- Not yet: Ollama `num_ctx` is not set by the client; `context_tokens` only budgets the prompt.
+
 ## Next action
 
-Merge #86 when CI is green, then branch from `main` for SH1-1.
+Review SH1-1, run `TestLiveOllama` where Ollama is installed, then SH1-2.
