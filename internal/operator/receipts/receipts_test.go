@@ -1334,6 +1334,7 @@ func TestFileVerifier_SubjectDiscovery(t *testing.T) {
 }
 
 func TestNewFileVerifier_EmptyTrustedOwnerUIDsRejected(t *testing.T) {
+	requireNonRoot(t)
 	_, err := NewFileVerifier(FileOptions{
 		OperatorDir:      t.TempDir(),
 		ReceiptsDir:      t.TempDir(),
