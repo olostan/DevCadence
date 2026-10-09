@@ -851,7 +851,19 @@ func TestCLIBenchmarkReplayEmpirical_InvalidFiles(t *testing.T) {
 	}
 }
 
+// chdirTempGitRepo makes the test independent of whether the source tree
+// being tested is itself a Git checkout (for example an exported snapshot).
+func chdirTempGitRepo(t *testing.T) {
+	t.Helper()
+	dir := t.TempDir()
+	if out, err := exec.Command("git", "init", dir).CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v: %s", err, out)
+	}
+	t.Chdir(dir)
+}
+
 func TestCLIBenchmarkReplayEmpirical_DefaultVerifier_Refusal_Exit3(t *testing.T) {
+	chdirTempGitRepo(t)
 	c := newCLI(t)
 	f := newEmpiricalFixture()
 	mPath, pPath, aPath, artDir, cPath := setupEmpiricalFiles(t, f)
@@ -1782,6 +1794,7 @@ func TestLoadOperatorVerifier_RevocationHonored(t *testing.T) {
 }
 
 func TestDefaultNewIndependentVerifier(t *testing.T) {
+	chdirTempGitRepo(t)
 	v, err := defaultNewIndependentVerifier(context.Background(), &env{}, nil, ".")
 	if err != nil {
 		t.Fatalf("unexpected error creating independent verifier: %v", err)
