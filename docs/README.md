@@ -78,7 +78,7 @@ Start with [AGENTS.md](../AGENTS.md), the applicable [role template](../prompts/
 | State, persistence or wire/schema compatibility | [PROJECT_STATE.md](PROJECT_STATE.md), [PROTOCOLS.md](PROTOCOLS.md), [schemas/README.md](../schemas/README.md), ADRs 0002–0006, affected schema/type |
 | Review, findings, repair, verification, closure or acceptance | [REVIEW_AND_CONVERGENCE.md](REVIEW_AND_CONVERGENCE.md), [ADR-0020](adr/0020-cognitive-invocation-compiler-and-review-ledger.md), [VERIFICATION.md](VERIFICATION.md), ADR-0010 |
 | Principal host or semantic MCP boundary | [PRINCIPAL_HOSTS.md](PRINCIPAL_HOSTS.md), [MCP_API.md](MCP_API.md), relevant host integration |
-| Durable execution trace, crash recovery, offline evidence export | [Proposed ADR-0026](adr/0026-durable-execution-flight-recorder.md), [OBSERVABILITY.md](OBSERVABILITY.md), [GO_ENGINEERING_PRACTICES.md](GO_ENGINEERING_PRACTICES.md) |
+| Durable execution trace, crash recovery, offline evidence export | [ADR-0026 (Accepted)](adr/0026-durable-execution-flight-recorder.md), [OBSERVABILITY.md](OBSERVABILITY.md), [GO_ENGINEERING_PRACTICES.md](GO_ENGINEERING_PRACTICES.md) |
 | Go interface ownership, constructor DI and context usage | [GO_ENGINEERING_PRACTICES.md](GO_ENGINEERING_PRACTICES.md), [ENGINEERING_STANDARDS.md](../ENGINEERING_STANDARDS.md) |
 | Health, lessons, telemetry or milestone status | [REFACTORING_AND_HEALTH.md](REFACTORING_AND_HEALTH.md), [LEARNING.md](LEARNING.md), [OBSERVABILITY.md](OBSERVABILITY.md), [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) |
 

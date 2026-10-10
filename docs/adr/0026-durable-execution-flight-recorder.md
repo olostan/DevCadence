@@ -1,6 +1,6 @@
 # ADR-0026: Durable Execution Flight Recorder and Offline Evidence Export
 
-- **Status:** Proposed (pending independent review)
+- **Status:** Accepted (accepted by repository owner direction; implementation tracked by the flight-recorder EWP)
 - **Date:** 2026-10-09
 - **Owner:** DevCadence architecture
 - **Related:** ADR-0002/0003/0006/0009/0016/0025; docs/OBSERVABILITY.md; docs/PROJECT_STATE.md; docs/SECURITY.md; docs/GO_ENGINEERING_PRACTICES.md
