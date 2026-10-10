@@ -20,7 +20,9 @@ __pycache__/
 # Anchored to the repo root (leading /) so these only match the top-level
 # runtime-state directories a running daemon creates, not the source
 # packages internal/artifacts and internal/worktrees (M2).
-.devcadence/
+.devcadence/*
+# DevCadence's own post-check profile is tracked (docs/work-packages/self-host-first-task-ewp.md).
+!.devcadence/validation.yaml
 /artifacts/
 /worktrees/
 *.db

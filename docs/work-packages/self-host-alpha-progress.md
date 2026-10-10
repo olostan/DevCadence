@@ -87,3 +87,16 @@ Config (never read from the project repo): only the existence of `$DEVCADENCE_HO
 ## Next action
 
 Run `scripts/selfhost-live.sh` where Ollama is installed (SH1-2/SH1-3 live acceptance), then follow the Antigravity sequence above against a real model; reviewexec wiring and an MCP approval tool remain open.
+
+## SH1-4B owner runbook: first self-modification attempt
+
+Repo readiness (no model run in SH1-4B): `.devcadence/validation.yaml` (profile `default`: format check via `go run ./scripts/health/fmtcheck internal/ids`, `go vet` and `go test` for `./internal/ids/...` only; static, so it is scoped to the first task) and the task contract [self-host-first-task-ewp.md](self-host-first-task-ewp.md). The profile is FAST and does NOT replace `make ci`. `gofmt -l` exits 0 on unformatted files and `make fmt-check` ignores uncommitted candidates, hence `scripts/health/fmtcheck` (exit 1 on unformatted or unparsable files). A different target package needs a reviewed edit of the profile first. `internal/selfhost/repo_profile_test.go` keeps the file loadable and safe.
+
+1. Build: `make build build-mcp`; register the checkout (`devcadence repo add` for the project, as in the SH1-1 flow) and set `DEVCADENCE_HOME`/`DEVCADENCE_PROJECT_ID` as in the Antigravity config above.
+2. `$DEVCADENCE_HOME/config/selfhost.json` with `"execution_mode":"yolo"` (see example above). This is user-level, UNCONFINED (profile commands and model tool commands run as you, not a sandbox), never read from or enabled by the repo; without it `delegate` refuses with `postcheck_requires_yolo`. Treat the candidate worktree as untrusted.
+3. Antigravity: use the `mcp_config.json` block above (`integrations/antigravity/devcadence/` has the plugin/skills); restart the MCP server after `ollama serve`/`ollama pull`.
+4. Principal: `project_state` -> `create_work_package` from the EWP (paste its Objective/Write scope/Requirements/Acceptance), then approve it with `devcadence event append -type WorkPackageApproved ...` (owner step, see SH1-4 above).
+5. `delegate` with the EWP's delegation text; poll `task_status(operation)` until completed; `task_status(task_id)` for `candidate_handoff`; `validate(profile_id=default)` and poll.
+6. Inspect: run `inspect.diff`/`inspect.log` from the handoff; the manifest must be exactly `internal/ids/ids_test.go`. Integrate manually (`inspect.merge` or `inspect.cherry_pick`) on a branch, NOT directly on `main`.
+7. On the integration branch run full `make ci` (and the hooks) before opening a PR; `accept` still only returns the handoff.
+8. Remaining acceptance (not done in the cloud sandbox): `DEVCADENCE_OLLAMA_MODEL=<installed-model> scripts/selfhost-live.sh` on a Mac with Ollama, then the real attempt above; record model/digest, rounds and the candidate ref in this file.

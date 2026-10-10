@@ -1,0 +1,30 @@
+# DevCadence post-check profile (profile id "default"), read from the REGISTERED
+# checkout by internal/selfhost. FAST checks only, scoped to the FIRST
+# self-modification task's package (internal/ids, see
+# docs/work-packages/self-host-first-task-ewp.md). The profile is static: when a
+# different package is the target, change the two package paths in a reviewed
+# commit first.
+#
+# THIS PROFILE DOES NOT REPLACE `make ci`. Full CI (fmt-check, diff-check,
+# mod-check, vet, schemas, docs-check, race, coverage) remains REQUIRED for final
+# integration of any candidate.
+#
+# Commands run only when the owner's user-level selfhost.json has
+# "execution_mode":"yolo" (unconfined; never enabled from the repo). argv only,
+# no shell. The format check is a Go tool because `gofmt -l` exits 0 even when it
+# lists unformatted files, and `make fmt-check` ignores uncommitted candidate edits.
+profiles:
+  default:
+    checks:
+      - id: fmt-check
+        kind: lint
+        argv: ["go", "run", "./scripts/health/fmtcheck", "internal/ids"]
+        timeout: 2m
+      - id: go-vet
+        kind: lint
+        argv: ["go", "vet", "./internal/ids/..."]
+        timeout: 3m
+      - id: go-test
+        kind: test
+        argv: ["go", "test", "./internal/ids/..."]
+        timeout: 5m
