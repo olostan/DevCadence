@@ -2,6 +2,8 @@
 
 This document defines implementation standards for the DevCadence codebase. Architectural invariants take precedence over convenience.
 
+For Go API/interface ownership, constructor-based dependency injection and context usage, see [Go Engineering Practices](docs/GO_ENGINEERING_PRACTICES.md) (proposed conventions; subject to existing normative requirements).
+
 ## 1. Architectural style
 
 The control plane is a modular monolith first. Do not introduce distributed services merely because the conceptual architecture contains multiple roles.
