@@ -38,9 +38,9 @@ type Executor struct { recorder OperationRecorder }
 func (e *Executor) Delegate(ctx context.Context) (err error) {
     ctx, op, err := e.recorder.Start(ctx, "task.delegate", StartMetadata{})
     if err != nil { return err }
-    defer func() { if endErr := op.End(err); err == nil { err = endErr } }()
+    // Schematic only: the final API must distinguish panics from success.\n    defer func() { err = errors.Join(err, op.End(err)) }()
     return e.run(ctx)
 }
 ```
 
-This is schematic, not a committed API; END error/durability and error precedence require explicit EWP semantics. Refer to proposed ADR-0026.
+This is schematic, not a committed API; END error/durability and error precedence require explicit EWP semantics. **Do not use this defer verbatim for crash reporting:** if `e.run` panics, `err` may still be nil and a defer can misleadingly emit `COMPLETED`. Implementations MUST recognize active panic unwinding and must not record a successful END. A safe option is to leave START unmatched and let offline export mark the operation unresolved; if panic capture is intentionally used, it must not silently swallow or turn the panic into success. Use `errors.Join` (Go 1.20+) or an equivalent typed combination if both the operation and terminal journal append fail, preserving the primary error; never hide a failed critical END append. Refer to proposed ADR-0026.
