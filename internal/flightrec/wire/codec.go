@@ -19,6 +19,19 @@ var (
 	ErrInvalid = errors.New("wire: invalid journal record")
 )
 
+// Caps on repeated message fields. A decoder rejects (ErrMalformed) and an
+// encoder refuses (ErrInvalid) a message with more entries, which bounds the
+// allocation a small hostile record can force (an empty entry costs 2 bytes on
+// the wire but a full struct in memory).
+const (
+	// MaxLinks caps OperationStart.Links and Observation.Links.
+	MaxLinks = 64
+	// MaxArtifacts caps the Artifacts field of OperationStart, OperationEnd and Observation.
+	MaxArtifacts = 64
+	// MaxAttempts caps JournalHealth.Attempts.
+	MaxAttempts = 64
+)
+
 // maxDepth is the maximum nesting of decoded messages below the root.
 const maxDepth = 3
 
@@ -38,6 +51,13 @@ func marshal(m encodable) ([]byte, error) {
 	var e encoder
 	m.encode(&e)
 	return e.b, e.err
+}
+
+// limit records ErrInvalid when a repeated field has more than max entries.
+func (e *encoder) limit(field string, n, max int) {
+	if n > max {
+		e.err = errors.Join(e.err, fmt.Errorf("%w: %d %s entries exceed the cap of %d", ErrInvalid, n, field, max))
+	}
 }
 
 func (e *encoder) tag(n protowire.Number, t protowire.Type) {
@@ -192,7 +212,10 @@ func setPtr[T any, P interface {
 func addMsg[T any, P interface {
 	*T
 	decodable
-}](dst *[]T, typ protowire.Type, v []byte, depth int) (bool, error) {
+}](dst *[]T, limit int, typ protowire.Type, v []byte, depth int) (bool, error) {
+	if _, ok := lengthDelimited(typ, v); ok && len(*dst) >= limit {
+		return true, fmt.Errorf("%w: more than %d entries in a repeated field", ErrMalformed, limit)
+	}
 	var x T
 	ok, err := decodeChild(P(&x), typ, v, depth)
 	if ok && err == nil {
@@ -626,6 +649,7 @@ func (m *OperationStart) encode(e *encoder) {
 	e.str(1, m.TraceID)
 	e.str(2, m.OperationID)
 	e.str(3, m.ParentOperationID)
+	e.limit("Links", len(m.Links), MaxLinks)
 	for i := range m.Links {
 		e.msg(4, &m.Links[i])
 	}
@@ -638,6 +662,7 @@ func (m *OperationStart) encode(e *encoder) {
 	e.str(9, m.TaskID)
 	e.str(10, m.AttemptID)
 	e.str(11, m.CanonicalEventID)
+	e.limit("Artifacts", len(m.Artifacts), MaxArtifacts)
 	for i := range m.Artifacts {
 		e.msg(12, &m.Artifacts[i])
 	}
@@ -657,7 +682,7 @@ func (m *OperationStart) unmarshalAt(b []byte, depth int) error {
 		case 3:
 			return setStr(&m.ParentOperationID, typ, v)
 		case 4:
-			return addMsg(&m.Links, typ, v, depth)
+			return addMsg(&m.Links, MaxLinks, typ, v, depth)
 		case 5:
 			return setStr(&m.OperationName, typ, v)
 		case 6:
@@ -673,7 +698,7 @@ func (m *OperationStart) unmarshalAt(b []byte, depth int) error {
 		case 11:
 			return setStr(&m.CanonicalEventID, typ, v)
 		case 12:
-			return addMsg(&m.Artifacts, typ, v, depth)
+			return addMsg(&m.Artifacts, MaxArtifacts, typ, v, depth)
 		case 13:
 			return setPtr(&m.Sanitization, typ, v, depth)
 		}
@@ -701,6 +726,7 @@ func (m *OperationEnd) encode(e *encoder) {
 	if m.Usage != nil {
 		e.msg(7, m.Usage)
 	}
+	e.limit("Artifacts", len(m.Artifacts), MaxArtifacts)
 	for i := range m.Artifacts {
 		e.msg(8, &m.Artifacts[i])
 	}
@@ -728,7 +754,7 @@ func (m *OperationEnd) unmarshalAt(b []byte, depth int) error {
 		case 7:
 			return setPtr(&m.Usage, typ, v, depth)
 		case 8:
-			return addMsg(&m.Artifacts, typ, v, depth)
+			return addMsg(&m.Artifacts, MaxArtifacts, typ, v, depth)
 		case 9:
 			return setPtr(&m.Sanitization, typ, v, depth)
 		}
@@ -759,9 +785,11 @@ func (m *Observation) encode(e *encoder) {
 		e.msg(7, m.Provenance)
 	}
 	e.varint(8, uint64(m.Evidence))
+	e.limit("Artifacts", len(m.Artifacts), MaxArtifacts)
 	for i := range m.Artifacts {
 		e.msg(9, &m.Artifacts[i])
 	}
+	e.limit("Links", len(m.Links), MaxLinks)
 	for i := range m.Links {
 		e.msg(10, &m.Links[i])
 	}
@@ -797,9 +825,9 @@ func (m *Observation) unmarshalAt(b []byte, depth int) error {
 		case 8:
 			return setInt(&m.Evidence, typ, v)
 		case 9:
-			return addMsg(&m.Artifacts, typ, v, depth)
+			return addMsg(&m.Artifacts, MaxArtifacts, typ, v, depth)
 		case 10:
-			return addMsg(&m.Links, typ, v, depth)
+			return addMsg(&m.Links, MaxLinks, typ, v, depth)
 		case 11:
 			return setPtr(&m.Sanitization, typ, v, depth)
 		case 20, 21:
@@ -846,6 +874,7 @@ func (m *JournalHealth) encode(e *encoder) {
 	e.varint(5, m.LastMissingSequence)
 	e.str(6, m.DetailCode)
 	e.str(7, m.Detail)
+	e.limit("Attempts", len(m.Attempts), MaxAttempts)
 	for i := range m.Attempts {
 		e.msg(8, &m.Attempts[i])
 	}
@@ -872,7 +901,7 @@ func (m *JournalHealth) unmarshalAt(b []byte, depth int) error {
 		case 7:
 			return setStr(&m.Detail, typ, v)
 		case 8:
-			return addMsg(&m.Attempts, typ, v, depth)
+			return addMsg(&m.Attempts, MaxAttempts, typ, v, depth)
 		case 9:
 			return setStr(&m.SelectedSource, typ, v)
 		case 10:

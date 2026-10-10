@@ -347,3 +347,66 @@ func TestUnmarshalResetsReceiver(t *testing.T) {
 		t.Fatalf("Unmarshal must reset: %+v %v", r, err)
 	}
 }
+
+func TestRepeatedFieldCaps(t *testing.T) {
+	repeat := func(field protowire.Number, n int) []byte {
+		var b []byte
+		for i := 0; i < n; i++ {
+			b = protowire.AppendBytes(protowire.AppendTag(b, field, protowire.BytesType), nil)
+		}
+		return b
+	}
+	cases := []struct {
+		name  string
+		field protowire.Number
+		max   int
+		fresh func() interface{ Unmarshal([]byte) error }
+		build func(n int) interface{ Marshal() ([]byte, error) }
+	}{
+		{"start links", 4, MaxLinks, func() interface{ Unmarshal([]byte) error } { return &OperationStart{} },
+			func(n int) interface{ Marshal() ([]byte, error) } { return &OperationStart{Links: make([]Link, n)} }},
+		{"start artifacts", 12, MaxArtifacts, func() interface{ Unmarshal([]byte) error } { return &OperationStart{} },
+			func(n int) interface{ Marshal() ([]byte, error) } {
+				return &OperationStart{Artifacts: make([]ArtifactRef, n)}
+			}},
+		{"end artifacts", 8, MaxArtifacts, func() interface{ Unmarshal([]byte) error } { return &OperationEnd{} },
+			func(n int) interface{ Marshal() ([]byte, error) } {
+				return &OperationEnd{Artifacts: make([]ArtifactRef, n)}
+			}},
+		{"observation artifacts", 9, MaxArtifacts, func() interface{ Unmarshal([]byte) error } { return &Observation{} },
+			func(n int) interface{ Marshal() ([]byte, error) } {
+				return &Observation{Artifacts: make([]ArtifactRef, n)}
+			}},
+		{"observation links", 10, MaxLinks, func() interface{ Unmarshal([]byte) error } { return &Observation{} },
+			func(n int) interface{ Marshal() ([]byte, error) } { return &Observation{Links: make([]Link, n)} }},
+		{"health attempts", 8, MaxAttempts, func() interface{ Unmarshal([]byte) error } { return &JournalHealth{} },
+			func(n int) interface{ Marshal() ([]byte, error) } {
+				return &JournalHealth{Attempts: make([]PathAttempt, n)}
+			}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if err := c.fresh().Unmarshal(repeat(c.field, c.max)); err != nil {
+				t.Fatalf("at the cap: %v", err)
+			}
+			if err := c.fresh().Unmarshal(repeat(c.field, c.max+1)); !errors.Is(err, ErrMalformed) {
+				t.Fatalf("over the cap on decode: %v", err)
+			}
+			// A hostile ~1 MiB record of empty entries is rejected early.
+			if err := c.fresh().Unmarshal(repeat(c.field, 1<<19)); !errors.Is(err, ErrMalformed) {
+				t.Fatalf("flood: %v", err)
+			}
+			if _, err := c.build(c.max).Marshal(); err != nil {
+				t.Fatalf("encode at the cap: %v", err)
+			}
+			if _, err := c.build(c.max + 1).Marshal(); !errors.Is(err, ErrInvalid) {
+				t.Fatalf("over the cap on encode: %v", err)
+			}
+		})
+	}
+	// A wrong wire type is an unknown field, not a repeated entry.
+	var s OperationStart
+	if err := s.Unmarshal(protowire.AppendVarint(protowire.AppendTag(nil, 4, protowire.VarintType), 1)); err != nil || len(s.Links) != 0 {
+		t.Fatalf("wrong wire type: %v %+v", err, s)
+	}
+}
