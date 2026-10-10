@@ -18,7 +18,10 @@ import (
 	"strings"
 )
 
-func main() { os.Exit(run(os.Args[1:], os.Stdout, os.Stderr)) }
+// exit is replaced in tests.
+var exit = os.Exit
+
+func main() { exit(run(os.Args[1:], os.Stdout, os.Stderr)) }
 
 // run returns 0 when every Go file under paths is formatted, 1 when at least one
 // is not, and 2 on usage or I/O errors.

@@ -38,3 +38,25 @@ func TestRun(t *testing.T) {
 		t.Fatalf("missing path: rc=%d", rc)
 	}
 }
+
+func TestRunUnreadableFileAndMain(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Symlink(filepath.Join(dir, "missing-target"), filepath.Join(dir, "dangling.go")); err != nil {
+		t.Skip("symlinks unavailable")
+	}
+	var out, errb bytes.Buffer
+	if rc := run([]string{dir}, &out, &errb); rc != 2 || errb.Len() == 0 {
+		t.Fatalf("unreadable file: rc=%d err=%q", rc, errb.String())
+	}
+
+	got := -1
+	exit = func(c int) { got = c }
+	defer func() { exit = os.Exit }()
+	oldArgs := os.Args
+	os.Args = []string{"fmtcheck"}
+	defer func() { os.Args = oldArgs }()
+	main()
+	if got != 2 {
+		t.Fatalf("main exit = %d, want 2 (usage)", got)
+	}
+}
