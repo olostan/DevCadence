@@ -101,8 +101,10 @@ func (in ResolveInput) withDefaults() ResolveInput {
 // usableCode checks one candidate directory and returns "" when it is usable:
 // absolute, creatable (0700), a real directory (not a symlink) owned by uid
 // and mode 0700 (fixed by Chmod). The checks are Lstat-then-use (TOCTOU) in
-// possibly shared directories; this is mitigated by 0700, the owner check,
-// O_EXCL files and flock, and accepted as a documented residual risk.
+// possibly shared directories. Only the leaf directory p is inspected: an
+// ancestor that is a symlink or owned by someone else is not detected. The
+// risk is mitigated by 0700, the owner check, O_EXCL files and flock, and
+// accepted as documented.
 func usableCode(fsys PathFS, uid int, p string) string {
 	if !filepath.IsAbs(p) {
 		return ErrCodeNotAbsolute

@@ -36,19 +36,19 @@ type Attempt struct {
 // Stats are the recorder anomaly counters (atomic snapshot).
 type Stats struct {
 	// DuplicateEnd counts second End calls on an Op.
-	DuplicateEnd uint64
+	DuplicateEnd uint64 `json:"duplicate_end"`
 	// EndDropped counts diagnostic END records that were dropped.
-	EndDropped uint64
+	EndDropped uint64 `json:"end_dropped"`
 	// EndFailed counts critical END appends that failed.
-	EndFailed uint64
+	EndFailed uint64 `json:"end_failed"`
 	// ObserveAfterEnd counts Op.Observe calls after END.
-	ObserveAfterEnd uint64
+	ObserveAfterEnd uint64 `json:"observe_after_end"`
 	// Dropped counts diagnostic records dropped (queue full, closed, no-op).
-	Dropped uint64
+	Dropped uint64 `json:"dropped"`
 	// ResultKeysDropped counts SetResult keys beyond the cap.
-	ResultKeysDropped uint64
+	ResultKeysDropped uint64 `json:"result_keys_dropped"`
 	// ArtifactsDropped counts artifacts dropped by Op.AddArtifact.
-	ArtifactsDropped uint64
+	ArtifactsDropped uint64 `json:"artifacts_dropped"`
 }
 
 // Status describes the recorder for the Phase-2 exporter and doctor: a
@@ -64,7 +64,11 @@ type Status struct {
 	NodeID          string
 	RuntimeID       string
 	NodeIDEphemeral bool
-	Stats           Stats
+	// SidecarPath is the bootstrap-failure sidecar written by a degraded
+	// Bootstrap (empty otherwise); SidecarError is a stable code when no
+	// directory was writable.
+	SidecarPath, SidecarError string
+	Stats                     Stats
 }
 
 // HealthEvent is one entry of the bounded in-memory health ring.

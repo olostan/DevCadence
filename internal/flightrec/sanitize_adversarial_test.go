@@ -82,6 +82,7 @@ func TestSanitizerFreeTextCredentials(t *testing.T) {
 		"connect ssh://deploy@host/x",
 		"npm_VALUE25abc failed",
 		"github_pat_VALUE26abc",
+		"using pat_VALUE27abc here", // caught by the token-level pass
 	}
 	for _, in := range leaks {
 		for _, v := range []any{in, map[string]any{"note": in}, []any{"a", in}} {

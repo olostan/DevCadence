@@ -3,6 +3,7 @@ package flightrec
 import (
 	"context"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -32,19 +33,34 @@ type BootstrapInput struct {
 
 	// wrapSink is an in-package test seam wrapping the opened writer.
 	wrapSink func(Sink) Sink
+	// sidecarCreate is an in-package test seam for sidecar file creation.
+	sidecarCreate sidecarCreate
 }
 
+// maxNodeIDFileBytes bounds the node-id read: a valid file is "nod_<ulid>\n".
+const maxNodeIDFileBytes = 256
+
 // nodeIDFile reads or creates <root>/node-id (O_EXCL, 0600, "id\n").
-// ephemeral is true when the id could not be read or persisted (a corrupt or
-// unreadable file is never overwritten; losing a creation race to another
-// process also yields an ephemeral id).
+// ephemeral is true when the id could not be read or persisted (a corrupt,
+// oversized, non-regular (symlink, directory, FIFO) or unreadable file is never
+// overwritten or followed; losing a creation race to another process also
+// yields an ephemeral id). The file is never opened unless Lstat says it is a
+// regular file, and at most maxNodeIDFileBytes are read, so a FIFO or a huge
+// file can neither block nor exhaust the process.
 func nodeIDFile(root string, src ids.Source) (id string, ephemeral bool) {
 	path := filepath.Join(root, "node-id")
-	b, err := os.ReadFile(path)
+	fi, err := os.Lstat(path)
 	if err == nil {
-		if id = strings.TrimSpace(string(b)); strings.HasPrefix(id, "nod_") && ids.Valid(id) {
-			return id, false
+		if fi.Mode().IsRegular() {
+			if f, oerr := os.Open(path); oerr == nil {
+				b, _ := io.ReadAll(io.LimitReader(f, maxNodeIDFileBytes))
+				_ = f.Close()
+				if id = strings.TrimSpace(string(b)); strings.HasPrefix(id, "nod_") && ids.Valid(id) {
+					return id, false
+				}
+			}
 		}
+		return src.New("nod"), true
 	}
 	id = src.New("nod")
 	if !errors.Is(err, os.ErrNotExist) || !ids.Valid(id) {
@@ -73,20 +89,36 @@ func nodeIDFile(root string, src ids.Source) (id string, ephemeral bool) {
 // is fixed for the process lifetime; later configuration affects only the next
 // run.
 func Bootstrap(ctx context.Context, in BootstrapInput) (rec *Recorder, st Status) {
-	var w *journal.Writer
+	var (
+		w          *journal.Writer
+		res        Resolution
+		nodeID     string
+		nodeSource string
+	)
+	// degrade builds the degraded no-op recorder and writes the last-resort
+	// bootstrap-failure sidecar (it never panics: writeSidecar recovers).
+	degrade := func(reason, detail string, journalFailed bool) (*Recorder, Status) {
+		root := ""
+		if journalFailed {
+			root = res.Root
+		}
+		body := buildSidecar(DefaultSanitizer(), in.Clock.Now(), reason, in.WriterVersion, nodeID, nodeSource, res.Attempts, Stats{})
+		create := in.sidecarCreate
+		if create == nil {
+			create = createSidecarFile
+		}
+		path, code := writeSidecar(in.Resolve, create, root, body)
+		r := newNoop(Status{Reason: reason, Attempts: res.Attempts, SidecarPath: path, SidecarError: code}, detail)
+		return r, r.Status()
+	}
 	defer func() {
 		if p := recover(); p != nil { // the panic value is never recorded
 			if w != nil {
 				_ = w.Close(context.WithoutCancel(ctx))
 			}
-			rec = NewNoop(Status{Reason: ReasonBootstrapPanic})
-			st = rec.Status()
+			rec, st = degrade(ReasonBootstrapPanic, "", res.Root != "")
 		}
 	}()
-	degrade := func(reason, detail string, attempts []Attempt) (*Recorder, Status) {
-		r := newNoop(Status{Reason: reason, Attempts: attempts}, detail)
-		return r, r.Status()
-	}
 	if in.Clock == nil {
 		in.Clock = clock.System()
 	}
@@ -99,12 +131,16 @@ func Bootstrap(ctx context.Context, in BootstrapInput) (rec *Recorder, st Status
 
 	res, err := Resolve(in.Resolve)
 	if err != nil {
-		return degrade(ReasonNoUsablePath, err.Error(), res.Attempts)
+		return degrade(ReasonNoUsablePath, err.Error(), false)
 	}
 	nodeID, ephemeral := nodeIDFile(res.Root, in.IDs)
+	nodeSource = nodeIDSourceFile
+	if ephemeral {
+		nodeSource = nodeIDSourceEphemeral
+	}
 	runID := in.IDs.New("run")
 	if !ids.Valid(nodeID) || !ids.Valid(runID) {
-		return degrade(ReasonInvalidID, "id source returned an invalid id", res.Attempts)
+		return degrade(ReasonInvalidID, "id source returned an invalid id", true)
 	}
 	origin := in.Now()
 	mono := func() int64 { return int64(in.Now().Sub(origin)) }
@@ -114,7 +150,7 @@ func Bootstrap(ctx context.Context, in BootstrapInput) (rec *Recorder, st Status
 		FlushEvery: diagnosticFlushEvery, Clock: in.Clock, IDs: in.IDs, Mono: mono, WriterVersion: in.WriterVersion,
 	})
 	if err != nil {
-		return degrade(ReasonJournalOpenFailed, err.Error(), res.Attempts)
+		return degrade(ReasonJournalOpenFailed, err.Error(), true)
 	}
 	var sink Sink = w
 	if in.wrapSink != nil {
@@ -126,7 +162,7 @@ func Bootstrap(ctx context.Context, in BootstrapInput) (rec *Recorder, st Status
 	})
 	if err := rec.recordHealth(ctx, Critical, wire.HealthStreamStarted, "stream_started", "", res.Source, res.Attempts); err != nil {
 		_ = w.Close(context.WithoutCancel(ctx))
-		return degrade(ReasonStreamStartFailure, err.Error(), res.Attempts)
+		return degrade(ReasonStreamStartFailure, err.Error(), true)
 	}
 	if res.Fallback {
 		_ = rec.recordHealth(ctx, Diagnostic, wire.HealthPathFallback, "path_fallback", "", res.Source, res.Attempts)
