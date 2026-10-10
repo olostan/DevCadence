@@ -6,9 +6,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/olostan/DevCadence/internal/actors"
@@ -197,26 +199,22 @@ func (e *Executor) Delegate(ctx context.Context, task facade.AuthorizedTask) (pr
 	if len(readEnvelope) == 0 {
 		readEnvelope = []string{"**"}
 	}
+	toolNames, declaredTools := workerToolDeclarations(e.opts.ExecutionMode)
 	compileReq := compiler.CompileRequest{
-		TaskID:              task.TaskID,
-		WorkPackageID:       task.WorkPackage.ID,
-		WorkPackageRevision: task.WorkPackage.Version,
-		WorkPackageDigest:   task.WorkPackage.Digest,
-		Role:                "implementer",
-		BaseCommit:          wp.BaseCommit,
-		SourceRevision:      wp.BaseCommit,
-		WriteScope:          writeScope,
-		ReadEnvelope:        readEnvelope,
-		ExecutionContract:   contractText,
-		ContextProfile:      &ep.ContextProfile,
-		AccessChannel:       &ep.Channel,
-		Tools:               []string{"read_file", "grep", "symbols", "write_file"},
-		DeclaredTools: []compiler.ToolCapabilityInfo{
-			{Name: "read_file", ReadOnly: true},
-			{Name: "grep", ReadOnly: true},
-			{Name: "symbols", ReadOnly: true},
-			{Name: "write_file", MutatesFiles: true},
-		},
+		TaskID:               task.TaskID,
+		WorkPackageID:        task.WorkPackage.ID,
+		WorkPackageRevision:  task.WorkPackage.Version,
+		WorkPackageDigest:    task.WorkPackage.Digest,
+		Role:                 "implementer",
+		BaseCommit:           wp.BaseCommit,
+		SourceRevision:       wp.BaseCommit,
+		WriteScope:           writeScope,
+		ReadEnvelope:         readEnvelope,
+		ExecutionContract:    contractText,
+		ContextProfile:       &ep.ContextProfile,
+		AccessChannel:        &ep.Channel,
+		Tools:                toolNames,
+		DeclaredTools:        declaredTools,
 		BudgetPoolID:         "pool-default",
 		ProjectStateRevision: P,
 		Action:               "Implement task " + task.TaskID,
@@ -404,7 +402,20 @@ func (e *Executor) runDelegate(
 		WorktreePath: wt.Path,
 	}
 	mediator := drivers.NewScopedToolMediator(scope)
-	toolDefs := setupWorkerTools(mediator, scope, e.opts.Runner, wp.Scope.InScope)
+	audit := newCommandAudit(e.opts.ExecutionMode.normalized())
+	toolDefs := setupWorkerToolsWith(mediator, scope, e.opts.Runner, wp.Scope.InScope, workerToolConfig{
+		Mode: e.opts.ExecutionMode, Audit: audit, Logger: e.opts.Logger,
+	})
+	if e.opts.ExecutionMode.normalized() == ExecutionUnsafeUnconfinedLocal {
+		e.opts.Logger.Warn("attempt runs with unsafe_unconfined_local execution: run_command executes unconfined as the local user",
+			slog.String("task_id", taskID), slog.String("attempt_id", attemptID), slog.String("marker", unsafeUnconfinedMarker))
+	}
+
+	// Drivers that were given the mediator execute the model's tool calls inside
+	// ExecuteTurn; count those executions so the loop below never runs a call
+	// twice (a duplicate run_command or apply_patch is not harmless).
+	var driverExecuted atomic.Int64
+	mediator.OnToolExecution(func(drivers.ToolCall, drivers.ToolResult) { driverExecuted.Add(1) })
 
 	// 4. Session Start
 	sessionConfig := drivers.SessionConfig{
@@ -472,6 +483,11 @@ func (e *Executor) runDelegate(
 			break
 		}
 
+		if int(driverExecuted.Swap(0)) >= len(turnRes.ToolCalls) {
+			// Already executed (and recorded in the session transcript) by the driver.
+			turnInput = drivers.TurnInput{TurnID: fmt.Sprintf("turn-%d", turn+1)}
+			continue
+		}
 		var toolResults []drivers.ToolResult
 		for _, tc := range turnRes.ToolCalls {
 			tr, trErr := mediator.ExecuteTool(ctx, tc)
@@ -488,7 +504,7 @@ func (e *Executor) runDelegate(
 	}
 
 	if !stoppedNormally {
-		return e.failAttempt(taskID, attemptID, "reason=limit_reached effects=none", false, 0, nil, principal.CodePolicyDenied, errors.New("maximum turns reached"))
+		return e.failAttempt(taskID, attemptID, "reason=limit_reached effects=none", false, 0, e.commandTraceRefs(ctx, audit), principal.CodePolicyDenied, errors.New("maximum turns reached"))
 	}
 
 	// 6. Materialize Candidate Commit
@@ -517,6 +533,9 @@ func (e *Executor) runDelegate(
 		return e.failAttempt(taskID, attemptID, "reason=driver_error effects=uncertain", false, 0, nil, principal.CodeModelUnavailable, err)
 	}
 
+	candidateArtifacts := []protocol.ArtifactRef{diffRef, usageRef}
+	candidateArtifacts = append(candidateArtifacts, e.commandTraceRefs(ctx, audit)...)
+
 	// 8. Commit CandidateProduced
 	if prov != nil {
 		prov.CandidateCommit = headCommit
@@ -534,7 +553,7 @@ func (e *Executor) runDelegate(
 			AttemptID:       attemptID,
 			CandidateCommit: headCommit,
 			Summary:         fmt.Sprintf("candidate produced: %d files", len(changedPaths)),
-			Artifacts:       []protocol.ArtifactRef{diffRef, usageRef},
+			Artifacts:       candidateArtifacts,
 		},
 	}
 	if prov != nil {
@@ -558,6 +577,46 @@ func (e *Executor) runDelegate(
 	}
 
 	return fmt.Sprintf("candidate:%s", attemptID), nil
+}
+
+// workerToolDeclarations lists the tools the compiler admits for the mode.
+// run_command is declared only in the unsafe-unconfined mode.
+func workerToolDeclarations(mode ExecutionMode) ([]string, []compiler.ToolCapabilityInfo) {
+	names := []string{"read_file", "grep", "symbols", "write_file", applyPatchToolName}
+	declared := []compiler.ToolCapabilityInfo{
+		{Name: "read_file", ReadOnly: true},
+		{Name: "grep", ReadOnly: true},
+		{Name: "symbols", ReadOnly: true},
+		{Name: "write_file", MutatesFiles: true},
+		{Name: applyPatchToolName, MutatesFiles: true},
+	}
+	if mode.normalized() == ExecutionUnsafeUnconfinedLocal {
+		names = append(names, runCommandToolName)
+		declared = append(declared, compiler.ToolCapabilityInfo{
+			Name: runCommandToolName, RequiredCapabilities: []compiler.CapabilityClass{compiler.CapabilityClassExec},
+		})
+	}
+	return names, declared
+}
+
+// commandTraceRefs stores the attempt's run_command audit trace through the
+// artifact sink and returns its reference (empty when no command was attempted).
+// Storage failure is logged, not fatal: the trace is audit evidence, and an
+// unrecorded trace is visible as a missing artifact.
+func (e *Executor) commandTraceRefs(ctx context.Context, audit *commandAudit) []protocol.ArtifactRef {
+	b, err := audit.trace()
+	if err != nil || b == nil {
+		if err != nil {
+			e.opts.Logger.Error("command trace marshal failed", slog.String("error", err.Error()))
+		}
+		return nil
+	}
+	ref, err := e.opts.Artifacts.Put(ctx, e.opts.ProjectID, "command-trace", "application/json", b)
+	if err != nil {
+		e.opts.Logger.Error("command trace store failed", slog.String("error", err.Error()))
+		return nil
+	}
+	return []protocol.ArtifactRef{ref}
 }
 
 func (e *Executor) materializeCandidate(

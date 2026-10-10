@@ -1126,8 +1126,8 @@ func TestWorkerTools_WriteFileSafety(t *testing.T) {
 	mediator := drivers.NewScopedToolMediator(scope)
 	writeScope := []string{"pkg/valid.go", "docs/*"}
 	toolDefs := taskexec.SetupWorkerToolsForTesting(mediator, scope, process.NewRunner(), writeScope)
-	if len(toolDefs) != 4 {
-		t.Fatalf("expected 4 tool definitions, got %d", len(toolDefs))
+	if len(toolDefs) != 5 {
+		t.Fatalf("expected 5 tool definitions, got %d", len(toolDefs))
 	}
 
 	callWrite := func(path, content string) error {

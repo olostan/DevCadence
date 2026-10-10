@@ -28,6 +28,14 @@ import (
 const (
 	EnvOllamaURL   = "DEVCADENCE_OLLAMA_URL"
 	EnvOllamaModel = "DEVCADENCE_OLLAMA_MODEL"
+	// EnvExecutionMode may only DOWNGRADE to "strict"; it can never enable "yolo".
+	EnvExecutionMode = "DEVCADENCE_EXECUTION_MODE"
+)
+
+// Execution modes for worker run_command.
+const (
+	ExecutionModeStrict = "strict"
+	ExecutionModeYolo   = "yolo"
 )
 
 // Defaults.
@@ -48,6 +56,10 @@ type Config struct {
 	EndpointID string `json:"endpoint_id,omitempty"`
 	// ContextTokens is the operating context target used for prompt budgeting.
 	ContextTokens int `json:"context_tokens,omitempty"`
+	// ExecutionMode is "strict" (default: workers get file tools only) or "yolo"
+	// (workers may also run bounded argv commands unconfined as the local user;
+	// NOT a sandbox). Only this user-level file can enable yolo.
+	ExecutionMode string `json:"execution_mode,omitempty"`
 }
 
 // ConfigPath returns the config file location under the DevCadence home.
@@ -72,7 +84,7 @@ func LoadConfig(home string, getenv func(string) string) (*Config, error) {
 		dec.DisallowUnknownFields()
 		if err := dec.Decode(&cfg); err != nil {
 			return nil, errs.Wrap(errs.CategoryInvalidArgument, err,
-				"selfhost: %s is not valid (expected keys ollama_url, model, endpoint_id, context_tokens)", path)
+				"selfhost: %s is not valid (expected keys ollama_url, model, endpoint_id, context_tokens, execution_mode)", path)
 		}
 		if _, err := dec.Token(); !errors.Is(err, io.EOF) {
 			return nil, errs.New(errs.CategoryInvalidArgument, "selfhost: %s has trailing content", path)
@@ -87,6 +99,9 @@ func LoadConfig(home string, getenv func(string) string) (*Config, error) {
 	}
 	if v := strings.TrimSpace(getenv(EnvOllamaURL)); v != "" {
 		cfg.OllamaURL = v
+	}
+	if strings.EqualFold(strings.TrimSpace(getenv(EnvExecutionMode)), ExecutionModeStrict) {
+		cfg.ExecutionMode = ExecutionModeStrict // downgrade only; no env value can enable yolo
 	}
 	if err := cfg.normalize(); err != nil {
 		return nil, err
@@ -120,6 +135,13 @@ func (c *Config) normalize() error {
 	}
 	if strings.ContainsAny(c.EndpointID, " \t\r\n/\\") {
 		return errs.New(errs.CategoryInvalidArgument, "selfhost: endpoint_id %q must not contain whitespace or slashes", c.EndpointID)
+	}
+	switch c.ExecutionMode = strings.ToLower(strings.TrimSpace(c.ExecutionMode)); c.ExecutionMode {
+	case "":
+		c.ExecutionMode = ExecutionModeStrict
+	case ExecutionModeStrict, ExecutionModeYolo:
+	default:
+		return errs.New(errs.CategoryInvalidArgument, "selfhost: execution_mode %q must be %q or %q", c.ExecutionMode, ExecutionModeStrict, ExecutionModeYolo)
 	}
 	if c.ContextTokens == 0 {
 		c.ContextTokens = DefaultContextTokens

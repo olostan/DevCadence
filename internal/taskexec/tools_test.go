@@ -57,8 +57,8 @@ func TestSetupWorkerTools_MediatorToolClosures(t *testing.T) {
 
 	mediator := drivers.NewScopedToolMediator(scope)
 	toolDefs := setupWorkerTools(mediator, scope, runner, writeScope)
-	if len(toolDefs) != 4 {
-		t.Fatalf("setupWorkerTools returned %d tool defs, want 4", len(toolDefs))
+	if len(toolDefs) != 5 {
+		t.Fatalf("setupWorkerTools returned %d tool defs, want 5", len(toolDefs))
 	}
 
 	ctx := context.Background()

@@ -301,3 +301,46 @@ func TestProbe_NonLoopbackRefusedBeforeDialing(t *testing.T) {
 		t.Fatalf("err = %v, want policy denied", err)
 	}
 }
+
+func TestLoadConfig_ExecutionMode(t *testing.T) {
+	load := func(t *testing.T, body string, e map[string]string) *selfhost.Config {
+		t.Helper()
+		home := t.TempDir()
+		writeCfg(t, home, body)
+		cfg, err := selfhost.LoadConfig(home, env(e))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return cfg
+	}
+	envMode := func(v string) map[string]string { return map[string]string{selfhost.EnvExecutionMode: v} }
+
+	if got := load(t, `{"model":"m:1"}`, nil).ExecutionMode; got != selfhost.ExecutionModeStrict {
+		t.Errorf("default = %q, want strict", got)
+	}
+	if got := load(t, `{"model":"m:1","execution_mode":"yolo"}`, nil).ExecutionMode; got != selfhost.ExecutionModeYolo {
+		t.Errorf("file yolo = %q", got)
+	}
+	// The environment can never enable yolo, whatever it says.
+	for _, v := range []string{"yolo", "YOLO", "unsafe_unconfined_local", "1", "true"} {
+		if got := load(t, `{"model":"m:1"}`, envMode(v)).ExecutionMode; got != selfhost.ExecutionModeStrict {
+			t.Errorf("env %q enabled %q", v, got)
+		}
+	}
+	// ...but it can downgrade a file-enabled yolo.
+	if got := load(t, `{"model":"m:1","execution_mode":"yolo"}`, envMode("strict")).ExecutionMode; got != selfhost.ExecutionModeStrict {
+		t.Errorf("env strict did not downgrade: %q", got)
+	}
+	if got := load(t, `{"model":"m:1","execution_mode":"yolo"}`, envMode("yolo")).ExecutionMode; got != selfhost.ExecutionModeYolo {
+		t.Errorf("unrelated env value must not change file yolo: %q", got)
+	}
+	// Env alone (no file) still does not enable self-host at all.
+	if cfg, err := selfhost.LoadConfig(t.TempDir(), env(envMode("yolo"))); cfg != nil || err != nil {
+		t.Errorf("env without file: cfg=%v err=%v", cfg, err)
+	}
+	home := t.TempDir()
+	writeCfg(t, home, `{"model":"m:1","execution_mode":"permissive"}`)
+	if _, err := selfhost.LoadConfig(home, env(nil)); !errors.Is(err, errs.ErrInvalidArgument) {
+		t.Errorf("invalid mode err = %v", err)
+	}
+}
