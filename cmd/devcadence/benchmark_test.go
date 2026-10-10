@@ -862,6 +862,77 @@ func chdirTempGitRepo(t *testing.T) {
 	t.Chdir(dir)
 }
 
+// assertNoGitAncestor fails the test if dir or any ancestor contains .git, so
+// the "reached filesystem root" walk-up branch is exercised deterministically.
+func assertNoGitAncestor(t *testing.T, dir string) {
+	t.Helper()
+	for d := dir; ; d = filepath.Dir(d) {
+		if _, err := os.Lstat(filepath.Join(d, ".git")); err == nil {
+			t.Fatalf("test precondition violated: %q contains .git", d)
+		}
+		if filepath.Dir(d) == d {
+			return
+		}
+	}
+}
+
+// replayWithInvalidProjectConfig runs replay-empirical (repo ".") from the
+// current directory and returns the error produced by the project benchmark
+// configuration found by the walk-up, which is invalid on purpose.
+func replayWithInvalidProjectConfig(t *testing.T) error {
+	t.Helper()
+	c := newCLI(t)
+	f := newEmpiricalFixture()
+	mPath, pPath, aPath, artDir, cPath := setupEmpiricalFiles(t, f)
+	_, _, err := c.run("benchmark", "replay-empirical",
+		"--manifest", mPath, "--plan", pPath, "--authorization", aPath,
+		"--artifacts", artDir, "--criteria", cPath)
+	return err
+}
+
+func writeInvalidBenchmarkConfig(t *testing.T, root string) {
+	t.Helper()
+	cfgDir := filepath.Join(root, ".devcadence")
+	if err := os.MkdirAll(cfgDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cfgDir, "benchmark.json"), []byte(`{"execution_mode":"bogus"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// With no .git in any ancestor the walk-up reaches the filesystem root and
+// project configuration falls back to the working directory.
+func TestCLIBenchmarkReplayEmpirical_ProjectConfigRootFallsBackToCwdWithoutGit(t *testing.T) {
+	cwd := t.TempDir()
+	assertNoGitAncestor(t, cwd)
+	writeInvalidBenchmarkConfig(t, cwd)
+	t.Chdir(cwd)
+	err := replayWithInvalidProjectConfig(t)
+	if err == nil || !strings.Contains(err.Error(), "invalid project execution_mode") {
+		t.Fatalf("expected cwd benchmark.json to be loaded, got: %v", err)
+	}
+}
+
+// With .git in an ancestor the walk-up stops there and loads configuration
+// from that root rather than the nested working directory.
+func TestCLIBenchmarkReplayEmpirical_ProjectConfigRootFoundAtGitAncestor(t *testing.T) {
+	root := t.TempDir()
+	if err := os.Mkdir(filepath.Join(root, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeInvalidBenchmarkConfig(t, root)
+	nested := filepath.Join(root, "a", "b")
+	if err := os.MkdirAll(nested, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(nested)
+	err := replayWithInvalidProjectConfig(t)
+	if err == nil || !strings.Contains(err.Error(), "invalid project execution_mode") {
+		t.Fatalf("expected git-root benchmark.json to be loaded, got: %v", err)
+	}
+}
+
 func TestCLIBenchmarkReplayEmpirical_DefaultVerifier_Refusal_Exit3(t *testing.T) {
 	chdirTempGitRepo(t)
 	c := newCLI(t)
