@@ -1349,6 +1349,24 @@ func TestNewFileVerifier_EmptyTrustedOwnerUIDsRejected(t *testing.T) {
 	}
 }
 
+func TestNewFileVerifier_RefusesToRunAsRoot(t *testing.T) {
+	orig := getEUID
+	getEUID = func() int { return 0 }
+	t.Cleanup(func() { getEUID = orig })
+	_, err := NewFileVerifier(FileOptions{
+		OperatorDir:      t.TempDir(),
+		ReceiptsDir:      t.TempDir(),
+		OperatorUID:      2000,
+		TrustedOwnerUIDs: []uint32{2000},
+	})
+	if err == nil {
+		t.Fatal("expected a root verifier to be refused")
+	}
+	if cat := errs.CategoryOf(err); cat != errs.CategoryPolicyDenied {
+		t.Errorf("category = %v, want CategoryPolicyDenied", cat)
+	}
+}
+
 func TestVerify_VerifierClockDeterminesValidity(t *testing.T) {
 	pub, priv := testKeypair(t)
 	anchorID := "anchor_clock_01"

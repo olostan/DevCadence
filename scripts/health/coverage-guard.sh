@@ -94,8 +94,32 @@ fi
 
 echo "health: coverage base=$base_pct% candidate=$candidate_pct% tolerance=$tolerance pp (base $base_counts, candidate $candidate_counts covered/total statements)"
 
+# On a regression, diagnose it: list blocks covered in base but not in the
+# candidate. Diagnostic only; it never changes the verdict. The base profile
+# exists only when the base was measured in this run (not served from the cache).
+regressed_file="$tmp_root/regressed-blocks.txt"
+regressed_max=40
+if [ "$status" = regression ] && [ -f "$tmp_root/base.out" ]; then
+  awk 'FNR == 1 { f++ }
+       FNR > 1 && f == 1 { n[$1] = $2; if ($3 > 0) b[$1] = 1 }
+       FNR > 1 && f == 2 { if ($3 > 0) c[$1] = 1 }
+       END { for (k in b) if (!(k in c)) print k, n[k] }' \
+    "$tmp_root/base.out" "$candidate_profile" | sort >"$regressed_file" || : >"$regressed_file"
+  regressed_total=$(wc -l <"$regressed_file" | tr -d ' ')
+  shown=$regressed_max
+  if [ "$regressed_total" -lt "$shown" ]; then shown=$regressed_total; fi
+  {
+    echo "health: blocks covered in base but not in candidate (showing $shown of $regressed_total; file:line.col,line.col numstmts):"
+    head -n "$regressed_max" "$regressed_file" | sed 's/^/  /'
+  } >&2
+elif [ "$status" = regression ]; then
+  echo "health: base coverage was served from the cache; block-level diagnostics need a fresh base measurement (remove COVERAGE_CACHE_DIR entry)" >&2
+fi
+
 if [ -n "${COVERAGE_EXPORT_DIR:-}" ]; then
   mkdir -p "$COVERAGE_EXPORT_DIR"
+  if [ -f "$tmp_root/base.out" ]; then cp "$tmp_root/base.out" "$COVERAGE_EXPORT_DIR/base.out"; fi
+  if [ -f "$regressed_file" ]; then cp "$regressed_file" "$COVERAGE_EXPORT_DIR/regressed-blocks.txt"; fi
   cp "$candidate_profile" "$COVERAGE_EXPORT_DIR/coverage.out"
   cp "$candidate_report" "$COVERAGE_EXPORT_DIR/coverage.txt"
   delta=$(awk -v b="$base_pct" -v c="$candidate_pct" 'BEGIN { printf "%+.4f", c-b }')

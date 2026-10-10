@@ -133,9 +133,12 @@ func TestCheckPathProtection_EUIDZero(t *testing.T) {
 	}
 }
 
-// requireNonRoot skips tests that assert the production refusal to run as
-// root. Under CI the test fails instead of skipping, so the security checks
-// can never be silently disabled in the supported (non-root) environment.
+// requireNonRoot makes a test that exercises the post-root-check protection
+// logic behave identically whether the suite runs as root or not. Under CI a
+// root run fails instead, so the security checks can never be silently run in
+// an unsupported environment. Anywhere else, a root run substitutes a non-root
+// effective UID through the getEUID seam rather than skipping, so the covered
+// statements do not depend on who launched the tests.
 func requireNonRoot(t *testing.T) {
 	t.Helper()
 	if os.Geteuid() != 0 {
@@ -144,7 +147,9 @@ func requireNonRoot(t *testing.T) {
 	if os.Getenv("CI") != "" {
 		t.Fatal("receipt protection tests must run as a non-root user in CI")
 	}
-	t.Skip("requires non-root execution: receipts refuse protected path checks as root")
+	orig := getEUID
+	getEUID = func() int { return 65534 }
+	t.Cleanup(func() { getEUID = orig })
 }
 
 func TestCheckPathProtection_AncestorWalk(t *testing.T) {
@@ -272,6 +277,9 @@ func TestCheckPathProtection_AncestorWalk(t *testing.T) {
 	})
 
 	t.Run("untrusted owner in ancestor rejected", func(t *testing.T) {
+		if os.Getuid() == 0 {
+			t.Skip("files created by a root run are owned by trusted UID 0; needs a non-root owner")
+		}
 		restrictedOpts := ProtectionOptions{
 			OperatorUID:      myUID,
 			TrustedOwnerUIDs: []uint32{0}, // myUID is not in trusted owner UIDs
