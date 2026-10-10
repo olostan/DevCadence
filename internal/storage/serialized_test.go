@@ -287,3 +287,65 @@ func TestWriteSerializedReportsParentCancellationAfterAFailedAttempt(t *testing.
 		t.Fatalf("err = %v after %d calls; the caller's cancellation is reported unchanged and never retried", err, calls)
 	}
 }
+
+func TestAttemptBusyBudgetBranches(t *testing.T) {
+	if got, want := storage.AttemptBusyBudgetForTest(context.Background(), 1),
+		storage.ContentionBudget/storage.MaxContentionAttempts; got != want {
+		t.Fatalf("no deadline: share = %s, want the fixed %s", got, want)
+	}
+	expired, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Hour))
+	defer cancel()
+	if got := storage.AttemptBusyBudgetForTest(expired, 3); got != time.Millisecond {
+		t.Fatalf("expired deadline: share = %s, want the 1ms floor", got)
+	}
+}
+
+// scriptedErrContext reports the scripted Err results in order, then the real
+// ones. It lets a test place a caller cancellation between two exact checks of
+// WriteSerialized without sleeping or racing a timer.
+type scriptedErrContext struct {
+	context.Context
+	script []error
+}
+
+func (c *scriptedErrContext) Err() error {
+	if len(c.script) > 0 {
+		err := c.script[0]
+		c.script = c.script[1:]
+		return err
+	}
+	return c.Context.Err()
+}
+
+// TestWriteSerializedPostLoopOutcomes covers the two ways the retry loop ends
+// after the contention budget is spent by a non-busy attempt failure: the
+// caller's cancellation, if it appeared after the in-loop check, wins; without
+// one the attempt's own error is returned.
+func TestWriteSerializedPostLoopOutcomes(t *testing.T) {
+	bodyErr := errors.New("body failure once the budget is spent")
+	for _, tc := range []struct {
+		name   string
+		postLp error
+		check  func(error) bool
+	}{
+		{"caller cancelled after the in-loop check", context.Canceled, func(err error) bool { return errors.Is(err, context.Canceled) }},
+		{"attempt error survives", nil, func(err error) bool { return errors.Is(err, bodyErr) }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			store := openStore(t)
+			inner, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			// Err checks, in order: entry, in-loop after the attempt, post-loop.
+			ctx := &scriptedErrContext{Context: inner, script: []error{nil, nil, tc.postLp}}
+			calls := 0
+			err := store.WriteSerialized(ctx, func(*storage.Tx) error {
+				calls++
+				cancel() // spends the budget context, which derives from the caller's
+				return bodyErr
+			})
+			if calls != 1 || !tc.check(err) {
+				t.Fatalf("err = %v after %d calls", err, calls)
+			}
+		})
+	}
+}

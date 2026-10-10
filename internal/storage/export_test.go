@@ -1,6 +1,9 @@
 package storage
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 // ExecForTest runs a raw statement inside the transaction.
 //
@@ -59,4 +62,10 @@ func (s *Store) ProvokeBusyForTest(ctx context.Context) error {
 	}
 	_, err = conn.ExecContext(ctx, "UPDATE principal_write_serialization SET marker = marker WHERE id = 1")
 	return err
+}
+
+// AttemptBusyBudgetForTest exposes the per-attempt busy-wait share so that its
+// no-deadline and exhausted-deadline branches can be pinned without waiting.
+func AttemptBusyBudgetForTest(ctx context.Context, attemptsLeft int) time.Duration {
+	return attemptBusyBudget(ctx, attemptsLeft)
 }
