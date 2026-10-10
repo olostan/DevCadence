@@ -8,7 +8,7 @@ Authoritative objective: [wp-m5-sh1-self-host-alpha-ewp.md](wp-m5-sh1-self-host-
 - SH1-1: implemented on branch `ccr-30e3bc5f-qjnr6g` (draft PR): `internal/selfhost` + composition root in `cmd/devcadence-mcp` (via `mcpadapter.LaunchWith` task-port factory, keeping the adapter's dependency boundary) + `devcadence selfhost check`. Verified with a stub-Ollama deterministic test only; the live test (`TestLiveOllama`) has NOT been run (no Ollama in the sandbox).
 - SH1-2: merged (PR #90; see section below).
 - SH1-3 (minimal): implemented on `ccr-30e3bc5f-qjnr6g` (draft PR): post-check validation, bounded repair loop, `validation-report` and `review_unavailable` evidence, uncertain-retry refusal. Stub-tested only; `TestLiveOllamaRepair` has NOT been run (no Ollama in the sandbox).
-- SH1-4: not started. No Ollama in the cloud sandbox: live acceptance must run where Ollama is installed.
+- SH1-4A/C/D (this PR, draft): MCP -> native runtime verified at the MCP transport, candidate handoff packet, `accept` handoff, deterministic stub-based rehearsal (section below). Real-Ollama acceptance is still NOT run (no Ollama in the cloud sandbox): the owner runs it later on a Mac.
 
 ## Implementation Surface Map (verified by scout, not yet by tests)
 
@@ -23,7 +23,7 @@ Authoritative objective: [wp-m5-sh1-self-host-alpha-ewp.md](wp-m5-sh1-self-host-
 
 1. SH1-1 composition root (`internal/selfhost`) + `mcpadapter` wiring + no-fake-driver success test.
 2. SH1-2 (done, see below) `apply_patch`/range-replace tool via shared write-path check; `run_command` gated by explicit local-dev execution mode (user-level trust, not repo config).
-3. SH1-3 (minimal, done, see below) `ProfileSource` over `validation.LoadProfiles`; `review_unavailable`; uncertain-retry refusal. Still open: reviewexec wiring, minimal Accept hand-off.
+3. SH1-3 (minimal, done, see below) `ProfileSource` over `validation.LoadProfiles`; `review_unavailable`; uncertain-retry refusal. Still open: reviewexec wiring (the minimal `accept` hand-off is done in SH1-4C).
 4. SH1-4 dogfood scripts/records.
 
 ## SH1-1 usage (owner-local, user-level only)
@@ -56,6 +56,34 @@ Config (never read from the project repo): only the existence of `$DEVCADENCE_HO
 - Live acceptance (owner machine, real Ollama and an installed model; never pulls): `DEVCADENCE_OLLAMA_MODEL=<installed-model> scripts/selfhost-live.sh` (preflights `devcadence selfhost check`, then `TestLiveOllamaRepair`, which builds a disposable Go project with a real defect and prints model identity and digest, model commands, validation rounds, candidate commit, manifest and review label).
 - Limitations: post-check validation EXECUTES MODEL-WRITTEN CODE (tests, Makefiles, scripts, `go generate`-style hooks) unconfined as the local user in `yolo`; treat the candidate worktree as untrusted. Strict mode CANNOT delegate in any repo containing `.devcadence/validation.yaml` (Delegate refuses with `postcheck_requires_yolo`). The uncertain-retry refusal has no override: create a new task or work package. Tests are stub-based and prove wiring and failure semantics, not real model behavior. `yolo` is unconfined as the local user, not a sandbox, and the post-check runs the repository's commands in that mode. Candidates carry `review_unavailable`: reviewexec is not wired, manual owner acceptance is required. Post-check time counts against the operation deadline but not the model meter. A passing check that leaves untracked out-of-scope files (for example a coverage profile) still fails candidate scope checks. Captured check output is bounded to 4 MiB (head kept).
 
+## SH1-4 MCP delegation path, candidate handoff, rehearsal (stub-based plumbing only; NOT a real-model result)
+
+**MCP surface** (exactly 11 tools, all reach the real facade; with selfhost config present `delegate`, `validate` and candidate inspection reach the real `taskexec.Executor`): `project_state`, `create_work_package`, `delegate` (returns an operation handle at once), `task_status` (poll the operation handle until `completed|failed|cancelled`; `task_id` form returns the task, its candidate and, new, `candidate_handoff`), `validate`, `accept` (still refused; new: carries `result.handoff`), `reject`, `record_decision`, `request_evidence`, `investigate` (MODEL_UNAVAILABLE: no scout runtime), `review` (MODEL_UNAVAILABLE: reviewexec not wired, honest `review_unavailable`). Absent `selfhost.json`: `delegate`/`validate` refuse with `MODEL_UNAVAILABLE` and evidence ref `runtime-not-installed:task-execution|validation`, and launch logs the remedy. Strict mode in a repo with `.devcadence/validation.yaml`: `delegate` refuses synchronously with `POLICY_DENIED` + ref `postcheck_requires_yolo`, no model call, no subprocess.
+
+**Handoff packet** (`facade.CandidateHandoff`; schema `candidateHandoff` in `principal-task-status-response`, fixtures `principal-*-response.valid-*handoff.json`): task/attempt, base and candidate commit, durable ref `refs/devcadence/candidates/<task>-<attempt>` (created with `git update-ref` in the attempt materialization, create-only; moves no branch and not HEAD; nothing pushed or merged; failing to create it fails the attempt closed), worktree branch/path, changed-file manifest, model endpoint/model/digest, execution mode (recorded at attempt time in the `review-status` artifact; `unknown` if absent), `review` (`review_unavailable`, `independent=false`), post-check rounds (repair history), `validate` outcomes, command-trace counts, and exact `git -C <repo> diff|log|merge --no-ff|cherry-pick` text. Built on demand from durable records by `Executor.InspectCandidate` (optional `facade.CandidateInspector`, found by type assertion).
+
+**Owner steps outside MCP** (no MCP tool exists for them): create the task and start design (`devcadence task create ...`, `devcadence event append -type TaskDesignStarted`), approve the proposed Work Package after `create_work_package` (`devcadence event append -type WorkPackageApproved -task <alias> -payload '{...}'`; the record is already stored), and integrate the candidate. `accept` requires at least one `review_ids` entry: pass the sentinel `review_unavailable` while no reviewer runs.
+
+**Antigravity MCP config** (`mcp_config.json`; build with `make build-mcp`, binary `bin/devcadence-mcp`):
+
+```json
+{"mcpServers": {"devcadence": {
+  "command": "/ABS/PATH/DevCadence/bin/devcadence-mcp",
+  "env": {"DEVCADENCE_HOME": "/Users/you/.devcadence", "DEVCADENCE_PROJECT_ID": "myproject"}}}}
+```
+
+`$DEVCADENCE_HOME/config/principal-binding.json` (0600, dir 0700) must grant the tools; `$DEVCADENCE_HOME/config/selfhost.json` (owner-local, never in the repo):
+
+```json
+{"model": "qwen2.5-coder:7b", "ollama_url": "http://127.0.0.1:11434", "execution_mode": "yolo", "max_repair_rounds": 2}
+```
+
+**Principal call sequence:** `project_state` -> `project_state(focus=task)` -> `create_work_package` (planning revision = current `state_revision`) -> owner approves -> `project_state` -> `delegate` -> poll `task_status(operation)` -> `task_status(task_id)` (read `candidate_handoff`) -> `validate(profile_id=default)` (yolo only) + poll -> `task_status` again -> `accept` (returns the handoff and refuses) -> owner integrates. Antigravity never edits files: all edits are made by the executor's tools in an isolated worktree.
+
+**Owner inspect/merge:** run the packet's `inspect.diff` and `inspect.log`; integrate manually from your target branch with `inspect.merge` or `inspect.cherry_pick` (or `git merge refs/devcadence/candidates/<task>-<attempt>`). Delete the ref and the `devcadence/<task>/<attempt>` branch/worktree when done.
+
+**Rehearsal** (`cmd/devcadence-mcp/rehearsal_test.go`, MCP in-memory transport -> real composition root -> real executor -> scripted httptest Ollama; disposable repo with `internal/calc`, committed `.devcadence/validation.yaml` gofmt-check + targeted `go test`): happy path with a failing first validation, repair and pass; asserts edits by DevCadence tools, repair history, commits/manifest/ref with primary HEAD unmoved, provenance, `review_unavailable`, that the printed `git diff`/`log`/`cherry-pick` commands work; plus strict-mode refusal, scope violation and absent-config refusal. Limitations: stub only; `validate` is now gated like the post-check: outside `yolo` it refuses with `POLICY_DENIED` + ref `validate_requires_yolo` before any subprocess; handoff worktree path may be gone after cleanup (the ref stays); `ref` creation requires a repository whose refs dir is writable; the 32 KiB response cap bounds very large manifests (capped at 256 entries).
+
 ## Next action
 
-Run `scripts/selfhost-live.sh` where Ollama is installed (SH1-2 and SH1-3 live acceptance), then reviewexec wiring/Accept hand-off and SH1-4 dogfood.
+Run `scripts/selfhost-live.sh` where Ollama is installed (SH1-2/SH1-3 live acceptance), then follow the Antigravity sequence above against a real model; reviewexec wiring and an MCP approval tool remain open.

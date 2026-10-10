@@ -1,0 +1,122 @@
+{
+  "schema_version": "1.0",
+  "state_revision": "ps_000000042",
+  "evidence_refs": [],
+  "result": {
+    "task": {
+      "task_id": "tsk_00000000000000000000000C",
+      "alias": "DC-012",
+      "state": "reviewing",
+      "work_package": {
+        "id": "wp_000000000000000000000012",
+        "version": 1,
+        "digest": "sha256:abababababababababababababababababababababababababababababababab",
+        "base_commit": "91acd8273f1"
+      },
+      "candidate": {
+        "task_id": "tsk_00000000000000000000000C",
+        "attempt_id": "att_00000000000000000000000D",
+        "work_package": {
+          "id": "wp_000000000000000000000012",
+          "version": 1,
+          "digest": "sha256:abababababababababababababababababababababababababababababababab",
+          "base_commit": "91acd8273f1"
+        },
+        "commit": "b7e1a2c3d4e5f60718293a4b5c6d7e8f90a1b2c3"
+      },
+      "attempt_ids": [
+        "att_00000000000000000000000D"
+      ],
+      "has_more_attempts": false
+    },
+    "candidate_handoff": {
+      "task_id": "tsk_00000000000000000000000C",
+      "attempt_id": "att_00000000000000000000000D",
+      "base_commit": "91acd8273f1c2b3a4d5e6f708192a3b4c5d6e7f8",
+      "candidate_commit": "b7e1a2c3d4e5f60718293a4b5c6d7e8f90a1b2c3",
+      "ref": "refs/devcadence/candidates/tsk_00000000000000000000000C-att_00000000000000000000000D",
+      "branch": "devcadence/tsk_00000000000000000000000C/att_00000000000000000000000D",
+      "worktree_path": "/home/owner/.devcadence/state/selfhost/worktrees/proj/tsk_00000000000000000000000C/att_00000000000000000000000D",
+      "changed_files": [
+        {
+          "status": "M",
+          "path": "internal/calc/calc.go"
+        },
+        {
+          "status": "A",
+          "path": "internal/calc/calc_test.go"
+        }
+      ],
+      "model": {
+        "endpoint_id": "ollama-local",
+        "model": "qwen2.5-coder:7b",
+        "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "execution_mode": "unsafe_unconfined_local",
+      "review": {
+        "status": "review_unavailable",
+        "independent": false,
+        "reason": "no independent reviewer configured; owner manual acceptance required"
+      },
+      "post_check": {
+        "profile_id": "default",
+        "passed": true,
+        "rounds_used": 2,
+        "repair_rounds": 1,
+        "max_repair_rounds": 2,
+        "rounds": [
+          {
+            "round": 1,
+            "passed": false,
+            "checks": [
+              {
+                "id": "go-test",
+                "argv": [
+                  "go",
+                  "test",
+                  "./..."
+                ],
+                "status": "fail",
+                "exit_code": 1
+              }
+            ]
+          },
+          {
+            "round": 2,
+            "passed": true,
+            "checks": [
+              {
+                "id": "go-test",
+                "argv": [
+                  "go",
+                  "test",
+                  "./..."
+                ],
+                "status": "pass",
+                "exit_code": 0
+              }
+            ]
+          }
+        ]
+      },
+      "validations": [
+        {
+          "validation_id": "val_00000000000000000000000E",
+          "outcome": "pass"
+        }
+      ],
+      "command_trace": {
+        "commands": 2,
+        "refused": 0,
+        "unsafe_unconfined": true
+      },
+      "inspect": {
+        "diff": "git -C '/home/owner/repo' diff 91acd8273f1c2b3a4d5e6f708192a3b4c5d6e7f8..b7e1a2c3d4e5f60718293a4b5c6d7e8f90a1b2c3",
+        "log": "git -C '/home/owner/repo' log --stat 91acd8273f1c2b3a4d5e6f708192a3b4c5d6e7f8..b7e1a2c3d4e5f60718293a4b5c6d7e8f90a1b2c3",
+        "merge": "git -C '/home/owner/repo' merge --no-ff b7e1a2c3d4e5f60718293a4b5c6d7e8f90a1b2c3",
+        "cherry_pick": "git -C '/home/owner/repo' cherry-pick b7e1a2c3d4e5f60718293a4b5c6d7e8f90a1b2c3"
+      },
+      "acceptance": "Acceptance is a manual owner action: DevCadence has not accepted, merged or pushed this candidate. No independent reviewer examined it (review_unavailable). Inspect the diff with the commands below, then integrate it yourself."
+    }
+  }
+}

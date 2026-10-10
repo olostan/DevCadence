@@ -851,6 +851,15 @@ func (e *Executor) materializeCandidate(
 		}
 	}
 
+	// Pin the candidate commit durably in the primary repository (shared ref
+	// namespace; moves no branch and not HEAD). Done only after every scope
+	// check passed, so a rejected candidate leaves no ref. Fail closed: a
+	// candidate that cannot be reached from the primary repository is not handed off.
+	if err := e.pinCandidateRef(ctx, worktreePath, taskID, attemptID, headCommit); err != nil {
+		_, ferr := e.failAttempt(taskID, attemptID, "reason=candidate_ref_unavailable effects=none", false, 0, nil, principal.CodeInternal, err)
+		return "", nil, ferr
+	}
+
 	return headCommit, paths, nil
 }
 

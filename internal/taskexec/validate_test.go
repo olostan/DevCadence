@@ -98,6 +98,7 @@ func TestValidate_SynchronousRejections(t *testing.T) {
 			},
 		},
 	}
+	f.opts.ExecutionMode = taskexec.ExecutionUnsafeUnconfinedLocal
 	f.opts.Profiles = profiles
 
 	exec, err := taskexec.New(f.opts)
@@ -211,6 +212,7 @@ func TestValidate_AttemptNotInCandidateProduced(t *testing.T) {
 			},
 		},
 	}
+	f.opts.ExecutionMode = taskexec.ExecutionUnsafeUnconfinedLocal
 	f.opts.Profiles = profiles
 
 	exec, err := taskexec.New(f.opts)
@@ -435,6 +437,7 @@ func TestValidate_ProhibitedProfiles(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			f := setupFixture(t, "proj-val-prohib")
+			f.opts.ExecutionMode = taskexec.ExecutionUnsafeUnconfinedLocal
 			f.opts.Profiles = &mockProfileSource{
 				profiles: map[string]validation.Profile{
 					"bad": tc.profile,
@@ -480,6 +483,7 @@ func TestValidate_AsynchronousExecution_Success(t *testing.T) {
 			},
 		},
 	}
+	f.opts.ExecutionMode = taskexec.ExecutionUnsafeUnconfinedLocal
 	f.opts.Profiles = profiles
 
 	exec, err := taskexec.New(f.opts)
@@ -592,6 +596,7 @@ func TestValidate_AsynchronousExecution_CheckFailure(t *testing.T) {
 			},
 		},
 	}
+	f.opts.ExecutionMode = taskexec.ExecutionUnsafeUnconfinedLocal
 	f.opts.Profiles = profiles
 
 	exec, err := taskexec.New(f.opts)
@@ -664,6 +669,7 @@ func TestValidate_ConcurrentValidations(t *testing.T) {
 			},
 		},
 	}
+	f.opts.ExecutionMode = taskexec.ExecutionUnsafeUnconfinedLocal
 	f.opts.Profiles = profiles
 
 	exec, err := taskexec.New(f.opts)
@@ -726,5 +732,30 @@ func TestValidate_ConcurrentValidations(t *testing.T) {
 		if wt.Status == worktrees.StatusActive && (wt.AttemptID == "att-conc-v1" || wt.AttemptID == "att-conc-v2") {
 			t.Fatalf("expected validation worktree %s to be cleaned up, but found active", wt.ID)
 		}
+	}
+}
+
+// Strict mode (the default) refuses validation before any subprocess: profile
+// commands and the candidate's code would otherwise run unconfined.
+func TestValidate_StrictModeRefusesBeforeAnyProcess(t *testing.T) {
+	f := setupFixture(t, "proj-val-strict")
+	f.opts.Profiles = &mockProfileSource{profiles: map[string]validation.Profile{
+		"fast": {Name: "fast", Checks: []validation.CheckSpec{{ID: "ok", Argv: []string{"true"}, Timeout: 5 * time.Second}}},
+	}}
+	exec, err := taskexec.New(f.opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	taskID, commit := driveTaskToValidating(t, f, "T-01", "wp-01", "att-01")
+	_, err = exec.Validate(context.Background(),
+		principal.CallerContext{PrincipalID: "p", ProjectID: f.projectID},
+		principal.CallMeta{SchemaVersion: principal.SchemaVersion, ProjectID: f.projectID, CorrelationID: "c"},
+		principal.CandidateRef{TaskID: taskID, AttemptID: "att-01", Commit: commit}, "fast")
+	var ce *principal.CodedError
+	if !errors.As(err, &ce) || ce.Code() != principal.CodePolicyDenied || len(ce.EvidenceRefs()) != 1 || ce.EvidenceRefs()[0] != "validate_requires_yolo" {
+		t.Fatalf("err = %v", err)
+	}
+	if wts, _ := f.opts.Worktrees.List(f.projectID); len(wts) != 0 {
+		t.Errorf("refused validation created %d worktrees", len(wts))
 	}
 }

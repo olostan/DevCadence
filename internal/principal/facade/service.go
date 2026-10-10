@@ -84,7 +84,14 @@ func nilPort(v any) bool {
 }
 
 func missingRuntime(what string) error {
-	return coded(principal.CodeModelUnavailable, false, nil, what+" runtime is not installed")
+	return coded(principal.CodeModelUnavailable, false, []string{MissingRuntimeRef(what)}, what+" runtime is not installed")
+}
+
+// MissingRuntimeRef is the evidence handle of a refusal caused by an absent
+// runtime port, so a host can tell which runtime to install or configure (for
+// task execution: the user-level selfhost.json) instead of seeing a bare code.
+func MissingRuntimeRef(what string) string {
+	return "runtime-not-installed:" + strings.ReplaceAll(what, " ", "-")
 }
 
 // admit is the common pre-effect gate: bound project, exact grant, current
@@ -804,7 +811,39 @@ func (s *Service) TaskStatus(ctx context.Context, caller CallerContext, req Task
 	if err != nil {
 		return fail(revision, err)
 	}
-	return TaskStatusResponse{Envelope: envelopeOK(revision, nil), Result: &TaskStatusResult{Task: taskStatusOf(d)}}, nil
+	result := &TaskStatusResult{Task: taskStatusOf(d)}
+	var refs []string
+	if cand := result.Task.Candidate; cand != nil {
+		// The task status itself never fails because the handoff packet could not
+		// be assembled, but the failure is never silent: a candidate exists whose
+		// durable ref or evidence cannot be verified, so the response carries the
+		// evidence handle CandidateHandoffUnavailableRef.
+		if h, err := s.inspectCandidate(ctx, *cand); err != nil {
+			refs = append(refs, CandidateHandoffUnavailableRef)
+		} else {
+			result.CandidateHandoff = h
+		}
+	}
+	return TaskStatusResponse{Envelope: envelopeOK(revision, refs), Result: result}, nil
+}
+
+// CandidateHandoffUnavailableRef marks a task_status response whose candidate
+// exists but whose handoff packet could not be built (for example the durable
+// candidate ref is missing or does not name the candidate commit).
+const CandidateHandoffUnavailableRef = "candidate-handoff-unavailable"
+
+// inspectCandidate asks the installed task runtime, when it can, to describe a
+// candidate whose lineage the caller has already verified. It returns (nil, nil)
+// when no runtime or no inspection capability is installed.
+func (s *Service) inspectCandidate(ctx context.Context, c CandidateRef) (*CandidateHandoff, error) {
+	if nilPort(s.opts.Tasks) {
+		return nil, nil
+	}
+	insp, ok := s.opts.Tasks.(CandidateInspector)
+	if !ok {
+		return nil, nil
+	}
+	return insp.InspectCandidate(ctx, c)
 }
 
 // --- accept / reject / record_decision ---
@@ -816,6 +855,9 @@ const AcceptanceUnavailableRef = "acceptance-runtime-unavailable"
 // Accept is hard-disabled in this slice. After structural, project and action
 // checks it returns NEEDS_PRINCIPAL with zero journal, storage or Git effects,
 // irrespective of grants or evidence. No option or injected gate enables it.
+// When the installed task runtime can inspect candidates (SH1-4C) the refusal
+// additionally carries the read-only handoff packet describing how the owner
+// integrates the candidate manually; nothing is accepted, merged or pushed.
 func (s *Service) Accept(ctx context.Context, caller CallerContext, req AcceptRequest) (AcceptResponse, error) {
 	if err := s.admit(ctx, caller, req.Meta, ToolAccept); err != nil {
 		return AcceptResponse{Envelope: s.refuse(ToolAccept, req.Meta, "", err)}, nil
@@ -824,7 +866,22 @@ func (s *Service) Accept(ctx context.Context, caller CallerContext, req AcceptRe
 		return AcceptResponse{Envelope: s.refuse(ToolAccept, req.Meta, "", err)}, nil
 	}
 	err := coded(principal.CodeNeedsPrincipal, false, []string{AcceptanceUnavailableRef}, "acceptance is disabled")
-	return AcceptResponse{Envelope: s.refuse(ToolAccept, req.Meta, "", err)}, nil
+	resp := AcceptResponse{Envelope: s.refuse(ToolAccept, req.Meta, "", err)}
+	if !nilPort(s.opts.Tasks) {
+		if _, ok := s.opts.Tasks.(CandidateInspector); ok {
+			// Read-only handoff: lineage must still be real, otherwise refuse as for
+			// any candidate-bearing tool.
+			if _, lerr := s.checkLineage(ctx, req.Meta.ProjectID, req.Candidate); lerr != nil {
+				return AcceptResponse{Envelope: s.refuse(ToolAccept, req.Meta, "", lerr)}, nil
+			}
+			if h, ierr := s.inspectCandidate(ctx, req.Candidate); ierr != nil {
+				return AcceptResponse{Envelope: s.refuse(ToolAccept, req.Meta, "", ierr)}, nil
+			} else if h != nil {
+				resp.Result = &AcceptResult{Handoff: h}
+			}
+		}
+	}
+	return resp, nil
 }
 
 // Reject records ChangeRejected for the current reviewing candidate. It never

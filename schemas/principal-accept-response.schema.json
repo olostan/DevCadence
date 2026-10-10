@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/olostan/DevCadence/schemas/principal-accept-response.schema.json",
   "title": "DevCadence Principal accept response",
-  "description": "Response of the accept tool (WP-M5-2): the same value for a Go and an MCP caller. state_revision is the prefix observed or committed and is omitted when the call was refused before any read. Acceptance is hard-disabled, so this response always carries an error.",
+  "description": "Response of the accept tool (WP-M5-2): the same value for a Go and an MCP caller. state_revision is the prefix observed or committed and is omitted when the call was refused before any read. Acceptance is hard-disabled, so this response always carries an error. When the installed task runtime can inspect the candidate (SH1-4C) the refusal also carries an optional read-only result.handoff packet describing how the owner integrates the candidate manually; nothing is accepted, merged or pushed.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -29,6 +29,15 @@
     },
     "error": {
       "$ref": "devcadence:///principal-semantic-error.schema.json"
+    },
+    "result": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "handoff": {
+          "$ref": "devcadence:///principal-task-status-response.schema.json#/$defs/candidateHandoff"
+        }
+      }
     }
   }
 }
