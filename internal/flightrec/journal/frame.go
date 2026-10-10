@@ -45,6 +45,9 @@ var (
 var (
 	// ErrClosed reports an append to a closed writer.
 	ErrClosed = errors.New("journal: writer closed")
+	// ErrNilBody reports a nil record body (invalid argument). A nil
+	// diagnostic body is counted as dropped.
+	ErrNilBody = errors.New("journal: nil record body")
 	// ErrRecordTooLarge reports a record whose marshalled size exceeds
 	// Limits.MaxRecordBytes. It does not poison the writer.
 	ErrRecordTooLarge = errors.New("journal: record exceeds MaxRecordBytes")

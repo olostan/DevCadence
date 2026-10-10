@@ -1264,15 +1264,80 @@ func TestTickAfterBrokenWriterIsHarmless(t *testing.T) {
 	if err := w.Flush(ctxBG()); err != nil {
 		t.Fatal(err)
 	}
-	w.AppendDiagnostic(obsBody(5))
+	// No further async append here: the queue is empty, so nothing can reopen a
+	// segment between tick() and the assertions.
 	w.mu.Lock()
 	w.unsynced = true
 	w.mu.Unlock()
 	ffs.reset()
 	ffs.rule = failNth("sync", 1, errBoom)
 	w.tick()
-	if !w.Stats().Broken {
+	if ffs.count("sync") != 1 || !w.Stats().Broken {
 		t.Fatal("failed tick sync must poison the segment")
+	}
+}
+
+func segmentCount(t *testing.T, dir string) int {
+	t.Helper()
+	ents, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return len(ents)
+}
+
+// B2: nothing may open a segment once the writer is shut (single-writer).
+func TestNoSegmentOpenedAfterClose(t *testing.T) {
+	env := newEnv(t)
+	ffs := newFaultFS(nil)
+	env.cfg.FS = ffs
+	w := env.open(t)
+	ffs.reset()
+	ffs.rule = failNth("sync", 1, errBoom)
+	_ = w.AppendCritical(ctxBG(), obsBody(5)) // poisons: active == nil, WRITER_ERROR pending
+	ffs.rule = nil
+	if err := w.Close(ctxBG()); err != nil {
+		t.Fatal(err)
+	}
+	before := segmentCount(t, env.dir)
+	w.dropped.Add(1) // pending health again, as if produced concurrently with Close
+	w.mu.Lock()
+	err1 := w.flushHealthLocked()
+	err2 := w.ensureActiveLocked()
+	w.mu.Unlock()
+	if !errors.Is(err1, ErrClosed) || !errors.Is(err2, ErrClosed) {
+		t.Fatalf("shut writer must refuse: %v %v", err1, err2)
+	}
+	if err := w.Flush(ctxBG()); !errors.Is(err, ErrClosed) {
+		t.Fatalf("Flush: %v", err)
+	}
+	// Interleaving: Flush passed the closed check, then Close completed.
+	w.cmu.Lock()
+	w.closed = false
+	w.cmu.Unlock()
+	if err := w.Flush(ctxBG()); !errors.Is(err, ErrClosed) {
+		t.Fatalf("Flush after shut: %v", err)
+	}
+	w.cmu.Lock()
+	w.closed = true // restore: the cleanup Close must stay idempotent
+	w.cmu.Unlock()
+	if after := segmentCount(t, env.dir); after != before {
+		t.Fatalf("segment created after Close: %d -> %d", before, after)
+	}
+}
+
+// N8: a nil body is an invalid argument, not a panic.
+func TestNilBodyIsRejected(t *testing.T) {
+	env := newEnv(t)
+	w := env.open(t)
+	if err := w.AppendCritical(ctxBG(), nil); !errors.Is(err, ErrNilBody) {
+		t.Fatalf("AppendCritical(nil): %v", err)
+	}
+	if w.AppendDiagnostic(nil) || w.Stats().Dropped != 1 {
+		t.Fatalf("AppendDiagnostic(nil) must be dropped: %+v", w.Stats())
+	}
+	if err := w.Close(ctxBG()); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -1344,5 +1409,58 @@ func TestSilentShortWriteIsAnError(t *testing.T) {
 	err := w.AppendCritical(ctxBG(), startBody("a.b"))
 	if !errors.Is(err, io.ErrShortWrite) || !w.Stats().Broken {
 		t.Fatalf("%v %+v", err, w.Stats())
+	}
+}
+
+// N7: worst-case ids and writer version at the exact minimum MaxSegmentBytes:
+// header + three health frames + one maximal record still fit one segment.
+func TestMinimumSegmentBudgetHoldsWithMaximalIDs(t *testing.T) {
+	env := newEnv(t)
+	env.cfg.NodeID = strings.Repeat("n", maxIDBytes)
+	env.cfg.RuntimeID = strings.Repeat("r", maxIDBytes)
+	env.cfg.StreamID = strings.Repeat("s", maxIDBytes)
+	env.cfg.WriterVersion = strings.Repeat("v", maxVersionByte)
+	env.cfg.Limits = Limits{MaxRecordBytes: 4096, MaxSegmentBytes: minSegmentBytes(4096)}
+	ffs := newFaultFS(nil)
+	env.cfg.FS = ffs
+	w := env.open(t)
+	if w.size > headerFixed+MaxHeaderMeta+4+frameOverhead+MaxHealthBytes {
+		t.Fatalf("header plus start health exceeds the budget: %d", w.size)
+	}
+	// Largest observation whose marshalled record is within MaxRecordBytes.
+	n := 4096
+	w.mu.Lock()
+	for ; n > 0; n-- {
+		if _, err := w.encodeLocked(obsBody(n), DurabilityCritical); err == nil {
+			break
+		}
+	}
+	w.mu.Unlock()
+	// Poison, then queue a drop so the fresh segment owes three health records.
+	ffs.reset()
+	ffs.rule = failNth("sync", 1, errBoom)
+	_ = w.AppendCritical(ctxBG(), obsBody(5))
+	ffs.rule = nil
+	w.dropped.Add(1)
+	if err := w.AppendCritical(ctxBG(), obsBody(n)); err != nil {
+		t.Fatalf("maximal record with three pending health frames: %v", err)
+	}
+	if err := w.Close(ctxBG()); err != nil {
+		t.Fatal(err)
+	}
+	if got := len(segFiles(t, env.dir)); got != 2 {
+		t.Fatalf("want the poisoned segment plus one fresh segment, got %d", got)
+	}
+	for _, p := range segFiles(t, env.dir) {
+		fi, err := os.Stat(p)
+		if err != nil || fi.Size() > int64(env.cfg.Limits.MaxSegmentBytes) {
+			t.Fatalf("%s: size %v exceeds MaxSegmentBytes %d (%v)", p, fi, env.cfg.Limits.MaxSegmentBytes, err)
+		}
+	}
+	rep, _ := scanDir(t, env.dir, ScanOptions{Limits: env.cfg.Limits})
+	for _, f := range rep.Findings {
+		if f.Severity == SeverityWarning && f.Code != SegmentOrder {
+			t.Fatalf("unexpected finding %+v", f)
+		}
 	}
 }

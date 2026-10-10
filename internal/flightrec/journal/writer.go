@@ -417,6 +417,9 @@ func (w *Writer) openNextLocked() error {
 
 // ensureActiveLocked recovers from a poisoned writer with a fresh segment.
 func (w *Writer) ensureActiveLocked() error {
+	if w.shut {
+		return ErrClosed
+	}
 	if w.active != nil {
 		return nil
 	}
@@ -511,6 +514,9 @@ func (w *Writer) flushPendingHealthLocked() error {
 // flushHealthLocked persists pending health, opening a fresh segment when the
 // writer is poisoned.
 func (w *Writer) flushHealthLocked() error {
+	if w.shut {
+		return ErrClosed
+	}
 	if w.pendingCount() == 0 {
 		return nil
 	}
@@ -638,6 +644,9 @@ func (w *Writer) AppendCritical(ctx context.Context, body *wire.JournalRecord) e
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	if body == nil {
+		return ErrNilBody
+	}
 	w.cmu.RLock()
 	closed := w.closed
 	w.cmu.RUnlock()
@@ -659,7 +668,7 @@ func (w *Writer) AppendCritical(ctx context.Context, body *wire.JournalRecord) e
 func (w *Writer) AppendDiagnostic(body *wire.JournalRecord) (accepted bool) {
 	w.cmu.RLock()
 	defer w.cmu.RUnlock()
-	if w.closed {
+	if w.closed || body == nil { // a nil body is an invalid argument: counted as dropped
 		w.dropped.Add(1)
 		return false
 	}
@@ -758,6 +767,9 @@ func (w *Writer) Flush(ctx context.Context) error {
 	}
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	if w.shut { // Close completed between the closed check and this lock
+		return ErrClosed
+	}
 	if err := w.flushHealthLocked(); err != nil {
 		return err
 	}
