@@ -10,7 +10,6 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
-	"syscall"
 	"testing"
 	"time"
 
@@ -76,7 +75,7 @@ func runHelper(mode, dir string) int {
 		}
 		fmt.Println("ready")
 		if mode == "kill_self" {
-			_ = syscall.Kill(os.Getpid(), syscall.SIGKILL)
+			killSelf()
 			select {} // unreachable: SIGKILL cannot be handled
 		}
 		return 0 // exits without Close or defers
