@@ -80,11 +80,20 @@ type ScanOptions struct {
 	PrevLastSequence uint64
 
 	skipBoundary bool
+	// hasPrev marks that a previous segment with a valid header exists even
+	// when PrevLastSequence is 0 (a header-only first segment).
+	hasPrev bool
 }
 
 const (
 	defaultMaxResync = 16 << 20
 	scanChunk        = 64 << 10
+	// schemaVersionTag is the first byte of every valid record payload
+	// (field 1, varint).
+	schemaVersionTag = 0x08
+	// resyncBudgetFactor scales MaxResyncBytes into the per-damage-region
+	// budget of candidate payload bytes that may be read and checksummed.
+	resyncBudgetFactor = 4
 )
 
 // Scanned is one record delivered to the visitor.
@@ -117,7 +126,9 @@ type StreamReport struct {
 	Records  uint64
 	// FirstSequence is the first_sequence of the first segment with a valid header.
 	FirstSequence uint64
-	// LastSequence is the stream-wide last delivered sequence.
+	// LastSequence is the maximum over segments of the last delivered sequence
+	// (first_sequence-1 for a header-only segment); a regressing segment never
+	// lowers it.
 	LastSequence uint64
 	// Clean is true iff there is no warning finding.
 	Clean bool
@@ -142,6 +153,11 @@ type segScan struct {
 	last      uint64
 	rep       SegmentReport
 	visit     func(Scanned) error
+
+	cBuf        []byte // read-through chunk cache used by the resync search
+	cOff        int64
+	spent       int64 // candidate payload bytes verified in the current damage region
+	budgetBlown bool
 }
 
 func (s *segScan) add(code FindingCode, off, skipped int64, expected, got uint64, detail string) {
@@ -152,6 +168,9 @@ func (s *segScan) add(code FindingCode, off, skipped int64, expected, got uint64
 }
 
 func (s *segScan) readAt(off int64, n int) ([]byte, error) {
+	if n <= frameOverhead+1 && off >= s.cOff && off+int64(n) <= s.cOff+int64(len(s.cBuf)) {
+		return s.cBuf[off-s.cOff : off-s.cOff+int64(n)], nil // read-only view of the chunk cache
+	}
 	buf := make([]byte, n)
 	got, err := s.r.ReadAt(buf, off)
 	if got == n {
@@ -211,7 +230,7 @@ func (s *segScan) parseHeader() (end int64, detail string, err error) {
 
 // frameAt validates the frame at off. code is empty for a valid frame; torn is
 // set when the frame is merely incomplete (length beyond EOF).
-func (s *segScan) frameAt(off int64) (rec *wire.JournalRecord, n int64, code FindingCode, torn bool, err error) {
+func (s *segScan) frameAt(off int64, probe bool) (rec *wire.JournalRecord, n int64, code FindingCode, torn bool, err error) {
 	if s.size-off < frameOverhead {
 		return nil, 0, BadLength, true, nil
 	}
@@ -228,6 +247,23 @@ func (s *segScan) frameAt(off int64) (rec *wire.JournalRecord, n int64, code Fin
 		return nil, 0, BadLength, false, nil
 	case off+frameOverhead+length > s.size:
 		return nil, 0, BadLength, true, nil
+	}
+	if probe {
+		// Resync candidates are filtered cheaply before the payload is read:
+		// every valid record starts with the schema_version field (tag 0x08),
+		// and the verified-bytes budget bounds the work per damage region.
+		first, err := s.readAt(off+frameOverhead, 1)
+		if err != nil {
+			return nil, 0, "", false, err
+		}
+		if first[0] != schemaVersionTag {
+			return nil, 0, DecodeError, false, nil
+		}
+		if s.spent+length > resyncBudgetFactor*s.maxResync {
+			s.budgetBlown = true
+			return nil, 0, DecodeError, false, nil
+		}
+		s.spent += length
 	}
 	payload, err := s.readAt(off+frameOverhead, int(length))
 	if err != nil {
@@ -248,22 +284,29 @@ func (s *segScan) frameAt(off int64) (rec *wire.JournalRecord, n int64, code Fin
 func (s *segScan) findSync(from, to int64) (int64, error) {
 	hi := min(to+int64(len(frameSync)), s.size)
 	for from+int64(len(frameSync)) <= hi {
-		n := min(int64(scanChunk), hi-from)
-		buf, err := s.readAt(from, int(n))
-		if err != nil {
-			return -1, err
+		if from < s.cOff || from+int64(len(frameSync)) > s.cOff+int64(len(s.cBuf)) {
+			n := min(int64(scanChunk), hi-from)
+			buf := make([]byte, n)
+			if got, err := s.r.ReadAt(buf, from); int64(got) != n {
+				if err == nil {
+					err = io.ErrUnexpectedEOF
+				}
+				return -1, err
+			}
+			s.cBuf, s.cOff = buf, from
 		}
-		if i := bytes.Index(buf, frameSync[:]); i >= 0 {
+		end := min(int64(len(s.cBuf)), hi-s.cOff)
+		if i := bytes.Index(s.cBuf[from-s.cOff:end], frameSync[:]); i >= 0 {
 			return from + int64(i), nil
 		}
-		from += n - int64(len(frameSync)) + 1
+		from = s.cOff + end - int64(len(frameSync)) + 1
 	}
 	return -1, nil
 }
 
 // candidate reports whether a fully valid frame of this stream starts at off.
 func (s *segScan) candidate(off int64) (bool, error) {
-	rec, _, code, _, err := s.frameAt(off)
+	rec, _, code, _, err := s.frameAt(off, true)
 	if err != nil || code != "" {
 		return false, err
 	}
@@ -277,12 +320,16 @@ func (s *segScan) candidate(off int64) (bool, error) {
 // exhausted before EOF.
 func (s *segScan) resync(off int64) (found int64, abandoned bool, err error) {
 	hi := min(off+s.maxResync, s.size-1)
+	s.spent, s.budgetBlown = 0, false
 	for q := off + 1; ; {
 		p, err := s.findSync(q, hi)
 		if err != nil || p < 0 {
 			return -1, off+s.maxResync < s.size-1, err
 		}
 		ok, err := s.candidate(p)
+		if s.budgetBlown {
+			return -1, true, nil
+		}
 		if err != nil || ok {
 			return p, false, err
 		}
@@ -347,11 +394,11 @@ func ScanSegment(r io.ReaderAt, size int64, segmentIndex uint32, opt ScanOptions
 	s.rep.HeaderOK = true
 	s.rep.FirstSequence = s.hdr.FirstSequence
 	s.last = s.hdr.FirstSequence - 1
-	if !opt.skipBoundary && opt.PrevLastSequence > 0 {
+	if !opt.skipBoundary && (opt.PrevLastSequence > 0 || opt.hasPrev) {
 		s.boundary(opt.PrevLastSequence)
 	}
 	for o < size {
-		rec, n, code, torn, err := s.frameAt(o)
+		rec, n, code, torn, err := s.frameAt(o, false)
 		if err != nil {
 			return s.rep, err
 		}
@@ -370,7 +417,11 @@ func ScanSegment(r io.ReaderAt, size int64, segmentIndex uint32, opt ScanOptions
 			s.add(code, o, p-o, 0, 0, "")
 			o = p
 		case abandoned:
-			s.add(ResyncAbandoned, o, s.maxResync, 0, 0, "")
+			detail := ""
+			if s.budgetBlown {
+				detail = "candidate verification budget exhausted"
+			}
+			s.add(ResyncAbandoned, o, s.maxResync, 0, 0, detail)
 			return s.rep, nil
 		case torn:
 			s.add(TornTail, o, size-o, 0, 0, "")
@@ -421,9 +472,11 @@ func ScanStream(fsys FS, dir string, opt ScanOptions, visit func(Scanned) error)
 	var rep StreamReport
 	var stream []Finding
 	expected := uint32(1)
+	var prevEff uint64 // effective last sequence of the previous segment with a valid header
+	havePrev := false
 	for _, e := range segs {
 		so := opt
-		so.PrevLastSequence = rep.LastSequence
+		so.PrevLastSequence, so.hasPrev = prevEff, havePrev
 		so.skipBoundary = false
 		if e.index > expected {
 			stream = append(stream, Finding{
@@ -442,8 +495,14 @@ func ScanStream(fsys FS, dir string, opt ScanOptions, visit func(Scanned) error)
 		if sr.HeaderOK && rep.FirstSequence == 0 {
 			rep.FirstSequence = sr.FirstSequence
 		}
-		if sr.Records > 0 {
-			rep.LastSequence = sr.LastSequence
+		if sr.HeaderOK {
+			// A header-only segment has consumed sequences up to first_sequence-1.
+			eff := sr.FirstSequence - 1
+			if sr.Records > 0 {
+				eff = sr.LastSequence
+			}
+			prevEff, havePrev = eff, true
+			rep.LastSequence = max(rep.LastSequence, eff) // never lowered by a regressing segment
 		}
 		expected = e.index + 1
 	}

@@ -473,6 +473,16 @@ func TestScanIOErrors(t *testing.T) {
 			t.Fatalf("only %d read sites exercised", reads)
 		}
 	}
+	// A candidate whose first payload byte lies beyond the resync window is read
+	// from the file (not the chunk cache): that pre-filter read can fail too.
+	head := []byte{'F', 'R', 'M', '1', 64, 0, 0, 0, 0, 0, 0, 0}
+	edge := newSeg(1, 1).rec(1).raw([]byte("xyz")).raw(head).raw(make([]byte, 100)).bytes()
+	for n := 1; ; n++ {
+		f := &flaky{r: bytes.NewReader(edge), n: n}
+		if _, err := ScanSegment(f, int64(len(edge)), 1, ScanOptions{MaxResyncBytes: 11}, nil); err == nil {
+			break
+		}
+	}
 	// A visitor error aborts the scan and is returned as is.
 	boom := errors.New("visitor")
 	_, err := ScanSegment(bytes.NewReader(data), int64(len(data)), 1, ScanOptions{}, func(Scanned) error { return boom })
@@ -495,4 +505,106 @@ func TestScanStreamFSErrors(t *testing.T) {
 	if _, err := ScanStream(OSFS(), dir, ScanOptions{}, func(Scanned) error { return boom }); !errors.Is(err, boom) {
 		t.Fatalf("%v", err)
 	}
+}
+
+// countingReaderAt counts the bytes a scan reads.
+type countingReaderAt struct {
+	r io.ReaderAt
+	n int64
+}
+
+func (c *countingReaderAt) ReadAt(p []byte, off int64) (int, error) {
+	n, err := c.r.ReadAt(p, off)
+	c.n += int64(n)
+	return n, err
+}
+
+// adversarialResync builds a segment whose damage region is followed by size
+// bytes of back-to-back fake frame heads (declared length 4096, first payload
+// byte firstByte), so every sync marker is a resync candidate.
+func adversarialResync(size int, firstByte byte) []byte {
+	pat := []byte{'F', 'R', 'M', '1', 0x00, 0x10, 0x00, 0x00, 0, 0, 0, 0, firstByte}
+	b := newSeg(1, 1).rec(1).raw([]byte("junk"))
+	for len(b.buf) < size {
+		b.raw(pat)
+	}
+	return b.bytes()
+}
+
+func TestResyncWorkIsBounded(t *testing.T) {
+	opt := ScanOptions{Limits: Limits{MaxRecordBytes: 4096}, MaxResyncBytes: 16 << 10}
+	// Candidates that pass the cheap pre-filter exhaust the verified-bytes budget.
+	data := adversarialResync(4<<20, schemaVersionTag)
+	cr := &countingReaderAt{r: bytes.NewReader(data)}
+	rep, err := ScanSegment(cr, int64(len(data)), 1, opt, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantCodes(t, rep, ResyncAbandoned)
+	if rep.Findings[0].Detail == "" {
+		t.Fatalf("budget exhaustion must be labelled: %+v", rep.Findings[0])
+	}
+	if cr.n > 256<<10 {
+		t.Fatalf("read %d bytes of a %d byte input; work must be bounded by the budget", cr.n, len(data))
+	}
+	// Candidates failing the pre-filter are never read past their first payload
+	// byte; the window bound alone ends the search.
+	data = adversarialResync(4<<20, 0x09)
+	cr = &countingReaderAt{r: bytes.NewReader(data)}
+	rep, err = ScanSegment(cr, int64(len(data)), 1, opt, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantCodes(t, rep, ResyncAbandoned)
+	if rep.Findings[0].Detail != "" || cr.n > 256<<10 {
+		t.Fatalf("pre-filter path: read %d, %+v", cr.n, rep.Findings[0])
+	}
+}
+
+func TestScanStreamHeaderOnlyFirstSegmentGap(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "s")
+	writeSegFile(t, dir, 1, newSeg(1, 1).bytes())
+	writeSegFile(t, dir, 2, newSeg(2, 7).rec(7).bytes())
+	rep, _ := scanDir(t, dir, ScanOptions{})
+	if got := codesOf(rep.Findings); !reflect.DeepEqual(got, []FindingCode{SeqGap}) {
+		t.Fatalf("%v", rep.Findings)
+	}
+	if f := rep.Findings[0]; f.Expected != 1 || f.Got != 7 || rep.LastSequence != 7 {
+		t.Fatalf("%+v last=%d", f, rep.LastSequence)
+	}
+}
+
+func TestScanStreamRegressionNeverLowersLastSequence(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "s")
+	writeSegFile(t, dir, 1, newSeg(1, 1).rec(1).rec(2).rec(3).rec(4).rec(5).bytes())
+	writeSegFile(t, dir, 2, newSeg(2, 3).rec(3).bytes())
+	rep, _ := scanDir(t, dir, ScanOptions{})
+	if rep.LastSequence != 5 {
+		t.Fatalf("LastSequence %d, want the maximum 5", rep.LastSequence)
+	}
+	// A trailing header-only segment contributes first_sequence-1.
+	writeSegFile(t, dir, 3, newSeg(3, 9).bytes())
+	if rep, _ = scanDir(t, dir, ScanOptions{}); rep.LastSequence != 8 {
+		t.Fatalf("LastSequence %d, want 8", rep.LastSequence)
+	}
+}
+
+func TestOpenResumesAboveMaximumSequence(t *testing.T) {
+	env := newEnv(t)
+	writeSegFile(t, env.dir, 1, newSeg(1, 1).rec(1).rec(2).rec(3).rec(4).rec(5).bytes())
+	writeSegFile(t, env.dir, 2, newSeg(2, 3).rec(3).bytes()) // regresses
+	w := env.open(t)
+	if err := w.Close(ctxBG()); err != nil {
+		t.Fatal(err)
+	}
+	_, recs := scanDir(t, env.dir, ScanOptions{})
+	for _, r := range recs {
+		if r.Segment == 3 {
+			if r.Record.StreamSequence != 6 {
+				t.Fatalf("first record of the new segment has sequence %d, want 6", r.Record.StreamSequence)
+			}
+			return
+		}
+	}
+	t.Fatal("no record in segment 3")
 }
