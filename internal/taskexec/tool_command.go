@@ -9,6 +9,7 @@ import (
 	"hash"
 	"log/slog"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -35,8 +36,9 @@ const (
 const runCommandDescription = "Run ONE program inside the worktree, without a shell (no pipes, redirects, globbing or &&). " +
 	"argv is the program followed by its arguments, e.g. [\"go\",\"test\",\"./...\"]. Optional cwd is a relative subdirectory of the worktree; " +
 	"timeout_seconds defaults to 120 (max 600). Returns exit_code, timed_out and the combined stdout/stderr (long output keeps head and tail). " +
-	"git, gh, ssh, scp, curl, wget, shells and env/xargs/sudo are refused. No credentials or network authority are provided. " +
-	"This runs unconfined as the local user: do not run destructive commands."
+	"git, gh, ssh, scp, curl, wget, shells and env/xargs/sudo are refused, as are programs located inside the worktree. " +
+	"No credential environment variables are forwarded and HOME is a scratch directory, but this is NOT a sandbox: " +
+	"the process runs as the local user and can read any user-readable file by absolute path. Do not run destructive commands."
 
 const runCommandSchema = `{"type":"object","properties":{` +
 	`"argv":{"type":"array","items":{"type":"string"},"description":"program and arguments, e.g. [\"go\",\"test\",\"./...\"]"},` +
@@ -223,12 +225,21 @@ func registerRunCommand(mediator *drivers.ScopedToolMediator, scope *tools.Scope
 				"timeout_seconds must be between 1 and %d, got %d", maxCommandTimeout, timeout))
 		}
 
+		exe, err := resolveWorkerExecutable(scope, p.Argv[0])
+		if err != nil {
+			return refuse("denied_executable", err)
+		}
+		env, err := hostCommandEnv.build(ctx, runner, dir, cfg.ScratchHome)
+		if err != nil {
+			return refuse("env_unavailable", err)
+		}
+
 		out := newHeadTailWriter()
 		res, runErr := runner.Run(ctx, process.Spec{
-			Executable: p.Argv[0],
+			Executable: exe,
 			Args:       p.Argv[1:],
 			Dir:        dir,
-			Env:        process.BaseEnv(),
+			Env:        env,
 			Timeout:    time.Duration(timeout) * time.Second,
 			// Inline capture is irrelevant (the sinks see the full stream); keep it tiny.
 			MaxStdoutBytes: 1,
@@ -267,6 +278,85 @@ func registerRunCommand(mediator *drivers.ScopedToolMediator, scope *tools.Scope
 			slog.String("marker", unsafeUnconfinedMarker))
 	}
 	return def, true
+}
+
+// resolveWorkerExecutable returns the absolute path to run for argv[0]. It
+// refuses executables whose real path lies inside the candidate worktree (a
+// script or binary the model wrote) and applies the basename denylist to the
+// real path as well (a symlink or copy named differently from git, ssh, ...).
+// Best effort: a renamed COPY of a denied binary outside the worktree is not
+// detectable.
+func resolveWorkerExecutable(scope *tools.Scope, argv0 string) (string, error) {
+	exe := argv0
+	if !strings.ContainsAny(argv0, `/\`) {
+		p, err := exec.LookPath(argv0)
+		if err != nil {
+			return "", cmdErr(errs.CategoryInvalidArgument, "not_started", "executable %q not found on PATH", argv0)
+		}
+		exe = p
+	}
+	if !filepath.IsAbs(exe) {
+		return "", cmdErr(errs.CategoryPolicyDenied, "denied_executable", "executable %q does not resolve to an absolute path", argv0)
+	}
+	real, err := filepath.EvalSymlinks(exe)
+	if err != nil {
+		return "", cmdErr(errs.CategoryInvalidArgument, "not_started", "executable %q not found", argv0)
+	}
+	if err := checkExecutable(real); err != nil {
+		return "", err
+	}
+	root, err := filepath.EvalSymlinks(scope.WorktreePath)
+	if err != nil {
+		return "", errs.Wrap(errs.CategoryInternal, err, "run_command: resolve worktree")
+	}
+	if rel, err := filepath.Rel(root, real); err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", cmdErr(errs.CategoryPolicyDenied, "denied_executable", "executable %q resolves inside the worktree; only installed programs may be run", argv0)
+	}
+	return exe, nil
+}
+
+// goEnvCache holds the host's Go cache locations, read once via `go env`.
+// Module and build caches are not credentials; passing them explicitly lets
+// builds work offline from warm caches while HOME is a scratch directory.
+type goEnvCache struct {
+	once sync.Once
+	vals map[string]string
+}
+
+var hostCommandEnv goEnvCache
+
+func (g *goEnvCache) build(ctx context.Context, runner *process.Runner, dir, scratchHome string) ([]string, error) {
+	if scratchHome == "" {
+		return nil, cmdErr(errs.CategoryInternal, "env_unavailable", "no scratch HOME configured")
+	}
+	if err := os.MkdirAll(scratchHome, 0o700); err != nil {
+		return nil, cmdErr(errs.CategoryInternal, "env_unavailable", "cannot create scratch HOME: %v", err)
+	}
+	g.once.Do(func() {
+		g.vals = map[string]string{}
+		res, err := runner.Run(ctx, process.Spec{
+			Executable: "go", Args: []string{"env", "GOCACHE", "GOMODCACHE", "GOPATH"},
+			Dir: dir, Env: process.BaseEnv(), Timeout: 20 * time.Second,
+		})
+		if err != nil || res.ExitCode != 0 {
+			return
+		}
+		lines := strings.Split(strings.TrimRight(string(res.Stdout), "\n"), "\n")
+		if len(lines) == 3 {
+			for i, k := range []string{"GOCACHE", "GOMODCACHE", "GOPATH"} {
+				if v := strings.TrimSpace(lines[i]); v != "" {
+					g.vals[k] = v
+				}
+			}
+		}
+	})
+	over := map[string]string{
+		"HOME": scratchHome, "GIT_CONFIG_NOSYSTEM": "1", "GOTOOLCHAIN": "local",
+	}
+	for k, v := range g.vals {
+		over[k] = v
+	}
+	return process.MergeEnv(process.BaseEnv(), over), nil
 }
 
 func validateArgv(argv []string) error {

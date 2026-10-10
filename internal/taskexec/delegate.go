@@ -10,7 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync/atomic"
+	"sync"
 	"time"
 
 	"github.com/olostan/DevCadence/internal/actors"
@@ -403,8 +403,11 @@ func (e *Executor) runDelegate(
 	}
 	mediator := drivers.NewScopedToolMediator(scope)
 	audit := newCommandAudit(e.opts.ExecutionMode.normalized())
+	e.audits.Store(attemptID, audit)
+	defer e.audits.Delete(attemptID)
 	toolDefs := setupWorkerToolsWith(mediator, scope, e.opts.Runner, wp.Scope.InScope, workerToolConfig{
 		Mode: e.opts.ExecutionMode, Audit: audit, Logger: e.opts.Logger,
+		ScratchHome: filepath.Join(e.opts.StateDir, "attempts", attemptID, "home"),
 	})
 	if e.opts.ExecutionMode.normalized() == ExecutionUnsafeUnconfinedLocal {
 		e.opts.Logger.Warn("attempt runs with unsafe_unconfined_local execution: run_command executes unconfined as the local user",
@@ -414,8 +417,13 @@ func (e *Executor) runDelegate(
 	// Drivers that were given the mediator execute the model's tool calls inside
 	// ExecuteTurn; count those executions so the loop below never runs a call
 	// twice (a duplicate run_command or apply_patch is not harmless).
-	var driverExecuted atomic.Int64
-	mediator.OnToolExecution(func(drivers.ToolCall, drivers.ToolResult) { driverExecuted.Add(1) })
+	var execMu sync.Mutex
+	driverExecuted := map[string]int{} // tool call ID -> executions this turn
+	mediator.OnToolExecution(func(c drivers.ToolCall, _ drivers.ToolResult) {
+		execMu.Lock()
+		driverExecuted[c.ID]++
+		execMu.Unlock()
+	})
 
 	// 4. Session Start
 	sessionConfig := drivers.SessionConfig{
@@ -483,13 +491,21 @@ func (e *Executor) runDelegate(
 			break
 		}
 
-		if int(driverExecuted.Swap(0)) >= len(turnRes.ToolCalls) {
-			// Already executed (and recorded in the session transcript) by the driver.
-			turnInput = drivers.TurnInput{TurnID: fmt.Sprintf("turn-%d", turn+1)}
-			continue
+		if ctx.Err() != nil {
+			return e.handleCancel(taskID, attemptID, session, ctx.Err())
 		}
+		execMu.Lock()
+		already := driverExecuted
+		driverExecuted = map[string]int{}
+		execMu.Unlock()
+
 		var toolResults []drivers.ToolResult
 		for _, tc := range turnRes.ToolCalls {
+			if already[tc.ID] > 0 {
+				// Executed (and recorded in the transcript) by the driver; never run twice.
+				already[tc.ID]--
+				continue
+			}
 			tr, trErr := mediator.ExecuteTool(ctx, tc)
 			if trErr != nil && ctx.Err() != nil {
 				return e.handleCancel(taskID, attemptID, session, ctx.Err())
@@ -504,7 +520,15 @@ func (e *Executor) runDelegate(
 	}
 
 	if !stoppedNormally {
-		return e.failAttempt(taskID, attemptID, "reason=limit_reached effects=none", false, 0, e.commandTraceRefs(ctx, audit), principal.CodePolicyDenied, errors.New("maximum turns reached"))
+		return e.failAttempt(taskID, attemptID, "reason=limit_reached effects=none", false, 0, nil, principal.CodePolicyDenied, errors.New("maximum turns reached"))
+	}
+
+	// 5b. Remove any leftover apply_patch temp files, then persist the command
+	// trace. Failing to persist it while commands ran fails the attempt closed.
+	sweepPatchTemps(wt.Path)
+	traceRefs, traceErr := e.commandTraceRefs(ctx, audit)
+	if traceErr != nil {
+		return e.failAttempt(taskID, attemptID, "reason=audit_unavailable effects=uncertain", false, 0, nil, principal.CodeInternal, traceErr)
 	}
 
 	// 6. Materialize Candidate Commit
@@ -534,7 +558,7 @@ func (e *Executor) runDelegate(
 	}
 
 	candidateArtifacts := []protocol.ArtifactRef{diffRef, usageRef}
-	candidateArtifacts = append(candidateArtifacts, e.commandTraceRefs(ctx, audit)...)
+	candidateArtifacts = append(candidateArtifacts, traceRefs...)
 
 	// 8. Commit CandidateProduced
 	if prov != nil {
@@ -601,22 +625,16 @@ func workerToolDeclarations(mode ExecutionMode) ([]string, []compiler.ToolCapabi
 
 // commandTraceRefs stores the attempt's run_command audit trace through the
 // artifact sink and returns its reference (empty when no command was attempted).
-// Storage failure is logged, not fatal: the trace is audit evidence, and an
-// unrecorded trace is visible as a missing artifact.
-func (e *Executor) commandTraceRefs(ctx context.Context, audit *commandAudit) []protocol.ArtifactRef {
+func (e *Executor) commandTraceRefs(ctx context.Context, audit *commandAudit) ([]protocol.ArtifactRef, error) {
 	b, err := audit.trace()
 	if err != nil || b == nil {
-		if err != nil {
-			e.opts.Logger.Error("command trace marshal failed", slog.String("error", err.Error()))
-		}
-		return nil
+		return nil, err
 	}
 	ref, err := e.opts.Artifacts.Put(ctx, e.opts.ProjectID, "command-trace", "application/json", b)
 	if err != nil {
-		e.opts.Logger.Error("command trace store failed", slog.String("error", err.Error()))
-		return nil
+		return nil, err
 	}
-	return []protocol.ArtifactRef{ref}
+	return []protocol.ArtifactRef{ref}, nil
 }
 
 func (e *Executor) materializeCandidate(
@@ -811,6 +829,23 @@ func (e *Executor) failAttempt(
 ) (string, error) {
 	freshCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
+
+	// Attach the command trace (content-addressed, so idempotent) on every
+	// failure path when commands were attempted. A store failure here is
+	// logged: the attempt is already failing.
+	if v, ok := e.audits.Load(attemptID); ok {
+		hasTrace := false
+		for _, a := range artifacts {
+			hasTrace = hasTrace || a.Kind == "command-trace"
+		}
+		if !hasTrace {
+			if refs, terr := e.commandTraceRefs(freshCtx, v.(*commandAudit)); terr != nil {
+				e.opts.Logger.Error("command trace not persisted on failed attempt", slog.String("attempt_id", attemptID), slog.String("error", terr.Error()))
+			} else {
+				artifacts = append(append([]protocol.ArtifactRef(nil), artifacts...), refs...)
+			}
+		}
+	}
 
 	psFresh, err := e.opts.ControlPlane.ProjectState(freshCtx, e.opts.ProjectID)
 	if err != nil {

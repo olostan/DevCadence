@@ -40,7 +40,7 @@ func newToolEnv(t *testing.T, writeScope []string, mode ExecutionMode) *toolEnv 
 	scope := &tools.Scope{ProjectID: "p", WorktreePath: root}
 	med := drivers.NewScopedToolMediator(scope)
 	audit := newCommandAudit(mode)
-	defs := setupWorkerToolsWith(med, scope, process.NewRunner(), writeScope, workerToolConfig{Mode: mode, Audit: audit})
+	defs := setupWorkerToolsWith(med, scope, process.NewRunner(), writeScope, workerToolConfig{Mode: mode, Audit: audit, ScratchHome: filepath.Join(base, "scratch-home")})
 	return &toolEnv{t: t, root: root, outside: outside, mediator: med, audit: audit, defs: defs}
 }
 
@@ -310,6 +310,22 @@ func assertNoTemp(t *testing.T, dir string) {
 	for _, n := range dirNames(t, dir) {
 		if strings.HasSuffix(n, ".tmp") {
 			t.Errorf("leftover temp file %s in %s", n, dir)
+		}
+	}
+}
+
+func TestSweepPatchTemps(t *testing.T) {
+	e := newToolEnv(t, []string{"src/*"}, ExecutionStrict)
+	keep := e.write("src/keep.go", "x", 0o644)
+	gitTmp := e.write(".git/.apply_patch-1.tmp", "x", 0o644)
+	stale := e.write("src/sub/.apply_patch-123.tmp", "x", 0o644)
+	sweepPatchTemps(e.root)
+	if _, err := os.Stat(stale); err == nil {
+		t.Error("stale temp file not removed")
+	}
+	for _, p := range []string{keep, gitTmp} {
+		if _, err := os.Stat(p); err != nil {
+			t.Errorf("%s removed: %v", p, err)
 		}
 	}
 }

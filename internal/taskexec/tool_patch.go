@@ -186,11 +186,24 @@ func applyPatch(guard *writeGuard, rel string, edits []patchEdit) (*patchResult,
 		return nil, patchErr(errs.CategoryPolicyDenied, patchCodeTooLarge, "result for %q would be %d bytes, exceeding the 256 KiB cap", clean, len(result))
 	}
 
-	if err := guard.reserve(applyPatchToolName, clean); err != nil {
+	if err := guard.available(applyPatchToolName, clean); err != nil {
 		return nil, err
+	}
+	// Re-check the path immediately before writing. A concurrent process (only
+	// possible with run_command in yolo mode) could swap a component for a
+	// symlink; a small TOCTOU window between this check and the rename remains
+	// and is part of the documented yolo caveat.
+	if err := refuseSymlinkedPath(guard.scope, clean, resolved); err != nil {
+		return nil, errs.Wrap(errs.CategoryPolicyDenied, err, "apply_patch: refusing to use symlinked path %q", clean)
+	}
+	if cur, lerr := os.Lstat(resolved); lerr != nil || !cur.Mode().IsRegular() {
+		return nil, patchErr(errs.CategoryPolicyDenied, patchCodeNotRegular, "%q changed before it could be written", clean)
 	}
 	if err := atomicReplace(resolved, []byte(result), fi.Mode().Perm()); err != nil {
 		return nil, errs.Wrap(errs.CategoryInternal, err, "apply_patch: failed writing %q", clean)
+	}
+	if err := guard.reserve(applyPatchToolName, clean); err != nil {
+		return nil, err
 	}
 
 	diff, truncated := buildPatchDiff(orig, spans, edits)
@@ -263,4 +276,24 @@ func writePrefixed(b *strings.Builder, prefix, text string) {
 		b.WriteString(l)
 		b.WriteByte('\n')
 	}
+}
+
+// sweepPatchTemps removes leftover apply_patch temp files (for example after a
+// crash or a kill mid-write) so they cannot enter the candidate manifest.
+func sweepPatchTemps(root string) {
+	_ = filepath.WalkDir(root, func(p string, d os.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if d.IsDir() {
+			if d.Name() == ".git" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if d.Type().IsRegular() && strings.HasPrefix(d.Name(), ".apply_patch-") && strings.HasSuffix(d.Name(), ".tmp") {
+			_ = os.Remove(p)
+		}
+		return nil
+	})
 }

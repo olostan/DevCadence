@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -258,4 +259,94 @@ func containsStr(list []string, s string) bool {
 		}
 	}
 	return false
+}
+
+func hostGoEnv(t *testing.T) map[string]string {
+	t.Helper()
+	out, err := exec.Command("go", "env", "GOCACHE", "GOMODCACHE", "GOPATH").Output()
+	if err != nil {
+		t.Skipf("go env: %v", err)
+	}
+	l := strings.Split(strings.TrimSpace(string(out)), "\n")
+	return map[string]string{"GOCACHE": l[0], "GOMODCACHE": l[1], "GOPATH": l[2]}
+}
+
+func TestRunCommand_ScratchHomeHidesHostHomeAndGoStillWorks(t *testing.T) {
+	for k, v := range hostGoEnv(t) { // keep the real caches when HOME is faked below
+		t.Setenv(k, v)
+	}
+	realHome := t.TempDir()
+	cred := filepath.Join(realHome, ".aws", "credentials")
+	if err := os.MkdirAll(filepath.Dir(cred), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(cred, []byte("aws_secret_access_key=fake"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HOME", realHome)
+
+	e := newToolEnv(t, []string{"src/*"}, ExecutionUnsafeUnconfinedLocal)
+	out, isErr := e.run(map[string]any{"argv": []string{"printenv"}})
+	if isErr {
+		t.Fatal(out)
+	}
+	env := decodeCommand(t, out).Output
+	if strings.Contains(env, realHome) || !strings.Contains(env, "HOME="+filepath.Join(filepath.Dir(e.root), "scratch-home")) {
+		t.Fatalf("HOME not scratch:\n%s", env)
+	}
+	for _, want := range []string{"GOTOOLCHAIN=local", "GIT_CONFIG_NOSYSTEM=1", "GOCACHE="} {
+		if !strings.Contains(env, want) {
+			t.Errorf("env lacks %s:\n%s", want, env)
+		}
+	}
+	if strings.Contains(env, "GOPROXY=off") {
+		t.Error("GOPROXY must not be forced off")
+	}
+	// The fake credential file is not discoverable through $HOME.
+	out, _ = e.run(map[string]any{"argv": []string{"ls", "-A", filepath.Join(filepath.Dir(e.root), "scratch-home")}})
+	if strings.Contains(out, ".aws") {
+		t.Errorf("credential dir visible via HOME: %s", out)
+	}
+
+	// go test still works with the scratch HOME.
+	e.write("go.mod", "module example.com/m\n\ngo 1.21\n", 0o644)
+	e.write("m_test.go", "package m\n\nimport \"testing\"\n\nfunc TestX(t *testing.T) {}\n", 0o644)
+	out, isErr = e.run(map[string]any{"argv": []string{"go", "test", "./..."}, "timeout_seconds": 300})
+	if r := decodeCommand(t, out); isErr || r.ExitCode != 0 {
+		t.Fatalf("go test failed: %s", out)
+	}
+}
+
+func TestRunCommand_ExecutableResolution(t *testing.T) {
+	e := newToolEnv(t, []string{"src/*"}, ExecutionUnsafeUnconfinedLocal)
+	script := e.write("src/tool.sh", "#!/bin/true\n", 0o755)
+	if err := os.Symlink(script, filepath.Join(e.root, "src", "alias")); err != nil {
+		t.Fatal(err)
+	}
+	tmp := t.TempDir()
+	cases := map[string][]string{
+		"script written in worktree":      {script},
+		"symlink in worktree to worktree": {filepath.Join(e.root, "src", "alias")},
+		"relative path":                   {"src/tool.sh"},
+	}
+	if git, err := exec.LookPath("git"); err == nil {
+		link := filepath.Join(tmp, "innocent")
+		if err := os.Symlink(git, link); err != nil {
+			t.Fatal(err)
+		}
+		cases["symlink named innocent to git"] = []string{link, "--version"}
+		inWT := filepath.Join(e.root, "src", "g")
+		if err := os.Symlink(git, inWT); err != nil {
+			t.Fatal(err)
+		}
+		cases["symlink in worktree to git"] = []string{inWT, "--version"}
+	}
+	for name, argv := range cases {
+		t.Run(name, func(t *testing.T) {
+			out, isErr := e.run(map[string]any{"argv": argv})
+			if !isErr || !strings.Contains(out, "denied_executable") {
+				t.Fatalf("isErr=%v out=%q", isErr, out)
+			}
+		})
+	}
 }

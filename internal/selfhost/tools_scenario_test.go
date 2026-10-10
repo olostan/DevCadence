@@ -3,6 +3,8 @@ package selfhost_test
 import (
 	"encoding/json"
 	"net/http"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"testing"
@@ -144,5 +146,61 @@ func TestStubOllama_StrictModeNeverOffersRunCommand(t *testing.T) {
 	att := f.attempt(t)
 	if att.Status != tasks.AttemptFailed || att.CandidateCommit != "" || len(att.Artifacts) != 0 {
 		t.Errorf("attempt = %+v", att)
+	}
+}
+
+// runOnlyScript runs one harmless command and finishes without changing files,
+// so the attempt fails with no_change after commands ran.
+func runOnlyScript(n int, _ map[string]any) (int, any) {
+	resp := map[string]any{"model": testModel, "done": true, "prompt_eval_count": 10, "eval_count": 5}
+	if n == 1 {
+		resp["message"] = map[string]any{"role": "assistant", "tool_calls": []any{
+			rawToolCall("run_command", map[string]any{"argv": []string{"go", "version"}}),
+		}}
+	} else {
+		resp["message"] = map[string]any{"role": "assistant", "content": "nothing to change"}
+	}
+	return http.StatusOK, resp
+}
+
+func yoloConfig(stub *stubOllama) selfhost.Config {
+	cfg := stub.config()
+	cfg.ExecutionMode = selfhost.ExecutionModeYolo
+	return cfg
+}
+
+// STUB-BASED: the command trace is attached to a failed attempt as well.
+func TestStubOllama_CommandTraceAttachedToFailedAttempt(t *testing.T) {
+	stub := newStubOllama(t, runOnlyScript)
+	f := newFixture(t)
+	f.build(t, yoloConfig(stub))
+	if ref := f.delegate(t, 3*time.Minute); ref.Status != principal.StatusFailed {
+		t.Fatalf("status = %s, want failed", ref.Status)
+	}
+	att := f.attempt(t)
+	if att.Status != tasks.AttemptFailed || !strings.Contains(att.FailureSummary, "no_change") {
+		t.Fatalf("attempt = %+v", att)
+	}
+	if len(att.Artifacts) != 1 || att.Artifacts[0].Kind != "command-trace" {
+		t.Fatalf("artifacts = %+v, want one command-trace", att.Artifacts)
+	}
+}
+
+// STUB-BASED: if the trace cannot be stored while commands ran, the attempt
+// fails closed with no candidate.
+func TestStubOllama_TraceStoreFailureFailsAttemptClosed(t *testing.T) {
+	stub := newStubOllama(t, scriptedPatchAndRun())
+	f := newFixture(t)
+	// A regular file where the artifact directory must be makes every Put fail.
+	if err := os.WriteFile(filepath.Join(f.deps.StateDir, "artifacts"), []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	f.build(t, yoloConfig(stub))
+	if ref := f.delegate(t, 3*time.Minute); ref.Status != principal.StatusFailed {
+		t.Fatalf("status = %s, want failed", ref.Status)
+	}
+	att := f.attempt(t)
+	if att.Status != tasks.AttemptFailed || att.CandidateCommit != "" || !strings.Contains(att.FailureSummary, "audit_unavailable") {
+		t.Fatalf("attempt = %+v", att)
 	}
 }

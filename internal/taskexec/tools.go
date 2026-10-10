@@ -80,6 +80,17 @@ func (g *writeGuard) reserve(tool, clean string) error {
 	return nil
 }
 
+// available reports whether clean can be written without exceeding the file
+// budget, without consuming a slot.
+func (g *writeGuard) available(tool, clean string) error {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if !g.files[clean] && len(g.files) >= maxFilesPerAttempt {
+		return errs.New(errs.CategoryPolicyDenied, "%s: attempt exceeded maximum of %d files modified", tool, maxFilesPerAttempt)
+	}
+	return nil
+}
+
 func isGitPath(clean string) bool {
 	return clean == ".git" || strings.HasPrefix(clean, ".git/") || strings.Contains(clean, "/.git/") || strings.HasSuffix(clean, "/.git")
 }
@@ -116,9 +127,10 @@ func setupWorkerTools(mediator *drivers.ScopedToolMediator, scope *tools.Scope, 
 // workerToolConfig carries the optional run_command policy. The zero value is
 // strict mode: run_command is neither declared nor executable.
 type workerToolConfig struct {
-	Mode   ExecutionMode
-	Audit  *commandAudit
-	Logger *slog.Logger
+	Mode        ExecutionMode
+	Audit       *commandAudit
+	Logger      *slog.Logger
+	ScratchHome string // per-attempt HOME for run_command (never the host HOME)
 }
 
 func setupWorkerToolsWith(mediator *drivers.ScopedToolMediator, scope *tools.Scope, runner *process.Runner, writeScope []string, cfg workerToolConfig) []drivers.ToolDefinition {

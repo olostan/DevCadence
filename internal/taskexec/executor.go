@@ -15,6 +15,9 @@ type Executor struct {
 	opts       Options
 	valMu      sync.Mutex
 	valIndices map[string]int
+	// audits maps a running attemptID to its run_command audit so failAttempt
+	// can attach the command trace on every failure path.
+	audits sync.Map
 }
 
 // New constructs and initializes a new Executor.
