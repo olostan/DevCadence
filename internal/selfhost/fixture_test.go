@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -142,12 +143,23 @@ type fixture struct {
 	wpDigest string
 }
 
-func newFixture(t *testing.T) *fixture {
+func newFixture(t *testing.T, extra ...map[string]string) *fixture {
 	t.Helper()
 	h := testsupport.NewHarness(t)
 	g := testsupport.NewGitRepo(t)
 	g.WriteFile("go.mod", "module example.com/calc\n\ngo 1.21\n")
 	g.WriteFile("calc.go", buggyCalc)
+	for _, files := range extra {
+		for path, content := range files {
+			if target, ok := strings.CutPrefix(content, "symlink:"); ok {
+				if err := os.Symlink(target, filepath.Join(g.Path, path)); err != nil {
+					t.Fatal(err)
+				}
+				continue
+			}
+			g.WriteFile(path, content)
+		}
+	}
 	g.Commit("add calc with a bug")
 
 	registry, err := facade.NewOperationRegistry("selfhost-test")

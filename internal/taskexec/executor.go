@@ -18,6 +18,9 @@ type Executor struct {
 	// audits maps a running attemptID to its run_command audit so failAttempt
 	// can attach the command trace on every failure path.
 	audits sync.Map
+	// postChecks maps a running attemptID to its post-check state so failAttempt
+	// can attach the validation report on every failure path.
+	postChecks sync.Map
 }
 
 // New constructs and initializes a new Executor.

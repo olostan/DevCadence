@@ -38,6 +38,13 @@ type Options struct {
 	Profiles     ProfileSource // defined in validate.go for WP-9
 	// ExecutionMode gates run_command; empty means ExecutionStrict.
 	ExecutionMode ExecutionMode
+	// PostCheckProfileID names the validation profile (from Profiles) run in the
+	// candidate worktree before a candidate is produced. Empty disables the
+	// post-check. Requires ExecutionUnsafeUnconfinedLocal when the profile exists.
+	PostCheckProfileID string
+	// MaxRepairRounds bounds how many failed post-checks are fed back to the
+	// model for repair (0 = run the check once, no repair; hard max 5).
+	MaxRepairRounds int
 }
 
 // Validate checks that all required constructor options are present.
@@ -83,6 +90,9 @@ func (o *Options) Validate() error {
 	case ExecutionStrict, ExecutionUnsafeUnconfinedLocal:
 	default:
 		return errs.New(errs.CategoryInvalidArgument, "%s: unknown ExecutionMode %q", kind, o.ExecutionMode)
+	}
+	if o.MaxRepairRounds < 0 || o.MaxRepairRounds > HardMaxRepairRounds {
+		return errs.New(errs.CategoryInvalidArgument, "%s: MaxRepairRounds must be between 0 and %d", kind, HardMaxRepairRounds)
 	}
 	if o.Clock == nil {
 		o.Clock = clock.System()

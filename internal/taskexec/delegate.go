@@ -131,6 +131,21 @@ func (e *Executor) Delegate(ctx context.Context, task facade.AuthorizedTask) (pr
 		)
 	}
 
+	// 2b. A prior attempt whose effects are uncertain (the model or worktree may
+	// have acted in a way DevCadence could not observe) must not be silently
+	// retried with a second model call.
+	for _, att := range detail.Attempts {
+		if hasUncertainEffects(att.FailureSummary) {
+			return principal.OperationRef{}, principal.NewCodedError(
+				principal.CodePolicyDenied,
+				false,
+				[]string{"uncertain_prior_attempt"},
+				fmt.Sprintf("task %s attempt %s ended with uncertain effects (%q); not retrying automatically. "+
+					"Inspect the attempt and its worktree manually; to continue, create a new task or work package (or re-delegate under a new task id)", foundTask.Alias, att.ID, att.FailureSummary),
+			)
+		}
+	}
+
 	// 3. Attempt budget from policy
 	if len(detail.Attempts) >= policy.MaxAttemptsPerTask {
 		return principal.OperationRef{}, principal.NewCodedError(
@@ -139,6 +154,12 @@ func (e *Executor) Delegate(ctx context.Context, task facade.AuthorizedTask) (pr
 			[]string{"attempt-budget-exhausted"},
 			fmt.Sprintf("task %s attempt budget exhausted (%d >= %d)", foundTask.Alias, len(detail.Attempts), policy.MaxAttemptsPerTask),
 		)
+	}
+
+	// 3b. Post-check profile: loaded and vetted before any model call.
+	postCheck, err := e.preparePostCheck(ctx)
+	if err != nil {
+		return principal.OperationRef{}, err
 	}
 
 	// 4. Resolve endpoint and probe driver
@@ -322,7 +343,7 @@ func (e *Executor) Delegate(ctx context.Context, task facade.AuthorizedTask) (pr
 	// 8. Start asynchronous run
 	deadline := time.Duration(ep.Limits.MaxDurationSeconds)*time.Second + 60*time.Second
 	opRef, err := e.opts.Registry.Start(e.opts.ProjectID, "delegate", deadline, func(opCtx context.Context) (string, error) {
-		return e.runDelegate(opCtx, task.TaskID, foundTask.Alias, attemptID, wp, ep, opened, compiled, prov)
+		return e.runDelegate(opCtx, task.TaskID, foundTask.Alias, attemptID, wp, ep, opened, compiled, prov, postCheck)
 	})
 	if err != nil {
 		// Operation registry failed to schedule
@@ -360,7 +381,12 @@ func (e *Executor) runDelegate(
 	opened execpolicy.OpenedEndpoint,
 	compiled *compiler.CompiledInvocation,
 	prov *protocol.InvocationProvenance,
+	postCheck *postCheck,
 ) (string, error) {
+	if postCheck != nil {
+		e.postChecks.Store(attemptID, postCheck)
+		defer e.postChecks.Delete(attemptID)
+	}
 	// 1. Create Worktree
 	repo, err := e.opts.Repositories.Repository(ctx, e.opts.ProjectID)
 	if err != nil {
@@ -487,8 +513,36 @@ func (e *Executor) runDelegate(
 		}
 
 		if len(turnRes.ToolCalls) == 0 {
-			stoppedNormally = true
-			break
+			if postCheck == nil {
+				stoppedNormally = true
+				break
+			}
+			// The model claims it is done: run the project's validation in the
+			// candidate worktree before any candidate commit exists.
+			passed, feedback, pcStarted, pcErr := e.runPostCheck(ctx, postCheck, wt.Path, attemptID)
+			if pcErr != nil {
+				if ctx.Err() != nil {
+					return e.handleCancel(taskID, attemptID, session, ctx.Err())
+				}
+				effects := "none"
+				if pcStarted {
+					effects = "uncertain" // validation commands may have run unconfined
+				}
+				return e.failAttempt(taskID, attemptID, "reason=validation_error effects="+effects, false, max(0, len(postCheck.rounds)-1), nil, principal.CodeInternal, pcErr)
+			}
+			if ctx.Err() != nil {
+				return e.handleCancel(taskID, attemptID, session, ctx.Err())
+			}
+			if passed {
+				stoppedNormally = true
+				break
+			}
+			if repairs := len(postCheck.rounds) - 1; repairs >= postCheck.maxRepair {
+				return e.failAttempt(taskID, attemptID, "reason=validation_failed effects=none", false, repairs, nil, principal.CodePolicyDenied,
+					fmt.Errorf("post-check still failing after %d repair round(s); no candidate produced", repairs))
+			}
+			turnInput = drivers.TurnInput{TurnID: fmt.Sprintf("turn-%d", turn+1), Prompt: feedback}
+			continue
 		}
 
 		if ctx.Err() != nil {
@@ -559,6 +613,16 @@ func (e *Executor) runDelegate(
 
 	candidateArtifacts := []protocol.ArtifactRef{diffRef, usageRef}
 	candidateArtifacts = append(candidateArtifacts, traceRefs...)
+	reportRefs, err := e.postCheckRefs(ctx, attemptID)
+	if err != nil {
+		return e.failAttempt(taskID, attemptID, "reason=audit_unavailable effects=uncertain", false, 0, nil, principal.CodeInternal, err)
+	}
+	candidateArtifacts = append(candidateArtifacts, reportRefs...)
+	reviewRef, err := e.reviewStatusRef(ctx)
+	if err != nil {
+		return e.failAttempt(taskID, attemptID, "reason=audit_unavailable effects=uncertain", false, 0, nil, principal.CodeInternal, err)
+	}
+	candidateArtifacts = append(candidateArtifacts, reviewRef)
 
 	// 8. Commit CandidateProduced
 	if prov != nil {
@@ -845,6 +909,13 @@ func (e *Executor) failAttempt(
 				artifacts = append(append([]protocol.ArtifactRef(nil), artifacts...), refs...)
 			}
 		}
+	}
+
+	// Attach the validation report when any post-check round ran.
+	if refs, rerr := e.postCheckRefs(freshCtx, attemptID); rerr != nil {
+		e.opts.Logger.Error("validation report not persisted on failed attempt", slog.String("attempt_id", attemptID), slog.String("error", rerr.Error()))
+	} else if len(refs) > 0 {
+		artifacts = append(append([]protocol.ArtifactRef(nil), artifacts...), refs...)
 	}
 
 	psFresh, err := e.opts.ControlPlane.ProjectState(freshCtx, e.opts.ProjectID)
