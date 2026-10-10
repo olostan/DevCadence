@@ -138,6 +138,12 @@ func Build(ctx context.Context, cfg Config, deps Deps) (*Built, error) {
 		_ = lock.Close()
 		return nil, err
 	}
+	execMode := taskexec.ExecutionStrict
+	if cfg.ExecutionMode == ExecutionModeYolo {
+		execMode = taskexec.ExecutionUnsafeUnconfinedLocal
+		deps.Logger.Warn("selfhost execution_mode=yolo: workers may run commands unconfined as the local user (NOT a sandbox); no per-command approval",
+			slog.String("endpoint_id", cfg.EndpointID))
+	}
 	exec, err := taskexec.New(taskexec.Options{
 		ProjectID:    deps.ProjectID,
 		Lock:         lock,
@@ -155,6 +161,8 @@ func Build(ctx context.Context, cfg Config, deps Deps) (*Built, error) {
 		Clock:        clk,
 		IDs:          deps.IDs,
 		Logger:       deps.Logger,
+
+		ExecutionMode: execMode,
 	})
 	if err != nil {
 		_ = lock.Close()

@@ -20,7 +20,7 @@ Authoritative objective: [wp-m5-sh1-self-host-alpha-ewp.md](wp-m5-sh1-self-host-
 ## Smallest changes, in order
 
 1. SH1-1 composition root (`internal/selfhost`) + `mcpadapter` wiring + no-fake-driver success test.
-2. SH1-2 `apply_patch`/range-replace tool via shared write-path check; `run_command` gated by explicit local-dev execution mode (user-level trust, not repo config).
+2. SH1-2 (done, see below) `apply_patch`/range-replace tool via shared write-path check; `run_command` gated by explicit local-dev execution mode (user-level trust, not repo config).
 3. SH1-3 `ProfileSource` over `validation.LoadProfiles`; reviewexec wiring; `review_unavailable`; minimal Accept hand-off; uncertain-retry refusal.
 4. SH1-4 dogfood scripts/records.
 
@@ -35,6 +35,15 @@ Config (never read from the project repo): only the existence of `$DEVCADENCE_HO
 - Live test (needs a running Ollama and an installed model): `DEVCADENCE_LIVE_OLLAMA=1 DEVCADENCE_OLLAMA_MODEL=<model> go test ./internal/selfhost -run TestLiveOllama -v -timeout 30m`.
 - Not yet: Ollama `num_ctx` is not set by the client; `context_tokens` only budgets the prompt.
 
+## SH1-2 worker tools (implemented; stub-tested only, no real-model run)
+
+- `apply_patch` (`internal/taskexec/tool_patch.go`): args `{path, edits:[{old_text,new_text}]}`; exact-text replace, every `old_text` must match exactly once in the ORIGINAL content. All-or-nothing; atomic temp-file + rename preserving mode. Stable error codes in the message: `stale_context`, `ambiguous_context`, `empty_old_text`, `overlapping_edits`, `no_edits`, `not_regular_file`, `binary_or_non_utf8`, `too_large`, `file_not_found`. Result JSON: path, hunks_applied, bytes_before/after, compact diff (8 KiB cap). Shares one guard with `write_file` (relative path, no `..`/`.git`, write scope, containment, symlinked path components refused, 256 KiB cap, 64 distinct files per attempt across both tools).
+- `run_command` (`internal/taskexec/tool_command.go`): `{argv, cwd?, timeout_seconds?}`; no shell, direct exec through `process.Runner`; env is `process.BaseEnv()` with HOME replaced by a per-attempt scratch dir (`<state>/attempts/<attempt>/home`), `GIT_CONFIG_NOSYSTEM=1`, `GOTOOLCHAIN=local` and the host's GOCACHE/GOMODCACHE/GOPATH (from `go env`, so offline builds from warm caches work; GOPROXY untouched). No credential variables, SSH agent or GOFLAGS are forwarded, cwd confined to the worktree (symlinks refused), default 120 s / max 600 s, combined output head+tail 16 KiB. Basename denylist (git, gh, ssh, scp, sftp, curl, wget, shells, env/xargs/sudo/su/doas) and relative-path executables refused. Executables whose real path is inside the worktree (scripts/binaries the model wrote) are refused, and the denylist also applies to the symlink-resolved basename. Best effort, NOT a sandbox: an unconfined process can still read any user-readable file by absolute path, a renamed copy of a denied binary outside the worktree is not detected, and `go run`, `go test -exec`, `make` and interpreters are not blocked; `go`, `python` etc. can still do anything the local user can, and files they create outside the write scope fail candidate materialization.
+- Mode: `execution_mode` in `$DEVCADENCE_HOME/config/selfhost.json`, `"strict"` (default) or `"yolo"` (maps to `taskexec.ExecutionUnsafeUnconfinedLocal`). `DEVCADENCE_EXECUTION_MODE=strict` may only downgrade; no env value enables yolo; never read from the repo. Strict: `run_command` is not offered and the handler refuses before any process exists (a scripted call to an undeclared tool fails the attempt at the driver integrity check). Yolo: warning at launch and per attempt, no per-command approvals, every result and audit record carries `unsafe_unconfined`.
+- Audit: the attempt's command trace (argv, cwd, exit code, duration, timed_out, truncated, output sha256, refusals) is stored via the existing `ArtifactSink` as kind `command-trace` and attached to `CandidateProduced.Artifacts` and to `AttemptFailed.Artifacts` on every failure path (via `failAttempt`) when commands were attempted. If the trace cannot be stored after commands ran, the attempt fails closed (`reason=audit_unavailable`, no candidate). No schema or event change. Processes are killed as a group after every run; leftover `.apply_patch-*.tmp` files are swept before candidate materialization.
+- Fixed on the way: `runDelegate` executed every tool call a second time after the driver had already executed it via the mediator; it now skips, per call ID, the calls the driver executed.
+- Tests: `internal/taskexec/tool_patch_test.go`, `tool_command_test.go`, `internal/selfhost/tools_scenario_test.go` (stub-Ollama scenario: apply_patch, write_file, `go test ./...`), config tests in `selfhost_test.go`. Stub-based: these prove wiring and policy, not real model behavior.
+
 ## Next action
 
-Review SH1-1, run `TestLiveOllama` where Ollama is installed, then SH1-2.
+Review SH1-2, run `TestLiveOllama` where Ollama is installed, then SH1-3 (validation/repair loop, review wiring).

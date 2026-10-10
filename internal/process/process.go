@@ -46,6 +46,10 @@ const (
 // (docs/IMPLEMENTATION_PLAN.md M2, DCI-033).
 const DefaultMaxOutputBytes = 4 << 20 // 4 MiB
 
+// waitDelay bounds how long Run waits for output pipes to close after the
+// command exits.
+const waitDelay = 2 * time.Second
+
 // Spec describes one controlled execution. It is the only accepted shape:
 // there is no alternate "run this shell string" entry point.
 type Spec struct {
@@ -169,6 +173,11 @@ func (r *Runner) Run(ctx context.Context, spec Spec) (Result, error) {
 		cmd.Stderr = stderr
 	}
 
+	// A descendant that inherited the stdout/stderr pipes (for example a
+	// backgrounded `sleep`) would otherwise keep Wait blocked after the leader
+	// exits; WaitDelay force-closes the pipes shortly after exit.
+	cmd.WaitDelay = waitDelay
+
 	setProcAttrs(&cmd)
 
 	started := time.Now().UTC()
@@ -189,6 +198,12 @@ func (r *Runner) Run(ctx context.Context, spec Spec) (Result, error) {
 	case <-runCtx.Done():
 		killProcessGroup(cmd.Process)
 		waitErr = <-waitErrCh
+	}
+	// Kill the whole process group after EVERY run, not only on timeout or
+	// cancellation, so no descendant outlives the controlled command.
+	killProcessGroup(cmd.Process)
+	if errors.Is(waitErr, exec.ErrWaitDelay) {
+		waitErr = nil // leader exited 0; only lingering pipe holders were cut off
 	}
 	finished := time.Now().UTC()
 

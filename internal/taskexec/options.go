@@ -36,6 +36,8 @@ type Options struct {
 	IDs          ids.Source
 	Logger       *slog.Logger
 	Profiles     ProfileSource // defined in validate.go for WP-9
+	// ExecutionMode gates run_command; empty means ExecutionStrict.
+	ExecutionMode ExecutionMode
 }
 
 // Validate checks that all required constructor options are present.
@@ -77,6 +79,11 @@ func (o *Options) Validate() error {
 	if strings.TrimSpace(o.StateDir) == "" {
 		return errs.New(errs.CategoryInvalidArgument, "%s: StateDir is required", kind)
 	}
+	switch o.ExecutionMode.normalized() {
+	case ExecutionStrict, ExecutionUnsafeUnconfinedLocal:
+	default:
+		return errs.New(errs.CategoryInvalidArgument, "%s: unknown ExecutionMode %q", kind, o.ExecutionMode)
+	}
 	if o.Clock == nil {
 		o.Clock = clock.System()
 	}
@@ -87,4 +94,27 @@ func (o *Options) Validate() error {
 		o.Logger = observability.NewLogger(observability.Options{})
 	}
 	return nil
+}
+
+// ExecutionMode selects whether workers may run commands in their candidate
+// worktree. The zero value is strict.
+type ExecutionMode string
+
+const (
+	// ExecutionStrict (default): workers get file tools only; run_command is not
+	// declared to the model and any call is refused before a process is created.
+	ExecutionStrict ExecutionMode = "strict"
+	// ExecutionUnsafeUnconfinedLocal: workers may run argv commands as the
+	// invoking OS user with a minimal environment. This is NOT a sandbox; it is
+	// an owner-local convenience enabled only by explicit user-level
+	// configuration, and every result and audit record carries an
+	// unsafe_unconfined marker.
+	ExecutionUnsafeUnconfinedLocal ExecutionMode = "unsafe_unconfined_local"
+)
+
+func (m ExecutionMode) normalized() ExecutionMode {
+	if m == "" {
+		return ExecutionStrict
+	}
+	return m
 }

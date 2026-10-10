@@ -3,6 +3,7 @@ package taskexec
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -16,9 +17,124 @@ import (
 	"github.com/olostan/DevCadence/internal/tools"
 )
 
+const (
+	maxWriteBytes        = 256 * 1024
+	maxFilesPerAttempt   = 64
+	writeFileDescription = "Write the FULL content of a file at a relative path inside the declared write scope. Use apply_patch instead to change part of an existing file."
+)
+
+// writeGuard holds the checks and the per-attempt file budget shared by every
+// file-mutating worker tool (write_file, apply_patch).
+type writeGuard struct {
+	scope      *tools.Scope
+	writeScope []string
+	mu         sync.Mutex
+	files      map[string]bool
+}
+
+func newWriteGuard(scope *tools.Scope, writeScope []string) *writeGuard {
+	return &writeGuard{scope: scope, writeScope: writeScope, files: make(map[string]bool)}
+}
+
+// resolve validates a model-supplied relative path for mutation and returns the
+// cleaned relative path and its resolved absolute path. It refuses absolute
+// paths, traversal, .git, paths outside the write scope, containment escapes,
+// and any path whose resolution traverses a symlink (including symlinked parent
+// directories, even ones that stay inside the worktree, since those would
+// bypass the lexical write-scope check).
+func (g *writeGuard) resolve(tool, rel string) (clean, resolved string, err error) {
+	if filepath.IsAbs(rel) {
+		return "", "", errs.New(errs.CategoryPolicyDenied, "%s: relative path required, got absolute %q", tool, rel)
+	}
+	clean = filepath.Clean(rel)
+	if clean == "." || clean == "" || strings.HasPrefix(clean, "..") {
+		return "", "", errs.New(errs.CategoryPolicyDenied, "%s: invalid path %q", tool, rel)
+	}
+	if isGitPath(clean) {
+		return "", "", errs.New(errs.CategoryPolicyDenied, "%s: modifying .git directory is forbidden", tool)
+	}
+	if !compiler.IsPathAuthorized(clean, g.writeScope) {
+		return "", "", errs.New(errs.CategoryPolicyDenied, "%s: path %q is outside declared write scope", tool, clean)
+	}
+	resolved, err = g.scope.ResolvePath(clean)
+	if err != nil {
+		return "", "", errs.Wrap(errs.CategoryPolicyDenied, err, "%s: path containment violation", tool)
+	}
+	if err := refuseSymlinkedPath(g.scope, clean, resolved); err != nil {
+		return "", "", errs.Wrap(errs.CategoryPolicyDenied, err, "%s: refusing to use symlinked path %q", tool, clean)
+	}
+	if fi, lerr := os.Lstat(resolved); lerr == nil && (fi.Mode()&os.ModeSymlink != 0) {
+		return "", "", errs.New(errs.CategoryPolicyDenied, "%s: refusing to write through symlink %q", tool, clean)
+	}
+	return clean, resolved, nil
+}
+
+// reserve counts clean against the per-attempt file limit.
+func (g *writeGuard) reserve(tool, clean string) error {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if !g.files[clean] && len(g.files) >= maxFilesPerAttempt {
+		return errs.New(errs.CategoryPolicyDenied, "%s: attempt exceeded maximum of %d files modified", tool, maxFilesPerAttempt)
+	}
+	g.files[clean] = true
+	return nil
+}
+
+// available reports whether clean can be written without exceeding the file
+// budget, without consuming a slot.
+func (g *writeGuard) available(tool, clean string) error {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if !g.files[clean] && len(g.files) >= maxFilesPerAttempt {
+		return errs.New(errs.CategoryPolicyDenied, "%s: attempt exceeded maximum of %d files modified", tool, maxFilesPerAttempt)
+	}
+	return nil
+}
+
+func isGitPath(clean string) bool {
+	return clean == ".git" || strings.HasPrefix(clean, ".git/") || strings.Contains(clean, "/.git/") || strings.HasSuffix(clean, "/.git")
+}
+
+// refuseSymlinkedPath fails when any existing component of the worktree-relative
+// path is a symlink (checked component by component, so it also covers
+// not-yet-existing targets below a symlinked directory).
+func refuseSymlinkedPath(scope *tools.Scope, clean, resolved string) error {
+	root, err := filepath.EvalSymlinks(scope.WorktreePath)
+	if err != nil {
+		return err
+	}
+	cur := root
+	for _, part := range strings.Split(clean, string(filepath.Separator)) {
+		cur = filepath.Join(cur, part)
+		fi, err := os.Lstat(cur)
+		if err != nil {
+			if os.IsNotExist(err) {
+				return nil
+			}
+			return err
+		}
+		if fi.Mode()&os.ModeSymlink != 0 {
+			return errs.New(errs.CategoryPolicyDenied, "component %q is a symlink", part)
+		}
+	}
+	return nil
+}
+
 func setupWorkerTools(mediator *drivers.ScopedToolMediator, scope *tools.Scope, runner *process.Runner, writeScope []string) []drivers.ToolDefinition {
-	var writtenMu sync.Mutex
-	writtenFiles := make(map[string]bool)
+	return setupWorkerToolsWith(mediator, scope, runner, writeScope, workerToolConfig{})
+}
+
+// workerToolConfig carries the optional run_command policy. The zero value is
+// strict mode: run_command is neither declared nor executable.
+type workerToolConfig struct {
+	Mode        ExecutionMode
+	Audit       *commandAudit
+	Logger      *slog.Logger
+	ScratchHome string // per-attempt HOME for run_command (never the host HOME)
+}
+
+func setupWorkerToolsWith(mediator *drivers.ScopedToolMediator, scope *tools.Scope, runner *process.Runner, writeScope []string, cfg workerToolConfig) []drivers.ToolDefinition {
+	guard := newWriteGuard(scope, writeScope)
 
 	// 1. read_file
 	readFileDef := drivers.ToolDefinition{
@@ -125,7 +241,7 @@ func setupWorkerTools(mediator *drivers.ScopedToolMediator, scope *tools.Scope, 
 	// 4. write_file
 	writeFileDef := drivers.ToolDefinition{
 		Name:           "write_file",
-		Description:    "Write full file content to a path within declared write scope in the worktree.",
+		Description:    writeFileDescription,
 		MutatesFiles:   true,
 		PathParameters: []string{"path"},
 	}
@@ -142,45 +258,22 @@ func setupWorkerTools(mediator *drivers.ScopedToolMediator, scope *tools.Scope, 
 			return "", errs.Wrap(errs.CategoryInvalidArgument, err, "invalid write_file arguments")
 		}
 
-		if filepath.IsAbs(p.Path) {
-			return "", errs.New(errs.CategoryPolicyDenied, "write_file: relative path required, got absolute %q", p.Path)
-		}
-		clean := filepath.Clean(p.Path)
-		if clean == "." || clean == "" || strings.HasPrefix(clean, "..") {
-			return "", errs.New(errs.CategoryPolicyDenied, "write_file: invalid path %q", p.Path)
-		}
-		if clean == ".git" || strings.HasPrefix(clean, ".git/") || strings.Contains(clean, "/.git/") || strings.HasSuffix(clean, "/.git") {
-			return "", errs.New(errs.CategoryPolicyDenied, "write_file: modifying .git directory is forbidden")
-		}
-
-		if !compiler.IsPathAuthorized(clean, writeScope) {
-			return "", errs.New(errs.CategoryPolicyDenied, "write_file: path %q is outside declared write scope", clean)
-		}
-
-		resolved, err := scope.ResolvePath(clean)
+		clean, resolved, err := guard.resolve("write_file", p.Path)
 		if err != nil {
-			return "", errs.Wrap(errs.CategoryPolicyDenied, err, "write_file: path containment violation")
-		}
-
-		if fi, err := os.Lstat(resolved); err == nil && (fi.Mode()&os.ModeSymlink != 0) {
-			return "", errs.New(errs.CategoryPolicyDenied, "write_file: refusing to write through symlink %q", clean)
+			return "", err
 		}
 
 		contentBytes := []byte(p.Content)
-		if len(contentBytes) > 256*1024 {
+		if len(contentBytes) > maxWriteBytes {
 			return "", errs.New(errs.CategoryPolicyDenied, "write_file: file %q size %d exceeds 256 KiB cap", clean, len(contentBytes))
 		}
 		if !utf8.Valid(contentBytes) {
 			return "", errs.New(errs.CategoryInvalidArgument, "write_file: content for %q is not valid UTF-8", clean)
 		}
 
-		writtenMu.Lock()
-		if !writtenFiles[clean] && len(writtenFiles) >= 64 {
-			writtenMu.Unlock()
-			return "", errs.New(errs.CategoryPolicyDenied, "write_file: attempt exceeded maximum of 64 files modified")
+		if err := guard.reserve("write_file", clean); err != nil {
+			return "", err
 		}
-		writtenFiles[clean] = true
-		writtenMu.Unlock()
 
 		if err := os.MkdirAll(filepath.Dir(resolved), 0755); err != nil {
 			return "", errs.Wrap(errs.CategoryInternal, err, "write_file: failed creating parent directory")
@@ -194,6 +287,10 @@ func setupWorkerTools(mediator *drivers.ScopedToolMediator, scope *tools.Scope, 
 	})
 
 	toolDefs := []drivers.ToolDefinition{readFileDef, grepDef, symbolsDef, writeFileDef}
+	toolDefs = append(toolDefs, registerApplyPatch(mediator, guard))
+	if def, ok := registerRunCommand(mediator, scope, runner, cfg); ok {
+		toolDefs = append(toolDefs, def)
+	}
 	mediator.SetDeclaredTools(toolDefs)
 	return toolDefs
 }
