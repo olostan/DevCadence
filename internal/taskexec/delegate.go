@@ -135,13 +135,13 @@ func (e *Executor) Delegate(ctx context.Context, task facade.AuthorizedTask) (pr
 	// have acted in a way DevCadence could not observe) must not be silently
 	// retried with a second model call.
 	for _, att := range detail.Attempts {
-		if strings.Contains(att.FailureSummary, "effects=uncertain") {
+		if hasUncertainEffects(att.FailureSummary) {
 			return principal.OperationRef{}, principal.NewCodedError(
 				principal.CodePolicyDenied,
 				false,
 				[]string{"uncertain_prior_attempt"},
 				fmt.Sprintf("task %s attempt %s ended with uncertain effects (%q); not retrying automatically. "+
-					"Inspect the attempt and its worktree, then record an owner decision before delegating again", foundTask.Alias, att.ID, att.FailureSummary),
+					"Inspect the attempt and its worktree manually; to continue, create a new task or work package (or re-delegate under a new task id)", foundTask.Alias, att.ID, att.FailureSummary),
 			)
 		}
 	}
@@ -519,12 +519,16 @@ func (e *Executor) runDelegate(
 			}
 			// The model claims it is done: run the project's validation in the
 			// candidate worktree before any candidate commit exists.
-			passed, feedback, pcErr := e.runPostCheck(ctx, postCheck, wt.Path, attemptID)
+			passed, feedback, pcStarted, pcErr := e.runPostCheck(ctx, postCheck, wt.Path, attemptID)
 			if pcErr != nil {
 				if ctx.Err() != nil {
 					return e.handleCancel(taskID, attemptID, session, ctx.Err())
 				}
-				return e.failAttempt(taskID, attemptID, "reason=validation_error effects=none", false, len(postCheck.rounds)-1, nil, principal.CodeInternal, pcErr)
+				effects := "none"
+				if pcStarted {
+					effects = "uncertain" // validation commands may have run unconfined
+				}
+				return e.failAttempt(taskID, attemptID, "reason=validation_error effects="+effects, false, max(0, len(postCheck.rounds)-1), nil, principal.CodeInternal, pcErr)
 			}
 			if ctx.Err() != nil {
 				return e.handleCancel(taskID, attemptID, session, ctx.Err())

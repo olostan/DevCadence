@@ -52,3 +52,19 @@ func TestOptionsValidate_MaxRepairRoundsBounds(t *testing.T) {
 		}
 	}
 }
+
+func TestHasUncertainEffects(t *testing.T) {
+	cases := map[string]bool{
+		"reason=driver_error effects=uncertain":        true,
+		"reason=validation_failed effects=none":        false,
+		"reason=x effects=uncertain_not effects=none":  false,
+		"note=effects=uncertain":                       false,
+		"":                                             false,
+		"reason=validation_error  effects=uncertain  ": true,
+	}
+	for in, want := range cases {
+		if got := hasUncertainEffects(in); got != want {
+			t.Errorf("hasUncertainEffects(%q) = %v, want %v", in, got, want)
+		}
+	}
+}

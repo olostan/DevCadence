@@ -129,20 +129,20 @@ func (e *Executor) preparePostCheck(ctx context.Context) (*postCheck, error) {
 
 // run executes one post-check round and returns whether it passed plus, when
 // it failed, the concise feedback message for the model.
-func (e *Executor) runPostCheck(ctx context.Context, pc *postCheck, worktree, attemptID string) (bool, string, error) {
+func (e *Executor) runPostCheck(ctx context.Context, pc *postCheck, worktree, attemptID string) (passed bool, feedback string, started bool, err error) {
 	sweepPatchTemps(worktree)
 	scratch := filepath.Join(e.opts.StateDir, "attempts", attemptID, "home")
 	env, err := hostCommandEnv.build(ctx, e.opts.Runner, worktree, scratch)
 	if err != nil {
-		return false, "", err
+		return false, "", false, err
 	}
 	absState, err := filepath.Abs(e.opts.StateDir)
 	if err != nil {
-		return false, "", err
+		return false, "", false, err
 	}
 	store, err := artifacts.NewStore(filepath.Join(absState, "artifacts"), e.opts.IDs)
 	if err != nil {
-		return false, "", err
+		return false, "", false, err
 	}
 
 	pc.mu.Lock()
@@ -150,18 +150,18 @@ func (e *Executor) runPostCheck(ctx context.Context, pc *postCheck, worktree, at
 	pc.mu.Unlock()
 
 	outputs := map[string]process.Result{}
-	started := time.Now()
+	t0 := time.Now()
 	checks, outcome, err := validation.RunProfile(ctx, pc.profile, validation.RunOptions{
 		Dir: worktree, Env: env, Runner: e.opts.Runner, Artifacts: store, ProjectID: e.opts.ProjectID,
 		MaxOutputBytes: postCheckCaptureBytes, RunID: fmt.Sprintf("%s-pc%d", attemptID, round),
 		OnCheckOutput: func(id string, res process.Result) { outputs[id] = res },
 	})
 	if err != nil {
-		return false, "", errs.Wrap(errs.CategoryInternal, err, "post-check run failed")
+		return false, "", true, errs.Wrap(errs.CategoryInternal, err, "post-check run failed")
 	}
 	rr := roundReport{
 		Round: round, Outcome: string(outcome), Passed: outcome == protocol.ValidationPass,
-		DurationMS: time.Since(started).Milliseconds(),
+		DurationMS: time.Since(t0).Milliseconds(),
 	}
 	var firstBad *protocol.CheckResult
 	for i := range checks {
@@ -192,9 +192,9 @@ func (e *Executor) runPostCheck(ctx context.Context, pc *postCheck, worktree, at
 	pc.passed = rr.Passed
 	pc.mu.Unlock()
 	if rr.Passed {
-		return true, "", nil
+		return true, "", true, nil
 	}
-	return false, buildFeedback(round, pc.maxRepair, outcome, checks, firstBad, outputs), nil
+	return false, buildFeedback(round, pc.maxRepair, outcome, checks, firstBad, outputs), true, nil
 }
 
 // buildFeedback is the bounded failure message the model sees. Verbose logs stay
@@ -281,4 +281,15 @@ func (e *Executor) reviewStatusRef(ctx context.Context) (protocol.ArtifactRef, e
 		return protocol.ArtifactRef{}, err
 	}
 	return e.opts.Artifacts.Put(ctx, e.opts.ProjectID, reviewStatusKind, "application/json", b)
+}
+
+// hasUncertainEffects reports whether a failure summary carries the exact
+// token effects=uncertain (token match, not a substring).
+func hasUncertainEffects(summary string) bool {
+	for _, tok := range strings.Fields(summary) {
+		if tok == "effects=uncertain" {
+			return true
+		}
+	}
+	return false
 }

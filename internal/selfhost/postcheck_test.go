@@ -171,8 +171,8 @@ func TestStub_PostCheckRepairLoopProducesCandidate(t *testing.T) {
 	f.build(t, yolo(stub, 2))
 
 	ref := f.delegate(t, 5*time.Minute)
+	st, _ := f.registry.Lookup(testProject, ref)
 	if ref.Status != principal.StatusCompleted {
-		st, _ := f.registry.Lookup(testProject, ref)
 		t.Fatalf("operation %s: %+v", ref.Status, st.Error)
 	}
 	if n := stub.chatCalls(); n != 5 {
@@ -448,4 +448,42 @@ func allEvents(t *testing.T, f *fixture) []events.Event {
 		t.Fatalf("read events: %v", err)
 	}
 	return evs
+}
+
+// A committed symlink used as a check `dir` must not let a check run outside the
+// worktree: the check errors, nothing runs, no candidate is produced.
+func TestStub_CheckDirSymlinkEscapeRefused(t *testing.T) {
+	outside := t.TempDir()
+	yaml := "profiles:\n  default:\n    checks:\n      - id: go-test\n        dir: esc\n        argv: [\"go\", \"version\"]\n        timeout: 1m\n"
+	stub := newStubOllama(t, script(alwaysWrong()...))
+	f := newFixture(t, postCheckFiles(yaml), map[string]string{"esc": "symlink:" + outside})
+	f.build(t, yolo(stub, 0))
+	if ref := f.delegate(t, 5*time.Minute); ref.Status != principal.StatusFailed {
+		t.Fatalf("operation %s, want failed", ref.Status)
+	}
+	att := f.attempt(t)
+	var rep reportDoc
+	if att.CandidateCommit != "" || !findArtifact(t, att.Artifacts, "validation-report", &rep) ||
+		rep.Passed || rep.Rounds[0].Checks[0].Status == "pass" || rep.Rounds[0].Checks[0].ExitCode != nil {
+		t.Fatalf("attempt = %+v report = %+v", att, rep)
+	}
+}
+
+// A profile that cannot run (unknown module) errors inside the validation run:
+// the attempt fails closed as validation_error with uncertain effects.
+func TestStub_PostCheckRunErrorIsUncertain(t *testing.T) {
+	yaml := "profiles:\n  default:\n    module_id: nope\n    checks:\n      - id: go-test\n        argv: [\"go\", \"version\"]\n        timeout: 1m\n"
+	stub := newStubOllama(t, script(
+		toolsReply(writeCalcTest(), rawToolCall("write_file", map[string]any{"path": "calc.go", "content": wrongCalc})),
+		doneReply("done")))
+	f := newFixture(t, postCheckFiles(yaml))
+	f.build(t, yolo(stub, 1))
+	ref := f.delegate(t, 5*time.Minute)
+	if ref.Status != principal.StatusFailed {
+		t.Fatalf("operation %s, want failed", ref.Status)
+	}
+	att := f.attempt(t)
+	if att.CandidateCommit != "" || att.FailureSummary != "reason=validation_error effects=uncertain" {
+		t.Fatalf("attempt = %s %q", att.Status, att.FailureSummary)
+	}
 }

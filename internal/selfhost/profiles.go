@@ -39,6 +39,10 @@ func NewRepoProfileSource(repoPath string) taskexec.ProfileSource {
 
 func (p repoProfiles) Profile(_ context.Context, _ string, profileID string) (validation.Profile, error) {
 	path := filepath.Join(p.repoPath, filepath.FromSlash(ValidationProfileRelPath))
+	// The profile directory must be a real directory, not a symlink out of the repo.
+	if di, derr := os.Lstat(filepath.Dir(path)); derr == nil && !di.IsDir() {
+		return validation.Profile{}, errs.New(errs.CategoryPolicyDenied, "%s must not be reached through a symlinked directory", ValidationProfileRelPath)
+	}
 	fi, err := os.Lstat(path)
 	if os.IsNotExist(err) {
 		return validation.Profile{}, taskexec.ErrProfileNotConfigured

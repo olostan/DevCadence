@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -150,6 +151,12 @@ func newFixture(t *testing.T, extra ...map[string]string) *fixture {
 	g.WriteFile("calc.go", buggyCalc)
 	for _, files := range extra {
 		for path, content := range files {
+			if target, ok := strings.CutPrefix(content, "symlink:"); ok {
+				if err := os.Symlink(target, filepath.Join(g.Path, path)); err != nil {
+					t.Fatal(err)
+				}
+				continue
+			}
 			g.WriteFile(path, content)
 		}
 	}

@@ -53,3 +53,17 @@ func TestRepoProfileSource(t *testing.T) {
 		}
 	}
 }
+
+func TestRepoProfileSource_SymlinkedDirRefused(t *testing.T) {
+	repo, outside := t.TempDir(), t.TempDir()
+	if err := os.WriteFile(filepath.Join(outside, "validation.yaml"), []byte(validationYAML), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(repo, ".devcadence")); err != nil {
+		t.Skip("symlinks unavailable")
+	}
+	_, err := selfhost.NewRepoProfileSource(repo).Profile(t.Context(), "p", selfhost.PostCheckProfileID)
+	if err == nil || errors.Is(err, taskexec.ErrProfileNotConfigured) {
+		t.Fatalf("symlinked .devcadence accepted: %v", err)
+	}
+}
