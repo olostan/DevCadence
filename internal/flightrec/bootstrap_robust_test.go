@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -213,6 +214,36 @@ func TestCreateSidecarFileCap(t *testing.T) {
 			t.Fatalf("n %d", n)
 		}
 	})
+}
+
+// Round 3: sidecar files owned by another user do not count toward the cap, and
+// the scan reads at most maxSidecarScan entries.
+func TestCountSidecarsOwnerAndScanBound(t *testing.T) {
+	dir := t.TempDir()
+	for i := 0; i < 5; i++ {
+		if err := os.WriteFile(filepath.Join(dir, "bootstrap-failure-"+strings.Repeat("x", i+1)+".json"), nil, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if n := countSidecars(dir, "bootstrap-failure-*.json"); n != 5 {
+		t.Fatalf("own files: %d", n)
+	}
+	own := currentUID
+	t.Cleanup(func() { currentUID = own })
+	currentUID = func() int { return own() + 1 } // every file now looks foreign
+	if n := countSidecars(dir, "bootstrap-failure-*.json"); n != 0 {
+		t.Fatalf("foreign files counted: %d", n)
+	}
+	currentUID = own
+	big := t.TempDir()
+	for i := 0; i < maxSidecarScan+20; i++ {
+		if err := os.WriteFile(filepath.Join(big, "bootstrap-failure-"+strconv.Itoa(i)+".json"), nil, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if n := countSidecars(big, "bootstrap-failure-*.json"); n != maxSidecarScan {
+		t.Fatalf("scan not bounded: %d", n)
+	}
 }
 
 // R2-NB(d): a full root is skipped and the next directory of the order wins.

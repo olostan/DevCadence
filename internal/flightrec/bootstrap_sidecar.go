@@ -85,17 +85,37 @@ const maxSidecarFiles = 32
 
 var errSidecarDirFull = errors.New("flightrec: too many bootstrap-failure files")
 
+// maxSidecarScan bounds how many directory entries countSidecars reads, so a
+// huge shared directory cannot make the failure path slow.
+const maxSidecarScan = 256
+
+// currentUID is the uid whose sidecar files count toward maxSidecarFiles; a
+// variable so tests stay deterministic whatever user runs them.
+var currentUID = os.Getuid
+
 // countSidecars counts the entries of dir matching the sidecar glob derived
-// from pattern ("bootstrap-failure-*.json" counts "bootstrap-failure*.json").
-// It reads the directory with plain os calls: createSidecarFile is itself the
-// replaceable creation seam, so tests stay deterministic through it.
+// from pattern ("bootstrap-failure-*.json" counts "bootstrap-failure*.json")
+// that are owned by the current user (files of other users in a shared
+// directory must not suppress this user's last-resort sidecar). At most
+// maxSidecarScan entries are read. It uses plain os calls: createSidecarFile is
+// itself the replaceable creation seam, so tests stay deterministic through it.
 func countSidecars(dir, pattern string) int {
 	glob := strings.Replace(pattern, "-*.json", "*.json", 1)
-	ents, _ := os.ReadDir(dir) // an unreadable directory counts as empty; creation then decides
+	d, err := os.Open(dir)
+	if err != nil {
+		return 0 // an unreadable directory counts as empty; creation then decides
+	}
+	defer d.Close()
+	ents, _ := d.ReadDir(maxSidecarScan)
 	n := 0
 	for _, e := range ents {
-		if ok, _ := filepath.Match(glob, e.Name()); ok {
-			n++
+		if ok, _ := filepath.Match(glob, e.Name()); !ok {
+			continue
+		}
+		if fi, err := e.Info(); err == nil {
+			if uid, known := ownerUID(fi); !known || uid == currentUID() {
+				n++
+			}
 		}
 	}
 	return n
