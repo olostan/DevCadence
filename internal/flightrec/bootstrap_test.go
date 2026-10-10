@@ -381,6 +381,7 @@ func TestBootstrapDefaultsAndMono(t *testing.T) {
 func TestBootstrapNeverPanics(t *testing.T) {
 	t.Run("panicking PathFS", func(t *testing.T) {
 		in, _ := bootInput(t)
+		hermeticEnv(t) // the last-resort sidecar uses the real HOME and TMPDIR
 		in.Resolve.FS = panicFS{OSPathFS()}
 		rec, st := Bootstrap(context.Background(), in)
 		if st.Mode != ModeDegradedNoop || st.Reason != ReasonBootstrapPanic || rec.Health()[0].Code != ReasonBootstrapPanic {

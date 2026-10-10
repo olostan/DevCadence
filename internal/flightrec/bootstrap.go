@@ -35,6 +35,8 @@ type BootstrapInput struct {
 	wrapSink func(Sink) Sink
 	// sidecarCreate is an in-package test seam for sidecar file creation.
 	sidecarCreate sidecarCreate
+	// lastResortCreate is an in-package test seam for the last-resort sidecar.
+	lastResortCreate sidecarCreate
 }
 
 // maxNodeIDFileBytes bounds the node-id read: a valid file is "nod_<ulid>\n".
@@ -96,26 +98,52 @@ func Bootstrap(ctx context.Context, in BootstrapInput) (rec *Recorder, st Status
 		nodeSource string
 	)
 	// degrade builds the degraded no-op recorder and writes the last-resort
-	// bootstrap-failure sidecar (it never panics: writeSidecar recovers).
+	// bootstrap-failure sidecar. It runs inside the deferred recovery, so every
+	// call into an injected dependency (Clock, PathFS, home/temp/uid funcs, the
+	// sidecar seams) is wrapped in a recover of its own: a second panic can
+	// never escape Bootstrap.
 	degrade := func(reason, detail string, journalFailed bool) (*Recorder, Status) {
 		root := ""
 		if journalFailed {
 			root = res.Root
 		}
-		body := buildSidecar(DefaultSanitizer(), in.Clock.Now(), reason, in.WriterVersion, nodeID, nodeSource, res.Attempts, Stats{})
-		create := in.sidecarCreate
-		if create == nil {
-			create = createSidecarFile
+		var now time.Time // the zero time when the injected Clock panics
+		func() {
+			defer func() { _ = recover() }()
+			now = in.Clock.Now()
+		}()
+		body := buildSidecar(DefaultSanitizer(), now, reason, in.WriterVersion, nodeID, nodeSource, res.Attempts, Stats{})
+		path, code := "", SidecarErrPanic // code stays panic when the write itself panics
+		func() {
+			defer func() { _ = recover() }()
+			create := in.sidecarCreate
+			if create == nil {
+				create = createSidecarFile
+			}
+			path, code = writeSidecar(in.Resolve, create, root, body)
+		}()
+		if code == SidecarErrPanic && len(body) > 0 {
+			// The injected filesystem or functions panicked: retry with plain os
+			// calls only so the early-failure evidence still lands.
+			lastResort := in.lastResortCreate
+			if lastResort == nil {
+				lastResort = createSidecarFile
+			}
+			if p := lastResortSidecar(lastResort, body); p != "" {
+				path, code = p, ""
+			}
 		}
-		path, code := writeSidecar(in.Resolve, create, root, body)
 		r := newNoop(Status{Reason: reason, Attempts: res.Attempts, SidecarPath: path, SidecarError: code}, detail)
 		return r, r.Status()
 	}
 	defer func() {
 		if p := recover(); p != nil { // the panic value is never recorded
-			if w != nil {
-				_ = w.Close(context.WithoutCancel(ctx))
-			}
+			func() {
+				defer func() { _ = recover() }()
+				if w != nil {
+					_ = w.Close(context.WithoutCancel(ctx))
+				}
+			}()
 			rec, st = degrade(ReasonBootstrapPanic, "", res.Root != "")
 		}
 	}()

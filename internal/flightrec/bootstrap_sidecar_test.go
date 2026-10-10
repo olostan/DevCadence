@@ -365,6 +365,7 @@ func TestBootstrapSidecarPanicIsContained(t *testing.T) {
 	e := newSidecarEnv(t)
 	in := e.input(nil)
 	in.Resolve.FS = panicFS{OSPathFS()}
+	in.lastResortCreate = func(string, string, string) (*os.File, error) { panic("last resort exploded") }
 	rec, st := Bootstrap(context.Background(), in)
 	if st.Mode != ModeDegradedNoop || st.Reason != ReasonBootstrapPanic || st.SidecarError != SidecarErrPanic || st.SidecarPath != "" {
 		t.Fatalf("%+v", st)
@@ -391,6 +392,11 @@ func TestNodeIDFileBounded(t *testing.T) {
 	for name, setup := range map[string]func(t *testing.T, path string){
 		"oversized regular file": func(t *testing.T, path string) {
 			if err := os.WriteFile(path, []byte(strings.Repeat("nod_", 1<<16)), 0o600); err != nil {
+				t.Fatal(err)
+			}
+		},
+		"directory is never read or replaced": func(t *testing.T, path string) {
+			if err := os.Mkdir(path, 0o700); err != nil {
 				t.Fatal(err)
 			}
 		},

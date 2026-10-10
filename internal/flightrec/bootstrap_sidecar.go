@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -78,6 +79,28 @@ type sidecarDoc struct {
 // first, O_EXCL, falling back to a random name from pattern when it exists.
 type sidecarCreate func(dir, preferred, pattern string) (*os.File, error)
 
+// maxSidecarFiles bounds accumulation: a new random-named sidecar is not
+// created in a directory that already holds more than this many sidecar files.
+const maxSidecarFiles = 32
+
+var errSidecarDirFull = errors.New("flightrec: too many bootstrap-failure files")
+
+// countSidecars counts the entries of dir matching the sidecar glob derived
+// from pattern ("bootstrap-failure-*.json" counts "bootstrap-failure*.json").
+// It reads the directory with plain os calls: createSidecarFile is itself the
+// replaceable creation seam, so tests stay deterministic through it.
+func countSidecars(dir, pattern string) int {
+	glob := strings.Replace(pattern, "-*.json", "*.json", 1)
+	ents, _ := os.ReadDir(dir) // an unreadable directory counts as empty; creation then decides
+	n := 0
+	for _, e := range ents {
+		if ok, _ := filepath.Match(glob, e.Name()); ok {
+			n++
+		}
+	}
+	return n
+}
+
 func createSidecarFile(dir, preferred, pattern string) (*os.File, error) {
 	if preferred != "" {
 		f, err := os.OpenFile(filepath.Join(dir, preferred), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
@@ -85,7 +108,51 @@ func createSidecarFile(dir, preferred, pattern string) (*os.File, error) {
 			return f, err
 		}
 	}
+	if countSidecars(dir, pattern) > maxSidecarFiles {
+		return nil, errSidecarDirFull
+	}
 	return os.CreateTemp(dir, pattern) // O_EXCL, 0600, random suffix
+}
+
+// writeSidecarFile creates a sidecar in dir through create and writes body; ""
+// means the directory was not usable (a partial file is removed).
+func writeSidecarFile(create sidecarCreate, dir, preferred, pattern string, body []byte) string {
+	f, err := create(dir, preferred, pattern)
+	if err != nil {
+		return ""
+	}
+	_, werr := f.Write(body)
+	serr := f.Sync()
+	cerr := f.Close()
+	if errors.Join(werr, serr, cerr) != nil {
+		_ = os.Remove(f.Name())
+		return ""
+	}
+	return f.Name()
+}
+
+// lastResortSidecar is the final attempt when the injected filesystem or
+// functions panicked: it uses ONLY plain os calls (os.UserHomeDir, os.TempDir,
+// os.MkdirAll, and create, which is O_EXCL, 0600 with a random suffix) and no
+// ownership checks, in its own recover. Order: <UserHomeDir>/.devcadence, then
+// <TempDir>. Names are always random (bootstrap-failure-<random>.json or
+// devcadence-bootstrap-failure-<random>.json) so an existing file or symlink is
+// never followed or overwritten.
+func lastResortSidecar(create sidecarCreate, body []byte) (path string) {
+	defer func() {
+		if recover() != nil {
+			path = ""
+		}
+	}()
+	if h, err := os.UserHomeDir(); err == nil && h != "" {
+		d := filepath.Join(h, ".devcadence")
+		if os.MkdirAll(d, 0o700) == nil {
+			if p := writeSidecarFile(create, d, "", "bootstrap-failure-*.json", body); p != "" {
+				return p
+			}
+		}
+	}
+	return writeSidecarFile(create, os.TempDir(), "", "devcadence-bootstrap-failure-*.json", body)
 }
 
 // buildSidecar renders the sanitized document.
@@ -122,18 +189,7 @@ func writeSidecar(in ResolveInput, create sidecarCreate, journalRoot string, bod
 	}()
 	in = in.withDefaults()
 	try := func(dir, preferred, pattern string) string {
-		f, err := create(dir, preferred, pattern)
-		if err != nil {
-			return ""
-		}
-		_, werr := f.Write(body)
-		serr := f.Sync()
-		cerr := f.Close()
-		if errors.Join(werr, serr, cerr) != nil {
-			_ = os.Remove(f.Name())
-			return ""
-		}
-		return f.Name()
+		return writeSidecarFile(create, dir, preferred, pattern, body)
 	}
 	const dirPattern = "bootstrap-failure-*.json"
 	if journalRoot != "" {
