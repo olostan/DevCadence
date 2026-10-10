@@ -95,7 +95,8 @@ func TestHandoff_AcceptAndTaskStatusCarryPacket(t *testing.T) {
 	// task_status stays available when the packet cannot be assembled.
 	insp.err = principal.NewCodedError(principal.CodeInternal, false, nil, "boom")
 	ts, _ = r.svc.TaskStatus(context.Background(), r.caller, facade.TaskStatusRequest{Meta: r.meta(""), TaskID: cand.TaskID})
-	if ts.Error != nil || ts.Result == nil || ts.Result.Task == nil || ts.Result.CandidateHandoff != nil {
+	if ts.Error != nil || ts.Result == nil || ts.Result.Task == nil || ts.Result.CandidateHandoff != nil ||
+		len(ts.EvidenceRefs) != 1 || ts.EvidenceRefs[0] != facade.CandidateHandoffUnavailableRef {
 		t.Fatalf("task_status must degrade to no handoff: %+v", ts)
 	}
 }

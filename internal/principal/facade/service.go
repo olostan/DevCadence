@@ -812,15 +812,25 @@ func (s *Service) TaskStatus(ctx context.Context, caller CallerContext, req Task
 		return fail(revision, err)
 	}
 	result := &TaskStatusResult{Task: taskStatusOf(d)}
+	var refs []string
 	if cand := result.Task.Candidate; cand != nil {
-		// Best effort evidence: a task status never fails because the handoff
-		// packet could not be assembled (the candidate ref itself is still given).
-		if h, err := s.inspectCandidate(ctx, *cand); err == nil {
+		// The task status itself never fails because the handoff packet could not
+		// be assembled, but the failure is never silent: a candidate exists whose
+		// durable ref or evidence cannot be verified, so the response carries the
+		// evidence handle CandidateHandoffUnavailableRef.
+		if h, err := s.inspectCandidate(ctx, *cand); err != nil {
+			refs = append(refs, CandidateHandoffUnavailableRef)
+		} else {
 			result.CandidateHandoff = h
 		}
 	}
-	return TaskStatusResponse{Envelope: envelopeOK(revision, nil), Result: result}, nil
+	return TaskStatusResponse{Envelope: envelopeOK(revision, refs), Result: result}, nil
 }
+
+// CandidateHandoffUnavailableRef marks a task_status response whose candidate
+// exists but whose handoff packet could not be built (for example the durable
+// candidate ref is missing or does not name the candidate commit).
+const CandidateHandoffUnavailableRef = "candidate-handoff-unavailable"
 
 // inspectCandidate asks the installed task runtime, when it can, to describe a
 // candidate whose lineage the caller has already verified. It returns (nil, nil)

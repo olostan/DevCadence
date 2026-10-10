@@ -143,6 +143,17 @@ func (e *Executor) Validate(
 		)
 	}
 
+	// Profile commands come from the (untrusted) repository and the candidate
+	// contains model-written code: they run unconfined, so only in the explicit
+	// owner-local mode (same gate as the post-check). Refuse before anything runs.
+	if e.opts.ExecutionMode.normalized() != ExecutionUnsafeUnconfinedLocal {
+		return principal.OperationRef{}, principal.NewCodedError(
+			principal.CodePolicyDenied, false, []string{"validate_requires_yolo"},
+			"validation runs repository-defined commands and model-written code unconfined; no command was run. "+
+				"Enable \"execution_mode\":\"yolo\" in $DEVCADENCE_HOME/config/selfhost.json (owner-local, NOT a sandbox) to allow it",
+		)
+	}
+
 	// Synchronous checks:
 	// 1. Caller and project mismatch checks
 	if caller.ProjectID != e.opts.ProjectID || (meta.ProjectID != "" && meta.ProjectID != e.opts.ProjectID) {

@@ -276,6 +276,8 @@ func (e *Executor) reviewStatusRef(ctx context.Context) (protocol.ArtifactRef, e
 	b, err := json.Marshal(map[string]any{
 		"schema": reviewStatusSchema, "review": ReviewUnavailable, "reason": reviewUnavailableReason,
 		"independent": false, "owner_acceptance_required": true,
+		// The mode the attempt actually ran under, recorded at attempt time.
+		"execution_mode": string(e.opts.ExecutionMode.normalized()),
 	})
 	if err != nil {
 		return protocol.ArtifactRef{}, err

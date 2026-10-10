@@ -88,7 +88,8 @@ func (e *Executor) InspectCandidate(ctx context.Context, c principal.CandidateRe
 	h := &facade.CandidateHandoff{
 		TaskID: detail.Task.ID, AttemptID: att.ID, BaseCommit: base, CandidateCommit: att.CandidateCommit,
 		Ref: refName, Branch: fmt.Sprintf("devcadence/%s/%s", detail.Task.ID, att.ID),
-		ExecutionMode: string(e.opts.ExecutionMode.normalized()),
+		// Unknown unless the attempt's own artifacts record it (never the executor's current mode).
+		ExecutionMode: "unknown",
 		Review:        facade.HandoffReview{Status: ReviewUnavailable, Independent: false, Reason: reviewUnavailableReason},
 		Validations:   []facade.HandoffValidation{}, ChangedFiles: []facade.ChangedFile{},
 		Acceptance: acceptanceNote,
@@ -136,9 +137,13 @@ func (e *Executor) InspectCandidate(ctx context.Context, c principal.CandidateRe
 				Review      string `json:"review"`
 				Independent bool   `json:"independent"`
 				Reason      string `json:"reason"`
+				Mode        string `json:"execution_mode"`
 			}
 			if e.readArtifactJSON(a, &rs) == nil && rs.Review != "" {
 				h.Review = facade.HandoffReview{Status: rs.Review, Independent: rs.Independent, Reason: rs.Reason}
+				if rs.Mode != "" {
+					h.ExecutionMode = rs.Mode
+				}
 			}
 		}
 	}
