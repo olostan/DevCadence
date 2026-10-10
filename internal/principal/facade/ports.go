@@ -41,6 +41,15 @@ type TaskExecutor interface {
 	Validate(context.Context, CallerContext, CallMeta, CandidateRef, string) (OperationRef, error)
 }
 
+// CandidateInspector is an optional capability of a TaskExecutor (SH1-4C). The
+// facade discovers it by type assertion, so hosts that install a task runtime
+// without it keep the previous behavior. It is read-only: it describes the
+// candidate (commits, durable ref, manifest, evidence) and changes nothing. The
+// facade has already verified lineage before calling it.
+type CandidateInspector interface {
+	InspectCandidate(context.Context, CandidateRef) (*CandidateHandoff, error)
+}
+
 // ReviewExecutor starts an independent review.
 type ReviewExecutor interface {
 	Review(context.Context, CallerContext, CallMeta, CandidateRef, []string) (OperationRef, error)

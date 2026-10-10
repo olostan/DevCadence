@@ -50,6 +50,9 @@
         },
         "operation": {
           "$ref": "#/$defs/operationStatus"
+        },
+        "candidate_handoff": {
+          "$ref": "#/$defs/candidateHandoff"
         }
       }
     }
@@ -143,6 +146,256 @@
         },
         "error": {
           "$ref": "devcadence:///principal-semantic-error.schema.json"
+        }
+      }
+    },
+    "candidateHandoff": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "task_id",
+        "attempt_id",
+        "base_commit",
+        "candidate_commit",
+        "ref",
+        "changed_files",
+        "model",
+        "review",
+        "validations",
+        "inspect",
+        "acceptance"
+      ],
+      "properties": {
+        "task_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[^\\p{Cc}]*\\S[^\\p{Cc}]*$"
+        },
+        "attempt_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[^\\p{Cc}]*\\S[^\\p{Cc}]*$"
+        },
+        "base_commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{7,64}$"
+        },
+        "candidate_commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{7,64}$"
+        },
+        "ref": {
+          "type": "string",
+          "pattern": "^refs/devcadence/candidates/"
+        },
+        "branch": {
+          "type": "string"
+        },
+        "worktree_path": {
+          "type": "string"
+        },
+        "changed_files": {
+          "type": "array",
+          "maxItems": 256,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "status",
+              "path"
+            ],
+            "properties": {
+              "status": {
+                "type": "string"
+              },
+              "path": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "model": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [],
+          "properties": {
+            "endpoint_id": {
+              "type": "string"
+            },
+            "model": {
+              "type": "string"
+            },
+            "digest": {
+              "type": "string"
+            }
+          }
+        },
+        "execution_mode": {
+          "type": "string"
+        },
+        "review": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "independent"
+          ],
+          "properties": {
+            "status": {
+              "type": "string"
+            },
+            "independent": {
+              "type": "boolean"
+            },
+            "reason": {
+              "type": "string"
+            }
+          }
+        },
+        "post_check": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "profile_id",
+            "passed",
+            "rounds_used",
+            "repair_rounds",
+            "max_repair_rounds",
+            "rounds"
+          ],
+          "properties": {
+            "profile_id": {
+              "type": "string"
+            },
+            "passed": {
+              "type": "boolean"
+            },
+            "rounds_used": {
+              "type": "integer"
+            },
+            "repair_rounds": {
+              "type": "integer"
+            },
+            "max_repair_rounds": {
+              "type": "integer"
+            },
+            "rounds": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "round",
+                  "passed",
+                  "checks"
+                ],
+                "properties": {
+                  "round": {
+                    "type": "integer"
+                  },
+                  "passed": {
+                    "type": "boolean"
+                  },
+                  "checks": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "id",
+                        "status"
+                      ],
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "argv": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "status": {
+                          "type": "string"
+                        },
+                        "exit_code": {
+                          "type": "integer"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "validations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "validation_id",
+              "outcome"
+            ],
+            "properties": {
+              "validation_id": {
+                "type": "string"
+              },
+              "outcome": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "command_trace": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "commands",
+            "refused",
+            "unsafe_unconfined"
+          ],
+          "properties": {
+            "commands": {
+              "type": "integer"
+            },
+            "refused": {
+              "type": "integer"
+            },
+            "unsafe_unconfined": {
+              "type": "boolean"
+            }
+          }
+        },
+        "inspect": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "diff",
+            "log",
+            "merge",
+            "cherry_pick"
+          ],
+          "properties": {
+            "diff": {
+              "type": "string"
+            },
+            "log": {
+              "type": "string"
+            },
+            "merge": {
+              "type": "string"
+            },
+            "cherry_pick": {
+              "type": "string"
+            }
+          }
+        },
+        "acceptance": {
+          "type": "string"
         }
       }
     }

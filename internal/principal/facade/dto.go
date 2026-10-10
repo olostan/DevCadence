@@ -185,10 +185,14 @@ type OperationStatus struct {
 	Error        *principal.SemanticError `json:"error,omitempty"`
 }
 
-// TaskStatusResult carries exactly one of Task and Operation.
+// TaskStatusResult carries exactly one of Task and Operation. CandidateHandoff
+// accompanies Task only when the task has a current candidate and the installed
+// task runtime can inspect it (SH1-4C): it is how the owner and the Principal
+// see exactly what to review and how to integrate it manually.
 type TaskStatusResult struct {
-	Task      *TaskStatus      `json:"task,omitempty"`
-	Operation *OperationStatus `json:"operation,omitempty"`
+	Task             *TaskStatus       `json:"task,omitempty"`
+	Operation        *OperationStatus  `json:"operation,omitempty"`
+	CandidateHandoff *CandidateHandoff `json:"candidate_handoff,omitempty"`
 }
 
 // TaskStatusResponse is the task_status response.
@@ -246,9 +250,14 @@ type AcceptRequest struct {
 	Reason        string                 `json:"reason"`
 }
 
-// AcceptResult exists only so the response type is uniform: acceptance is
-// hard-disabled and never produces a result.
-type AcceptResult struct{}
+// AcceptResult carries the candidate handoff packet when the installed task
+// runtime can inspect the candidate. Acceptance itself is never performed: the
+// response still carries the NEEDS_PRINCIPAL error, and integration is a manual
+// owner action described by the packet. Without a candidate inspector there is
+// no result at all.
+type AcceptResult struct {
+	Handoff *CandidateHandoff `json:"handoff,omitempty"`
+}
 
 // AcceptResponse is the accept response; it always carries an error.
 type AcceptResponse struct {
@@ -766,4 +775,102 @@ func (r RecordDecisionRequest) Validate() error {
 		return err
 	}
 	return r.Decision.Validate()
+}
+
+// --- candidate handoff (SH1-4C) ---
+
+// CandidateHandoff is the bounded, reproducible description of one candidate
+// that a human (or the Principal) needs to inspect and integrate it manually.
+// It is evidence, never authority: nothing here accepts, merges or pushes.
+type CandidateHandoff struct {
+	TaskID          string `json:"task_id"`
+	AttemptID       string `json:"attempt_id"`
+	BaseCommit      string `json:"base_commit"`
+	CandidateCommit string `json:"candidate_commit"`
+	// Ref is a durable ref in the primary repository (refs/devcadence/candidates/...)
+	// pinning the candidate commit; creating it moves no branch and not HEAD.
+	Ref string `json:"ref"`
+	// Branch and WorktreePath locate the attempt's isolated worktree (may be removed later).
+	Branch       string        `json:"branch,omitempty"`
+	WorktreePath string        `json:"worktree_path,omitempty"`
+	ChangedFiles []ChangedFile `json:"changed_files"`
+	Model        HandoffModel  `json:"model"`
+	// ExecutionMode is "strict" or "unsafe_unconfined_local".
+	ExecutionMode string         `json:"execution_mode,omitempty"`
+	Review        HandoffReview  `json:"review"`
+	PostCheck     *HandoffChecks `json:"post_check,omitempty"`
+	// Validations are the results of separate validate calls on this attempt.
+	Validations  []HandoffValidation `json:"validations"`
+	CommandTrace *HandoffCommands    `json:"command_trace,omitempty"`
+	Inspect      HandoffInspect      `json:"inspect"`
+	// Acceptance states plainly who may accept and that nothing was accepted.
+	Acceptance string `json:"acceptance"`
+}
+
+// ChangedFile is one entry of the candidate's changed-file manifest.
+type ChangedFile struct {
+	Status string `json:"status"`
+	Path   string `json:"path"`
+}
+
+// HandoffModel is the model identity recorded for the attempt.
+type HandoffModel struct {
+	EndpointID string `json:"endpoint_id,omitempty"`
+	Model      string `json:"model,omitempty"`
+	Digest     string `json:"digest,omitempty"`
+}
+
+// HandoffReview is the honest review label. Independent is false when no
+// independent reviewer examined the candidate.
+type HandoffReview struct {
+	Status      string `json:"status"`
+	Independent bool   `json:"independent"`
+	Reason      string `json:"reason,omitempty"`
+}
+
+// HandoffChecks summarizes the post-check (validation-report artifact).
+type HandoffChecks struct {
+	ProfileID       string         `json:"profile_id"`
+	Passed          bool           `json:"passed"`
+	RoundsUsed      int            `json:"rounds_used"`
+	RepairRounds    int            `json:"repair_rounds"`
+	MaxRepairRounds int            `json:"max_repair_rounds"`
+	Rounds          []HandoffRound `json:"rounds"`
+}
+
+// HandoffRound is one validation round of the repair history.
+type HandoffRound struct {
+	Round  int            `json:"round"`
+	Passed bool           `json:"passed"`
+	Checks []HandoffCheck `json:"checks"`
+}
+
+// HandoffCheck is one check of a round; output stays in the artifact.
+type HandoffCheck struct {
+	ID       string   `json:"id"`
+	Argv     []string `json:"argv,omitempty"`
+	Status   string   `json:"status"`
+	ExitCode *int     `json:"exit_code,omitempty"`
+}
+
+// HandoffValidation is the outcome of a validate call on the attempt.
+type HandoffValidation struct {
+	ValidationID string `json:"validation_id"`
+	Outcome      string `json:"outcome"`
+}
+
+// HandoffCommands summarizes the run_command audit trace.
+type HandoffCommands struct {
+	Commands         int  `json:"commands"`
+	Refused          int  `json:"refused"`
+	UnsafeUnconfined bool `json:"unsafe_unconfined"`
+}
+
+// HandoffInspect holds the exact commands to reproduce the inspection and
+// to integrate manually. They are text for the owner to run; DevCadence runs none.
+type HandoffInspect struct {
+	Diff       string `json:"diff"`
+	Log        string `json:"log"`
+	Merge      string `json:"merge"`
+	CherryPick string `json:"cherry_pick"`
 }

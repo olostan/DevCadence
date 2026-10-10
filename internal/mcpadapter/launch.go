@@ -155,6 +155,10 @@ func run(ctx context.Context, getenv func(string) string, transport mcp.Transpor
 			}
 			closeTasks = closeFn
 			opts.Tasks = exec
+			if exec == nil {
+				logger.Info("task execution is not configured: delegate and validate will refuse with runtime-not-installed:task-execution; " +
+					"create $DEVCADENCE_HOME/config/selfhost.json to enable the native executor")
+			}
 		}
 	}
 	svc, err := facade.NewService(opts)
