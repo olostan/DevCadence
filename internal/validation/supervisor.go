@@ -406,6 +406,24 @@ func startSingleServiceWithIdentity(ctx context.Context, spec ServiceSpec, baseD
 }
 
 func allocateUnusedPort() (int, error) {
+	return allocateUnusedPortWith(portResponds)
+}
+
+// portResponds reports whether something already accepts connections on the
+// loopback port.
+func portResponds(port int) bool {
+	conn, err := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", port), 20*time.Millisecond)
+	if err != nil {
+		return false
+	}
+	_ = conn.Close()
+	return true
+}
+
+// allocateUnusedPortWith picks an ephemeral loopback port and retries when the
+// probe reports an unrelated service already answering on it. The probe is a
+// parameter so the conflict branches are tested deterministically.
+func allocateUnusedPortWith(responds func(port int) bool) (int, error) {
 	for attempt := 0; attempt < 3; attempt++ {
 		l, err := net.ListenTCP("tcp", &net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: 0})
 		if err != nil {
@@ -414,11 +432,9 @@ func allocateUnusedPort() (int, error) {
 		port := l.Addr().(*net.TCPAddr).Port
 		_ = l.Close()
 
-		// Pre-flight probe: ensure port is not already responding
-		conn, err := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", port), 20*time.Millisecond)
-		if err == nil {
-			// Port was responding; conflict with unrelated pre-existing service
-			_ = conn.Close()
+		// Pre-flight probe: a responding port conflicts with an unrelated
+		// pre-existing service.
+		if responds(port) {
 			continue
 		}
 		return port, nil
