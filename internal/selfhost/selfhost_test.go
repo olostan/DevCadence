@@ -344,3 +344,26 @@ func TestLoadConfig_ExecutionMode(t *testing.T) {
 		t.Errorf("invalid mode err = %v", err)
 	}
 }
+
+func TestLoadConfig_MaxRepairRounds(t *testing.T) {
+	load := func(body string) (*selfhost.Config, error) {
+		home := t.TempDir()
+		writeCfg(t, home, body)
+		return selfhost.LoadConfig(home, env(nil))
+	}
+	cfg, err := load(`{"model":"m:1"}`)
+	if err != nil || *cfg.MaxRepairRounds != selfhost.DefaultMaxRepairRounds {
+		t.Fatalf("default = %v err %v, want %d", cfg, err, selfhost.DefaultMaxRepairRounds)
+	}
+	if cfg, err = load(`{"model":"m:1","max_repair_rounds":0}`); err != nil || *cfg.MaxRepairRounds != 0 {
+		t.Fatalf("explicit 0 = %v err %v", cfg, err)
+	}
+	if cfg, err = load(`{"model":"m:1","max_repair_rounds":5}`); err != nil || *cfg.MaxRepairRounds != 5 {
+		t.Fatalf("5 = %v err %v", cfg, err)
+	}
+	for _, bad := range []string{`{"model":"m:1","max_repair_rounds":6}`, `{"model":"m:1","max_repair_rounds":-1}`} {
+		if _, err := load(bad); err == nil {
+			t.Errorf("%s accepted", bad)
+		}
+	}
+}

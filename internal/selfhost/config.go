@@ -60,6 +60,9 @@ type Config struct {
 	// (workers may also run bounded argv commands unconfined as the local user;
 	// NOT a sandbox). Only this user-level file can enable yolo.
 	ExecutionMode string `json:"execution_mode,omitempty"`
+	// MaxRepairRounds bounds how many failed post-checks are fed back to the model
+	// (default 2, hard max 5; 0 means run the post-check once without repair).
+	MaxRepairRounds *int `json:"max_repair_rounds,omitempty"`
 }
 
 // ConfigPath returns the config file location under the DevCadence home.
@@ -84,7 +87,7 @@ func LoadConfig(home string, getenv func(string) string) (*Config, error) {
 		dec.DisallowUnknownFields()
 		if err := dec.Decode(&cfg); err != nil {
 			return nil, errs.Wrap(errs.CategoryInvalidArgument, err,
-				"selfhost: %s is not valid (expected keys ollama_url, model, endpoint_id, context_tokens, execution_mode)", path)
+				"selfhost: %s is not valid (expected keys ollama_url, model, endpoint_id, context_tokens, execution_mode, max_repair_rounds)", path)
 		}
 		if _, err := dec.Token(); !errors.Is(err, io.EOF) {
 			return nil, errs.New(errs.CategoryInvalidArgument, "selfhost: %s has trailing content", path)
@@ -142,6 +145,13 @@ func (c *Config) normalize() error {
 	case ExecutionModeStrict, ExecutionModeYolo:
 	default:
 		return errs.New(errs.CategoryInvalidArgument, "selfhost: execution_mode %q must be %q or %q", c.ExecutionMode, ExecutionModeStrict, ExecutionModeYolo)
+	}
+	if c.MaxRepairRounds == nil {
+		d := DefaultMaxRepairRounds
+		c.MaxRepairRounds = &d
+	}
+	if *c.MaxRepairRounds < 0 || *c.MaxRepairRounds > HardMaxRepairRounds {
+		return errs.New(errs.CategoryInvalidArgument, "selfhost: max_repair_rounds must be between 0 and %d, got %d", HardMaxRepairRounds, *c.MaxRepairRounds)
 	}
 	if c.ContextTokens == 0 {
 		c.ContextTokens = DefaultContextTokens

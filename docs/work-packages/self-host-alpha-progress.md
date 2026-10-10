@@ -6,7 +6,9 @@ Authoritative objective: [wp-m5-sh1-self-host-alpha-ewp.md](wp-m5-sh1-self-host-
 
 - PR #86 (M5-R3): gofmt fixed on `feat/m5-r3-provider-composition` (f7f2de8). Local hooks bypassed with owner authorization because the sandbox runs as root and `internal/operator/receipts` tests refuse root (`protection_unix.go:18`, `verifier.go:325`; they fail identically on `origin/main`). CI is authoritative.
 - SH1-1: implemented on branch `ccr-30e3bc5f-qjnr6g` (draft PR): `internal/selfhost` + composition root in `cmd/devcadence-mcp` (via `mcpadapter.LaunchWith` task-port factory, keeping the adapter's dependency boundary) + `devcadence selfhost check`. Verified with a stub-Ollama deterministic test only; the live test (`TestLiveOllama`) has NOT been run (no Ollama in the sandbox).
-- SH1-2..SH1-4: not started. No Ollama in the cloud sandbox: live acceptance must run where Ollama is installed.
+- SH1-2: merged (PR #90; see section below).
+- SH1-3 (minimal): implemented on `ccr-30e3bc5f-qjnr6g` (draft PR): post-check validation, bounded repair loop, `validation-report` and `review_unavailable` evidence, uncertain-retry refusal. Stub-tested only; `TestLiveOllamaRepair` has NOT been run (no Ollama in the sandbox).
+- SH1-4: not started. No Ollama in the cloud sandbox: live acceptance must run where Ollama is installed.
 
 ## Implementation Surface Map (verified by scout, not yet by tests)
 
@@ -21,7 +23,7 @@ Authoritative objective: [wp-m5-sh1-self-host-alpha-ewp.md](wp-m5-sh1-self-host-
 
 1. SH1-1 composition root (`internal/selfhost`) + `mcpadapter` wiring + no-fake-driver success test.
 2. SH1-2 (done, see below) `apply_patch`/range-replace tool via shared write-path check; `run_command` gated by explicit local-dev execution mode (user-level trust, not repo config).
-3. SH1-3 `ProfileSource` over `validation.LoadProfiles`; reviewexec wiring; `review_unavailable`; minimal Accept hand-off; uncertain-retry refusal.
+3. SH1-3 (minimal, done, see below) `ProfileSource` over `validation.LoadProfiles`; `review_unavailable`; uncertain-retry refusal. Still open: reviewexec wiring, minimal Accept hand-off.
 4. SH1-4 dogfood scripts/records.
 
 ## SH1-1 usage (owner-local, user-level only)
@@ -44,6 +46,16 @@ Config (never read from the project repo): only the existence of `$DEVCADENCE_HO
 - Fixed on the way: `runDelegate` executed every tool call a second time after the driver had already executed it via the mediator; it now skips, per call ID, the calls the driver executed.
 - Tests: `internal/taskexec/tool_patch_test.go`, `tool_command_test.go`, `internal/selfhost/tools_scenario_test.go` (stub-Ollama scenario: apply_patch, write_file, `go test ./...`), config tests in `selfhost_test.go`. Stub-based: these prove wiring and policy, not real model behavior.
 
+## SH1-3 post-check and repair loop (implemented; stub-tested only, no real-model run)
+
+- Flow (`internal/taskexec/postcheck.go`, `delegate.go`): when the model replies without tool calls, the project's validation profile runs in the candidate worktree through `validation.RunProfile` BEFORE any candidate commit. On failure the same model session gets one bounded user message (failing check, argv, exit code, first failing `go test` name, last 4 KiB of output; full logs stay in artifacts) and may repair with its tools. Turns and request bytes count against the existing limits. Still failing after `max_repair_rounds` -> attempt fails `reason=validation_failed effects=none`, no candidate, `validation-report` attached to the failure.
+- Config (user-level `selfhost.json`): `execution_mode` `strict`|`yolo`, `max_repair_rounds` (default 2, hard max 5, 0 = check once without repair).
+- Project profile: `.devcadence/validation.yaml` in the registered repo, profile `default` (format of `validation.LoadProfiles`, e.g. `profiles: {default: {checks: [{id: go-test, argv: [go, test, ./...], timeout: 5m}]}}`). Absent file = no post-check. It is read from the registered checkout when a delegation starts (not from the model-edited worktree). Its commands are repository-controlled, so they run ONLY in `yolo`; in `strict` Delegate refuses before any subprocess or model call with ref `postcheck_requires_yolo`. Same env scrub as `run_command` (scratch HOME, no credentials); `validateProfileSafety` still rejects shells/network arguments.
+- Evidence (via `ArtifactSink`, attached to `CandidateProduced.Artifacts` / `AttemptFailed.Artifacts`, no schema change): `validation-report` (profile id and digest, per-round per-check status, exit code, duration, rounds used, passed, `unsafe_unconfined`), `command-trace`, and on candidates `review-status` = `review_unavailable` ("no independent reviewer configured; owner manual acceptance required"). `independent` is false: nobody independent reviewed the candidate.
+- Retry guard: a new Delegate for a task with a prior attempt whose summary contains `effects=uncertain` is refused (ref `uncertain_prior_attempt`) before any model call. There is no owner acknowledgement mechanism yet.
+- Live acceptance (owner machine, real Ollama and an installed model; never pulls): `DEVCADENCE_OLLAMA_MODEL=<installed-model> scripts/selfhost-live.sh` (preflights `devcadence selfhost check`, then `TestLiveOllamaRepair`, which builds a disposable Go project with a real defect and prints model identity and digest, model commands, validation rounds, candidate commit, manifest and review label).
+- Limitations: tests are stub-based and prove wiring and failure semantics, not real model behavior. `yolo` is unconfined as the local user, not a sandbox, and the post-check runs the repository's commands in that mode. Candidates carry `review_unavailable`: reviewexec is not wired, manual owner acceptance is required. Post-check time counts against the operation deadline but not the model meter. A passing check that leaves untracked out-of-scope files (for example a coverage profile) still fails candidate scope checks. Captured check output is bounded to 4 MiB (head kept).
+
 ## Next action
 
-Review SH1-2, run `TestLiveOllama` where Ollama is installed, then SH1-3 (validation/repair loop, review wiring).
+Run `scripts/selfhost-live.sh` where Ollama is installed (SH1-2 and SH1-3 live acceptance), then reviewexec wiring/Accept hand-off and SH1-4 dogfood.

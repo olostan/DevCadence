@@ -162,7 +162,10 @@ func Build(ctx context.Context, cfg Config, deps Deps) (*Built, error) {
 		IDs:          deps.IDs,
 		Logger:       deps.Logger,
 
-		ExecutionMode: execMode,
+		ExecutionMode:      execMode,
+		Profiles:           NewRepoProfileSource(deps.RepoPath),
+		PostCheckProfileID: PostCheckProfileID,
+		MaxRepairRounds:    *cfg.MaxRepairRounds,
 	})
 	if err != nil {
 		_ = lock.Close()

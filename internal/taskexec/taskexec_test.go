@@ -680,8 +680,15 @@ func TestDelegate_HappyPath(t *testing.T) {
 	if candidateEv == nil {
 		t.Fatalf("CandidateProduced event not found")
 	}
-	if len(candidateEv.Artifacts) != 2 {
-		t.Errorf("expected 2 artifacts (diff, usage), got %d", len(candidateEv.Artifacts))
+	if len(candidateEv.Artifacts) != 3 {
+		t.Errorf("expected 3 artifacts (diff, usage, review-status), got %d", len(candidateEv.Artifacts))
+	}
+	hasReview := false
+	for _, a := range candidateEv.Artifacts {
+		hasReview = hasReview || a.Kind == "review-status"
+	}
+	if !hasReview {
+		t.Errorf("candidate lacks review-status artifact: %+v", candidateEv.Artifacts)
 	}
 }
 

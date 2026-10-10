@@ -36,6 +36,11 @@ type RunOptions struct {
 	RunID string
 	// Modules provides the project's authoritative module catalog for resolving CheckSpec.ModuleID.
 	Modules []protocol.ModuleDefinition
+	// OnCheckOutput, when set, receives each executed check's raw captured
+	// result (bounded by MaxOutputBytes) right after the check ran, so a caller
+	// can build a bounded summary without re-reading stored artifacts. It is
+	// not called for checks that did not start.
+	OnCheckOutput func(checkID string, res process.Result)
 }
 
 // RunProfile executes every check in profile, in order, against opts.Dir.
@@ -308,6 +313,9 @@ func RunProfile(ctx context.Context, profile Profile, opts RunOptions) (checks [
 			continue
 		}
 
+		if opts.OnCheckOutput != nil {
+			opts.OnCheckOutput(spec.ID, res)
+		}
 		check.ExitCode = intPtr(res.ExitCode)
 		stdoutRef, stderrRef := storeCheckOutput(ctx, opts.Artifacts, opts.ProjectID, spec.ID, res)
 		if stdoutRef != nil {
