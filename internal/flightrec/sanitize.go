@@ -40,25 +40,64 @@ const (
 
 const unserializableDoc = `{"_unserializable":true}`
 
+// credWords are the credential-bearing name fragments of the free-text
+// assignment rules. They are matched anywhere inside a name (prefix and suffix
+// tolerant, so db_password, GITHUB_TOKEN and aws_secret_access_key all match;
+// \b cannot be used because '_' is a word character).
+const credWords = `password|passwd|pwd|passphrase|secret|token|api[_-]?key|private[_-]?key|access[_-]?key|secret[_-]?key|` +
+	`authorization|cookie|credential|bearer|jwt|session[_-]?id|ssh[_-]?key|connection[_-]?string|encryption[_-]?key|` +
+	`signing[_-]?key|hmac|mnemonic|x-amz-signature`
+
+// assignValue is the value of an assignment: a quoted string (which may hold
+// spaces) or the next whitespace-delimited word.
+const assignValue = `(?:"[^"]*"|'[^']*'|\S+)`
+
 var (
 	jwtRE      = regexp.MustCompile(`eyJ[\w-]{10,}\.[\w-]{10,}\.[\w-]{5,}`)
-	pemRE      = regexp.MustCompile(`-----BEGIN [A-Z ]*PRIVATE KEY-----`)
+	pemRE      = regexp.MustCompile(`-----BEGIN [A-Z ]*PRIVATE KEY[A-Z ]*-----[^\n]*`)
+	sshKeyRE   = regexp.MustCompile(`\bssh-(?:rsa|dss|ed25519)\s+AAAA\S*`)
 	userinfoRE = regexp.MustCompile(`://[^/\s@]+@`)
-	authRE     = regexp.MustCompile(`(?i)\bauthorization\b\s*[:=][^\n]*`)
-	schemeRE   = regexp.MustCompile(`(?i)\b(?:bearer|basic)\s+\S{6,}`)
-	keywordRE  = regexp.MustCompile(`(?i)\b(?:password|passwd|pwd|secret|token|api[_-]?key|authorization|x-api-key)["']?(?:\s*[:=]\s*|\s+)\S+`)
-	prefixRE   = regexp.MustCompile(`\b(?:(?i:gh[pousr])_[A-Za-z0-9]{6,}|(?i:github_pat_)\w{6,}|(?i:glpat-)[\w-]{6,}|(?i:xox[bpas])-[\w-]{6,}|(?i:sk[-_])[\w-]{6,}|(?i:npm_)\w{6,}|(?i:aiza)[\w-]{8,}|A[KS]IA[0-9A-Z]{8,})`)
-	envRE      = regexp.MustCompile(`\b[A-Z][A-Z0-9_]{2,}=\S+`)
-	secretFlag = regexp.MustCompile(`(?i)^--?(?:[\w]+-)*(?:password|passwd|pwd|token|secret|api-?key|authorization|credentials?)$`)
-	digestRE   = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
-	tokenRE    = regexp.MustCompile(`\S+`)
+	// authRE and cookieRE redact to the end of the line: the value may hold a
+	// scheme and several words or ';'-separated pairs.
+	authRE   = regexp.MustCompile(`(?i)authorization["']?\s*[:=][^\n]*`)
+	cookieRE = regexp.MustCompile(`(?i)cookie["']?\s*[:=][^\n]*`)
+	schemeRE = regexp.MustCompile(`(?i)\b(?:bearer|basic)\s+\S{6,}`)
+	// assignRE: <name containing a credential word> [quote] (:|=) <value>.
+	assignRE = regexp.MustCompile(`(?i)[\w.-]*(?:` + credWords + `)[\w.-]*["']?\s*[:=]\s*` + assignValue)
+	// shortAssignRE covers short names that are credentials only as a whole
+	// name or a name suffix (pass, pw, otp, seed, auth).
+	shortAssignRE = regexp.MustCompile(`(?i)\b(?:[\w.-]*[_.-])?(?:pass|pw|otp|seed|auth)\b["']?\s*[:=]\s*` + assignValue)
+	// keywordRE is the whitespace-separated form ("password hunter2").
+	keywordRE = regexp.MustCompile(`(?i)\b(?:password|passwd|pwd|passphrase|secret|token|api[_-]?key|authorization|x-api-key)\b["']?\s+\S+`)
+	prefixRE  = regexp.MustCompile(`\b(?:(?i:gh[pousr])_[A-Za-z0-9]{6,}|(?i:github_pat_)\w{6,}|(?i:glpat-)[\w-]{6,}|(?i:xox[bpas])-[\w-]{6,}|(?i:xapp-)[\w-]{6,}|(?i:sk[-_])[\w-]{6,}|(?i:npm_)\w{6,}|(?i:hf_)[A-Za-z0-9]{10,}|(?i:pypi-)[\w-]{10,}|(?i:aiza)[\w-]{8,}|ya29\.[\w-]{10,}|SG\.[\w-]{10,}|A[KS]IA[0-9A-Z]{8,})`)
+	envRE     = regexp.MustCompile(`\b[A-Z][A-Z0-9_]{2,}=` + assignValue)
+	digestRE  = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
+	tokenRE   = regexp.MustCompile(`\S+`)
 )
 
+// denyKeys are the substrings (of a normalized key or flag name) that make a
+// name a credential. The structured-key rule and the CLI-flag rule both use
+// this one list (via denyHit) so the two cannot diverge.
+//
+// Additions beyond the original list, with the reason for each: passphrase,
+// secretkey, clientsecret, privatekey, accesskey (explicit forms of common
+// credential names; the first three are also covered by shorter substrings and
+// are listed so the intent survives a future narrowing), dsn and
+// connectionstring (embed passwords), encryptionkey and signingkey (key
+// material), hmac (shared secrets), mnemonic (wallet seed phrases).
 var denyKeys = []string{
 	"password", "passwd", "secret", "token", "apikey", "authorization",
 	"credential", "privatekey", "cookie", "bearer", "sessionid",
 	"pwd", "auth", "accesskey", "sshkey", "signature", "session", "jwt",
+	"passphrase", "secretkey", "clientsecret", "dsn", "connectionstring",
+	"encryptionkey", "signingkey", "hmac", "mnemonic",
 }
+
+// denyExact are normalized names that are credentials only as a whole name
+// (substring matching would over-redact ordinary words): pass (as in --pass),
+// pw, otp (one-time passwords) and seed (RNG or wallet seeds; "seeded" or
+// "seedling" are not).
+var denyExact = map[string]bool{"pass": true, "pw": true, "otp": true, "seed": true}
 
 // counterKeys are the only token-named keys whose value may be kept, and only
 // when the value is a JSON number.
@@ -156,7 +195,8 @@ func NewSanitizer(cfg SanitizerConfig) (*Sanitizer, error) {
 		deny: append([]string(nil), denyKeys...),
 		rules: []rule{
 			{jwtRE, redacted}, {pemRE, redacted}, {userinfoRE, "://" + redacted + "@"},
-			{authRE, redacted}, {schemeRE, redacted}, {keywordRE, redacted}, {prefixRE, redacted}, {envRE, redacted},
+			{sshKeyRE, redacted}, {authRE, redacted}, {cookieRE, redacted}, {schemeRE, redacted}, {assignRE, redacted},
+			{shortAssignRE, redacted}, {keywordRE, redacted}, {prefixRE, redacted}, {envRE, redacted},
 		},
 	}
 	for _, k := range cfg.ExtraDenyKeys {
@@ -210,16 +250,84 @@ func (s *Sanitizer) keyRule(k string, v any) (string, bool) {
 	if rawKey(n) {
 		return "[OMITTED:raw]", true
 	}
-	for _, d := range s.deny {
-		if strings.Contains(n, d) && !(d == "token" && tokenAllowed(n, v)) {
-			return redacted, true
-		}
+	if s.denyHit(n, tokenAllowed(n, v)) {
+		return redacted, true
 	}
 	return "", false
 }
 
+// denyHit reports whether the normalized name n is a credential name. It is the
+// single decision shared by structured keys and CLI flags. counterOK exempts
+// the "token" substring (numeric token counters).
+func (s *Sanitizer) denyHit(n string, counterOK bool) bool {
+	if denyExact[n] {
+		return true
+	}
+	for _, d := range s.deny {
+		if strings.Contains(n, d) && !(counterOK && d == "token") {
+			return true
+		}
+	}
+	return false
+}
+
+// secretFlagName reports whether a command-line argument without its value
+// ("--client_secret", "-token") names a credential flag: the leading dashes are
+// stripped and the rest takes the structured-key decision.
+func (s *Sanitizer) secretFlagName(arg string) bool {
+	if !strings.HasPrefix(arg, "-") {
+		return false
+	}
+	return s.denyHit(normalizeKey(strings.TrimLeft(arg, "-")), false)
+}
+
+// redactFlags masks the value of credential flags in free text: "--flag=value"
+// keeps the flag and masks the value, "--flag value" masks the next word.
+func (s *Sanitizer) redactFlags(t *tally, str string) string {
+	var b strings.Builder
+	last, maskNext := 0, false
+	for _, m := range tokenRE.FindAllStringIndex(str, -1) {
+		tok := str[m[0]:m[1]]
+		repl := ""
+		if maskNext {
+			maskNext, repl = false, redacted
+		} else if name, _, hasEq := strings.Cut(tok, "="); s.secretFlagName(name) {
+			if hasEq {
+				repl = name + "=" + redacted
+			} else {
+				maskNext = true
+			}
+		}
+		if repl != "" && repl != tok {
+			t.red++
+			b.WriteString(str[last:m[0]] + repl)
+			last = m[1]
+		}
+	}
+	return b.String() + str[last:]
+}
+
+// foldText maps look-alike and invisible characters that would hide a keyword
+// from the rules onto ASCII: format (Cf) runes are dropped, Unicode spaces and
+// line/paragraph separators become ' ', and full-width ASCII forms become their
+// ASCII counterparts.
+func foldText(str string) string {
+	return strings.Map(func(r rune) rune {
+		switch {
+		case unicode.Is(unicode.Cf, r):
+			return -1
+		case unicode.Is(unicode.Zs, r) || unicode.Is(unicode.Zl, r) || unicode.Is(unicode.Zp, r):
+			return ' '
+		case r >= 0xFF01 && r <= 0xFF5E:
+			return r - 0xFEE0
+		}
+		return r
+	}, str)
+}
+
 // redact replaces secret-looking content in str (token-level where possible).
 func (s *Sanitizer) redact(t *tally, str string) string {
+	str = foldText(str)
 	if protocol.LooksLikeSecret(str) {
 		t.red++
 		return redacted
@@ -230,6 +338,7 @@ func (s *Sanitizer) redact(t *tally, str string) string {
 			str = r.re.ReplaceAllString(str, r.repl)
 		}
 	}
+	str = s.redactFlags(t, str)
 	return tokenRE.ReplaceAllStringFunc(str, func(tok string) string {
 		if digestRE.MatchString(tok) {
 			return tok // content digests are exempt
@@ -405,7 +514,7 @@ func (s *Sanitizer) walk(t *tally, v any, depth int) any {
 		n := min(len(x), s.maxEntries)
 		out := make([]any, 0, n+1)
 		for i, e := range x[:n] {
-			if i > 0 && isSecretFlag(x[i-1]) { // the value of a preceding --password style flag
+			if i > 0 && s.isSecretFlag(x[i-1]) { // the value of a preceding --password style flag
 				t.red++
 				out = append(out, redacted)
 				continue
@@ -421,9 +530,11 @@ func (s *Sanitizer) walk(t *tally, v any, depth int) any {
 	return v // nil, bool, json.Number
 }
 
-func isSecretFlag(v any) bool {
+// isSecretFlag reports whether v is a credential flag whose value is the next
+// array element ("--flag=value" carries its value inline and is handled as text).
+func (s *Sanitizer) isSecretFlag(v any) bool {
 	str, ok := v.(string)
-	return ok && secretFlag.MatchString(str)
+	return ok && !strings.Contains(str, "=") && s.secretFlagName(str)
 }
 
 func truncatedDoc(n int) []byte {
