@@ -235,11 +235,12 @@ func TestSanitizerMapKeys(t *testing.T) {
 	}
 	got, san := sanitized(t, s, in)
 	// sorted keys: "[INVALID_KEY_0]"(0) "api_key=1"(1) "has space"(2) kkk..(3) ok_key(4) password(5)
-	want := `{"[INVALID_KEY_0]":5,"[INVALID_KEY_1]":"[REDACTED]","[INVALID_KEY_2]":2,"[INVALID_KEY_3]":3,"ok_key":1,"password":"[REDACTED]"}`
+	// default-deny: a replaced key never keeps its value
+	want := `{"[INVALID_KEY_0]":"[REDACTED]","[INVALID_KEY_1]":"[REDACTED]","[INVALID_KEY_2]":"[REDACTED]","[INVALID_KEY_3]":"[REDACTED]","ok_key":1,"password":"[REDACTED]"}`
 	if got != want {
 		t.Fatalf("got %s", got)
 	}
-	if san.Redactions != 6 {
+	if san.Redactions != 9 {
 		t.Fatalf("redactions %d", san.Redactions)
 	}
 }

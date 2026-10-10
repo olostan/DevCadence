@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/olostan/DevCadence/internal/errs"
@@ -42,9 +43,13 @@ const unserializableDoc = `{"_unserializable":true}`
 var (
 	jwtRE      = regexp.MustCompile(`eyJ[\w-]{10,}\.[\w-]{10,}\.[\w-]{5,}`)
 	pemRE      = regexp.MustCompile(`-----BEGIN [A-Z ]*PRIVATE KEY-----`)
-	userinfoRE = regexp.MustCompile(`://[^/\s:@]+:[^/\s@]+@`)
-	authRE     = regexp.MustCompile(`(?i)\bauthorization:[^\n]*`)
+	userinfoRE = regexp.MustCompile(`://[^/\s@]+@`)
+	authRE     = regexp.MustCompile(`(?i)\bauthorization\b\s*[:=][^\n]*`)
+	schemeRE   = regexp.MustCompile(`(?i)\b(?:bearer|basic)\s+\S{6,}`)
+	keywordRE  = regexp.MustCompile(`(?i)\b(?:password|passwd|pwd|secret|token|api[_-]?key|authorization|x-api-key)["']?(?:\s*[:=]\s*|\s+)\S+`)
+	prefixRE   = regexp.MustCompile(`\b(?:(?i:gh[pousr])_[A-Za-z0-9]{6,}|(?i:github_pat_)\w{6,}|(?i:glpat-)[\w-]{6,}|(?i:xox[bpas])-[\w-]{6,}|(?i:sk[-_])[\w-]{6,}|(?i:npm_)\w{6,}|(?i:aiza)[\w-]{8,}|A[KS]IA[0-9A-Z]{8,})`)
 	envRE      = regexp.MustCompile(`\b[A-Z][A-Z0-9_]{2,}=\S+`)
+	secretFlag = regexp.MustCompile(`(?i)^--?(?:[\w]+-)*(?:password|passwd|pwd|token|secret|api-?key|authorization|credentials?)$`)
 	digestRE   = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
 	tokenRE    = regexp.MustCompile(`\S+`)
 )
@@ -52,6 +57,14 @@ var (
 var denyKeys = []string{
 	"password", "passwd", "secret", "token", "apikey", "authorization",
 	"credential", "privatekey", "cookie", "bearer", "sessionid",
+	"pwd", "auth", "accesskey", "sshkey", "signature", "session", "jwt",
+}
+
+// counterKeys are the only token-named keys whose value may be kept, and only
+// when the value is a JSON number.
+var counterKeys = map[string]bool{
+	"inputtokens": true, "outputtokens": true, "totaltokens": true, "tokencount": true,
+	"tokenlimit": true, "tokenusage": true, "maxtokens": true, "cachedtokens": true, "reasoningtokens": true,
 }
 
 // rawKey reports whether a normalized key names raw content that must travel
@@ -143,7 +156,7 @@ func NewSanitizer(cfg SanitizerConfig) (*Sanitizer, error) {
 		deny: append([]string(nil), denyKeys...),
 		rules: []rule{
 			{jwtRE, redacted}, {pemRE, redacted}, {userinfoRE, "://" + redacted + "@"},
-			{authRE, redacted}, {envRE, redacted},
+			{authRE, redacted}, {schemeRE, redacted}, {keywordRE, redacted}, {prefixRE, redacted}, {envRE, redacted},
 		},
 	}
 	for _, k := range cfg.ExtraDenyKeys {
@@ -168,28 +181,37 @@ func DefaultSanitizer() *Sanitizer {
 	return s
 }
 
+// normalizeKey lowercases k and drops separators and invisible format (Cf)
+// runes. Non-ASCII keys are additionally invalid map keys (see key), so their
+// values are redacted regardless of what they normalize to.
 func normalizeKey(k string) string {
 	return strings.Map(func(r rune) rune {
 		switch r {
 		case '-', '_', '.', ' ':
 			return -1
 		}
+		if unicode.Is(unicode.Cf, r) {
+			return -1
+		}
 		return r
 	}, strings.ToLower(k))
 }
 
-func tokenAllowed(n string) bool {
-	return strings.HasSuffix(n, "tokens") || n == "tokencount" || n == "tokenlimit" || n == "tokenusage"
+// tokenAllowed reports whether the key is an exact token counter and the value
+// is numeric; every other token-named key is a credential.
+func tokenAllowed(n string, v any) bool {
+	_, num := v.(json.Number)
+	return num && counterKeys[n]
 }
 
 // keyRule reports the replacement value a key forces, if any.
-func (s *Sanitizer) keyRule(k string) (string, bool) {
+func (s *Sanitizer) keyRule(k string, v any) (string, bool) {
 	n := normalizeKey(k)
 	if rawKey(n) {
 		return "[OMITTED:raw]", true
 	}
 	for _, d := range s.deny {
-		if strings.Contains(n, d) && !(d == "token" && tokenAllowed(n)) {
+		if strings.Contains(n, d) && !(d == "token" && tokenAllowed(n, v)) {
 			return redacted, true
 		}
 	}
@@ -304,18 +326,49 @@ func (s *Sanitizer) Scalar(kind ScalarKind, v string) string {
 	return s.scalar(&t, kind, v)
 }
 
-func (s *Sanitizer) key(t *tally, k string, ordinal int) string {
+// key returns the persisted form of a map key; ok is false when the key was
+// replaced (invalid or secret-looking), in which case the value must not be
+// kept either (default-deny: the deny check cannot see the original name).
+func (s *Sanitizer) key(t *tally, k string, ordinal int) (string, bool) {
 	var scratch tally
 	if !validScalar(k, maxKeyBytes, "") || s.redact(&scratch, k) != k {
 		t.red++
-		return fmt.Sprintf("[INVALID_KEY_%d]", ordinal)
+		return fmt.Sprintf("[INVALID_KEY_%d]", ordinal), false
 	}
-	return k
+	return k, true
+}
+
+// omitBytes replaces []byte values (found in maps and slices) by a marker so
+// their base64 form is never persisted. Maps and slices are copied; other
+// values (including structs with byte fields) pass through to the heuristics.
+func omitBytes(t *tally, v any, depth int) any {
+	if depth > DefaultMaxDepth+1 {
+		return v
+	}
+	switch x := v.(type) {
+	case []byte:
+		t.trunc++
+		return "[OMITTED:bytes]"
+	case map[string]any:
+		out := make(map[string]any, len(x))
+		for k, e := range x {
+			out[k] = omitBytes(t, e, depth+1)
+		}
+		return out
+	case []any:
+		out := make([]any, len(x))
+		for i, e := range x {
+			out[i] = omitBytes(t, e, depth+1)
+		}
+		return out
+	}
+	return v
 }
 
 func (s *Sanitizer) walk(t *tally, v any, depth int) any {
 	if depth > s.maxDepth {
 		t.trunc++
+		t.replaced = true
 		return "[DEPTH_LIMIT]"
 	}
 	switch x := v.(type) {
@@ -334,10 +387,15 @@ func (s *Sanitizer) walk(t *tally, v any, depth int) any {
 				t.trunc++
 				break
 			}
-			ek := s.key(t, k, i)
-			if repl, ok := s.keyRule(k); ok {
+			ek, valid := s.key(t, k, i)
+			if repl, ok := s.keyRule(k, x[k]); ok {
 				t.red++
 				out[ek] = repl
+				continue
+			}
+			if !valid {
+				t.red++
+				out[ek] = redacted
 				continue
 			}
 			out[ek] = s.walk(t, x[k], depth+1)
@@ -346,7 +404,12 @@ func (s *Sanitizer) walk(t *tally, v any, depth int) any {
 	case []any:
 		n := min(len(x), s.maxEntries)
 		out := make([]any, 0, n+1)
-		for _, e := range x[:n] {
+		for i, e := range x[:n] {
+			if i > 0 && isSecretFlag(x[i-1]) { // the value of a preceding --password style flag
+				t.red++
+				out = append(out, redacted)
+				continue
+			}
 			out = append(out, s.walk(t, e, depth+1))
 		}
 		if len(x) > n {
@@ -356,6 +419,11 @@ func (s *Sanitizer) walk(t *tally, v any, depth int) any {
 		return out
 	}
 	return v // nil, bool, json.Number
+}
+
+func isSecretFlag(v any) bool {
+	str, ok := v.(string)
+	return ok && secretFlag.MatchString(str)
 }
 
 func truncatedDoc(n int) []byte {
@@ -385,6 +453,11 @@ func (s *Sanitizer) json(v any) (out []byte, t tally) {
 	if n := rawLen(v); n > MaxMarshalBytes {
 		return truncatedDoc(n), tally{replaced: true}
 	}
+	switch v.(type) {
+	case []byte:
+		return []byte(`"[OMITTED:bytes]"`), tally{trunc: 1}
+	}
+	v = omitBytes(&t, v, 0)
 	raw, err := json.Marshal(v)
 	if err != nil {
 		return []byte(unserializableDoc), tally{replaced: true}
@@ -395,7 +468,9 @@ func (s *Sanitizer) json(v any) (out []byte, t tally) {
 	var tree any
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	dec.UseNumber()
-	_ = dec.Decode(&tree) // json.Marshal output always decodes
+	if err := dec.Decode(&tree); err != nil { // e.g. nesting beyond the decoder limit
+		return []byte(unserializableDoc), tally{replaced: true}
+	}
 	out, _ = json.Marshal(s.walk(&t, tree, 0))
 	if len(out) > s.maxJSON {
 		return truncatedDoc(len(out)), tally{replaced: true}
