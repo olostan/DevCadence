@@ -46,33 +46,62 @@ const unserializableDoc = `{"_unserializable":true}`
 // \b cannot be used because '_' is a word character).
 const credWords = `password|passwd|pwd|passphrase|secret|token|api[_-]?key|private[_-]?key|access[_-]?key|secret[_-]?key|` +
 	`authorization|cookie|credential|bearer|jwt|session[_-]?id|ssh[_-]?key|connection[_-]?string|encryption[_-]?key|` +
-	`signing[_-]?key|hmac|mnemonic|x-amz-signature`
+	`signing[_-]?key|hmac|mnemonic|signature|userpass|userpwd|dbpass|dbpw|account[_-]?key|license[_-]?key|key[_-]?data|client[_-]?key`
 
 // assignValue is the value of an assignment: a quoted string (which may hold
 // spaces) or the next whitespace-delimited word.
 const assignValue = `(?:"[^"]*"|'[^']*'|\S+)`
 
+// quoteSlot is the optional quote between a name and its operator. The text is
+// unescaped first (see foldText) so the backslash tolerance is defense in depth.
+const quoteSlot = `(?:\\*["'])?\]?`
+
+// assignOp is an assignment operator: ":", "=", "=>" (PHP, Ruby, Lua), ":="
+// and "?=" (Make, Go).
+const assignOp = `(?:=>|::=|:=|\?=|[:=])`
+
 var (
-	jwtRE      = regexp.MustCompile(`eyJ[\w-]{10,}\.[\w-]{10,}\.[\w-]{5,}`)
-	pemRE      = regexp.MustCompile(`-----BEGIN [A-Z ]*PRIVATE KEY[A-Z ]*-----[^\n]*`)
-	sshKeyRE   = regexp.MustCompile(`\bssh-(?:rsa|dss|ed25519)\s+AAAA\S*`)
-	userinfoRE = regexp.MustCompile(`://[^/\s@]+@`)
+	jwtRE    = regexp.MustCompile(`eyJ[\w-]{10,}\.[\w-]{10,}\.[\w-]{5,}`)
+	pemRE    = regexp.MustCompile(`-----BEGIN [A-Z ]*PRIVATE KEY[A-Z ]*-----[^\n]*`)
+	sshKeyRE = regexp.MustCompile(`\bssh-(?:rsa|dss|ed25519)\s+AAAA\S*`)
+	// userinfoRE: the userinfo ends at the LAST '@' before the first '/' (a '@'
+	// inside the password must not leak its tail). A '/' inside an unescaped
+	// password ends the match early (documented limit).
+	userinfoRE = regexp.MustCompile(`//[^/\s]*@`)
+	// dsnRE covers scheme-less "user:pass@host" (a host with a dot, or MySQL's
+	// "@tcp(" form); "image:1.2@sha256:..." digests do not match.
+	dsnRE = regexp.MustCompile(`[\w.%+-]+:[^\s@/:'"]+@(?:[\w-]+\.[\w.-]+|\w+\()`)
+	// webhookRE: Slack and Discord webhook URLs carry the secret in the path.
+	webhookRE = regexp.MustCompile(`(?i)hooks\.slack\.com/(?:services|workflows|triggers)/[\w/-]+|discord(?:app)?\.com/api/webhooks/\d+/[\w-]+`)
+	// dockerLoginRE: "docker login ... -p SECRET" (a bare -p is a port flag in
+	// other commands, so only the login form is a credential).
+	dockerLoginRE = regexp.MustCompile(`((?:docker|podman|buildah)\s+login\b[^\n]*?\s-p\s*)\S+`)
+	// queryKeyRE: "key" is a credential only in query position (?key=, &key=).
+	queryKeyRE = regexp.MustCompile(`(?i)([?&;#])key=\S+`)
 	// authRE and cookieRE redact to the end of the line: the value may hold a
 	// scheme and several words or ';'-separated pairs.
-	authRE   = regexp.MustCompile(`(?i)authorization["']?\s*[:=][^\n]*`)
-	cookieRE = regexp.MustCompile(`(?i)cookie["']?\s*[:=][^\n]*`)
+	authRE   = regexp.MustCompile(`(?i)authorization` + quoteSlot + `\s*` + assignOp + `[^\n]*`)
+	cookieRE = regexp.MustCompile(`(?i)cookie` + quoteSlot + `\s*` + assignOp + `[^\n]*`)
 	schemeRE = regexp.MustCompile(`(?i)\b(?:bearer|basic)\s+\S{6,}`)
-	// assignRE: <name containing a credential word> [quote] (:|=) <value>.
-	assignRE = regexp.MustCompile(`(?i)[\w.-]*(?:` + credWords + `)[\w.-]*["']?\s*[:=]\s*` + assignValue)
+	// assignRE: <name containing a credential word> [quote] <operator> <value>.
+	assignRE = regexp.MustCompile(`(?i)(?:` + credWords + `)[\w.-]*` + quoteSlot + `\s*` + assignOp + `\s*` + assignValue)
 	// shortAssignRE covers short names that are credentials only as a whole
-	// name or a name suffix (pass, pw, otp, seed, auth).
-	shortAssignRE = regexp.MustCompile(`(?i)\b(?:[\w.-]*[_.-])?(?:pass|pw|otp|seed|auth)\b["']?\s*[:=]\s*` + assignValue)
-	// keywordRE is the whitespace-separated form ("password hunter2").
-	keywordRE = regexp.MustCompile(`(?i)\b(?:password|passwd|pwd|passphrase|secret|token|api[_-]?key|authorization|x-api-key)\b["']?\s+\S+`)
-	prefixRE  = regexp.MustCompile(`\b(?:(?i:gh[pousr])_[A-Za-z0-9]{6,}|(?i:github_pat_)\w{6,}|(?i:glpat-)[\w-]{6,}|(?i:xox[bpas])-[\w-]{6,}|(?i:xapp-)[\w-]{6,}|(?i:sk[-_])[\w-]{6,}|(?i:npm_)\w{6,}|(?i:hf_)[A-Za-z0-9]{10,}|(?i:pypi-)[\w-]{10,}|(?i:aiza)[\w-]{8,}|ya29\.[\w-]{10,}|SG\.[\w-]{10,}|A[KS]IA[0-9A-Z]{8,})`)
+	// name or a name suffix (pass, pw, otp, seed, auth, sig).
+	shortAssignRE = regexp.MustCompile(`(?i)\b(?:[\w.-]*[_.-])?(?:pass|pw|[th]?otp|seed|auth|sig)\b` + quoteSlot + `\s*` + assignOp + `\s*` + assignValue)
+	// camelAssignRE covers camelCase suffixes (dbPass=, adminPw:), which carry no
+	// separator for shortAssignRE; it is case-sensitive so "bypass" and
+	// "compass" do not match.
+	camelAssignRE = regexp.MustCompile(`[\w.-]*[A-Za-z0-9](?:Pass|Pw|Otp)\b` + quoteSlot + `\s*` + assignOp + `\s*` + assignValue)
+	// keywordRE is the whitespace-separated form ("password hunter2",
+	// "password is hunter2", "_authToken hunter2").
+	keywordRE = regexp.MustCompile(`(?i)(?:password|passwd|pwd|passphrase|secret|token|api[_-]?key|authorization|x-api-key|secret[_-]?key|private[_-]?key|access[_-]?key|secret[_-]?access[_-]?key)\b` + quoteSlot + `\s+(?:(?:is|was|are|were|=>|::=|:=|\?=|[:=])\s+)?\S+`)
+	prefixRE  = regexp.MustCompile(`\b(?:(?i:gh[pousr])_[A-Za-z0-9]{6,}|(?i:github_pat_)\w{6,}|(?i:glpat-)[\w-]{6,}|(?i:xox[a-z])-[\w-]{6,}|(?i:xapp-)[\w-]{6,}|(?i:sk[-_])[\w-]{6,}|(?i:rk_(?:live|test)_)\w{6,}|(?i:whsec_)\w{6,}|(?i:shp(?:at|ca|pa)_)\w{6,}|(?i:dop_v1_)\w{6,}|(?i:npm_)\w{6,}|(?i:hf_)[A-Za-z0-9]{8,}|(?i:pypi-)[\w-]{6,}|(?i:aiza)[\w-]{8,}|ya29\.[\w-]{6,}|SG\.[\w-]{6,}|SK[0-9a-f]{32}|A[KS]IA[0-9A-Z]{8,})`)
 	envRE     = regexp.MustCompile(`\b[A-Z][A-Z0-9_]{2,}=` + assignValue)
 	digestRE  = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
 	tokenRE   = regexp.MustCompile(`\S+`)
+	// escapedRE finds a run of backslashes before a quote or slash (JSON string
+	// escapes of any nesting depth).
+	escapedRE = regexp.MustCompile(`\\+(["'/])`)
 )
 
 // denyKeys are the substrings (of a normalized key or flag name) that make a
@@ -90,20 +119,34 @@ var denyKeys = []string{
 	"credential", "privatekey", "cookie", "bearer", "sessionid",
 	"pwd", "auth", "accesskey", "sshkey", "signature", "session", "jwt",
 	"passphrase", "secretkey", "clientsecret", "dsn", "connectionstring",
-	"encryptionkey", "signingkey", "hmac", "mnemonic",
+	"encryptionkey", "signingkey", "hmac", "mnemonic", "userpass", "userpwd", "dbpass",
+	"accountkey", "licensekey", "oauth",
 }
 
 // denyExact are normalized names that are credentials only as a whole name
 // (substring matching would over-redact ordinary words): pass (as in --pass),
 // pw, otp (one-time passwords) and seed (RNG or wallet seeds; "seeded" or
 // "seedling" are not).
-var denyExact = map[string]bool{"pass": true, "pw": true, "otp": true, "seed": true}
+//
+// "key", "sig", "salt" and "license" are whole-name credentials for the same
+// reason ("api_key" is caught by substring; "cache_key" or "sort_key" are not
+// credentials).
+var denyExact = map[string]bool{
+	"pass": true, "pw": true, "otp": true, "totp": true, "hotp": true, "seed": true, "key": true, "sig": true, "salt": true, "license": true,
+}
+
+// denySegment are the name segments (split on "-_. " and camelCase boundaries)
+// that make a name a credential wherever they appear: db_pass, DB_PASS,
+// mysql-pw, adminPass. "seed" stays whole-name only.
+var denySegment = map[string]bool{"pass": true, "pw": true, "otp": true, "totp": true, "hotp": true}
 
 // counterKeys are the only token-named keys whose value may be kept, and only
 // when the value is a JSON number.
 var counterKeys = map[string]bool{
 	"inputtokens": true, "outputtokens": true, "totaltokens": true, "tokencount": true,
 	"tokenlimit": true, "tokenusage": true, "maxtokens": true, "cachedtokens": true, "reasoningtokens": true,
+	"prompttokens": true, "completiontokens": true, "cachereadinputtokens": true, "cachecreationinputtokens": true,
+	"maxoutputtokens": true,
 }
 
 // rawKey reports whether a normalized key names raw content that must travel
@@ -150,6 +193,7 @@ type rule struct {
 // immutable and safe for concurrent use.
 type Sanitizer struct {
 	maxString, maxDepth, maxEntries, maxJSON int
+	window, budget                           int // redaction window and per-record budget (see redactWindow)
 	deny                                     []string
 	rules                                    []rule
 }
@@ -158,6 +202,9 @@ type Sanitizer struct {
 type tally struct {
 	red, trunc uint32
 	replaced   bool
+	// scan is the number of free-text bytes run through the rules so far (the
+	// work budget, see redactBudget); it is not a reported counter.
+	scan int
 }
 
 func (t tally) wire() wire.Sanitization {
@@ -165,7 +212,7 @@ func (t tally) wire() wire.Sanitization {
 }
 
 func (t tally) ptr() *wire.Sanitization {
-	if t == (tally{}) {
+	if t.red == 0 && t.trunc == 0 && !t.replaced {
 		return nil
 	}
 	w := t.wire()
@@ -192,11 +239,13 @@ func NewSanitizer(cfg SanitizerConfig) (*Sanitizer, error) {
 	}
 	s := &Sanitizer{
 		maxString: cfg.MaxStringBytes, maxDepth: cfg.MaxDepth, maxEntries: cfg.MaxEntries, maxJSON: cfg.MaxJSONBytes,
+		window: redactWindow, budget: redactBudget,
 		deny: append([]string(nil), denyKeys...),
 		rules: []rule{
-			{jwtRE, redacted}, {pemRE, redacted}, {userinfoRE, "://" + redacted + "@"},
+			{jwtRE, redacted}, {pemRE, redacted}, {userinfoRE, "//" + redacted + "@"}, {dsnRE, redacted}, {webhookRE, redacted},
 			{sshKeyRE, redacted}, {authRE, redacted}, {cookieRE, redacted}, {schemeRE, redacted}, {assignRE, redacted},
-			{shortAssignRE, redacted}, {keywordRE, redacted}, {prefixRE, redacted}, {envRE, redacted},
+			{shortAssignRE, redacted}, {camelAssignRE, redacted}, {queryKeyRE, "${1}" + redacted}, {dockerLoginRE, "${1}" + redacted}, {keywordRE, redacted},
+			{prefixRE, redacted}, {envRE, redacted},
 		},
 	}
 	for _, k := range cfg.ExtraDenyKeys {
@@ -250,21 +299,68 @@ func (s *Sanitizer) keyRule(k string, v any) (string, bool) {
 	if rawKey(n) {
 		return "[OMITTED:raw]", true
 	}
-	if s.denyHit(n, tokenAllowed(n, v)) {
+	if s.denyHit(k, tokenAllowed(n, v)) {
 		return redacted, true
 	}
 	return "", false
 }
 
-// denyHit reports whether the normalized name n is a credential name. It is the
-// single decision shared by structured keys and CLI flags. counterOK exempts
-// the "token" substring (numeric token counters).
-func (s *Sanitizer) denyHit(n string, counterOK bool) bool {
+// authorRepl removes "author" (author, authority, authoritative) before the
+// "auth" substring test; "authorization" is a deny substring of its own.
+var authorRepl = strings.NewReplacer("author", "")
+
+// nameSegments splits a raw key or flag name on "-_. " and camelCase boundaries
+// into lowercase segments (invisible Cf runes are dropped first).
+func nameSegments(raw string) []string {
+	var segs []string
+	var cur []rune
+	var prev rune // last appended rune in its original case
+	flush := func() {
+		if len(cur) > 0 {
+			segs = append(segs, string(cur))
+			cur = cur[:0]
+		}
+	}
+	rs := []rune(raw)
+	for i, r := range rs {
+		switch {
+		case unicode.Is(unicode.Cf, r):
+		case r == '-' || r == '_' || r == '.' || r == ' ':
+			flush()
+		default:
+			if unicode.IsUpper(r) && len(cur) > 0 {
+				nextLower := i+1 < len(rs) && unicode.IsLower(rs[i+1])
+				if unicode.IsLower(prev) || unicode.IsDigit(prev) || (unicode.IsUpper(prev) && nextLower) {
+					flush()
+				}
+			}
+			cur = append(cur, unicode.ToLower(r))
+			prev = r
+		}
+	}
+	flush()
+	return segs
+}
+
+// denyHit reports whether the raw name is a credential name. It is the single
+// decision shared by structured keys and CLI flags. counterOK exempts the
+// "token" substring (numeric token counters).
+func (s *Sanitizer) denyHit(raw string, counterOK bool) bool {
+	n := normalizeKey(raw)
 	if denyExact[n] {
 		return true
 	}
+	for _, seg := range nameSegments(raw) {
+		if denySegment[seg] {
+			return true
+		}
+	}
 	for _, d := range s.deny {
-		if strings.Contains(n, d) && !(counterOK && d == "token") {
+		hay := n
+		if d == "auth" {
+			hay = authorRepl.Replace(n)
+		}
+		if strings.Contains(hay, d) && !(counterOK && d == "token") {
 			return true
 		}
 	}
@@ -278,20 +374,40 @@ func (s *Sanitizer) secretFlagName(arg string) bool {
 	if !strings.HasPrefix(arg, "-") {
 		return false
 	}
-	return s.denyHit(normalizeKey(strings.TrimLeft(arg, "-")), false)
+	return s.denyHit(strings.TrimLeft(arg, "-"), false)
+}
+
+// userFlagName reports flags whose value is "user:password" (curl, kubectl).
+// Only the separate and "=" forms are handled; "-uuser:pass" and "mysql -pSECRET"
+// are documented limits.
+func userFlagName(name string) bool {
+	return name == "-u" || name == "--user" || name == "--proxy-user"
 }
 
 // redactFlags masks the value of credential flags in free text: "--flag=value"
 // keeps the flag and masks the value, "--flag value" masks the next word.
 func (s *Sanitizer) redactFlags(t *tally, str string) string {
 	var b strings.Builder
-	last, maskNext := 0, false
+	last, maskNext, maskColon := 0, false, false
 	for _, m := range tokenRE.FindAllStringIndex(str, -1) {
 		tok := str[m[0]:m[1]]
 		repl := ""
-		if maskNext {
+		name, val, hasEq := strings.Cut(tok, "=")
+		switch {
+		case maskNext:
 			maskNext, repl = false, redacted
-		} else if name, _, hasEq := strings.Cut(tok, "="); s.secretFlagName(name) {
+		case maskColon:
+			maskColon = false
+			if strings.Contains(tok, ":") {
+				repl = redacted
+			}
+		case userFlagName(name):
+			if !hasEq {
+				maskColon = true
+			} else if strings.Contains(val, ":") {
+				repl = name + "=" + redacted
+			}
+		case s.secretFlagName(name):
 			if hasEq {
 				repl = name + "=" + redacted
 			} else {
@@ -311,7 +427,14 @@ func (s *Sanitizer) redactFlags(t *tally, str string) string {
 // from the rules onto ASCII: format (Cf) runes are dropped, Unicode spaces and
 // line/paragraph separators become ' ', and full-width ASCII forms become their
 // ASCII counterparts.
+//
+// JSON string escapes are also undone for matching: a run of backslashes before
+// a quote or slash is dropped, so a double-encoded body (`{\"password\":\"x\"}`)
+// is seen as JSON. The persisted text is this folded text, never the original.
 func foldText(str string) string {
+	if strings.Contains(str, `\`) {
+		str = escapedRE.ReplaceAllString(str, "$1")
+	}
 	return strings.Map(func(r rune) rune {
 		switch {
 		case unicode.Is(unicode.Cf, r):
@@ -372,41 +495,80 @@ func lengthBucket(n int) string {
 	return "over16k"
 }
 
+// Free-text work bounds. The rules run on at most redactWindow bytes of one
+// string and on at most redactBudget bytes per record, so adversarial 1 MiB
+// inputs cost milliseconds rather than seconds. Anything beyond is truncated or
+// omitted (never persisted unredacted).
+const (
+	redactWindow = 8192
+	redactBudget = 256 << 10
+)
+
+// windowText returns the prefix of str that is redacted: at most redactWindow
+// bytes, cut at a UTF-8 boundary and, when whitespace allows, before the last
+// token so a secret is never cut in the middle by the window.
+func (s *Sanitizer) windowText(str string) string {
+	if len(str) <= s.window {
+		return str
+	}
+	w := truncUTF8(str, s.window)
+	if i := strings.LastIndexAny(w, " \t"); i > 0 {
+		w = w[:i]
+	}
+	return w
+}
+
 // text sanitizes free text: multiline omission, secret redaction, truncation
-// at a UTF-8 boundary. The truncation suffix is appended after the cap.
+// at a UTF-8 boundary. The truncation suffix is appended after the cap. Text
+// beyond the redaction window is dropped and counted in the suffix.
 func (s *Sanitizer) text(t *tally, str string) string {
 	if strings.Contains(strings.TrimSuffix(str, "\n"), "\n") {
 		t.trunc++
 		return "[OMITTED:multiline " + lengthBucket(len(str)) + "]"
 	}
-	str = s.redact(t, str)
-	if len(str) > s.maxString {
-		kept := truncUTF8(str, s.maxString)
+	w := s.windowText(str)
+	if t.scan += len(w); t.scan > s.budget {
 		t.trunc++
-		return fmt.Sprintf("%s...[truncated %d bytes]", kept, len(str)-len(kept))
+		return "[OMITTED:budget]"
 	}
-	return str
+	out := s.redact(t, w)
+	dropped := len(str) - len(w)
+	if len(out) > s.maxString {
+		kept := truncUTF8(out, s.maxString)
+		t.trunc++
+		return fmt.Sprintf("%s...[truncated %d bytes]", kept, len(out)-len(kept)+dropped)
+	}
+	if dropped > 0 {
+		t.trunc++
+		return fmt.Sprintf("%s...[truncated %d bytes]", out, dropped)
+	}
+	return out
 }
 
-func scalarLimits(k ScalarKind) (int, string) {
+// scalarLimits returns the byte limit, the extra ASCII characters and whether
+// non-ASCII letters, marks and digits are allowed (paths and locators may hold
+// spaces and non-ASCII names; every secret rule still runs afterwards).
+func scalarLimits(k ScalarKind) (limit int, extra string, wide bool) {
 	switch k {
 	case ScalarLocator:
-		return maxLocatorBytes, ""
+		return maxLocatorBytes, " ", true
 	case ScalarMediaType:
-		return maxScalarBytes, "+"
+		return maxScalarBytes, "+", false
 	}
-	return maxScalarBytes, ""
+	return maxScalarBytes, "", false
 }
 
-// validScalar implements ^[A-Za-z0-9._:/@=-]{0,limit}$ plus extra characters.
-func validScalar(v string, limit int, extra string) bool {
+// validScalar implements ^[A-Za-z0-9._:/@=-]{0,limit}$ plus extra characters and,
+// when wide, non-ASCII letters, marks and numbers (control, format and
+// separator runes and invalid UTF-8 are never valid).
+func validScalar(v string, limit int, extra string, wide bool) bool {
 	if len(v) > limit {
 		return false
 	}
-	for i := 0; i < len(v); i++ {
-		c := v[i]
-		ok := c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' ||
-			strings.IndexByte("._:/@=-", c) >= 0 || strings.IndexByte(extra, c) >= 0
+	for _, r := range v {
+		ok := r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' ||
+			r < 0x80 && strings.ContainsRune("._:/@=-"+extra, r) ||
+			wide && r >= 0x80 && r != utf8.RuneError && (unicode.IsLetter(r) || unicode.IsMark(r) || unicode.IsNumber(r))
 		if !ok {
 			return false
 		}
@@ -415,8 +577,8 @@ func validScalar(v string, limit int, extra string) bool {
 }
 
 func (s *Sanitizer) scalar(t *tally, kind ScalarKind, v string) string {
-	limit, extra := scalarLimits(kind)
-	if !validScalar(v, limit, extra) {
+	limit, extra, wide := scalarLimits(kind)
+	if !validScalar(v, limit, extra, wide) {
 		t.red++
 		return invalidValue
 	}
@@ -440,7 +602,7 @@ func (s *Sanitizer) Scalar(kind ScalarKind, v string) string {
 // kept either (default-deny: the deny check cannot see the original name).
 func (s *Sanitizer) key(t *tally, k string, ordinal int) (string, bool) {
 	var scratch tally
-	if !validScalar(k, maxKeyBytes, "") || s.redact(&scratch, k) != k {
+	if !validScalar(k, maxKeyBytes, "", false) || s.redact(&scratch, k) != k {
 		t.red++
 		return fmt.Sprintf("[INVALID_KEY_%d]", ordinal), false
 	}
@@ -490,6 +652,7 @@ func (s *Sanitizer) walk(t *tally, v any, depth int) any {
 		}
 		sort.Strings(keys)
 		out := make(map[string]any)
+		pairKey := s.pairValueKey(x)
 		for i, k := range keys {
 			if i >= s.maxEntries {
 				out["_truncated"] = json.Number(strconv.Itoa(len(keys) - i))
@@ -497,7 +660,10 @@ func (s *Sanitizer) walk(t *tally, v any, depth int) any {
 				break
 			}
 			ek, valid := s.key(t, k, i)
-			if repl, ok := s.keyRule(k, x[k]); ok {
+			if repl, ok := s.keyRule(k, x[k]); ok || (pairKey != "" && k == pairKey) {
+				if !ok {
+					repl = redacted
+				}
 				t.red++
 				out[ek] = repl
 				continue
@@ -514,7 +680,7 @@ func (s *Sanitizer) walk(t *tally, v any, depth int) any {
 		n := min(len(x), s.maxEntries)
 		out := make([]any, 0, n+1)
 		for i, e := range x[:n] {
-			if i > 0 && s.isSecretFlag(x[i-1]) { // the value of a preceding --password style flag
+			if i > 0 && s.maskValue(x[i-1], e) { // the value of a preceding --password style flag
 				t.red++
 				out = append(out, redacted)
 				continue
@@ -530,11 +696,43 @@ func (s *Sanitizer) walk(t *tally, v any, depth int) any {
 	return v // nil, bool, json.Number
 }
 
-// isSecretFlag reports whether v is a credential flag whose value is the next
-// array element ("--flag=value" carries its value inline and is handled as text).
-func (s *Sanitizer) isSecretFlag(v any) bool {
-	str, ok := v.(string)
-	return ok && !strings.Contains(str, "=") && s.secretFlagName(str)
+// maskValue reports whether cur is the value of the credential flag prev
+// ("--flag=value" carries its value inline and is handled as text); a user flag
+// masks only a "user:password" value.
+func (s *Sanitizer) maskValue(prev, cur any) bool {
+	str, ok := prev.(string)
+	if !ok || strings.Contains(str, "=") {
+		return false
+	}
+	if userFlagName(str) {
+		c, _ := cur.(string)
+		return strings.Contains(c, ":")
+	}
+	return s.secretFlagName(str)
+}
+
+// pairValueKey implements name/value pairs ({"name":"DB_PASSWORD","value":"x"},
+// the Kubernetes env shape, or {"key":..,"value":..} headers): when a name-like
+// string field is a credential name, the sibling "value" key is returned so the
+// walk redacts it. It returns "" when the map is not such a pair.
+func (s *Sanitizer) pairValueKey(m map[string]any) string {
+	valKey := ""
+	var val any
+	for k, e := range m {
+		if strings.EqualFold(k, "value") {
+			valKey, val = k, e
+		}
+	}
+	if valKey == "" {
+		return ""
+	}
+	for k, e := range m {
+		if name, ok := e.(string); ok && (strings.EqualFold(k, "name") || strings.EqualFold(k, "key")) &&
+			s.denyHit(name, tokenAllowed(normalizeKey(name), val)) {
+			return valKey
+		}
+	}
+	return ""
 }
 
 func truncatedDoc(n int) []byte {
