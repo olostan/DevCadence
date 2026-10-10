@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -559,5 +560,55 @@ func TestServiceReadinessVerification(t *testing.T) {
 	}
 	if errs.CategoryOf(err) != errs.CategoryProbeTimeout {
 		t.Errorf("Expected CategoryProbeTimeout, got: %v", err)
+	}
+}
+
+// TestAllocateUnusedPortRetriesConflictingPorts pins the pre-flight conflict
+// branches that otherwise run only when an unrelated listener happens to hold
+// the chosen port, which made whole-module coverage nondeterministic.
+func TestAllocateUnusedPortRetriesConflictingPorts(t *testing.T) {
+	probes := 0
+	port, err := allocateUnusedPortWith(func(int) bool { probes++; return probes == 1 })
+	if err != nil || port <= 0 || probes != 2 {
+		t.Fatalf("port = %d, err = %v after %d probes; one conflict must be retried", port, err, probes)
+	}
+	probes = 0
+	if _, err := allocateUnusedPortWith(func(int) bool { probes++; return true }); err == nil || probes != 3 {
+		t.Fatalf("err = %v after %d probes; persistent conflict must fail after 3 attempts", err, probes)
+	}
+}
+
+// TestPortRespondsSeesOnlyAcceptingPorts pins both outcomes of the pre-flight
+// probe against a real loopback listener and a port that was just closed.
+func TestPortRespondsSeesOnlyAcceptingPorts(t *testing.T) {
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	port := l.Addr().(*net.TCPAddr).Port
+	if !portResponds(port) {
+		t.Fatalf("portResponds(%d) = false while a listener accepts on it", port)
+	}
+	if err := l.Close(); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+	if portResponds(port) {
+		t.Fatalf("portResponds(%d) = true after its listener closed", port)
+	}
+}
+
+// TestProbeHTTPReportsUnreachableServices pins the connection-failure branch
+// against a port that was just closed.
+func TestProbeHTTPReportsUnreachableServices(t *testing.T) {
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	port := l.Addr().(*net.TCPAddr).Port
+	if err := l.Close(); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+	if probeHTTP(port, "/", 0, "") {
+		t.Fatalf("probeHTTP succeeded against closed port %d", port)
 	}
 }
