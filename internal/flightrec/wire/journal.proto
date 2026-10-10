@@ -1,0 +1,62 @@
+// Normative schema of the DevCadence flight-recorder journal (ADR-0026).
+// Field numbers are frozen once merged. The Go codec in this package is
+// hand-written over protowire; tests keep it identical to this file.
+syntax = "proto3";
+package devcadence.trace.v1;
+import "google/protobuf/any.proto";
+
+enum RecordType { RECORD_TYPE_UNSPECIFIED = 0; OPERATION_START = 1; OPERATION_END = 2; OBSERVATION = 3; JOURNAL_HEALTH = 4; }
+enum Durability { DURABILITY_UNSPECIFIED = 0; DURABILITY_CRITICAL = 1; DURABILITY_DIAGNOSTIC = 2; }
+enum Outcome { OUTCOME_UNSPECIFIED = 0; OUTCOME_COMPLETED = 1; OUTCOME_FAILED = 2; OUTCOME_CANCELLED = 3; OUTCOME_PANIC = 4; }
+enum ObservationKind { OBSERVATION_KIND_UNSPECIFIED = 0; PROGRESS = 1; DECISION = 2; FACT = 3; AUDIT = 4; }
+enum EvidenceState { EVIDENCE_STATE_UNSPECIFIED = 0; OBSERVED = 1; DOCUMENTED = 2; INFERRED = 3; CONFIRMED = 4; MISSING = 5; UNKNOWN = 6; }
+enum HealthKind { HEALTH_KIND_UNSPECIFIED = 0; STREAM_STARTED = 1; SEGMENT_ROTATED = 2; DROPPED_DIAGNOSTICS = 3; WRITER_ERROR = 4; RECOVERY_REOPEN = 5; PATH_FALLBACK = 6; DEGRADED_NOOP = 7; NODE_ID_EPHEMERAL = 8; }
+
+message Stamp { int64 wall_unix_nanos = 1; int64 mono_nanos = 2; }
+message ArtifactRef {
+  string id = 1; string kind = 2; string locator = 3; string media_type = 4;
+  string digest = 5;
+  int64 size_bytes = 6; bool truncated = 7; bool digest_verified = 8;
+}
+message Link { string relation = 1; string trace_id = 2; string operation_id = 3; string event_id = 4; }
+message Subject { string kind = 1; string id = 2; }
+message Provenance { string source_kind = 1; string source_ref = 2; string observed_by = 3; string method = 4; Stamp observed_at = 5; }
+message Sanitization { uint32 redactions = 1; uint32 truncations = 2; bool payload_replaced = 3; }
+message Usage { uint64 input_tokens = 1; uint64 output_tokens = 2; uint64 duration_nanos = 3; }
+message PathAttempt { string source = 1; string path = 2; string error_code = 3; }
+
+message JournalRecord {
+  uint32 schema_version = 1;
+  string event_id = 2; string node_id = 3; string runtime_id = 4;
+  uint64 stream_sequence = 5;
+  RecordType type = 6;
+  Durability durability = 7;
+  string stream_id = 8;
+  oneof body { OperationStart start = 10; OperationEnd end = 11; Observation observation = 12; JournalHealth health = 13; }
+}
+message OperationStart {
+  string trace_id = 1; string operation_id = 2; string parent_operation_id = 3;
+  repeated Link links = 4;
+  string operation_name = 5; Stamp at = 6; bytes json_metadata = 7;
+  string actor_id = 8; string task_id = 9; string attempt_id = 10; string canonical_event_id = 11;
+  repeated ArtifactRef artifacts = 12; Sanitization sanitization = 13;
+}
+message OperationEnd {
+  string operation_id = 1; Stamp at = 2; Outcome outcome = 3; string error_code = 4; string error_summary = 5;
+  bytes json_result = 6; Usage usage = 7; repeated ArtifactRef artifacts = 8; Sanitization sanitization = 9;
+}
+message Observation {
+  string operation_id = 1; Stamp at = 2; string name = 3; ObservationKind kind = 4;
+  string reason_code = 5; Subject subject = 6; Provenance provenance = 7; EvidenceState evidence = 8;
+  repeated ArtifactRef artifacts = 9; repeated Link links = 10; Sanitization sanitization = 11;
+  oneof payload { bytes json_payload = 20; google.protobuf.Any proto_payload = 21; }
+}
+message JournalHealth {
+  HealthKind kind = 1; Stamp at = 2; uint64 dropped_count = 3; uint64 first_missing_sequence = 4; uint64 last_missing_sequence = 5;
+  string detail_code = 6; string detail = 7; repeated PathAttempt attempts = 8; string selected_source = 9; int64 offset = 10;
+}
+message SegmentHeader {
+  uint32 schema_version = 1; string node_id = 2; string runtime_id = 3; string stream_id = 4;
+  uint32 segment_index = 5; uint64 first_sequence = 6; Stamp created_at = 7; uint32 writer_pid = 8;
+  string writer_version = 9; uint32 max_record_bytes = 10; int64 mono_origin_wall_unix_nanos = 11;
+}
