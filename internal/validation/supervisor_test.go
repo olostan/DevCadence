@@ -561,3 +561,18 @@ func TestServiceReadinessVerification(t *testing.T) {
 		t.Errorf("Expected CategoryProbeTimeout, got: %v", err)
 	}
 }
+
+// TestAllocateUnusedPortRetriesConflictingPorts pins the pre-flight conflict
+// branches that otherwise run only when an unrelated listener happens to hold
+// the chosen port, which made whole-module coverage nondeterministic.
+func TestAllocateUnusedPortRetriesConflictingPorts(t *testing.T) {
+	probes := 0
+	port, err := allocateUnusedPortWith(func(int) bool { probes++; return probes == 1 })
+	if err != nil || port <= 0 || probes != 2 {
+		t.Fatalf("port = %d, err = %v after %d probes; one conflict must be retried", port, err, probes)
+	}
+	probes = 0
+	if _, err := allocateUnusedPortWith(func(int) bool { probes++; return true }); err == nil || probes != 3 {
+		t.Fatalf("err = %v after %d probes; persistent conflict must fail after 3 attempts", err, probes)
+	}
+}

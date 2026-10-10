@@ -269,3 +269,21 @@ func TestWriteSerializedNeverRetriesAFailedCommit(t *testing.T) {
 		t.Fatalf("err = %v, want an internal/integrity failure", err)
 	}
 }
+
+// TestWriteSerializedReportsParentCancellationAfterAFailedAttempt covers the
+// caller-cancelled-during-attempt branch deterministically; it otherwise ran
+// only when a deadline happened to expire inside a busy wait.
+func TestWriteSerializedReportsParentCancellationAfterAFailedAttempt(t *testing.T) {
+	store := openStore(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	calls := 0
+	err := store.WriteSerialized(ctx, func(*storage.Tx) error {
+		calls++
+		cancel()
+		return errors.New("body failure after cancellation")
+	})
+	if !errors.Is(err, context.Canceled) || calls != 1 {
+		t.Fatalf("err = %v after %d calls; the caller's cancellation is reported unchanged and never retried", err, calls)
+	}
+}
